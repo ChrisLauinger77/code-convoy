@@ -1,11 +1,13 @@
 use super::*;
 
+pub(super) fn valid_revision(revision: Option<&str>) -> Option<&str> {
+    revision.filter(|r| (7..=40).contains(&r.len()) && r.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
 pub(super) fn version_text(version: &str, revision: Option<&str>) -> String {
-    let revision = revision
-        .filter(|r| (7..=40).contains(&r.len()) && r.bytes().all(|b| b.is_ascii_hexdigit()));
-    match revision {
-        Some(revision) => format!("Version {version} · base commit {revision}"),
-        None => format!("Version {version} · commit unavailable"),
+    match valid_revision(revision) {
+        Some(revision) => format!("Version {version} ({revision})"),
+        None => format!("Version {version}"),
     }
 }
 
@@ -48,14 +50,22 @@ mod tests {
     #[test]
     fn version_is_useful_without_git_and_rejects_invalid_metadata() {
         assert_eq!(
-            version_text("0.1.0", Some("abcdef123456")),
-            "Version 0.1.0 · base commit abcdef123456"
+            version_text("0.1.0", Some("abcdef1")),
+            "Version 0.1.0 (abcdef1)"
         );
-        for revision in [None, Some(""), Some("unknown\nmetadata")] {
-            assert_eq!(
-                version_text("0.1.0", revision),
-                "Version 0.1.0 · commit unavailable"
-            );
+        assert_eq!(
+            version_text("0.1.0", Some("abcdef123456")),
+            "Version 0.1.0 (abcdef123456)"
+        );
+        for revision in [
+            None,
+            Some(""),
+            Some("0.1.0"),
+            Some("abcdef"),
+            Some("unknown\nmetadata"),
+            Some("/Users/builder/workspace"),
+        ] {
+            assert_eq!(version_text("0.1.0", revision), "Version 0.1.0");
         }
     }
 }

@@ -132,7 +132,9 @@ def macos():
     plist_path = app / "Contents/Info.plist"
     with plist_path.open("rb") as source:
         info = plistlib.load(source)
-    # cargo-packager otherwise uses a timestamp for CFBundleVersion.
+    # Keep this numeric and Cargo-derived (cargo-packager otherwise uses a timestamp).
+    # The native About panel gets its optional Git revision from the compiled app,
+    # not CFBundleVersion, including for detached tagged release checkouts.
     info["CFBundleVersion"] = version()
     with plist_path.open("wb") as destination:
         plistlib.dump(info, destination)

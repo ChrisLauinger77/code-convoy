@@ -1,4 +1,6 @@
 mod about;
+#[cfg(target_os = "macos")]
+mod about_macos;
 mod agent_config;
 mod diagnostics;
 mod editor;
@@ -62,6 +64,8 @@ pub struct App {
     busy: bool,
     checking_cli: Option<(domain::AgentId, domain::AgentOptions)>,
     about_open: bool,
+    #[cfg(target_os = "macos")]
+    native_about: Option<about_macos::NativeAbout>,
     execution_height: f32,
     session_runs: HashSet<u64>,
     notice: String,
@@ -97,6 +101,10 @@ impl App {
         let mut app = Self::with_context(&cc.egui_ctx, store, state, runtime);
         // eframe owns this root window for the lifetime of the app.
         app.repository_dialog = app.repository_dialog.set_parent(cc);
+        #[cfg(target_os = "macos")]
+        {
+            app.native_about = about_macos::NativeAbout::install();
+        }
         app
     }
     fn with_context(ctx: &egui::Context, store: Store, state: AppState, runtime: Runtime) -> Self {
@@ -126,6 +134,8 @@ impl App {
             busy: false,
             checking_cli: None,
             about_open: false,
+            #[cfg(target_os = "macos")]
+            native_about: None,
             execution_height: 184.0,
             session_runs: HashSet::new(),
             notice: String::new(),
