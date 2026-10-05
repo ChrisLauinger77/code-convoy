@@ -212,18 +212,21 @@ async fn drafts_are_snapshotted_and_codex_and_copilot_run_independently() {
 }
 
 #[tokio::test]
-async fn three_convoys_share_global_slots_and_keep_their_own_limits() {
-    let mut h = Harness::new(3);
+async fn four_convoys_share_global_slots_and_keep_their_own_limits() {
+    let mut h = Harness::new(4);
     let a = vec![h.repo("a1").await, h.repo("a2").await];
     let b = vec![h.repo("b1").await, h.repo("b2").await, h.repo("b3").await];
     let c = vec![h.repo("c1").await, h.repo("c2").await];
+    let d = vec![h.repo("d1").await, h.repo("d2").await];
+    let pd = h.prepared(4, AgentId::Claude, 2, false, &d).await;
     let pa = h.prepared(1, AgentId::Codex, 1, false, &a).await;
     let pb = h.prepared(2, AgentId::Copilot, 2, false, &b).await;
     let pc = h.prepared(3, AgentId::OpenCode, 2, false, &c).await;
     h.start(1, pa);
     h.start(2, pb);
     h.start(3, pc);
-    h.until(|e| (1..=3).all(|run| Harness::ready(e, run, 0)))
+    h.start(4, pd);
+    h.until(|e| (1..=4).all(|run| Harness::ready(e, run, 0)))
         .await;
     h.release(1, &a[0]);
     h.until(|e| {
@@ -231,12 +234,12 @@ async fn three_convoys_share_global_slots_and_keep_their_own_limits() {
             .any(|event| matches!(event, Event::Started { job: 1, .. }))
     })
     .await;
-    for (id, repos) in [(1, &a), (2, &b), (3, &c)] {
+    for (id, repos) in [(1, &a), (2, &b), (3, &c), (4, &d)] {
         for repo in repos {
             h.release(id, repo);
         }
     }
-    h.finish_all(7).await;
+    h.finish_all(9).await;
     let mut active = BTreeSet::new();
     let mut maxima = BTreeMap::new();
     let mut global_max = 0;
@@ -251,7 +254,7 @@ async fn three_convoys_share_global_slots_and_keep_their_own_limits() {
                     .and_modify(|v: &mut usize| *v = (*v).max(count))
                     .or_insert(count);
                 assert!(count <= if *run == 1 { 1 } else { 2 });
-                assert!(active.len() <= 3);
+                assert!(active.len() <= 4);
             }
             Event::Finished {
                 run, job, status, ..
@@ -262,9 +265,9 @@ async fn three_convoys_share_global_slots_and_keep_their_own_limits() {
             _ => {}
         }
     }
-    assert_eq!(global_max, 3);
+    assert_eq!(global_max, 4);
     assert!(active.is_empty());
-    assert_eq!(maxima.len(), 3);
+    assert_eq!(maxima.len(), 4);
 }
 
 #[tokio::test]
@@ -300,7 +303,7 @@ async fn cancelling_a_convoy_cancels_its_queue_and_leaves_another_running() {
 
 #[tokio::test]
 async fn same_repository_is_serialized_and_released_after_success_failure_and_cancel() {
-    for first_agent in [AgentId::Codex, AgentId::OpenCode] {
+    for first_agent in [AgentId::Codex, AgentId::OpenCode, AgentId::Claude] {
         for first_status in [
             JobStatus::Succeeded,
             JobStatus::Failed,
@@ -643,4 +646,114 @@ async fn independent_opencode_convoys_snapshot_options_and_release_global_capaci
             "--auto"
         ]
     );
+}
+#[tokio::test]
+async fn independent_claude_convoys_snapshot_options_and_release_global_capacity() {
+    let mut h = Harness::new(1);
+    let a = h.repo("claude-a").await;
+    let b = h.repo("claude-b").await;
+    let mut draft = h.task(1, AgentId::Claude, 2, false);
+    draft.options.extend([
+        ("model".into(), "sonnet".into()),
+        ("max_turns".into(), "10".into()),
+        ("effort".into(), "high".into()),
+        ("permission_mode".into(), "acceptEdits".into()),
+    ]);
+    let first = runner::prepare(draft.clone(), vec![a.clone()])
+        .await
+        .unwrap();
+    let snapshot = first.snapshot(1);
+    h.start(1, first);
+    draft.prompt = "changed draft".into();
+    draft.options.insert("effort".into(), "low".into());
+    let second = h
+        .prepared(2, AgentId::Claude, 1, false, std::slice::from_ref(&b))
+        .await;
+    h.start(2, second);
+    h.until(|e| {
+        Harness::ready(e, 1, 0)
+            && e.iter().any(|e| {
+                matches!(
+                    e,
+                    Event::Queued {
+                        run: 2,
+                        reason: QueueReason::GlobalLimit,
+                        ..
+                    }
+                )
+            })
+    })
+    .await;
+    assert!(!h.control.join("2-claude-b.input").exists());
+    h.release(1, &a);
+    h.until(|e| Harness::ready(e, 2, 0)).await;
+    assert!(Harness::finished(&h.events, 1, 0, JobStatus::Succeeded));
+    h.release(2, &b);
+    h.finish_all(2).await;
+    assert!(Harness::finished(&h.events, 2, 0, JobStatus::Succeeded));
+    assert_eq!(snapshot.task.options["effort"], "high");
+    assert_eq!(snapshot.task.concurrency, 2);
+    assert_ne!(snapshot.task.prompt, draft.prompt);
+    assert_eq!(
+        std::fs::read_to_string(h.control.join("1-claude-a.input")).unwrap(),
+        snapshot.task.prompt
+    );
+    let args: Vec<String> =
+        serde_json::from_slice(&std::fs::read(h.control.join("1-claude-a.args")).unwrap()).unwrap();
+    assert_eq!(
+        &args[1..],
+        [
+            "--print",
+            "--input-format",
+            "text",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--no-session-persistence",
+            "--permission-mode",
+            "acceptEdits",
+            "--model=sonnet",
+            "--effort=high",
+            "--max-turns=10"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn claude_build_spawn_and_zero_exit_protocol_failures_release_slots_and_repository_leases() {
+    for failure in ["build", "spawn", "result_error", "malformed", "incomplete"] {
+        let mut h = Harness::new(1);
+        let repo = h.repo("shared").await;
+        let mut task = h.task(1, AgentId::Claude, 1, false);
+        task.prompt = format!(
+            "codeconvoy-fixture-gate\n{}",
+            serde_json::json!({"control":h.control,"ticket":"1","claude_outcome":failure})
+        );
+        let mut first = runner::prepare(task, vec![repo.clone()]).await.unwrap();
+        // Exercise worker failures after admission, beyond preflight validation.
+        if failure == "build" {
+            first.task.options.insert("max_turns".into(), "0".into());
+        } else if failure == "spawn" {
+            first.task.options.insert(
+                "executable".into(),
+                h.directory
+                    .path()
+                    .join("removed-executable")
+                    .to_str()
+                    .unwrap()
+                    .into(),
+            );
+        }
+        let second = h
+            .prepared(2, AgentId::Claude, 1, false, std::slice::from_ref(&repo))
+            .await;
+        h.start(1, first);
+        h.start(2, second);
+        h.release(1, &repo);
+        h.until(|e| Harness::finished(e, 1, 0, JobStatus::Failed) && Harness::ready(e, 2, 0))
+            .await;
+        h.release(2, &repo);
+        h.finish_all(2).await;
+        assert!(Harness::finished(&h.events, 2, 0, JobStatus::Succeeded));
+    }
 }

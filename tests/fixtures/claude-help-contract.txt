@@ -1,0 +1,7 @@
+Claude Code — synthetic contract fixture, NOT captured installed CLI help.
+Documented interface: https://code.claude.com/docs/en/cli-reference
+  -p, --print
+  --output-format <format> (text, json, stream-json)
+  --permission-mode <mode>
+  --verbose
+Some documented flags are hidden from help. This fixture intentionally omits them.

@@ -86,7 +86,7 @@ fn prepare(app: &mut App, agent: AgentId) {
 
 #[test]
 fn accepted_launch_clears_only_task_and_selection_and_persists_preferences() {
-    for agent in [AgentId::Codex, AgentId::Copilot, AgentId::OpenCode] {
+    for agent in AgentId::ALL {
         let (_temp, mut app) = app();
         prepare(&mut app, agent);
         let expected = serde_json::to_value(app.prepared.as_ref().unwrap().task.clone()).unwrap();
@@ -123,17 +123,10 @@ fn accepted_launch_clears_only_task_and_selection_and_persists_preferences() {
 }
 
 #[test]
-fn failed_preflight_save_backend_or_admission_preserves_draft_and_selection() {
-    for failure in ["preflight", "save", "backend", "admission"] {
+fn failed_preflight_save_or_admission_preserves_draft_and_selection() {
+    for failure in ["preflight", "save", "admission"] {
         let (_temp, mut app) = app();
-        prepare(
-            &mut app,
-            if failure == "backend" {
-                AgentId::Claude
-            } else {
-                AgentId::Codex
-            },
-        );
+        prepare(&mut app, AgentId::Codex);
         let draft = serde_json::to_value(&app.state.draft).unwrap();
         let selected = app.selected.clone();
         match failure {
@@ -148,7 +141,6 @@ fn failed_preflight_save_backend_or_admission_preserves_draft_and_selection() {
                 std::fs::create_dir(app.store.directory().join("state.json")).unwrap();
                 app.start();
             }
-            "backend" => app.start(),
             "admission" => {
                 app.manager.shutdown();
                 app.start();
@@ -338,7 +330,7 @@ fn backend_controls_fit_compact_editor_in_both_themes_and_detection_is_snapshot_
         } else {
             egui::Visuals::light()
         });
-        for agent in [AgentId::Codex, AgentId::Copilot, AgentId::OpenCode] {
+        for agent in AgentId::ALL {
             app.state.select_agent(agent);
             for width in [310.0, 360.0, 520.0] {
                 // Include margins used by the real left pane; widgets must fit
@@ -387,4 +379,41 @@ fn backend_controls_fit_compact_editor_in_both_themes_and_detection_is_snapshot_
         .options
         .insert("agent".into(), "plan".into());
     assert!(app.current_detection().is_none());
+}
+#[test]
+fn claude_reuse_restores_backend_options_without_launching_or_mutating_history() {
+    let (_temp, mut app) = app();
+    prepare(&mut app, AgentId::Codex);
+    app.prepared = None;
+    let mut history = run(30, &[JobStatus::Succeeded]);
+    history.task.agent = AgentId::Claude;
+    history.task.options = [
+        ("executable".into(), "claude".into()),
+        ("model".into(), "sonnet".into()),
+        ("max_turns".into(), "10".into()),
+        ("effort".into(), "high".into()),
+        ("permission_mode".into(), "acceptEdits".into()),
+    ]
+    .into();
+    history.jobs[0].repository = app.state.repositories[0].clone();
+    let expected = serde_json::to_value(&history.task).unwrap();
+    app.state.runs.push(history);
+    app.reuse_convoy(30);
+    assert_eq!(serde_json::to_value(&app.state.draft).unwrap(), expected);
+    assert_eq!(
+        app.selected,
+        [app.state.repositories[0].path.clone()].into()
+    );
+    assert!(app.manager.is_idle() && app.prepared.is_none());
+    assert_eq!(app.state.global_concurrency, 6);
+    app.state
+        .draft
+        .options
+        .insert("effort".into(), "low".into());
+    assert_eq!(
+        serde_json::to_value(&app.state.runs[0].task).unwrap(),
+        expected
+    );
+    app.save();
+    assert_eq!(app.store.load().unwrap().draft.options["effort"], "low");
 }

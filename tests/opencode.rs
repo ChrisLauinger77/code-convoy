@@ -69,7 +69,7 @@ fn default_command_uses_exact_stdin_native_repository_path_and_existing_rules() 
             assert!(choices.iter().any(|(value, _)| *value == spec.default));
         }
     }
-    assert!(agents::backend(AgentId::Claude).is_err());
+    assert!(agents::backend(AgentId::Claude).is_ok());
 }
 
 #[test]

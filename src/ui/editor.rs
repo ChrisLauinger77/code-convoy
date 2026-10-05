@@ -156,8 +156,8 @@ impl App {
                     ui.small(backend.execution_summary(&self.state.draft.options));
                 });
             }
-            Err(_) => {
-                ui.weak("Planned backend. Choose Codex, Copilot or OpenCode to run a task.");
+            Err(error) => {
+                ui.weak(format!("Backend unavailable: {error}"));
             }
         }
     }

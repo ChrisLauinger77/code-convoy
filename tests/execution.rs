@@ -456,3 +456,108 @@ async fn opencode_cancellation_kills_descendants_and_leaves_other_jobs_running()
     tokio::time::sleep(Duration::from_millis(1400)).await;
     assert!(!dir.path().join("tree/orphan-survived").exists());
 }
+
+async fn prepare_claude(root: &Path, names: &[&str], concurrency: usize) -> PreparedRun {
+    let mut prepared = prepare(root, names, concurrency).await;
+    prepared.task.agent = AgentId::Claude;
+    prepared.task.options.insert(
+        "executable".into(),
+        env!("CARGO_BIN_EXE_codeconvoy-test-agent").into(),
+    );
+    runner::prepare(
+        prepared.task,
+        prepared
+            .repositories
+            .into_iter()
+            .map(|r| r.repository)
+            .collect(),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn claude_jobs_pass_stdin_and_cwd_and_isolate_failure_and_baseline_changes() {
+    use codeconvoy::agents::claude::Claude;
+    let dir = tempfile::tempdir().unwrap();
+    let prepared = prepare_claude(dir.path(), &["one", "fail", "changed", "cancelled"], 1).await;
+    assert_eq!(prepared.task.options["permission_mode"], "dontAsk");
+    assert_eq!(prepared.task.options["model"], "");
+    assert_eq!(prepared.task.options["max_turns"], "");
+    assert_eq!(prepared.task.options["effort"], "");
+    let prompt = prepared.task.prompt.clone();
+    std::fs::write(dir.path().join("changed/unreviewed"), "new change").unwrap();
+    let (tx, mut rx) = mpsc::channel(256);
+    let mut manager = runner::RunManager::new(1, tx);
+    manager.start(300, prepared, Arc::new(Claude)).unwrap();
+    manager.cancel(300, 3);
+    let events = finish(&mut rx, 4).await;
+    let outcomes: std::collections::BTreeMap<_, _> = events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Finished { job, status, .. } => Some((*job, *status)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(outcomes[&0], JobStatus::Succeeded);
+    assert_eq!(outcomes[&1], JobStatus::Failed);
+    assert_eq!(outcomes[&2], JobStatus::Failed);
+    assert_eq!(outcomes[&3], JobStatus::Cancelled);
+    for name in ["one", "fail"] {
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join(name).join("agent-input")).unwrap(),
+            prompt
+        );
+    }
+    for name in ["changed", "cancelled"] {
+        assert!(!dir.path().join(name).join("agent-input").exists());
+    }
+    assert!(events.iter().any(|e| matches!(e, Event::Finished {job:2,detail,..} if detail.contains("changed after preflight"))));
+    let log: String = events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Output { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(log.contains("[stderr] fixture diagnostic"));
+    assert!(log.contains("init") && log.contains("done") && log.contains("fixture failure"));
+}
+
+#[tokio::test]
+async fn claude_cancellation_kills_descendants_and_leaves_other_jobs_running() {
+    use codeconvoy::agents::claude::Claude;
+    let dir = tempfile::tempdir().unwrap();
+    let mut prepared = prepare_claude(dir.path(), &["tree", "other"], 2).await;
+    prepared.task.prompt = "cancel-test".into();
+    let (tx, mut rx) = mpsc::channel(256);
+    let mut manager = runner::RunManager::new(2, tx);
+    manager.start(300, prepared, Arc::new(Claude)).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !dir.path().join("tree/descendant-ready").exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    manager.cancel(300, 0);
+    let events = finish(&mut rx, 2).await;
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::Finished {
+            job: 0,
+            status: JobStatus::Cancelled,
+            ..
+        }
+    )));
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::Finished {
+            job: 1,
+            status: JobStatus::Succeeded,
+            ..
+        }
+    )));
+    tokio::time::sleep(Duration::from_millis(1400)).await;
+    assert!(!dir.path().join("tree/orphan-survived").exists());
+}

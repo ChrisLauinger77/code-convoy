@@ -4,14 +4,14 @@ A local, native desktop task runner for coding-agent CLIs.
 
 **Write one task → choose an agent → select local Git repositories → run with a concurrency limit → inspect each result.**
 
-CodeConvoy 0.1 is a native Rust/egui implementation with three independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
+CodeConvoy 0.1 is a native Rust/egui implementation with four independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
 
 | Backend | Status | Authenticated E2E status |
 | --- | --- | --- |
 | Codex CLI | Supported | User-verified on Linux with two concurrent repositories |
 | GitHub Copilot CLI | Supported | User-verified on Linux with two concurrent repositories |
 | OpenCode | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally |
-| Claude Code | Planned backend #4 | Not implemented |
+| Claude Code | Supported | Unverified; official documentation/source and deterministic fixtures tested, CLI unavailable locally |
 
 ## Build and run
 
@@ -39,8 +39,8 @@ The executable is `target/release/codeconvoy` (`codeconvoy.exe` on Windows). Ins
 
 ## First run
 
-1. Enter a task and select Codex, GitHub Copilot CLI, or OpenCode.
-2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. OpenCode offers its own model, agent, variant and permission controls. Model and reasoning support depends on the selected CLI/model.
+1. Enter a task and select Codex, GitHub Copilot CLI, OpenCode, or Claude Code.
+2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. OpenCode offers its own model, agent, variant and permission controls. Claude offers model, effort, turn limit and tool permissions. Model and reasoning support depends on the selected CLI/model.
 3. Register existing repository **root directories**. Select the checkboxes for this task.
 4. Set **This convoy** (its job limit) and **Global job limit** (shared by every convoy), then **Run Convoy**.
 5. Review branches and existing changes. Dirty working trees require acknowledgment before **Start convoy**.
@@ -175,11 +175,59 @@ Optional help-only compatibility probe (never invokes a model):
 cargo test --all-features --test opencode installed_opencode_accepts_generated_arguments -- --ignored --nocapture
 ```
 
+## Claude Code contract
+
+Claude is the fourth independent backend. It uses the documented [print interface](https://code.claude.com/docs/en/headless) and [CLI flags](https://code.claude.com/docs/en/cli-reference). No Claude installation or authenticated execution was available on the development Mac. See [validation evidence and limitations](docs/claude-validation.md).
+
+Default invocation:
+
+```text
+claude --print --input-format text --output-format stream-json --verbose \
+  --no-session-persistence --permission-mode dontAsk
+```
+
+CodeConvoy passes separate arguments directly, sets the selected repository as the working directory, writes the exact task bytes to stdin and closes it. It removes inherited `GIT_*`/`PWD` overrides and inherits Claude authentication, provider environment and configuration. Each job is a fresh invocation; CodeConvoy does not log in, request keys, change Claude settings, attach to a server or resume a session.
+
+| Control | Behavior |
+| --- | --- |
+| Executable | `claude` on PATH or an absolute executable path; native `claude.exe` on Windows |
+| Model | **Claude default** when blank; otherwise `--model=ALIAS_OR_ID`, without a fixed model catalog |
+| Effort | Claude default, or `--effort=low/medium/high/xhigh/max`; CLI/model support applies |
+| Permissions | **Existing approvals; deny asks** (`dontAsk`, default), or **Accept edits / file commands** (`acceptEdits`) |
+| Max turns | Blank preserves Claude's default; otherwise `--max-turns=POSITIVE_INTEGER`. Reaching it fails completion. This is not a time limit. |
+
+These are [Claude tool permissions](https://code.claude.com/docs/en/permissions), **not an OS sandbox**. Existing approvals can allow writes and shell commands. `acceptEdits` additionally auto-approves edits and common filesystem commands such as `mkdir`, `touch`, `mv` and `cp`. Unresolved permission requests are denied because CodeConvoy supplies no interactive permission host. Existing permission hooks still apply. No additional directories or blanket bypass are enabled by CodeConvoy; configured access remains Claude's responsibility.
+
+Use trusted repositories: print mode skips workspace trust prompts and can load repository hooks/MCP configuration. Disabling session persistence does not disable all Claude logging, configuration or network activity.
+
+`Check CLI` checks the core help interface and displays the version where available, without contacting a model. Some documented flags are hidden from help, so this is a compatibility check, not proof that every optional setting works on an older CLI. Missing Claude is a normal state and does not affect other backends.
+
+Output retains Claude's JSON records for assistant/tool activity and metadata, extracts final response text, and labels stderr. Success requires exit zero and one valid final `result` with `subtype=success`, `is_error=false`, required result fields, and no explicit execution/protocol error or reported interruption. Errors, missing results, malformed/oversized records and activity after the result fail conservatively. Recovered tool failures and permission denials remain visible; review the response and diff even after success. Assembly allows 1 MiB per record, following the official SDK's default; existing display/log caps still apply.
+
+Scheduling, repository safeguards, cancellation, draft clearing, persisted options, snapshots, history and **Reuse convoy** use the shared lifecycle unchanged. No state migration is required, and reuse never starts work automatically.
+
+### Safe manual Claude E2E test
+
+1. Use an already installed/authenticated Claude Code. Check its version/help independently and inspect existing permissions, hooks and MCP settings. Do not use important repositories.
+2. Prepare two **trusted, disposable**, clean Git repositories, each with a tracked README and a tracked `CODECONVOY_CLAUDE_SMOKE.md` placeholder.
+3. Select **Claude Code**, leave model/effort at **Claude default**, set **Max turns** to **10** and both concurrency limits to **2**. Keep **Existing approvals; deny asks** if your existing rules allow editing the smoke file. Otherwise explicitly select **Accept edits / file commands**, understanding its broader filesystem-command approval. Run **Check CLI**, select both repositories, review and start:
+
+   > Edit only CODECONVOY_CLAUDE_SMOKE.md. Replace its placeholder with a heading “CodeConvoy Claude smoke test”, this repository's directory name, and a short summary of its README. Do not modify other files, run shell commands, or perform Git operations. Report the file you edited. If permissions prevent editing, report that and stop.
+
+4. Confirm independent output and expected tracked-file diffs in both repositories. Inspect permission denials even on success. Prompt instructions are not an access boundary. Turn-limit failures are not successful E2E results.
+5. Select **Reuse convoy** and verify all settings/selections return without execution. Separately start an inspection task, stop it while active, and check process cleanup and retained edits. Record the real CLI version, platform, options and outcomes before claiming authenticated E2E success.
+
+An optional installed-CLI probe runs help/version only:
+
+```sh
+cargo test --all-features --test claude installed_claude_accepts_generated_arguments -- --ignored --nocapture
+```
+
 ## Repository safety and data
 
 CodeConvoy's Git operations only inspect working trees. Registration/removal never clones, deletes, resets, stashes, checks out, commits, or pushes. External diff/textconv and filesystem-monitor commands are disabled for inspection. Duplicate and nested repository selections are rejected. Each queued job rechecks branch, HEAD, and porcelain status immediately before starting; detected state changes fail that job without affecting other jobs.
 
-Codex Workspace-write, Copilot file-write/tool approvals, and OpenCode permissions can permit the **agent** to modify files. CodeConvoy is an orchestrator, not an extra security sandbox. Stop terminates processes and retains partial edits; it cannot roll changes back. Review the diff before committing. Git checks are not filesystem locks: another application can still edit a repository, and changes within an already-dirty file may leave the same porcelain status.
+Codex Workspace-write, Copilot file-write/tool approvals, and OpenCode/Claude permissions can permit the **agent** to modify files. CodeConvoy is an orchestrator, not an extra security sandbox. Stop terminates processes and retains partial edits; it cannot roll changes back. Review the diff before committing. Git checks are not filesystem locks: another application can still edit a repository, and changes within an already-dirty file may leave the same porcelain status.
 
 State is saved atomically in the conventional per-user application data directory, available from the footer’s Local session tooltip:
 
@@ -199,13 +247,13 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --all-features
 ```
 
-The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous Codex/Copilot/OpenCode convoys, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover all three backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
+The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous Codex/Copilot/OpenCode/Claude convoys, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover all four backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
 
 ```sh
 cargo test --all-features --test copilot installed_copilot_accepts_the_exact_command_flags -- --ignored --nocapture
 ```
 
-Read [the architecture](docs/architecture.md) for module boundaries and implementation tradeoffs. Claude Code is the next planned backend; it is not part of the OpenCode implementation. Before a public release, verify native behavior on macOS/Windows.
+Read [the architecture](docs/architecture.md) for module boundaries and implementation tradeoffs. Claude is the fourth and final backend for the v0.1.0 cycle. The backend abstraction is feature-frozen except for bug fixes. Authenticated Claude/OpenCode E2E and Windows runtime verification remain outstanding.
 
 ## License
 

@@ -1,4 +1,5 @@
 //! Backends own their options and CLI protocol; process machinery is reusable.
+pub mod claude;
 pub mod codex;
 pub mod copilot;
 pub mod opencode;
@@ -75,9 +76,7 @@ pub fn backend(id: AgentId) -> Result<std::sync::Arc<dyn AgentBackend>> {
         AgentId::Codex => Ok(std::sync::Arc::new(codex::Codex)),
         AgentId::Copilot => Ok(std::sync::Arc::new(copilot::Copilot)),
         AgentId::OpenCode => Ok(std::sync::Arc::new(opencode::OpenCode)),
-        AgentId::Claude => {
-            anyhow::bail!("{} is not implemented yet.", id.label())
-        }
+        AgentId::Claude => Ok(std::sync::Arc::new(claude::Claude)),
     }
 }
 pub fn value<'a>(options: &'a AgentOptions, spec: &'a OptionSpec) -> &'a str {

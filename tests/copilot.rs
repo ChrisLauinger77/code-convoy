@@ -166,7 +166,7 @@ fn capability_choices_come_from_the_inspected_cli_and_registry_is_independent() 
         choices.iter().map(|(v, _)| *v).collect::<Vec<_>>(),
         ["", "none", "low", "medium", "high", "xhigh", "max"]
     );
-    assert!(agents::backend(AgentId::Claude).is_err());
+    assert!(agents::backend(AgentId::Claude).is_ok());
 }
 #[test]
 fn detection_uses_same_executable_and_version_policy_and_rejects_incompatible_help() {

@@ -1,6 +1,6 @@
 # OpenCode backend validation
 
-Recorded 2026-10-05. OpenCode is implemented as CodeConvoy's third independent backend. Claude Code remains planned. This record does not claim authenticated OpenCode E2E success.
+Recorded 2026-10-05. OpenCode is implemented as CodeConvoy's third independent backend. Claude was still planned at the time of this OpenCode validation; see the subsequent [Claude validation](claude-validation.md). This record does not claim authenticated OpenCode E2E success.
 
 ## Evidence and invocation
 

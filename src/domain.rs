@@ -28,7 +28,7 @@ impl AgentId {
     pub fn label(self) -> &'static str {
         match self {
             Self::Codex => "OpenAI Codex CLI",
-            Self::Claude => "Claude Code (not implemented)",
+            Self::Claude => "Claude Code",
             Self::Copilot => "GitHub Copilot CLI",
             Self::OpenCode => "OpenCode",
         }

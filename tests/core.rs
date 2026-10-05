@@ -67,7 +67,7 @@ fn codex_arguments_are_separate_and_options_are_backend_owned() {
             .validate(&[("sandbox".into(), "danger-full-access".into())].into())
             .is_err()
     );
-    assert!(agents::backend(AgentId::Claude).is_err());
+    assert!(agents::backend(AgentId::Claude).is_ok());
     assert!(agents::backend(AgentId::Copilot).is_ok());
 }
 #[test]

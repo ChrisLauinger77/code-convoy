@@ -2,7 +2,7 @@
 
 CodeConvoy uses one egui UI thread and a small Tokio runtime. The unit of work is a task configuration applied to a set of existing repository roots. A run is a saved snapshot of that configuration plus one job per repository.
 
-Backend status: Codex and Copilot are implemented and user-verified end-to-end on Linux with two concurrent real repositories each. OpenCode is the third supported backend, with source/fixture checks and macOS UI validation; authenticated E2E is unverified. Claude Code remains planned as backend #4.
+Backend status: Codex and Copilot are implemented and user-verified end-to-end on Linux with two concurrent real repositories each. OpenCode is the third supported backend, with source/fixture checks and macOS UI validation; authenticated E2E is unverified. Claude Code is the fourth supported backend, validated against official documentation/SDK source, fixtures and the native macOS UI; authenticated E2E is unverified.
 
 ## Modules
 
@@ -13,6 +13,7 @@ Backend status: Codex and Copilot are implemented and user-verified end-to-end o
 | `agents/codex` | Codex flags, capability checks, existing JSONL formatting/completion criteria |
 | `agents/copilot` | Copilot flags, bundled-version checks, raw text streaming, exit-status interpretation |
 | `agents/opencode` | OpenCode run/help/version contract, model/agent/variant/permission options, native JSON event decoding and conservative completion |
+| `agents/claude` | Claude print/help/version contract, model/effort/turn/permission options, stream-json decoding and final-result validation |
 | `process` | Shell-free process spawning, pipes, cancellation tokens, process-tree ownership, short-command timeouts |
 | `git` | Root validation, working-tree inspection, staged/unstaged diff and untracked status |
 | `runner` | Preflight, immutable snapshots, per-job Git recheck and execution events |
@@ -37,7 +38,7 @@ Reuse copies a run's task/options and selects its still-registered canonical rep
 
 `OptionSpec` provides rendering metadata (text fields or backend-specific choice values). Persisted option keys belong to the selected backend. There is no cross-agent reasoning, model, or permission translation. Backends validate keys and values before invocation. The generic renderer only renders that backend's descriptions. Adding Copilot exposed two concrete Codex assumptions: shared line-based output with `turn.completed` observation fields, and hardcoded Codex approval/sandbox UI text. Both now live in the Codex backend. The runner only sends bytes and an exit status to an opaque per-job output handler. This permits Copilot to stream partial text immediately and interpret its own exit status, without inventing a common event schema. Codex's formatter and success criteria are unchanged. No plugin system or hypothetical capability layer was added.
 
-New backend support should add its module, enum/registry entry, real CLI contract, option schema, and tests; do not return simulated success for an unimplemented agent.
+With four real backends implemented, `AgentBackend` / `AgentOutput` are feature-frozen for the v0.1.0 stabilization cycle unless a bug requires changes. No additional backend or speculative capability layer is in scope.
 
 Codex uses stdin for the prompt to avoid shell injection and command-line length limits. It sets `--no-daemon`, explicit sandbox permissions, and `--ask-for-approval never`; no interactive approval UI exists. Authentication remains entirely with the CLI. Session resume is intentionally absent while ephemeral execution is enabled. A successful exit must also have a `turn.completed` event and no `turn.failed` event. Unknown JSONL events remain visible for diagnostics.
 
@@ -61,6 +62,22 @@ The persisted enum value is `opencode`; its backend-owned option map uses `execu
 
 See [OpenCode validation](opencode-validation.md) for authoritative sources, tests and unverified E2E/platform work. The UI uses the existing backend option renderer and scrolling panes; no Activity view or general redesign is included.
 
+### Fourth-backend review: Claude Code
+
+Claude fits `AgentBackend` / `AgentOutput` unchanged. Registration replaces the existing Claude placeholder; the enum's serialized `claude` value already existed. No shared trait, scheduler, process, persistence or Git implementation change is required. Codex, Copilot and OpenCode implementation files remain unchanged. The abstraction is feature-frozen for v0.1.0 except for genuine bugs.
+
+`agents/claude` owns print-mode arguments, stdin prompt transport, working context, help/version checks and five option keys: `executable`, `model`, `effort`, `permission_mode`, `max_turns`. Preflight resolves defaults into the immutable snapshot. Old version-1 drafts and history continue loading; no credential fields are introduced. Per-agent preferences, accepted-launch clearing, restart interruption recovery, terminal-history cleanup and reuse follow the existing paths.
+
+The decoder treats stdout as JSONL, independently frames stderr, and handles split UTF-8. Final response text is displayed separately from retained result metadata. Other messages, including tool payloads, usage, denials, retries and unknown event types, remain visible. The complete parsed final result lives in the per-job decoder until interpretation; it is not persisted or exposed through a speculative common activity model.
+
+Success requires exit zero and exactly one last `result` record with success subtype, boolean `is_error=false`, string response, nonempty session ID and nonnegative integer duration/turn fields. If supplied, `terminal_reason` must be `completed`; deferred tools, API error status and nonempty result errors prevent success. A final `stop_reason` reporting token/context truncation or a paused turn also prevents success, including on older CLIs without `terminal_reason`. Explicit session/assistant errors, invalid JSON and oversized stdout records also prevent success. A recoverable tool error or API retry alone does not fail the session. Stderr diagnostics do not override a valid result. This confirms protocol completion, not task fulfillment.
+
+The 1 MiB record bound follows the official Python Agent SDK transport's default rather than reusing a smaller backend's limit. Oversized records remain displayable but fail completion; fragments cannot become false result records. Large valid records below the bound are tested. Existing log retention can still truncate their display.
+
+No Claude-specific process management is added. Each invocation belongs to the shared process group/Job Object. Cancellation takes precedence over decoding, preserves edits, releases confirmed-cleanup slots/leases, and leaves unrelated jobs alone. Existing quarantine behavior remains authoritative if process cleanup cannot be confirmed. Detached descendants retain the platform limitations described below.
+
+Permissions and omitted capabilities are explained in [Claude validation](claude-validation.md). CodeConvoy supplies no additional directories, unrestricted bypass, detached/background session, resume, agent definition or custom tool policy. Existing Claude configuration/hooks still apply; tool permissions do not sandbox that configuration. Future Activity UI and backend #5 are outside this release cycle.
+
 ## Scheduling and shutdown
 
 The editor draft is separate from execution. Preflight takes owned copies of task/options and selected canonical repositories; confirmation saves `PreparedRun::snapshot` before handing owned data to `RunManager`. Each convoy keeps its own task/backend and job cancellation tokens. Run IDs route every event and cancellation, so selecting or editing another convoy does not affect workers.
@@ -81,7 +98,7 @@ Overall status is Running while any job is running, otherwise Queued while work 
 
 Unix process groups cannot contain a descendant that deliberately creates a new session/group. Abrupt OS termination or a crash cannot guarantee cleanup on Unix. No promise is made to recover or kill stale processes by persisted PID (PID reuse would make that unsafe). The application does not manage detached sessions. These constraints should be tested further before packaging a release.
 
-Stdout and stderr are drained concurrently in fixed-size chunks. Codex and OpenCode line assembly is capped at 256 KiB. Copilot forwards each chunk immediately, retaining at most three bytes per stream to complete a split UTF-8 character; invalid bytes are replaced for display. Stderr is labelled, and no Copilot event normalization is performed. The event queue is bounded; if the UI cannot keep up, log events can be omitted with a visible count. Backend output processing continues even if a display event is dropped. Logs retain their latest 512 KiB per job, with a 32 MiB session budget that evicts the oldest job logs first. Stream interleaving is arrival order, not a claim about exact cross-stream ordering. Short Git/detection commands have a 20-second timeout and output caps.
+Stdout and stderr are drained concurrently in fixed-size chunks. Codex and OpenCode line assembly is capped at 256 KiB. Claude permits 1 MiB per record, matching the official Python Agent SDK's default; oversized stdout records invalidate completion without reinterpreting fragments. Copilot forwards each chunk immediately, retaining at most three bytes per stream to complete a split UTF-8 character; invalid bytes are replaced for display. Stderr is labelled, and no Copilot event normalization is performed. The event queue is bounded; if the UI cannot keep up, log events can be omitted with a visible count. Backend output processing continues even if a display event is dropped. Logs retain their latest 512 KiB per job, with a 32 MiB session budget that evicts the oldest job logs first. Stream interleaving is arrival order, not a claim about exact cross-stream ordering. Short Git/detection commands have a 20-second timeout and output caps.
 
 ## Git and state
 
@@ -99,7 +116,7 @@ All active convoys and the most recent 30 completed convoys are retained; active
 
 - `eframe`/egui: native windowing and widgets. Version 0.36 is used with Rust 1.95 or newer; OpenGL is used to avoid a direct WGPU renderer dependency. Wayland, X11, fonts, and accessibility are enabled.
 - Tokio: background process I/O, timers, task ownership, cancellation notifications.
-- serde/serde_json: local state and backend-specific Codex/OpenCode JSON records.
+- serde/serde_json: local state and backend-specific Codex/OpenCode/Claude JSON records.
 - `directories`: conventional platform data paths.
 - `tempfile`: atomic state replacement and isolated tests.
 - `fs2`: cross-platform file locking.
