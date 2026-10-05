@@ -10,7 +10,7 @@ CodeConvoy 0.1 is an initial Rust/egui implementation. Codex and GitHub Copilot 
 
 Requirements:
 
-- Rust 1.88 or later and Cargo.
+- Rust 1.95 or later and Cargo.
 - Git on `PATH`.
 - A working desktop graphics environment.
 - The CLI for the agent you want to use, already installed and authenticated using its own login flow. Its executable must be on the desktop application's `PATH`, or supply its absolute path in the UI. Neither CLI is required for CodeConvoy to start; **Check CLI** checks only the selected agent.
