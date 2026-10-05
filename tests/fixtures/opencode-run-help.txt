@@ -1,0 +1,14 @@
+Synthetic compatibility fixture, NOT captured installed CLI output.
+Based on official v1.18.34 packages/opencode/src/cli/cmd/run.ts.
+See docs/opencode-validation.md for provenance and validation limits.
+
+opencode run [message..]
+Options:
+  --help
+  --version
+  --format   [choices: "default", "json"]
+  --dir      [string]
+  --model    [string]
+  --agent    [string]
+  --variant  [string]
+  --auto     [boolean]

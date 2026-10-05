@@ -4,6 +4,7 @@ pub fn agent_name(agent: AgentId) -> &'static str {
     match agent {
         AgentId::Codex => "Codex",
         AgentId::Copilot => "Copilot",
+        AgentId::OpenCode => "OpenCode",
         AgentId::Claude => "Claude Code",
     }
 }

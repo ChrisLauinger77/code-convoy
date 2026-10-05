@@ -6,13 +6,22 @@ use std::{
 };
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    let opencode = args.get(1).is_some_and(|a| a == "run");
+    if opencode && args.iter().any(|a| a == "--help") {
+        print!("{}", include_str!("../fixtures/opencode-run-help.txt"));
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--help") {
         println!("Codex fixture: --no-daemon --ask-for-approval exec");
         print!("{}", include_str!("../fixtures/copilot-1.0.65-help.txt"));
         return Ok(());
     }
     if args.iter().any(|a| a == "--version") {
-        println!("GitHub Copilot CLI fixture 1.0.65");
+        if args.iter().any(|a| a == "--no-auto-update") {
+            println!("GitHub Copilot CLI fixture 1.0.65");
+        } else {
+            println!("1.18.34 (CodeConvoy fixture)");
+        }
         return Ok(());
     }
     let copilot = args.iter().any(|a| a == "--no-auto-update");
@@ -31,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
     if let Some(json) = input.strip_prefix("codeconvoy-fixture-gate\n") {
-        return gate(json, &input, &args, copilot);
+        return gate(json, &input, &args, copilot, opencode);
     }
     if input == "spawn-child"
         || (input == "cancel-test"
@@ -46,6 +55,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = child.wait()?;
         return Ok(());
     }
+    if opencode {
+        assert!(args.windows(2).any(|a| a == ["--format", "json"]));
+        let dir = args
+            .windows(2)
+            .find(|a| a[0] == "--dir")
+            .expect("missing --dir");
+        assert_eq!(std::path::Path::new(&dir[1]), std::env::current_dir()?);
+        assert!(std::env::var_os("PWD").is_none());
+    }
     std::fs::write("agent-input", &input)?;
     if copilot {
         // Assert the real backend passes its known CLI flags and stdin correctly.
@@ -55,6 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         assert!(!args.iter().any(|a| a == "--prompt" || a == "-p"));
         print!("live fragment without newline");
         std::io::stdout().flush()?;
+    } else if opencode {
+        println!("{{\"type\":\"step_start\",\"part\":{{\"type\":\"step-start\"}}}}");
     } else {
         println!("{{\"type\":\"turn.started\"}}");
     }
@@ -64,12 +84,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .file_name()
         .is_some_and(|n| n == "fail")
     {
-        if copilot {
+        if opencode {
+            println!("{{\"type\":\"error\",\"error\":{{\"name\":\"fixture failure\"}}}}");
+        } else if copilot {
             eprintln!("fixture failure");
         } else {
             println!("{{\"type\":\"turn.failed\",\"error\":\"fixture failure\"}}");
         }
         std::process::exit(7);
+    }
+    if opencode {
+        opencode_complete();
+        return Ok(());
     }
     if copilot {
         println!("\ndone");
@@ -90,6 +116,7 @@ fn gate(
     input: &str,
     args: &[String],
     copilot: bool,
+    opencode: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use fs2::FileExt;
     let config: serde_json::Value = serde_json::from_str(json)?;
@@ -113,7 +140,12 @@ fn gate(
         root.join(format!("{marker}.args")),
         serde_json::to_vec(args)?,
     )?;
-    if copilot {
+    if opencode {
+        println!(
+            "{}",
+            serde_json::json!({"type":"text", "part":{"text":format!("fixture gate ready {marker}")}})
+        );
+    } else if copilot {
         println!("fixture gate ready {marker}");
     } else {
         println!(
@@ -130,7 +162,9 @@ fn gate(
         std::thread::sleep(Duration::from_millis(5));
     }
     if config["fail"].as_bool() == Some(true) {
-        if !copilot {
+        if opencode {
+            println!("{{\"type\":\"error\",\"error\":{{\"name\":\"controlled failure\"}}}}");
+        } else if !copilot {
             println!("{{\"type\":\"turn.failed\",\"error\":\"controlled failure\"}}");
         }
         std::process::exit(7);
@@ -138,10 +172,23 @@ fn gate(
     if config["edit"].as_bool() == Some(true) {
         std::fs::write("fixture-change.txt", "controlled repository edit")?;
     }
-    if copilot {
+    if opencode {
+        opencode_complete();
+    } else if copilot {
         println!("done");
     } else {
         println!("{{\"type\":\"turn.completed\",\"usage\":{{}}}}");
     }
     Ok(())
+}
+
+fn opencode_complete() {
+    println!(
+        "{}",
+        serde_json::json!({"type":"text", "part":{"type":"text", "text":"done"}})
+    );
+    println!(
+        "{}",
+        serde_json::json!({"type":"step_finish", "part":{"type":"step-finish", "reason":"stop", "tokens":{}, "cost":0}})
+    );
 }

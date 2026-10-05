@@ -2,7 +2,7 @@
 
 CodeConvoy uses one egui UI thread and a small Tokio runtime. The unit of work is a task configuration applied to a set of existing repository roots. A run is a saved snapshot of that configuration plus one job per repository.
 
-Backend status: Codex and Copilot are implemented and user-verified end-to-end on Linux with two concurrent real repositories each. Claude Code and OpenCode are planned, in that order.
+Backend status: Codex and Copilot are implemented and user-verified end-to-end on Linux with two concurrent real repositories each. OpenCode is the third supported backend; Claude Code remains planned as backend #4.
 
 ## Modules
 
@@ -12,6 +12,7 @@ Backend status: Codex and Copilot are implemented and user-verified end-to-end o
 | `agents` | Backend registry, backend-owned option descriptions, `AgentBackend` / per-job `AgentOutput` contracts |
 | `agents/codex` | Codex flags, capability checks, existing JSONL formatting/completion criteria |
 | `agents/copilot` | Copilot flags, bundled-version checks, raw text streaming, exit-status interpretation |
+| `agents/opencode` | OpenCode run/help/version contract, model/agent/variant/permission options, native JSON event decoding and conservative completion |
 | `process` | Shell-free process spawning, pipes, cancellation tokens, process-tree ownership, short-command timeouts |
 | `git` | Root validation, working-tree inspection, staged/unstaged diff and untracked status |
 | `runner` | Preflight, immutable snapshots, per-job Git recheck and execution events |
@@ -46,6 +47,20 @@ Detection and execution both use `--no-auto-update`. On the development machine 
 
 Copilot's default grants `write` permission and denies `shell`; choices also support existing CLI approvals or explicit all-tool approval. Temp-directory verification can be restricted. These are Copilot permission rules, not an OS sandbox. Saved CLI permissions/hooks/MCP configuration still apply. Authentication and `COPILOT_HOME` are inherited, never read or edited by CodeConvoy. `COPILOT_ALLOW_ALL` is removed in the child so the UI's chosen approval mode is not silently broadened by that environment variable. As with Codex, inherited `GIT_*` repository overrides are removed; authentication variables such as `GITHUB_TOKEN` do not match that prefix.
 
+### Third-backend review: OpenCode
+
+OpenCode fits the existing `AgentBackend` / `AgentOutput` contracts. No orchestration refactor or new universal capability is needed: options, help/version checks, command construction and output interpretation already belong to the backend. Codex and Copilot implementation files, process machinery, preflight and scheduler are unchanged. Adding the enum/registry entry and display label makes existing draft, results, history and reuse flows available automatically. No Claude-specific abstractions were added.
+
+`agents/opencode` uses a dedicated local `run --format json --dir <repository>` invocation with exact stdin bytes. `--model=provider/model`, `--agent=NAME`, `--variant=NAME` and `--auto` are optional. `--key=value` preserves a leading dash in a configured value as data. The process working directory and explicit native path agree; removing inherited `PWD` is necessary because the inspected OpenCode source also reads that variable. `GIT_*` overrides are removed as in the existing backends. Provider/auth/config variables are inherited and never persisted by the backend. Permission selection relies on the CLI's unattended rejection or explicit auto-approval behavior; it does not rewrite permission files or manufacture a sandbox.
+
+The decoder assembles each stream independently, including UTF-8 split across reads. It displays text events as text and retains other JSON records, including full tool payloads and unknown events. Plain CLI diagnostics are permitted because OpenCode can mix approval/fallback messages with JSON. A malformed JSON-looking line or an oversized stdout record prevents confirmed success. Assembly is bounded to 256 KiB per stream; oversized records stream through without parsing their fragments as fresh events. A later valid record cannot clear that failure. Existing queue/log limits remain in force.
+
+Completion requires process exit zero, no session `error` event, and the last step having `reason=stop`. A new `step_start` clears completion. `tool-calls`, token-limit or unknown finish reasons alone cannot succeed. Tool failures stay visible without preventing a model from recovering; a success status still requires reviewing response/diff. Cancellation bypasses completion interpretation and uses the existing group/Job Object termination and scheduler cleanup. No remote server is attached, so local task processes stay owned by the shared runner.
+
+The persisted enum value is `opencode`; its backend-owned option map uses `executable`, `model`, `agent`, `variant`, and `permissions`. Defaults are resolved during preflight and frozen in the run snapshot. The additive enum variant requires no version-1 migration: older Codex/Copilot state and missing option defaults keep their prior behavior. Downgrading to an older binary after saving an OpenCode run is not supported by that older binary. CodeConvoy saves only user-entered non-secret settings and prompt/run metadata, not OpenCode credentials or emitted events.
+
+See [OpenCode validation](opencode-validation.md) for authoritative sources, tests and unverified E2E/platform work. The UI uses the existing backend option renderer and scrolling panes; no Activity view or general redesign is included.
+
 ## Scheduling and shutdown
 
 The editor draft is separate from execution. Preflight takes owned copies of task/options and selected canonical repositories; confirmation saves `PreparedRun::snapshot` before handing owned data to `RunManager`. Each convoy keeps its own task/backend and job cancellation tokens. Run IDs route every event and cancellation, so selecting or editing another convoy does not affect workers.
@@ -66,7 +81,7 @@ Overall status is Running while any job is running, otherwise Queued while work 
 
 Unix process groups cannot contain a descendant that deliberately creates a new session/group. Abrupt OS termination or a crash cannot guarantee cleanup on Unix. No promise is made to recover or kill stale processes by persisted PID (PID reuse would make that unsafe). The application does not manage detached sessions. These constraints should be tested further before packaging a release.
 
-Stdout and stderr are drained concurrently in fixed-size chunks. Codex line assembly is capped at 256 KiB. Copilot forwards each chunk immediately, retaining at most three bytes per stream to complete a split UTF-8 character; invalid bytes are replaced for display. Stderr is labelled, and no Copilot event normalization is performed. The event queue is bounded; if the UI cannot keep up, log events can be omitted with a visible count. Backend output processing continues even if a display event is dropped. Logs retain their latest 512 KiB per job, with a 32 MiB session budget that evicts the oldest job logs first. Stream interleaving is arrival order, not a claim about exact cross-stream ordering. Short Git/detection commands have a 20-second timeout and output caps.
+Stdout and stderr are drained concurrently in fixed-size chunks. Codex and OpenCode line assembly is capped at 256 KiB. Copilot forwards each chunk immediately, retaining at most three bytes per stream to complete a split UTF-8 character; invalid bytes are replaced for display. Stderr is labelled, and no Copilot event normalization is performed. The event queue is bounded; if the UI cannot keep up, log events can be omitted with a visible count. Backend output processing continues even if a display event is dropped. Logs retain their latest 512 KiB per job, with a 32 MiB session budget that evicts the oldest job logs first. Stream interleaving is arrival order, not a claim about exact cross-stream ordering. Short Git/detection commands have a 20-second timeout and output caps.
 
 ## Git and state
 
@@ -82,9 +97,9 @@ All active convoys and the most recent 30 completed convoys are retained; active
 
 ## Dependencies and scope
 
-- `eframe`/egui: native windowing and widgets. Version 0.33.3 targets Rust 1.88; OpenGL is used to avoid a direct WGPU renderer dependency. Wayland, X11, fonts, and accessibility are enabled.
+- `eframe`/egui: native windowing and widgets. Version 0.36.0 is used with Rust 1.95 or newer; OpenGL is used to avoid a direct WGPU renderer dependency. Wayland, X11, fonts, and accessibility are enabled.
 - Tokio: background process I/O, timers, task ownership, cancellation notifications.
-- serde/serde_json: local state and Codex JSONL.
+- serde/serde_json: local state and backend-specific Codex/OpenCode JSON records.
 - `directories`: conventional platform data paths.
 - `tempfile`: atomic state replacement and isolated tests.
 - `fs2`: cross-platform file locking.

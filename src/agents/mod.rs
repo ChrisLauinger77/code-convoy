@@ -1,6 +1,7 @@
 //! Backends own their options and CLI protocol; process machinery is reusable.
 pub mod codex;
 pub mod copilot;
+pub mod opencode;
 use crate::{
     domain::{AgentId, AgentOptions, JobStatus, Repository, TaskConfig},
     process::{self, CommandSpec, ManagedChild, Stream},
@@ -73,6 +74,7 @@ pub fn backend(id: AgentId) -> Result<std::sync::Arc<dyn AgentBackend>> {
     match id {
         AgentId::Codex => Ok(std::sync::Arc::new(codex::Codex)),
         AgentId::Copilot => Ok(std::sync::Arc::new(copilot::Copilot)),
+        AgentId::OpenCode => Ok(std::sync::Arc::new(opencode::OpenCode)),
         AgentId::Claude => {
             anyhow::bail!("{} is not implemented yet.", id.label())
         }

@@ -219,7 +219,7 @@ async fn three_convoys_share_global_slots_and_keep_their_own_limits() {
     let c = vec![h.repo("c1").await, h.repo("c2").await];
     let pa = h.prepared(1, AgentId::Codex, 1, false, &a).await;
     let pb = h.prepared(2, AgentId::Copilot, 2, false, &b).await;
-    let pc = h.prepared(3, AgentId::Codex, 2, false, &c).await;
+    let pc = h.prepared(3, AgentId::OpenCode, 2, false, &c).await;
     h.start(1, pa);
     h.start(2, pb);
     h.start(3, pc);
@@ -300,75 +300,77 @@ async fn cancelling_a_convoy_cancels_its_queue_and_leaves_another_running() {
 
 #[tokio::test]
 async fn same_repository_is_serialized_and_released_after_success_failure_and_cancel() {
-    for first_status in [
-        JobStatus::Succeeded,
-        JobStatus::Failed,
-        JobStatus::Cancelled,
-    ] {
-        let mut h = Harness::new(2);
-        let shared = h.repo("shared").await;
-        let other = h.repo("other").await;
-        #[cfg(unix)]
-        let mut alias = {
-            let path = h.directory.path().join("shared-alias");
-            std::os::unix::fs::symlink(&shared.path, &path).unwrap();
-            git::register(&path).await.unwrap()
-        };
-        #[cfg(not(unix))]
-        let mut alias = shared.clone();
-        assert_eq!(alias.path, shared.path);
-        alias.name = "A different display name".into();
-        let first = h
-            .prepared(
-                1,
-                AgentId::Codex,
-                1,
-                first_status == JobStatus::Failed,
-                std::slice::from_ref(&shared),
-            )
+    for first_agent in [AgentId::Codex, AgentId::OpenCode] {
+        for first_status in [
+            JobStatus::Succeeded,
+            JobStatus::Failed,
+            JobStatus::Cancelled,
+        ] {
+            let mut h = Harness::new(2);
+            let shared = h.repo("shared").await;
+            let other = h.repo("other").await;
+            #[cfg(unix)]
+            let mut alias = {
+                let path = h.directory.path().join("shared-alias");
+                std::os::unix::fs::symlink(&shared.path, &path).unwrap();
+                git::register(&path).await.unwrap()
+            };
+            #[cfg(not(unix))]
+            let mut alias = shared.clone();
+            assert_eq!(alias.path, shared.path);
+            alias.name = "A different display name".into();
+            let first = h
+                .prepared(
+                    1,
+                    first_agent,
+                    1,
+                    first_status == JobStatus::Failed,
+                    std::slice::from_ref(&shared),
+                )
+                .await;
+            let second = h
+                .prepared(2, AgentId::Copilot, 2, false, &[alias, other.clone()])
+                .await;
+            h.start(1, first);
+            h.until(|e| Harness::ready(e, 1, 0)).await;
+            h.start(2, second);
+            h.until(|e| {
+                Harness::ready(e, 2, 1)
+                    && e.iter().any(|event| {
+                        matches!(
+                            event,
+                            Event::Queued {
+                                run: 2,
+                                job: 0,
+                                reason: QueueReason::Repository(1)
+                            }
+                        )
+                    })
+            })
             .await;
-        let second = h
-            .prepared(2, AgentId::Copilot, 2, false, &[alias, other.clone()])
-            .await;
-        h.start(1, first);
-        h.until(|e| Harness::ready(e, 1, 0)).await;
-        h.start(2, second);
-        h.until(|e| {
-            Harness::ready(e, 2, 1)
-                && e.iter().any(|event| {
-                    matches!(
-                        event,
-                        Event::Queued {
-                            run: 2,
-                            job: 0,
-                            reason: QueueReason::Repository(1)
-                        }
-                    )
-                })
-        })
-        .await;
-        assert!(
-            !h.events
-                .iter()
-                .any(|e| matches!(e, Event::Started { run: 2, job: 0, .. }))
-        );
-        if first_status == JobStatus::Cancelled {
-            h.manager.cancel_run(1);
-        } else {
-            h.release(1, &shared);
+            assert!(
+                !h.events
+                    .iter()
+                    .any(|e| matches!(e, Event::Started { run: 2, job: 0, .. }))
+            );
+            if first_status == JobStatus::Cancelled {
+                h.manager.cancel_run(1);
+            } else {
+                h.release(1, &shared);
+            }
+            h.until(|e| Harness::finished(e, 1, 0, first_status) && Harness::ready(e, 2, 0))
+                .await;
+            assert!(
+                !h.events
+                    .iter()
+                    .any(|e| matches!(e, Event::Finished { run: 2, .. }))
+            );
+            h.release(2, &shared);
+            h.release(2, &other);
+            h.finish_all(3).await;
+            assert!(Harness::finished(&h.events, 2, 0, JobStatus::Succeeded));
+            assert!(Harness::finished(&h.events, 2, 1, JobStatus::Succeeded));
         }
-        h.until(|e| Harness::finished(e, 1, 0, first_status) && Harness::ready(e, 2, 0))
-            .await;
-        assert!(
-            !h.events
-                .iter()
-                .any(|e| matches!(e, Event::Finished { run: 2, .. }))
-        );
-        h.release(2, &shared);
-        h.release(2, &other);
-        h.finish_all(3).await;
-        assert!(Harness::finished(&h.events, 2, 0, JobStatus::Succeeded));
-        assert!(Harness::finished(&h.events, 2, 1, JobStatus::Succeeded));
     }
 }
 
@@ -574,4 +576,71 @@ fn history_never_evicts_active_convoys_and_mixed_results_are_truthful() {
     assert_eq!(run.status(), JobStatus::Failed);
     run.jobs[1].status = JobStatus::Cancelled;
     assert_eq!(run.status(), JobStatus::Cancelled);
+}
+
+#[tokio::test]
+async fn independent_opencode_convoys_snapshot_options_and_release_global_capacity() {
+    let mut h = Harness::new(1);
+    let a = h.repo("opencode-a").await;
+    let b = h.repo("opencode-b").await;
+    let mut draft = h.task(1, AgentId::OpenCode, 2, false);
+    draft.options.extend([
+        ("model".into(), "provider/model".into()),
+        ("agent".into(), "build".into()),
+        ("variant".into(), "high".into()),
+        ("permissions".into(), "auto".into()),
+    ]);
+    let first = runner::prepare(draft.clone(), vec![a.clone()])
+        .await
+        .unwrap();
+    let snapshot = first.snapshot(1);
+    h.start(1, first);
+    draft.prompt = "changed draft".into();
+    draft.options.insert("variant".into(), "low".into());
+    let second = h
+        .prepared(2, AgentId::OpenCode, 1, false, std::slice::from_ref(&b))
+        .await;
+    h.start(2, second);
+    h.until(|e| {
+        Harness::ready(e, 1, 0)
+            && e.iter().any(|e| {
+                matches!(
+                    e,
+                    Event::Queued {
+                        run: 2,
+                        reason: QueueReason::GlobalLimit,
+                        ..
+                    }
+                )
+            })
+    })
+    .await;
+    assert!(!h.control.join("2-opencode-b.input").exists());
+    h.release(1, &a);
+    h.until(|e| Harness::ready(e, 2, 0)).await;
+    assert!(Harness::finished(&h.events, 1, 0, JobStatus::Succeeded));
+    h.release(2, &b);
+    h.finish_all(2).await;
+    assert!(Harness::finished(&h.events, 2, 0, JobStatus::Succeeded));
+    assert_eq!(snapshot.task.options["variant"], "high");
+    assert_eq!(snapshot.task.concurrency, 2);
+    assert_ne!(snapshot.task.prompt, draft.prompt);
+    assert_eq!(
+        std::fs::read_to_string(h.control.join("1-opencode-a.input")).unwrap(),
+        snapshot.task.prompt
+    );
+    let args: Vec<String> =
+        serde_json::from_slice(&std::fs::read(h.control.join("1-opencode-a.args")).unwrap())
+            .unwrap();
+    assert_eq!(&args[1..5], ["run", "--format", "json", "--dir"]);
+    assert_eq!(args[5], a.path.to_str().unwrap());
+    assert_eq!(
+        &args[6..],
+        [
+            "--model=provider/model",
+            "--agent=build",
+            "--variant=high",
+            "--auto"
+        ]
+    );
 }

@@ -54,7 +54,16 @@ fn prepare(app: &mut App, agent: AgentId) {
         prompt: "Make a focused change".into(),
         agent,
         concurrency: 3,
-        options: [("model".into(), "selected-model".into())].into(),
+        options: [(
+            "model".into(),
+            if agent == AgentId::OpenCode {
+                "provider/selected-model"
+            } else {
+                "selected-model"
+            }
+            .into(),
+        )]
+        .into(),
     };
     app.state.global_concurrency = 6;
     app.state.agent_options.insert(
@@ -77,7 +86,7 @@ fn prepare(app: &mut App, agent: AgentId) {
 
 #[test]
 fn accepted_launch_clears_only_task_and_selection_and_persists_preferences() {
-    for agent in [AgentId::Codex, AgentId::Copilot] {
+    for agent in [AgentId::Codex, AgentId::Copilot, AgentId::OpenCode] {
         let (_temp, mut app) = app();
         prepare(&mut app, agent);
         let expected = serde_json::to_value(app.prepared.as_ref().unwrap().task.clone()).unwrap();
@@ -88,7 +97,7 @@ fn accepted_launch_clears_only_task_and_selection_and_persists_preferences() {
         assert!(app.state.draft.prompt.is_empty());
         assert!(app.selected.is_empty());
         assert_eq!(app.state.draft.agent, agent);
-        assert_eq!(app.state.draft.options["model"], "selected-model");
+        assert_eq!(app.state.draft.options, app.state.runs[0].task.options);
         assert_eq!(app.state.draft.concurrency, 3);
         assert_eq!(app.state.global_concurrency, 6);
         assert_eq!(app.state.agent_options, preferences);
@@ -279,4 +288,103 @@ fn reuse_copies_full_configuration_and_registered_selection_without_starting_job
     prepare(&mut app, AgentId::Codex);
     app.reuse_convoy(20);
     assert_eq!(app.state.draft.prompt, "Make a focused change");
+}
+
+#[test]
+fn opencode_reuse_restores_backend_options_without_launching_or_mutating_history() {
+    let (_temp, mut app) = app();
+    prepare(&mut app, AgentId::Codex);
+    app.prepared = None;
+    let mut history = run(30, &[JobStatus::Succeeded]);
+    history.task.agent = AgentId::OpenCode;
+    history.task.options = [
+        ("model".into(), "provider/model".into()),
+        ("agent".into(), "build".into()),
+        ("variant".into(), "high".into()),
+        ("permissions".into(), "auto".into()),
+    ]
+    .into();
+    history.jobs[0].repository = app.state.repositories[0].clone();
+    let expected = serde_json::to_value(&history.task).unwrap();
+    app.state.runs.push(history);
+    app.reuse_convoy(30);
+    assert_eq!(serde_json::to_value(&app.state.draft).unwrap(), expected);
+    assert_eq!(
+        app.selected,
+        [app.state.repositories[0].path.clone()].into()
+    );
+    assert!(app.manager.is_idle() && app.prepared.is_none());
+    assert_eq!(app.state.global_concurrency, 6);
+    app.state
+        .draft
+        .options
+        .insert("variant".into(), "low".into());
+    assert_eq!(
+        serde_json::to_value(&app.state.runs[0].task).unwrap(),
+        expected
+    );
+    app.save();
+    assert_eq!(app.store.load().unwrap().draft.options["variant"], "low");
+}
+
+#[test]
+fn backend_controls_fit_compact_editor_in_both_themes_and_detection_is_snapshot_scoped() {
+    let (_temp, mut app) = app();
+    let ctx = egui::Context::default();
+    theme::install(&ctx);
+    for dark in [false, true] {
+        ctx.set_visuals(if dark {
+            egui::Visuals::dark()
+        } else {
+            egui::Visuals::light()
+        });
+        for agent in [AgentId::Codex, AgentId::Copilot, AgentId::OpenCode] {
+            app.state.select_agent(agent);
+            for width in [310.0, 360.0, 520.0] {
+                // Include margins used by the real left pane; widgets must fit
+                // horizontally even when the vertical editor needs scrolling.
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(width, 820.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::NONE.inner_margin(theme::PANEL_MARGIN))
+                            .show(ui, |ui| {
+                                let available = ui.available_width();
+                                let inner = ui.scope(|ui| app.editor(ui, &ctx));
+                                assert!(
+                                    inner.response.rect.width() <= available + 1.0,
+                                    "{} at width {width}: {} > {available}",
+                                    agent.label(),
+                                    inner.response.rect.width()
+                                );
+                            });
+                    },
+                );
+                output.textures_delta.clear();
+                assert!(!output.shapes.is_empty());
+            }
+        }
+    }
+    app.state.select_agent(AgentId::OpenCode);
+    app.detection = Some((
+        AgentId::OpenCode,
+        app.state.draft.options.clone(),
+        Ok("version detected".into()),
+    ));
+    assert!(app.current_detection().is_some());
+    app.state.select_agent(AgentId::Codex);
+    assert!(app.current_detection().is_none());
+    app.state.select_agent(AgentId::OpenCode);
+    assert!(app.current_detection().is_some());
+    app.state
+        .draft
+        .options
+        .insert("agent".into(), "plan".into());
+    assert!(app.current_detection().is_none());
 }

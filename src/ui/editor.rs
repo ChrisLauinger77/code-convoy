@@ -157,7 +157,7 @@ impl App {
                 });
             }
             Err(_) => {
-                ui.weak("Planned backend. Choose Codex or Copilot to run a task.");
+                ui.weak("Planned backend. Choose Codex, Copilot or OpenCode to run a task.");
             }
         }
     }
