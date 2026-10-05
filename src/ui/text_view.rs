@@ -54,7 +54,7 @@ impl TextView {
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,
-        id: impl std::hash::Hash,
+        id: impl egui::AsIdSalt,
         text: &str,
         diff: bool,
         height: f32,
@@ -115,7 +115,7 @@ mod tests {
         theme::install(&ctx);
         let mut view = TextView::default();
         let text = "A short log line\n".repeat(30_000);
-        let output = ctx.run(
+        let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
@@ -123,12 +123,14 @@ mod tests {
                 )),
                 ..Default::default()
             },
-            |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| {
+            |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
                     view.show(ui, "large_log", &text, false, 300.0);
                 });
             },
         );
+        // This headless layout test has no renderer to apply texture updates.
+        output.textures_delta.clear();
         assert_eq!(view.lines.len(), 30_000);
         let text_shapes = output
             .shapes

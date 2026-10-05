@@ -3,7 +3,7 @@ name = "codeconvoy"
 default-run = "codeconvoy"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.95"
 description = "A local desktop task runner for coding-agent CLIs across Git repositories"
 license = "MIT"
 

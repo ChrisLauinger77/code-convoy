@@ -137,13 +137,13 @@ impl App {
         })
     }
 
-    fn header(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("header")
+    fn header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::Panel::top("header")
             .frame(
-                egui::Frame::side_top_panel(&ctx.style())
+                egui::Frame::side_top_panel(ui.style())
                     .inner_margin(egui::Margin::symmetric(theme::PANEL_MARGIN, 10)),
             )
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.heading("CodeConvoy");
                     if ui.available_width() > 650.0 {
@@ -195,10 +195,10 @@ impl App {
             });
     }
 
-    fn footer(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::bottom("footer")
-            .frame(egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(theme::PANEL_MARGIN, 5)))
-            .show(ctx, |ui| {
+    fn footer(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::bottom("footer")
+            .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(theme::PANEL_MARGIN, 5)))
+            .show(ui, |ui| {
                 if !self.notice.is_empty() {
                     ui.horizontal_wrapped(|ui| {
                         ui.colored_label(theme::Palette::of(ui).error, &self.notice);
@@ -501,7 +501,8 @@ impl App {
     }
 }
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
+        let ctx = &ui.ctx().clone();
         self.poll();
         if ctx.input(|i| i.viewport().close_requested()) && !self.manager.is_idle() {
             self.closing = true;
@@ -512,17 +513,17 @@ impl eframe::App for App {
             self.save();
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
-        self.header(ctx);
-        self.footer(ctx);
-        egui::SidePanel::left("task_editor")
+        self.header(ui, ctx);
+        self.footer(ui);
+        egui::Panel::left("task_editor")
             .resizable(true)
-            .default_width(360.0)
-            .width_range(310.0..=(ctx.content_rect().width() * 0.55).max(310.0))
-            .frame(egui::Frame::side_top_panel(&ctx.style()).inner_margin(theme::PANEL_MARGIN))
-            .show(ctx, |ui| {
-                egui::TopBottomPanel::bottom("execution_controls")
+            .default_size(360.0)
+            .size_range(310.0..=(ui.available_width() * 0.55).max(310.0))
+            .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
+            .show(ui, |ui| {
+                egui::Panel::bottom("execution_controls")
                     .frame(egui::Frame::NONE)
-                    .show_inside(ui, |ui| {
+                    .show(ui, |ui| {
                         ui.add_enabled_ui(self.prepared.is_none() && !self.closing, |ui| {
                             self.execution_section(ui, ctx)
                         });
@@ -537,8 +538,8 @@ impl eframe::App for App {
                     });
             });
         egui::CentralPanel::default()
-            .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(theme::PANEL_MARGIN))
-            .show(ctx, |ui| self.results(ui, ctx));
+            .frame(egui::Frame::central_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
+            .show(ui, |ui| self.results(ui, ctx));
         self.preflight_window(ctx);
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
             self.save();
