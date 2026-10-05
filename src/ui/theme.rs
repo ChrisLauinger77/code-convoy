@@ -99,7 +99,7 @@ pub fn install(ctx: &egui::Context) {
             v.warn_fg_color = p.warning;
             v.error_fg_color = p.error;
             v.selection.bg_fill = p.selection;
-            v.selection.stroke = Stroke::new(1.5, p.accent);
+            v.selection.stroke = Stroke::new(1.5_f32, p.accent);
             v.hyperlink_color = p.accent;
             v.window_corner_radius = CORNER.into();
             v.menu_corner_radius = CORNER.into();
@@ -135,9 +135,9 @@ pub fn install(ctx: &egui::Context) {
             v.widgets.hovered.bg_fill = hover;
             v.widgets.hovered.weak_bg_fill = hover;
             v.widgets.active.bg_fill = p.selection;
-            v.widgets.hovered.bg_stroke = Stroke::new(1.5, p.accent);
-            v.widgets.active.bg_stroke = Stroke::new(1.5, p.accent);
-            v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, p.border);
+            v.widgets.hovered.bg_stroke = Stroke::new(1.5_f32, p.accent);
+            v.widgets.active.bg_stroke = Stroke::new(1.5_f32, p.accent);
+            v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, p.border);
         });
     }
 }

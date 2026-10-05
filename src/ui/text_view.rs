@@ -63,7 +63,7 @@ impl TextView {
         let p = theme::Palette::of(ui);
         egui::Frame::new()
             .fill(p.inset)
-            .stroke(egui::Stroke::new(1.0, p.border))
+            .stroke(egui::Stroke::new(1.0_f32, p.border))
             .corner_radius(theme::CORNER)
             .inner_margin(theme::GAP)
             .show(ui, |ui| {
