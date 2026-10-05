@@ -1,4 +1,4 @@
-use super::format::{duration, run_label, status_label};
+use super::format::{duration, run_label};
 use super::*;
 
 impl App {
@@ -14,8 +14,8 @@ impl App {
         theme::eyebrow(ui, "RUNS / RESULTS");
         self.run_navigation(ui);
         if self.state.runs.is_empty() {
-            ui.add_space(theme::SECTION_GAP * 2.0);
-            ui.heading("One task. Independent jobs.");
+            ui.add_space(theme::SECTION_GAP);
+            ui.strong("No convoys yet");
             ui.add_space(theme::GAP);
             ui.label("Describe your task, choose an agent and add repositories in New Convoy.");
             ui.weak("Review their Git state, then start your convoy. Each repository gets its own output and diff.");
@@ -27,12 +27,19 @@ impl App {
             .iter()
             .find(|r| Some(r.id) == self.selected_run)
         else {
+            ui.weak("Select a convoy to inspect its jobs.");
             return;
         };
         ui.add(
             egui::Label::new(
-                egui::RichText::new(run.task.prompt.lines().next().unwrap_or("Untitled task"))
-                    .color(theme::Palette::of(ui).muted),
+                egui::RichText::new(
+                    run.task
+                        .prompt
+                        .lines()
+                        .find(|l| !l.trim().is_empty())
+                        .unwrap_or("Untitled task"),
+                )
+                .color(theme::Palette::of(ui).muted),
             )
             .truncate(),
         )
@@ -77,7 +84,13 @@ impl App {
                             .show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
                                 ui.horizontal(|ui| {
-                                    let name_width = (ui.available_width() - 210.0).max(55.0);
+                                    let controls_width = if job.status.is_terminal() {
+                                        176.0
+                                    } else {
+                                        260.0
+                                    };
+                                    let name_width =
+                                        (ui.available_width() - controls_width).max(40.0);
                                     let response = ui
                                         .allocate_ui_with_layout(
                                             egui::vec2(name_width, theme::ROW_HEIGHT),
@@ -95,6 +108,9 @@ impl App {
                                             },
                                         )
                                         .inner;
+                                    if response.has_focus() {
+                                        response.scroll_to_me(None);
+                                    }
                                     if response
                                         .on_hover_text(job.repository.path.display().to_string())
                                         .clicked()
@@ -103,13 +119,15 @@ impl App {
                                         self.diff = None;
                                         self.diff_target = None;
                                     }
-                                    ui.add_sized(
-                                        [92.0, theme::ROW_HEIGHT],
-                                        egui::Label::new(
-                                            egui::RichText::new(status_label(job.status))
-                                                .color(p.status(job.status)),
-                                        ),
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(110.0, theme::ROW_HEIGHT),
+                                        egui::Layout::left_to_right(egui::Align::Center),
+                                        |ui| {
+                                            ui.set_min_width(110.0);
+                                            theme::job_status(ui, job)
+                                        },
                                     )
+                                    .inner
                                     .on_hover_text(
                                         job.queue_reason.map_or_else(
                                             || job.status.label().into(),
@@ -133,7 +151,7 @@ impl App {
                                         ),
                                     );
                                     if !job.status.is_terminal()
-                                        && ui.add(theme::quiet("Stop").small()).clicked()
+                                        && ui.add(theme::quiet("Stop job").small()).clicked()
                                     {
                                         self.manager.cancel(run.id, index);
                                     }
@@ -145,11 +163,12 @@ impl App {
         ui.add_space(theme::GAP);
         ui.separator();
         let Some(job) = run.jobs.get(self.selected_job) else {
+            ui.weak("Select a repository job to inspect output, diff and settings.");
             return;
         };
         ui.horizontal_wrapped(|ui| {
             ui.strong(&job.repository.name);
-            ui.colored_label(p.status(job.status), status_label(job.status));
+            theme::job_status(ui, job);
         });
         ui.add(
             egui::Label::new(
@@ -170,7 +189,22 @@ impl App {
             );
         }
         if !job.detail.is_empty() {
-            ui.label(&job.detail);
+            if job.status == JobStatus::Failed {
+                ui.colored_label(p.error, diagnostics::summary(&job.detail));
+                diagnostics::details(
+                    ui,
+                    ("job_diagnostics", run.id, self.selected_job),
+                    &job.detail,
+                );
+            } else if job.status == JobStatus::Cancelled {
+                ui.small(&job.detail);
+            } else {
+                egui::CollapsingHeader::new("Completion details")
+                    .id_salt((run.id, self.selected_job))
+                    .show(ui, |ui| {
+                        ui.label(&job.detail);
+                    });
+            }
         }
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.tab, Tab::Output, "Output");
@@ -199,13 +233,10 @@ impl App {
                     );
                 }
                 if job.log.text.is_empty() {
-                    ui.weak(if job.status == JobStatus::Queued {
-                        "Waiting for an available job slot…"
-                    } else if job.status == JobStatus::Running {
-                        "Waiting for agent output…"
-                    } else {
-                        "No output in this session. Previous-session logs are not saved."
-                    });
+                    ui.weak(format::output_empty(
+                        job,
+                        self.session_runs.contains(&run.id),
+                    ));
                 } else {
                     self.output_view.show(
                         ui,
@@ -244,7 +275,8 @@ impl App {
                         bottom - ui.cursor().top() - 26.0,
                     ),
                     Some(Err(error)) => {
-                        ui.colored_label(p.error, error);
+                        ui.colored_label(p.error, diagnostics::summary(error));
+                        diagnostics::details(ui, "diff_error", error);
                     }
                     None if !loading => {
                         ui.weak("Refresh to inspect this repository's current Git diff.");
@@ -252,28 +284,7 @@ impl App {
                     None => {}
                 }
             }
-            Tab::Task => {
-                ui.label(&run.task.prompt);
-                ui.separator();
-                ui.label(run.task.agent.label());
-                for (key, value) in &run.task.options {
-                    ui.label(egui::RichText::new(format!("{key}: {value}")).monospace());
-                }
-                ui.label(format!("Concurrency: {}", run.task.concurrency));
-                if let Some(before) = &job.before {
-                    ui.label(format!(
-                        "Before execution: {} · {} changes",
-                        before.branch, before.changed
-                    ));
-                    ui.label(
-                        egui::RichText::new(before.head.as_deref().unwrap_or("No initial commit"))
-                            .monospace(),
-                    );
-                }
-                if let Some(code) = job.exit_code {
-                    ui.label(format!("Exit code: {code}"));
-                }
-            }
+            Tab::Task => snapshot::show(ui, run, job),
         }
         if let Some(path) = load_diff {
             self.diff_target = Some(path.clone());
@@ -338,9 +349,17 @@ impl App {
                         ui.selectable_value(
                             &mut selected,
                             Some(run.id),
-                            format!("{}\n{summary}", run_label(run)),
+                            format!(
+                                "{} · {}\n{summary}",
+                                run_label(run),
+                                duration(run.elapsed(domain::now()))
+                            ),
                         )
-                        .on_hover_text(&run.task.prompt);
+                        .on_hover_text(format!(
+                            "{}\nCreated {}",
+                            run.task.prompt,
+                            format::timestamp(run.created_at)
+                        ));
                     }
                     if is_active {
                         ui.separator();
@@ -352,19 +371,20 @@ impl App {
         let mut remove = None;
         let mut clear = false;
         ui.horizontal_wrapped(|ui| {
-            if let Some(run) = self.state.runs.iter().find(|r| Some(r.id) == self.selected_run) {
-                if ui.add_enabled(!self.busy && self.prepared.is_none() && !self.closing,
+            if let Some(run) = self.state.runs.iter().find(|r| Some(r.id) == self.selected_run)
+                && ui.add_enabled(!self.busy && self.prepared.is_none() && !self.closing,
                     theme::quiet("Reuse convoy").small())
                     .on_hover_text("Replace the draft with this convoy's task, agent settings, concurrency and still-registered repositories. Review before launching; this does not start jobs.")
                     .clicked() { reuse = Some(run.id); }
-                if !run.active() && ui.add(theme::quiet("Remove from history").small())
-                    .on_hover_text("Remove only this convoy's local history and session output. Repository files and Git changes are untouched.")
-                    .clicked() { remove = Some(run.id); }
-            }
             if history > 0 {
                 ui.menu_button("History cleanup", |ui| {
                     ui.label("Removes local history and session output only.");
                     ui.weak("Active convoys and repository files are untouched.");
+                    if let Some(run)=self.state.runs.iter().find(|r|Some(r.id)==self.selected_run)
+                        && !run.active() && ui.button(format!("Remove convoy #{} from history",run.id)).clicked() {
+                        remove=Some(run.id); ui.close();
+                    }
+                    ui.separator();
                     if ui.button(format!("Clear history ({history})")).clicked() {
                         clear = true;
                         ui.close();

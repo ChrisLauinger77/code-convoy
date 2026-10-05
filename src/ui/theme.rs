@@ -7,6 +7,36 @@ pub const PANEL_MARGIN: i8 = 16;
 pub const ROW_HEIGHT: f32 = 30.0;
 pub const CORNER: u8 = 4;
 
+/// Paint the mark so it is legible even when bundled fonts lack check glyphs.
+pub fn success_label(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    let color = Palette::of(ui).success;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 14.0), egui::Sense::hover());
+        ui.painter().add(egui::Shape::line(
+            vec![
+                rect.min + egui::vec2(1.0, 7.0),
+                rect.min + egui::vec2(4.5, 10.5),
+                rect.min + egui::vec2(11.0, 3.0),
+            ],
+            Stroke::new(1.5, color),
+        ));
+        ui.colored_label(color, text)
+    })
+    .inner
+}
+
+pub fn job_status(ui: &mut egui::Ui, job: &crate::domain::Job) -> egui::Response {
+    if job.status == JobStatus::Succeeded && !job.interrupted {
+        success_label(ui, super::format::job_label(job))
+    } else {
+        ui.colored_label(
+            Palette::of(ui).status(job.status),
+            super::format::job_label(job),
+        )
+    }
+}
+
 pub struct Palette {
     pub surface: Color32,
     pub inset: Color32,

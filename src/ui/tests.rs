@@ -21,6 +21,131 @@ fn app() -> (tempfile::TempDir, App) {
     (temp, app)
 }
 
+#[test]
+fn bulk_selection_includes_dirty_and_nested_repositories_without_mutating_them() {
+    let (_temp, mut app) = app();
+    for count in [0, 1, 5, 10, 24, MAX_REPOSITORIES] {
+        app.state.repositories = (0..count)
+            .map(|i| repository(&format!("parent/repo{i}")))
+            .collect();
+        let registered = app.state.repositories.clone();
+        app.selected.insert("/stale".into());
+        app.select_repositories(true);
+        assert_eq!(app.selected.len(), count);
+        assert!(registered.iter().all(|r| app.selected.contains(&r.path)));
+        app.select_repositories(false);
+        assert!(app.selected.is_empty());
+        assert_eq!(app.state.repositories, registered);
+        assert!(app.manager.is_idle());
+    }
+}
+
+#[test]
+fn cli_check_is_configuration_scoped_and_does_not_release_repository_work() {
+    let (_temp, mut app) = app();
+    app.busy = true; // Repository refresh is independently in progress.
+    let checked = app.state.draft.options.clone();
+    app.checking_cli = Some((AgentId::Codex, checked.clone()));
+    assert!(app.current_cli_check());
+    app.state.select_agent(AgentId::Claude);
+    assert!(!app.current_cli_check());
+    app.tx
+        .send(Message::Detected(
+            AgentId::Codex,
+            checked,
+            Ok("fixture".into()),
+        ))
+        .unwrap();
+    app.poll();
+    assert!(app.busy);
+    assert!(app.checking_cli.is_none());
+    assert!(app.current_detection().is_none());
+    app.state.select_agent(AgentId::Codex);
+    assert!(app.current_detection().is_some());
+}
+
+#[test]
+fn editor_scroll_and_execution_fit_small_and_large_panes() {
+    let (_temp, mut app) = app();
+    let ctx = egui::Context::default();
+    theme::install(&ctx);
+    app.state.repositories = (0..24)
+        .map(|i| repository(&format!("long-repository-name-{i}")))
+        .collect();
+    for agent in AgentId::ALL {
+        app.state.select_agent(agent);
+        for (width, height) in [(310.0, 450.0), (360.0, 710.0), (520.0, 890.0)] {
+            // The footer measures once and reserves its actual height next frame.
+            for frame in 0..3 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(width, height),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::NONE.inner_margin(theme::PANEL_MARGIN))
+                            .show(ui, |ui| {
+                                let bounds = ui.available_rect_before_wrap();
+                                let result = ui.scope(|ui| app.editor_pane(ui, &ctx));
+                                if frame > 0 {
+                                    assert!(
+                                        result.response.rect.right() <= bounds.right() + 1.0,
+                                        "{agent:?} width {width}"
+                                    );
+                                    assert!(
+                                        result.response.rect.bottom() <= bounds.bottom() + 1.0,
+                                        "{agent:?} height {height}"
+                                    );
+                                }
+                            });
+                    },
+                );
+                output.textures_delta.clear();
+            }
+        }
+    }
+}
+
+#[test]
+fn result_actions_fit_the_narrowest_allowed_results_pane() {
+    let (_temp, mut app) = app();
+    let ctx = egui::Context::default();
+    theme::install(&ctx);
+    app.state.runs = vec![run(
+        1,
+        &[JobStatus::Running, JobStatus::Queued, JobStatus::Succeeded],
+    )];
+    app.selected_run = Some(1);
+    for width in [350.0, 600.0, 1100.0] {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(width, 720.0),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::NONE.inner_margin(theme::PANEL_MARGIN))
+                    .show(ui, |ui| {
+                        let right = ui.available_rect_before_wrap().right();
+                        let response = ui.scope(|ui| app.results(ui, &ctx));
+                        assert!(
+                            response.response.rect.right() <= right + 1.0,
+                            "results width {width}"
+                        );
+                    });
+            },
+        );
+        output.textures_delta.clear();
+    }
+}
+
 fn repository(name: &str) -> Repository {
     Repository {
         name: name.into(),

@@ -1,6 +1,11 @@
+mod about;
+mod agent_config;
+mod diagnostics;
 mod editor;
 mod format;
+mod repositories;
 mod results;
+mod snapshot;
 #[cfg(test)]
 mod tests;
 mod text_view;
@@ -29,7 +34,7 @@ enum Message {
     Detected(
         domain::AgentId,
         domain::AgentOptions,
-        Result<String, String>,
+        Result<String, diagnostics::CliError>,
     ),
     Diff(PathBuf, Result<String, String>),
 }
@@ -50,11 +55,15 @@ pub struct App {
     repository_input: String,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     busy: bool,
+    checking_cli: Option<(domain::AgentId, domain::AgentOptions)>,
+    about_open: bool,
+    execution_height: f32,
+    session_runs: HashSet<u64>,
     notice: String,
     detection: Option<(
         domain::AgentId,
         domain::AgentOptions,
-        Result<String, String>,
+        Result<String, diagnostics::CliError>,
     )>,
     output_view: text_view::TextView,
     diff_view: text_view::TextView,
@@ -101,6 +110,10 @@ impl App {
             repository_input: String::new(),
             repository_states: HashMap::new(),
             busy: false,
+            checking_cli: None,
+            about_open: false,
+            execution_height: 184.0,
+            session_runs: HashSet::new(),
             notice: String::new(),
             detection: None,
             output_view: text_view::TextView::default(),
@@ -130,9 +143,15 @@ impl App {
     ) -> Option<&(
         domain::AgentId,
         domain::AgentOptions,
-        Result<String, String>,
+        Result<String, diagnostics::CliError>,
     )> {
         self.detection.as_ref().filter(|(agent, options, _)| {
+            *agent == self.state.draft.agent && *options == self.state.draft.options
+        })
+    }
+
+    fn current_cli_check(&self) -> bool {
+        self.checking_cli.as_ref().is_some_and(|(agent, options)| {
             *agent == self.state.draft.agent && *options == self.state.draft.options
         })
     }
@@ -146,8 +165,8 @@ impl App {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.heading("CodeConvoy");
-                    if ui.available_width() > 650.0 {
-                        ui.weak("One task. Multiple repositories.");
+                    if ui.available_width() > 850.0 {
+                        ui.weak("One task. Multiple repositories. Your agent.");
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.menu_button("Appearance", |ui| {
@@ -177,9 +196,10 @@ impl App {
                         } else {
                             let (suffix, color) = match self.current_detection().map(|(_, _, r)| r)
                             {
-                                Some(Ok(_)) => ("available", p.success),
-                                Some(Err(_)) => ("check failed", p.error),
-                                None => ("not checked", p.muted),
+                                Some(Ok(_)) => ("Available", p.success),
+                                Some(Err(error)) => (error.label(), p.warning),
+                                None if self.current_cli_check() => ("Checking…", p.muted),
+                                None => ("Unchecked", p.muted),
                             };
                             ui.label(
                                 egui::RichText::new(format!(
@@ -201,13 +221,15 @@ impl App {
             .show(ui, |ui| {
                 if !self.notice.is_empty() {
                     ui.horizontal_wrapped(|ui| {
-                        ui.colored_label(theme::Palette::of(ui).error, &self.notice);
+                        ui.colored_label(theme::Palette::of(ui).error, diagnostics::summary(&self.notice));
                         if ui.add(theme::quiet("Dismiss").small()).clicked() { self.notice.clear(); }
                     });
+                    if !self.notice.is_empty() { diagnostics::details(ui, "notice_diagnostics", &self.notice); }
                 }
                 ui.horizontal(|ui| {
                     ui.small("Tab / Shift+Tab to navigate · Enter / Space to activate");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.add(theme::quiet("About").small()).clicked() { self.about_open = true; }
                         ui.small("Local session").on_hover_text(format!("Local state: {}\nPrompts and run metadata are saved locally. Output stays in memory. Do not put credentials in the task.", self.store.directory().display()));
                     });
                 });
@@ -306,6 +328,7 @@ impl App {
             self.draft_message = format!("Convoy #{id} launched. Ready for your next task.");
             self.focus_draft = true;
         }
+        self.session_runs.insert(id);
         self.state.trim_history();
         self.dirty = true;
         self.select_run(Some(id));
@@ -354,7 +377,7 @@ impl App {
                     }
                 }
                 Message::Detected(agent, options, result) => {
-                    self.busy = false;
+                    self.checking_cli = None;
                     self.detection = Some((agent, options, result));
                 }
                 Message::Diff(path, result) => {
@@ -373,6 +396,8 @@ impl App {
         self.state.trim_logs();
         self.manager.reap();
         self.state.trim_history();
+        self.session_runs
+            .retain(|id| self.state.runs.iter().any(|run| run.id == *id));
         self.reconcile_run_selection();
     }
     fn select_run(&mut self, id: Option<u64>) {
@@ -521,31 +546,22 @@ impl eframe::App for App {
             .size_range(310.0..=(ui.available_width() * 0.55).max(310.0))
             .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
             .show(ui, |ui| {
-                egui::Panel::bottom("execution_controls")
-                    .frame(egui::Frame::NONE)
-                    .show(ui, |ui| {
-                        ui.add_enabled_ui(self.prepared.is_none() && !self.closing, |ui| {
-                            self.execution_section(ui, ctx)
-                        });
-                    });
-                egui::ScrollArea::vertical()
-                    .id_salt("editor_scroll")
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        ui.add_enabled_ui(self.prepared.is_none() && !self.closing, |ui| {
-                            self.editor(ui, ctx)
-                        });
-                    });
+                self.editor_pane(ui, ctx);
             });
         egui::CentralPanel::default()
             .frame(egui::Frame::central_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
             .show(ui, |ui| self.results(ui, ctx));
         self.preflight_window(ctx);
+        self.about_window(ctx);
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
             self.save();
         }
         ctx.request_repaint_after(Duration::from_millis(
-            if !self.manager.is_idle() || self.state.runs.iter().any(Run::active) || self.busy {
+            if !self.manager.is_idle()
+                || self.state.runs.iter().any(Run::active)
+                || self.busy
+                || self.checking_cli.is_some()
+            {
                 100
             } else {
                 1000
