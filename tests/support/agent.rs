@@ -61,7 +61,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .windows(2)
             .find(|a| a[0] == "--dir")
             .expect("missing --dir");
-        assert_eq!(std::path::Path::new(&dir[1]), std::env::current_dir()?);
+        assert_eq!(
+            std::path::Path::new(&dir[1]).canonicalize()?,
+            std::env::current_dir()?.canonicalize()?
+        );
         assert!(std::env::var_os("PWD").is_none());
     }
     std::fs::write("agent-input", &input)?;

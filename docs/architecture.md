@@ -2,7 +2,7 @@
 
 CodeConvoy uses one egui UI thread and a small Tokio runtime. The unit of work is a task configuration applied to a set of existing repository roots. A run is a saved snapshot of that configuration plus one job per repository.
 
-Backend status: Codex and Copilot are implemented and user-verified end-to-end on Linux with two concurrent real repositories each. OpenCode is the third supported backend; Claude Code remains planned as backend #4.
+Backend status: Codex and Copilot are implemented and user-verified end-to-end on Linux with two concurrent real repositories each. OpenCode is the third supported backend, with source/fixture checks and macOS UI validation; authenticated E2E is unverified. Claude Code remains planned as backend #4.
 
 ## Modules
 
@@ -97,7 +97,7 @@ All active convoys and the most recent 30 completed convoys are retained; active
 
 ## Dependencies and scope
 
-- `eframe`/egui: native windowing and widgets. Version 0.36.0 is used with Rust 1.95 or newer; OpenGL is used to avoid a direct WGPU renderer dependency. Wayland, X11, fonts, and accessibility are enabled.
+- `eframe`/egui: native windowing and widgets. Version 0.36 is used with Rust 1.95 or newer; OpenGL is used to avoid a direct WGPU renderer dependency. Wayland, X11, fonts, and accessibility are enabled.
 - Tokio: background process I/O, timers, task ownership, cancellation notifications.
 - serde/serde_json: local state and backend-specific Codex/OpenCode JSON records.
 - `directories`: conventional platform data paths.
