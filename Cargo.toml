@@ -1,0 +1,36 @@
+[package]
+name = "codeconvoy"
+default-run = "codeconvoy"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "A local desktop task runner for coding-agent CLIs across Git repositories"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+directories = "6"
+eframe = { version = "0.33.3", default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "accesskit"] }
+fs2 = "0.4"
+process-wrap = { version = "9.1", default-features = false, features = ["tokio1", "process-group", "job-object", "kill-on-drop"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "sync", "time", "macros"] }
+
+[profile.release]
+lto = "thin"
+strip = true
+
+[lints.clippy]
+unwrap_used = "warn"
+
+[features]
+test-support = []
+
+[[bin]]
+name = "codeconvoy-test-agent"
+path = "tests/support/agent.rs"
+required-features = ["test-support"]
+test = false
+bench = false
