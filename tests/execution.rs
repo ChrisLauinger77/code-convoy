@@ -86,12 +86,14 @@ async fn concurrency_limit_is_respected_and_failure_does_not_abort_other_jobs() 
     let directory = tempfile::tempdir().unwrap();
     let prepared = prepare(directory.path(), &["one", "fail", "three", "four"], 2).await;
     let (tx, mut rx) = mpsc::channel(256);
-    let handle = runner::start(42, prepared, Arc::new(Fixture), tx);
+    let mut handle = runner::RunManager::new(16, tx);
+    handle.start(42, prepared, Arc::new(Fixture)).unwrap();
     let events = finish(&mut rx, 4).await;
     let (mut active, mut maximum, mut successes, mut failures) = (0, 0, 0, 0);
     let mut output = String::new();
     for event in events {
         match event {
+            Event::Queued { .. } => {}
             Event::Started { .. } => {
                 active += 1;
                 maximum = maximum.max(active);
@@ -117,7 +119,7 @@ async fn concurrency_limit_is_respected_and_failure_does_not_abort_other_jobs() 
         std::fs::read_to_string(directory.path().join("one/agent-input")).unwrap(),
         "literal prompt with $(shell)\nsecond line"
     );
-    while !handle.join.is_finished() {
+    while !handle.is_idle() {
         tokio::task::yield_now().await;
     }
 }
@@ -131,8 +133,9 @@ async fn queued_cancellation_never_spawns_and_dirty_change_after_preflight_fails
     )
     .unwrap();
     let (tx, mut rx) = mpsc::channel(256);
-    let handle = runner::start(1, prepared, Arc::new(Fixture), tx);
-    handle.cancel(1);
+    let mut handle = runner::RunManager::new(16, tx);
+    handle.start(1, prepared, Arc::new(Fixture)).unwrap();
+    handle.cancel(1, 1);
     let events = finish(&mut rx, 3).await;
     assert!(!directory.path().join("cancelled/agent-input").exists());
     assert!(!directory.path().join("changed/agent-input").exists());
@@ -152,7 +155,8 @@ async fn cancelling_a_running_job_terminates_its_descendants() {
     let mut prepared = prepare(directory.path(), &["tree"], 1).await;
     prepared.task.prompt = "spawn-child".into();
     let (tx, mut rx) = mpsc::channel(256);
-    let handle = runner::start(1, prepared, Arc::new(Fixture), tx);
+    let mut handle = runner::RunManager::new(16, tx);
+    handle.start(1, prepared, Arc::new(Fixture)).unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         while !directory.path().join("tree/descendant-ready").exists() {
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -160,7 +164,7 @@ async fn cancelling_a_running_job_terminates_its_descendants() {
     })
     .await
     .unwrap();
-    handle.cancel(0);
+    handle.cancel(1, 0);
     let events = finish(&mut rx, 1).await;
     assert!(events.iter().any(|e| matches!(
         e,
@@ -226,7 +230,8 @@ async fn copilot_jobs_stream_before_completion_and_isolate_failures_with_a_concu
     assert_eq!(prepared.task.options["tool_approvals"], "file-edits");
     let prompt = prepared.task.prompt.clone();
     let (tx, mut rx) = mpsc::channel(256);
-    let handle = runner::start(100, prepared, Arc::new(Copilot), tx);
+    let mut handle = runner::RunManager::new(16, tx);
+    handle.start(100, prepared, Arc::new(Copilot)).unwrap();
     let events = finish(&mut rx, 4).await;
     let (mut active, mut maximum, mut successes, mut failures) = (0, 0, 0, 0);
     let mut finished = std::collections::HashSet::new();
@@ -234,6 +239,7 @@ async fn copilot_jobs_stream_before_completion_and_isolate_failures_with_a_concu
     let mut logs = String::new();
     for event in events {
         match event {
+            Event::Queued { .. } => {}
             Event::Started { .. } => {
                 active += 1;
                 maximum = maximum.max(active);
@@ -277,7 +283,7 @@ async fn copilot_jobs_stream_before_completion_and_isolate_failures_with_a_concu
             prompt
         );
     }
-    while !handle.join.is_finished() {
+    while !handle.is_idle() {
         tokio::task::yield_now().await;
     }
 }
@@ -288,7 +294,8 @@ async fn copilot_running_cancellation_kills_descendants_without_cancelling_anoth
     let mut prepared = prepare_copilot(directory.path(), &["tree", "other"], 2).await;
     prepared.task.prompt = "cancel-test".into();
     let (tx, mut rx) = mpsc::channel(256);
-    let handle = runner::start(100, prepared, Arc::new(Copilot), tx);
+    let mut handle = runner::RunManager::new(16, tx);
+    handle.start(100, prepared, Arc::new(Copilot)).unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         while !directory.path().join("tree/descendant-ready").exists() {
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -296,7 +303,7 @@ async fn copilot_running_cancellation_kills_descendants_without_cancelling_anoth
     })
     .await
     .unwrap();
-    handle.cancel(0);
+    handle.cancel(100, 0);
     let events = finish(&mut rx, 2).await;
     assert!(events.iter().any(|e| matches!(
         e,
@@ -328,8 +335,9 @@ async fn copilot_queued_cancel_and_preflight_changes_never_spawn_an_agent() {
     )
     .unwrap();
     let (tx, mut rx) = mpsc::channel(256);
-    let handle = runner::start(100, prepared, Arc::new(Copilot), tx);
-    handle.cancel(1);
+    let mut handle = runner::RunManager::new(16, tx);
+    handle.start(100, prepared, Arc::new(Copilot)).unwrap();
+    handle.cancel(100, 1);
     let events = finish(&mut rx, 3).await;
     assert!(!directory.path().join("cancelled/agent-input").exists());
     assert!(!directory.path().join("changed/agent-input").exists());

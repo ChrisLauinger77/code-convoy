@@ -6,10 +6,10 @@ mod theme;
 
 use crate::{
     agents,
-    domain::{self, AppState, Job, JobStatus, MAX_HISTORY, MAX_REPOSITORIES, Repository, Run},
+    domain::{self, AppState, JobStatus, MAX_REPOSITORIES, Repository, Run},
     git::{self, WorkingTree},
     persistence::Store,
-    runner::{self, Event, PreparedRun, RunHandle},
+    runner::{self, Event, PreparedRun, RunManager},
 };
 use eframe::egui;
 use std::{
@@ -56,9 +56,8 @@ pub struct App {
     diff_view: text_view::TextView,
     tx: mpsc::Sender<Message>,
     rx: mpsc::Receiver<Message>,
-    events_tx: async_mpsc::Sender<Event>,
     events_rx: async_mpsc::Receiver<Event>,
-    active: Option<RunHandle>,
+    manager: RunManager,
     prepared: Option<PreparedRun>,
     dirty_ack: bool,
     selected_run: Option<u64>,
@@ -81,6 +80,10 @@ impl App {
         let (tx, rx) = mpsc::channel();
         let (events_tx, events_rx) = async_mpsc::channel(256);
         let selected_run = state.runs.first().map(|r| r.id);
+        let manager = {
+            let _entered = runtime.enter();
+            RunManager::new(state.global_concurrency, events_tx)
+        };
         let mut app = Self {
             store,
             state,
@@ -95,9 +98,8 @@ impl App {
             diff_view: text_view::TextView::default(),
             tx,
             rx,
-            events_tx,
             events_rx,
-            active: None,
+            manager,
             prepared: None,
             dirty_ack: false,
             selected_run,
@@ -151,11 +153,14 @@ impl App {
                                 }
                             }
                         });
-                        if self.active.is_some()
-                            && ui.add(theme::quiet("Stop all jobs")).clicked()
-                            && let Some(handle) = &self.active
-                        {
-                            handle.cancel_all();
+                        if !self.manager.is_idle() {
+                            ui.menu_button("All convoys", |ui| {
+                                ui.label(format!("{} active convoys", self.manager.active_count()));
+                                if ui.button("Stop All Convoys").on_hover_text("Emergency stop: cancels every running and queued job in all convoys.").clicked() {
+                                    self.manager.cancel_all();
+                                    ui.close();
+                                }
+                            });
                         }
                         let p = theme::Palette::of(ui);
                         if self.closing {
@@ -271,33 +276,24 @@ impl App {
         };
         let id = self.state.next_run;
         self.state.next_run = id.saturating_add(1);
-        let jobs = prepared
-            .repositories
-            .iter()
-            .map(|r| {
-                let mut job = Job::queued(r.repository.clone());
-                job.before = Some(r.state.summary.clone());
-                job
-            })
-            .collect();
-        self.state.runs.insert(
-            0,
-            Run {
-                id,
-                created_at: domain::now(),
-                task: prepared.task.clone(),
-                jobs,
-            },
-        );
-        self.state.runs.truncate(MAX_HISTORY);
+        self.state.runs.insert(0, prepared.snapshot(id));
         // Persist intent before an agent can touch a repository.
         if let Err(error) = self.store.save(&self.state) {
             self.state.runs.remove(0);
             self.notice = format!("Cannot save run; nothing was started: {error:#}");
             return;
         }
-        let _entered = self.runtime.enter();
-        self.active = Some(runner::start(id, prepared, backend, self.events_tx.clone()));
+        if let Err(error) = self.manager.start(id, prepared, backend) {
+            for job in &mut self.state.runs[0].jobs {
+                job.finish(
+                    JobStatus::Failed,
+                    None,
+                    format!("Could not queue convoy: {error:#}"),
+                );
+            }
+        }
+        self.state.trim_history();
+        self.dirty = true;
         self.selected_run = Some(id);
         self.selected_job = 0;
         self.tab = Tab::Output;
@@ -361,46 +357,64 @@ impl App {
             let Ok(event) = self.events_rx.try_recv() else {
                 break;
             };
-            let (id, job) = match &event {
-                Event::Started { run, job, .. }
-                | Event::Output { run, job, .. }
-                | Event::Finished { run, job, .. } => (*run, *job),
-            };
-            let Some(job) = self
-                .state
-                .runs
-                .iter_mut()
-                .find(|r| r.id == id)
-                .and_then(|r| r.jobs.get_mut(job))
-            else {
-                continue;
-            };
-            match event {
-                Event::Started { before, .. } => {
-                    job.status = JobStatus::Running;
-                    job.started_at = Some(domain::now());
-                    job.before = Some(before);
-                    self.dirty = true;
-                }
-                Event::Output { text, .. } => job.log.append(&text),
-                Event::Finished {
-                    status,
-                    exit_code,
-                    detail,
-                    ..
-                } => {
-                    job.finish(status, exit_code, detail);
-                    self.dirty = true;
-                }
-            }
+            self.apply_event(event);
         }
         self.state.trim_logs();
-        if self.active.as_ref().is_some_and(|h| h.join.is_finished())
-            && !self.state.runs.iter().any(Run::active)
+        self.manager.reap();
+        self.state.trim_history();
+        if !self
+            .state
+            .runs
+            .iter()
+            .any(|r| Some(r.id) == self.selected_run)
         {
-            self.active = None;
-            // Cached registration status is stale after execution.
-            self.repository_states.clear();
+            self.selected_run = self.state.runs.first().map(|r| r.id);
+            self.selected_job = 0;
+            self.diff = None;
+            self.diff_target = None;
+        }
+    }
+    fn apply_event(&mut self, event: Event) {
+        let (id, job) = match &event {
+            Event::Queued { run, job, .. }
+            | Event::Started { run, job, .. }
+            | Event::Output { run, job, .. }
+            | Event::Finished { run, job, .. } => (*run, *job),
+        };
+        let Some(job) = self
+            .state
+            .runs
+            .iter_mut()
+            .find(|r| r.id == id)
+            .and_then(|r| r.jobs.get_mut(job))
+        else {
+            return;
+        };
+        match event {
+            Event::Queued { reason, .. } => {
+                if job.status == JobStatus::Queued {
+                    job.queue_reason = Some(reason);
+                }
+            }
+            Event::Started { before, .. } => {
+                job.status = JobStatus::Running;
+                job.queue_reason = None;
+                self.repository_states.remove(&job.repository.path);
+                job.started_at = Some(domain::now());
+                job.before = Some(before);
+                self.dirty = true;
+            }
+            Event::Output { text, .. } => job.log.append(&text),
+            Event::Finished {
+                status,
+                exit_code,
+                detail,
+                ..
+            } => {
+                job.finish(status, exit_code, detail);
+                self.repository_states.remove(&job.repository.path);
+                self.dirty = true;
+            }
         }
     }
     fn save(&mut self) {
@@ -414,14 +428,12 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.poll();
-        if ctx.input(|i| i.viewport().close_requested()) && self.active.is_some() {
+        if ctx.input(|i| i.viewport().close_requested()) && !self.manager.is_idle() {
             self.closing = true;
-            if let Some(handle) = &self.active {
-                handle.cancel_all();
-            }
+            self.manager.cancel_all();
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
-        if self.closing && self.active.is_none() {
+        if self.closing && self.manager.is_idle() && !self.state.runs.iter().any(Run::active) {
             self.save();
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -457,7 +469,7 @@ impl eframe::App for App {
             self.save();
         }
         ctx.request_repaint_after(Duration::from_millis(
-            if self.active.is_some() || self.busy {
+            if !self.manager.is_idle() || self.state.runs.iter().any(Run::active) || self.busy {
                 100
             } else {
                 1000
@@ -465,24 +477,27 @@ impl eframe::App for App {
         ));
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
-        if let Some(handle) = &self.active {
-            handle.cancel_all();
-        }
-        // Ordinary close is delayed in update. This covers framework-driven exit.
-        if let Some(handle) = self.active.take() {
-            self.runtime.block_on(async {
-                let deadline = tokio::time::sleep(Duration::from_secs(8));
-                tokio::pin!(deadline);
-                loop {
-                    tokio::select! {
-                        _ = &mut deadline => break,
-                        _ = tokio::time::sleep(Duration::from_millis(20)) => {
-                            while self.events_rx.try_recv().is_ok() {}
-                            if handle.join.is_finished() { break; }
+        self.manager.shutdown();
+        // Continue draining lifecycle/output events while process trees stop.
+        let final_events = self.runtime.block_on(async {
+            let mut final_events = Vec::new();
+            let deadline = tokio::time::sleep(Duration::from_secs(8));
+            tokio::pin!(deadline);
+            loop {
+                tokio::select! {
+                    _ = &mut deadline => break,
+                    _ = tokio::time::sleep(Duration::from_millis(20)) => {
+                        while let Ok(event) = self.events_rx.try_recv() {
+                            if !matches!(event, Event::Output { .. }) { final_events.push(event); }
                         }
+                        if self.manager.join.is_finished() { break; }
                     }
                 }
-            });
+            }
+            final_events
+        });
+        for event in final_events {
+            self.apply_event(event);
         }
         self.state.recover_interrupted();
         self.save();

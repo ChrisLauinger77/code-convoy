@@ -32,28 +32,22 @@ pub fn status_label(status: JobStatus) -> &'static str {
 }
 
 pub fn run_state(run: &Run) -> &'static str {
-    if run.jobs.iter().any(|j| j.status == JobStatus::Running) {
-        "Running"
-    } else if run.jobs.iter().any(|j| j.status == JobStatus::Queued) {
-        "Queued"
-    } else if run.jobs.iter().any(|j| j.status == JobStatus::Failed) {
-        "Failed"
-    } else if run.jobs.iter().any(|j| j.status == JobStatus::Cancelled) {
-        "Cancelled"
-    } else if run.jobs.is_empty() {
+    if run.jobs.is_empty() {
         "No jobs"
     } else {
-        "Succeeded"
+        run.status().label()
     }
 }
 
 pub fn run_label(run: &Run) -> String {
     format!(
-        "#{} · {} · {} repos · {}",
+        "#{} · {} · {} repos · {} · {}/{}",
         run.id,
         agent_name(run.task.agent),
         run.jobs.len(),
-        run_state(run)
+        run_state(run),
+        run.completed_jobs(),
+        run.jobs.len()
     )
 }
 
@@ -97,6 +91,6 @@ mod tests {
         run.jobs[0].status = JobStatus::Succeeded;
         assert_eq!(run_state(&run), "Cancelled");
         run.jobs[1].status = JobStatus::Succeeded;
-        assert_eq!(run_label(&run), "#12 · Codex · 2 repos · Succeeded");
+        assert_eq!(run_label(&run), "#12 · Codex · 2 repos · Succeeded · 2/2");
     }
 }

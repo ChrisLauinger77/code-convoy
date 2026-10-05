@@ -33,8 +33,21 @@ impl App {
             .selected_text(label)
             .show_ui(ui, |ui| {
                 for run in &self.state.runs {
-                    ui.selectable_value(&mut self.selected_run, Some(run.id), run_label(run))
-                        .on_hover_text(&run.task.prompt);
+                    let summary: String = run
+                        .task
+                        .prompt
+                        .lines()
+                        .next()
+                        .unwrap_or("Untitled task")
+                        .chars()
+                        .take(64)
+                        .collect();
+                    ui.selectable_value(
+                        &mut self.selected_run,
+                        Some(run.id),
+                        format!("{}\n{summary}", run_label(run)),
+                    )
+                    .on_hover_text(&run.task.prompt);
                 }
             });
         if self.selected_run != old {
@@ -58,6 +71,25 @@ impl App {
             .truncate(),
         )
         .on_hover_text(&run.task.prompt);
+        ui.horizontal_wrapped(|ui| {
+            ui.small(format!(
+                "{} / {} finished · {} elapsed · per-convoy limit {}",
+                run.completed_jobs(),
+                run.jobs.len(),
+                duration(run.elapsed(domain::now())),
+                run.task.concurrency
+            ));
+            if run.active()
+                && ui
+                    .button("Stop Convoy")
+                    .on_hover_text(
+                        "Cancel this convoy's running and queued jobs. Other convoys continue.",
+                    )
+                    .clicked()
+            {
+                self.manager.cancel_run(run.id);
+            }
+        });
         ui.add_space(theme::GAP);
         let p = theme::Palette::of(ui);
         let job_height = ((bottom - ui.cursor().top()) * 0.3).clamp(72.0, 180.0);
@@ -111,6 +143,12 @@ impl App {
                                             egui::RichText::new(status_label(job.status))
                                                 .color(p.status(job.status)),
                                         ),
+                                    )
+                                    .on_hover_text(
+                                        job.queue_reason.map_or_else(
+                                            || job.status.label().into(),
+                                            |r| r.label(),
+                                        ),
                                     );
                                     let elapsed = job
                                         .started_at
@@ -130,9 +168,8 @@ impl App {
                                     );
                                     if !job.status.is_terminal()
                                         && ui.add(theme::quiet("Stop").small()).clicked()
-                                        && let Some(handle) = &self.active
                                     {
-                                        handle.cancel(index);
+                                        self.manager.cancel(run.id, index);
                                     }
                                 });
                             });
@@ -157,6 +194,9 @@ impl App {
             .truncate(),
         )
         .on_hover_text(job.repository.path.display().to_string());
+        if let Some(reason) = job.queue_reason {
+            ui.weak(reason.label());
+        }
         if job.interrupted {
             ui.colored_label(
                 p.warning,

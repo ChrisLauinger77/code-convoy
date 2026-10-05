@@ -188,7 +188,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
-                            .add_enabled(self.active.is_none(), theme::quiet("Remove").small())
+                            .add(theme::quiet("Remove").small())
                             .on_hover_text("Unregister only; files on disk are untouched.")
                             .clicked()
                         {
@@ -282,7 +282,7 @@ impl App {
         ui.separator();
         ui.strong("Execution");
         ui.horizontal(|ui| {
-            let label = ui.label("Concurrent jobs");
+            let label = ui.label("This convoy");
             self.dirty |= ui
                 .add(
                     egui::DragValue::new(&mut self.state.draft.concurrency)
@@ -292,12 +292,19 @@ impl App {
                 .labelled_by(label.id)
                 .changed();
         });
+        ui.horizontal(|ui| {
+            let label = ui.label("Global job limit");
+            if ui.add(egui::DragValue::new(&mut self.state.global_concurrency).range(1..=domain::MAX_CONCURRENCY).speed(0.1))
+                .labelled_by(label.id).on_hover_text("Shared by all convoys. Lowering the limit lets existing jobs finish before admitting more.").changed() {
+                if let Err(error) = self.manager.set_global_limit(self.state.global_concurrency) { self.notice = error.to_string(); }
+                self.dirty = true;
+            }
+        });
         ui.weak(format!(
             "Run this task in {} selected repositories.",
             self.selected.len()
         ));
-        let enabled = self.active.is_none()
-            && !self.busy
+        let enabled = !self.busy
             && !self.selected.is_empty()
             && !self.state.draft.prompt.trim().is_empty()
             && agents::backend(self.state.draft.agent).is_ok();
@@ -307,16 +314,14 @@ impl App {
         {
             self.preflight(ctx.clone());
         }
-        let hint = if self.active.is_some() {
-            "Wait for the current convoy to finish."
-        } else if self.busy {
+        let hint = if self.busy {
             "Checking CLI or repository state…"
         } else if self.state.draft.prompt.trim().is_empty() {
             "Enter a task, then select repositories."
         } else if self.selected.is_empty() {
             "Select at least one repository."
         } else {
-            "Review Git state before execution. No automatic commits."
+            "Starts an independent convoy; your draft stays here."
         };
         ui.small(hint);
     }
@@ -335,6 +340,8 @@ impl App {
                 egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 230.0).max(160.0)).show(ui, |ui| {
                     ui.strong(format!("{} repositories · {} concurrent jobs", prepared.repositories.len(), prepared.task.concurrency));
                     ui.label(prepared.task.agent.label());
+                    ui.label(&prepared.task.prompt);
+                    ui.small(format!("Global job limit: {} · busy repositories remain queued", self.state.global_concurrency));
                     if let Ok(backend) = agents::backend(prepared.task.agent) {
                         ui.small(backend.execution_summary(&prepared.task.options));
                     }

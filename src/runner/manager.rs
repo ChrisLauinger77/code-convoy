@@ -1,0 +1,330 @@
+use super::{
+    Event, PreparedRepository, PreparedRun, job_work,
+    schedule::{Key, Schedule},
+};
+use crate::{
+    agents::AgentBackend,
+    domain::{JobStatus, MAX_CONCURRENCY, QueueReason, TaskConfig},
+    process::Cancellation,
+};
+use anyhow::{Context, Result};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+use tokio::{
+    sync::mpsc,
+    task::{Id, JoinHandle, JoinSet},
+};
+
+type Outcome = (JobStatus, Option<i32>, String);
+struct Control {
+    cancellations: Vec<Cancellation>,
+    done: Arc<AtomicBool>,
+}
+struct Convoy {
+    task: Arc<TaskConfig>,
+    backend: Arc<dyn AgentBackend>,
+    repositories: Vec<Option<PreparedRepository>>,
+    cancellations: Vec<Cancellation>,
+    done: Arc<AtomicBool>,
+    remaining: usize,
+}
+enum Command {
+    Start(u64, Convoy),
+    Limit(usize),
+    Wake,
+    Shutdown,
+}
+/// Application-owned execution. Methods enqueue work or signal cancellation;
+/// Git, processes, admission, and cleanup run entirely on the Tokio runtime.
+pub struct RunManager {
+    commands: mpsc::UnboundedSender<Command>,
+    controls: BTreeMap<u64, Control>,
+    pub join: JoinHandle<()>,
+    closing: bool,
+}
+impl RunManager {
+    pub fn new(global_limit: usize, events: mpsc::Sender<Event>) -> Self {
+        let (commands, rx) = mpsc::unbounded_channel();
+        let join = tokio::spawn(manage(rx, events, global_limit.clamp(1, MAX_CONCURRENCY)));
+        Self {
+            commands,
+            controls: BTreeMap::new(),
+            join,
+            closing: false,
+        }
+    }
+    pub fn start(
+        &mut self,
+        id: u64,
+        prepared: PreparedRun,
+        backend: Arc<dyn AgentBackend>,
+    ) -> Result<()> {
+        anyhow::ensure!(!self.closing, "The run manager is closing.");
+        anyhow::ensure!(
+            !self.controls.contains_key(&id),
+            "Convoy #{id} already exists."
+        );
+        prepared.task.validate(
+            &prepared
+                .repositories
+                .iter()
+                .map(|r| r.repository.clone())
+                .collect::<Vec<_>>(),
+        )?;
+        let cancellations: Vec<_> = prepared
+            .repositories
+            .iter()
+            .map(|_| Cancellation::default())
+            .collect();
+        let done = Arc::new(AtomicBool::new(false));
+        let convoy = Convoy {
+            task: Arc::new(prepared.task),
+            backend,
+            remaining: prepared.repositories.len(),
+            repositories: prepared.repositories.into_iter().map(Some).collect(),
+            cancellations: cancellations.clone(),
+            done: done.clone(),
+        };
+        self.commands
+            .send(Command::Start(id, convoy))
+            .context("The run manager stopped.")?;
+        self.controls.insert(
+            id,
+            Control {
+                cancellations,
+                done,
+            },
+        );
+        Ok(())
+    }
+    pub fn set_global_limit(&self, limit: usize) -> Result<()> {
+        anyhow::ensure!(
+            (1..=MAX_CONCURRENCY).contains(&limit),
+            "Global concurrency must be between 1 and {MAX_CONCURRENCY}."
+        );
+        self.commands
+            .send(Command::Limit(limit))
+            .context("The run manager stopped.")
+    }
+    pub fn cancel(&self, run: u64, job: usize) {
+        if let Some(token) = self
+            .controls
+            .get(&run)
+            .and_then(|r| r.cancellations.get(job))
+        {
+            token.cancel();
+        }
+        let _ = self.commands.send(Command::Wake);
+    }
+    pub fn cancel_run(&self, run: u64) {
+        if let Some(control) = self.controls.get(&run) {
+            for token in &control.cancellations {
+                token.cancel();
+            }
+        }
+        let _ = self.commands.send(Command::Wake);
+    }
+    pub fn cancel_all(&self) {
+        for id in self.controls.keys() {
+            self.cancel_run(*id);
+        }
+    }
+    pub fn is_active(&self, run: u64) -> bool {
+        self.controls
+            .get(&run)
+            .is_some_and(|r| !r.done.load(Ordering::Acquire))
+    }
+    pub fn active_count(&self) -> usize {
+        self.controls
+            .values()
+            .filter(|r| !r.done.load(Ordering::Acquire))
+            .count()
+    }
+    pub fn is_idle(&self) -> bool {
+        self.active_count() == 0
+    }
+    pub fn reap(&mut self) {
+        self.controls.retain(|_, r| !r.done.load(Ordering::Acquire));
+    }
+    pub fn shutdown(&mut self) {
+        self.closing = true;
+        self.cancel_all();
+        let _ = self.commands.send(Command::Shutdown);
+    }
+}
+impl Drop for RunManager {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+fn command(
+    command: Command,
+    runs: &mut BTreeMap<u64, Convoy>,
+    schedule: &mut Schedule,
+    closing: &mut bool,
+) {
+    match command {
+        Command::Start(id, convoy) => {
+            schedule.insert(
+                id,
+                convoy.task.concurrency,
+                convoy
+                    .repositories
+                    .iter()
+                    .filter_map(|r| r.as_ref().map(|r| r.repository.path.clone())),
+            );
+            runs.insert(id, convoy);
+        }
+        Command::Limit(limit) => schedule.limit = limit,
+        Command::Wake => {}
+        Command::Shutdown => {
+            *closing = true;
+            for convoy in runs.values() {
+                for token in &convoy.cancellations {
+                    token.cancel();
+                }
+            }
+        }
+    }
+}
+async fn finish(
+    events: &mpsc::Sender<Event>,
+    runs: &mut BTreeMap<u64, Convoy>,
+    key: Key,
+    outcome: Outcome,
+) {
+    let (status, exit_code, detail) = outcome;
+    let _ = events
+        .send(Event::Finished {
+            run: key.0,
+            job: key.1,
+            status,
+            exit_code,
+            detail,
+        })
+        .await;
+    if let Some(convoy) = runs.get_mut(&key.0) {
+        convoy.remaining -= 1;
+        if convoy.remaining == 0 {
+            convoy.done.store(true, Ordering::Release);
+            runs.remove(&key.0);
+        }
+    }
+}
+async fn manage(
+    mut commands: mpsc::UnboundedReceiver<Command>,
+    events: mpsc::Sender<Event>,
+    limit: usize,
+) {
+    let mut schedule = Schedule::new(limit);
+    let mut runs: BTreeMap<u64, Convoy> = BTreeMap::new();
+    let mut workers = JoinSet::new();
+    let mut keys: HashMap<Id, (Key, Arc<AtomicBool>)> = HashMap::new();
+    let mut reasons = HashMap::new();
+    let mut closing = false;
+    loop {
+        // Batch arrivals before admission, preserving each convoy's round-robin turn.
+        while let Ok(c) = commands.try_recv() {
+            command(c, &mut runs, &mut schedule, &mut closing);
+        }
+        let cancelled: Vec<_> = schedule
+            .waiting()
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|(run, job)| runs[run].cancellations[*job].is_cancelled())
+            .collect();
+        for key in cancelled {
+            schedule.cancel_pending(key);
+            reasons.remove(&key);
+            finish(
+                &events,
+                &mut runs,
+                key,
+                (
+                    JobStatus::Cancelled,
+                    None,
+                    "Cancelled before execution; repository untouched.".into(),
+                ),
+            )
+            .await;
+        }
+        while let Some(key) = schedule.next() {
+            let convoy = runs.get_mut(&key.0).expect("scheduled convoy exists");
+            let repository = convoy.repositories[key.1]
+                .take()
+                .expect("job admitted once");
+            let task = convoy.task.clone();
+            let backend = convoy.backend.clone();
+            let cancellation = convoy.cancellations[key.1].clone();
+            let safe = Arc::new(AtomicBool::new(true));
+            let worker_safe = safe.clone();
+            reasons.remove(&key);
+            let _ = events
+                .send(Event::Queued {
+                    run: key.0,
+                    job: key.1,
+                    reason: QueueReason::CheckingRepository,
+                })
+                .await;
+            let tx = events.clone();
+            let handle = workers.spawn(async move {
+                job_work(
+                    key.0,
+                    key.1,
+                    &repository,
+                    &task,
+                    backend.as_ref(),
+                    &cancellation,
+                    &worker_safe,
+                    &tx,
+                )
+                .await
+            });
+            keys.insert(handle.id(), (key, safe));
+        }
+        for (key, reason) in schedule.waiting() {
+            if reasons.insert(key, reason) != Some(reason) {
+                let _ = events
+                    .send(Event::Queued {
+                        run: key.0,
+                        job: key.1,
+                        reason,
+                    })
+                    .await;
+            }
+        }
+        if closing && runs.is_empty() {
+            break;
+        }
+        tokio::select! {
+            // Ready control messages take precedence over admitting replacement jobs.
+            biased;
+            c = commands.recv(), if !closing => {
+                command(c.unwrap_or(Command::Shutdown), &mut runs, &mut schedule, &mut closing);
+            }
+            joined = workers.join_next_with_id(), if !workers.is_empty() => {
+                let (id, result) = match joined.expect("workers are nonempty") {
+                    Ok((id, result)) => (id, result),
+                    Err(error) => (error.id(), Err(anyhow::anyhow!("Job worker stopped unexpectedly: {error}"))),
+                };
+                if let Some((key, safe)) = keys.remove(&id) {
+                    let repository_safe = safe.load(Ordering::Acquire);
+                    let mut outcome = result.unwrap_or_else(|e| (JobStatus::Failed, None, format!("{e:#}")));
+                    if !repository_safe {
+                        outcome.2.push_str(" Repository access and job capacity remain reserved because process cleanup could not be confirmed; inspect remaining processes before restarting CodeConvoy.");
+                    }
+                    // Notify completion before allowing a replacement start, so
+                    // UI/tests observe causal lifecycle order across all convoys.
+                    finish(&events, &mut runs, key, outcome).await;
+                    schedule.finish(key, repository_safe);
+                }
+            }
+        }
+    }
+}

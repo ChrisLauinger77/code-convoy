@@ -35,12 +35,22 @@ The executable is `target/release/codeconvoy` (`codeconvoy.exe` on Windows). Ins
 1. Enter a task and select Codex or GitHub Copilot CLI.
 2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. Model and reasoning support depends on the selected CLI/model.
 3. Register existing repository **root directories**. Select the checkboxes for this task.
-4. Choose the number of concurrent jobs, then **Run Convoy**.
+4. Set **This convoy** (its job limit) and **Global job limit** (shared by every convoy), then **Run Convoy**.
 5. Review branches and existing changes. Dirty working trees require acknowledgment before **Start convoy**.
-6. Select a job to read its live output. Use **Stop** for one job or **Stop all jobs** for the run.
+6. Select a job to read its live output. Use **Stop** for one job or **Stop Convoy** for the selected convoy. Other convoys continue.
 7. Open **Diff** and use **Refresh diff** to load the staged and unstaged changes. Untracked filenames are listed, but their contents are not included in Git's diff.
 
-Each backend keeps its own preferences when you switch agents. Existing version-1 state and historical Codex tasks remain readable without a destructive migration. The task editor remains available while jobs run. Only one batch runs at a time, so the concurrency limit applies to the whole application. History retains the latest 30 batches, with the original prompt, effective backend settings, repository paths, initial branch/HEAD, timestamps, exit codes, and statuses. **Use this task again** copies a historical task into the editor.
+**NEW CONVOY is a draft.** Run Convoy captures its prompt, selected backend/options, and repositories for review. Start convoy saves an independent run snapshot and queues its jobs. The draft stays populated: immediately edit it and launch another convoy, including one using a different agent. Later edits never alter existing runs. Each backend retains its own draft preferences.
+
+Each convoy has its own concurrency limit. **Global job limit** defaults to **4**, is saved as a user preference, and caps agent jobs across all convoys. Both limits must allow a start. Changing the global limit affects queued work; lowering it lets existing jobs finish before starting more. Eligible convoys take turns receiving slots, and a repository waiter does not occupy a slot.
+
+CodeConvoy serializes jobs targeting the same canonical repository path (including overlapping parent/child paths). The next job waits, then rechecks Git state. If an earlier convoy changed branch, HEAD, or status since review, the waiting job fails safely and needs a fresh review. These are application-level leases, not locks against external tools or separate instances with different data directories.
+
+Use the run selector to switch between active and historical convoys without affecting execution. It shows agent, state, finished/total progress, and a task summary; selected-run details include elapsed time and its original settings. Any failed job makes the completed convoy **Failed**; otherwise any cancelled job makes it **Cancelled**. All jobs must succeed for **Succeeded**. While work remains, state is Running (a job is running) or Queued.
+
+**Stop Convoy** cancels only the selected convoy's running and queued jobs. Individual Stop remains available. **All convoys → Stop All Convoys** is the distinct emergency stop. Closing CodeConvoy stops all convoys; restarting marks unfinished jobs cancelled/interrupted and never resumes agent processes. Partial repository edits remain.
+
+History retains all active convoys plus the latest 30 completed convoys, including snapshots, repository paths, initial Git state, timestamps, exit codes, and statuses. Logs remain session-only. Existing version-1 state loads with the default global limit. **Use this task again** copies a historical task into the draft.
 
 The execution controls stay visible while the task and repository pane scrolls. **Appearance** follows the system theme by default and offers dark/light overrides for the current session. Output and diffs render only visible lines, with Copy actions for the full retained text. Diff headers, additions, and removals have distinct styling; wide lines scroll horizontally.
 
@@ -103,13 +113,19 @@ Use two disposable repositories, each containing a **tracked**, clean `CODECONVO
 
 Verify both jobs succeed, each output identifies its own repository, and each current Git diff contains only the expected tracked file. Using tracked files makes the result visible in CodeConvoy's staged/unstaged diff viewer; untracked files would only appear in its status list. This test is for the user to run manually.
 
+### Manual multi-convoy E2E check
+
+Use four disposable, clean repositories with tracked smoke-test files. Set global limit **2**. Launch Codex with **Workspace-write** in the first pair with per-convoy limit **1**, asking it to edit only the smoke-test file. Immediately change the draft to Copilot with **File edits; shell denied**, select the other pair, and launch with limit **1** and a different smoke-test instruction. Switch between runs: confirm their original agent/settings, independent logs/diffs, progress, and at most two running jobs. Stop one convoy while it is active and verify the other continues. Inspect retained partial edits.
+
+For repository queuing, launch a second convoy against a repository still in use by the first. It must wait. If the first changes its Git status, expect the waiting job's safety recheck to fail before an agent starts; review the new state and launch a fresh convoy. No reset, stash, branch change, commit, or push is part of this check.
+
 ## Repository safety and data
 
 CodeConvoy's Git operations only inspect working trees. Registration/removal never clones, deletes, resets, stashes, checks out, commits, or pushes. External diff/textconv and filesystem-monitor commands are disabled for inspection. Duplicate and nested repository selections are rejected. Each queued job rechecks branch, HEAD, and porcelain status immediately before starting; detected state changes fail that job without affecting other jobs.
 
 Codex Workspace-write and Copilot file-write/tool approvals permit the **agent** to modify files. CodeConvoy is an orchestrator, not an extra security sandbox. Stop terminates processes and retains partial edits; it cannot roll changes back. Review the diff before committing. Git checks are not filesystem locks: another application can still edit a repository, and changes within an already-dirty file may leave the same porcelain status.
 
-State is saved atomically in the conventional per-user application data directory, shown in the footer:
+State is saved atomically in the conventional per-user application data directory, available from the footer’s Local session tooltip:
 
 - Linux: `$XDG_DATA_HOME/codeconvoy`, normally `~/.local/share/codeconvoy`.
 - macOS: `~/Library/Application Support/CodeConvoy`.
@@ -127,7 +143,7 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --all-features
 ```
 
-The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories to check bounded concurrency, failure isolation, cancellation of queued/running jobs and descendants, output capture, and repository-state changes. Core tests cover both backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
+The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous Codex/Copilot convoys, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover both backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
 
 ```sh
 cargo test --all-features --test copilot installed_copilot_accepts_the_exact_command_flags -- --ignored --nocapture

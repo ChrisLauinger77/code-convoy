@@ -1,4 +1,4 @@
-use crate::domain::{AppState, MAX_HISTORY, MAX_REPOSITORIES};
+use crate::domain::{AppState, MAX_CONCURRENCY, MAX_REPOSITORIES};
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use fs2::FileExt;
@@ -60,7 +60,8 @@ impl Store {
             "Too many registered repositories in saved state."
         );
         state.recover_interrupted();
-        state.runs.truncate(MAX_HISTORY);
+        state.trim_history();
+        state.global_concurrency = state.global_concurrency.clamp(1, MAX_CONCURRENCY);
         state.draft.concurrency = state.draft.concurrency.clamp(1, 16);
         Ok(state)
     }

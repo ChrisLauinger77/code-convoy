@@ -6,6 +6,8 @@ use std::{
 };
 
 pub const MAX_HISTORY: usize = 30;
+pub const DEFAULT_GLOBAL_CONCURRENCY: usize = 4;
+pub const MAX_CONCURRENCY: usize = 16;
 pub const MAX_REPOSITORIES: usize = 128;
 pub const LOG_LIMIT: usize = 512 * 1024;
 pub const TOTAL_LOG_LIMIT: usize = 32 * 1024 * 1024;
@@ -115,6 +117,30 @@ impl JobStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueueReason {
+    ConvoyLimit,
+    GlobalLimit,
+    Repository(u64),
+    CheckingRepository,
+    CleanupFailed(u64),
+}
+impl QueueReason {
+    pub fn label(self) -> String {
+        match self {
+            Self::ConvoyLimit => "Waiting for this convoy's concurrency slot.".into(),
+            Self::GlobalLimit => "Waiting for a global job slot.".into(),
+            Self::Repository(run) => {
+                format!("Waiting for repository access held by convoy #{run}.")
+            }
+            Self::CheckingRepository => "Checking Git state before execution…".into(),
+            Self::CleanupFailed(run) => format!(
+                "Repository blocked: process cleanup was not confirmed in convoy #{run}. Inspect processes before restarting CodeConvoy."
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Job {
     pub repository: Repository,
@@ -129,6 +155,8 @@ pub struct Job {
     pub detail: String,
     #[serde(skip)]
     pub log: LogBuffer,
+    #[serde(skip)]
+    pub queue_reason: Option<QueueReason>,
 }
 impl Job {
     pub fn queued(repository: Repository) -> Self {
@@ -142,11 +170,13 @@ impl Job {
             interrupted: false,
             detail: String::new(),
             log: LogBuffer::default(),
+            queue_reason: None,
         }
     }
     pub fn finish(&mut self, status: JobStatus, exit_code: Option<i32>, detail: String) {
         if !self.status.is_terminal() {
             self.status = status;
+            self.queue_reason = None;
             self.exit_code = exit_code;
             self.detail = detail;
             self.finished_at = Some(now());
@@ -169,6 +199,35 @@ pub struct Run {
     pub jobs: Vec<Job>,
 }
 impl Run {
+    pub fn status(&self) -> JobStatus {
+        if self.jobs.iter().any(|j| j.status == JobStatus::Running) {
+            JobStatus::Running
+        } else if self.jobs.iter().any(|j| j.status == JobStatus::Queued) {
+            JobStatus::Queued
+        } else if self.jobs.iter().any(|j| j.status == JobStatus::Failed) {
+            JobStatus::Failed
+        } else if self.jobs.iter().any(|j| j.status == JobStatus::Cancelled) || self.jobs.is_empty()
+        {
+            JobStatus::Cancelled
+        } else {
+            JobStatus::Succeeded
+        }
+    }
+    pub fn completed_jobs(&self) -> usize {
+        self.jobs.iter().filter(|j| j.status.is_terminal()).count()
+    }
+    pub fn elapsed(&self, current_time: u64) -> u64 {
+        let end = if self.active() {
+            current_time
+        } else {
+            self.jobs
+                .iter()
+                .filter_map(|j| j.finished_at)
+                .max()
+                .unwrap_or(self.created_at)
+        };
+        end.saturating_sub(self.created_at)
+    }
     pub fn active(&self) -> bool {
         self.jobs.iter().any(|j| !j.status.is_terminal())
     }
@@ -183,6 +242,7 @@ pub struct AppState {
     pub draft: TaskConfig,
     pub agent_options: BTreeMap<AgentId, AgentOptions>,
     pub runs: Vec<Run>,
+    pub global_concurrency: usize,
 }
 impl Default for AppState {
     fn default() -> Self {
@@ -193,6 +253,7 @@ impl Default for AppState {
             draft: TaskConfig::default(),
             agent_options: BTreeMap::new(),
             runs: Vec::new(),
+            global_concurrency: DEFAULT_GLOBAL_CONCURRENCY,
         }
     }
 }
@@ -210,6 +271,18 @@ impl AppState {
         self.agent_options
             .insert(self.draft.agent, self.draft.options.clone());
         self.draft = task;
+    }
+    /// Never evict an active convoy, even when it is older than the history cap.
+    pub fn trim_history(&mut self) {
+        let mut completed = 0;
+        self.runs.retain(|run| {
+            if run.active() {
+                true
+            } else {
+                completed += 1;
+                completed <= MAX_HISTORY
+            }
+        });
     }
     pub fn trim_logs(&mut self) {
         let mut total: usize = self

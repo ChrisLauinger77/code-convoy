@@ -7,6 +7,7 @@ use std::{
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--help") {
+        println!("Codex fixture: --no-daemon --ask-for-approval exec");
         print!("{}", include_str!("../fixtures/copilot-1.0.65-help.txt"));
         return Ok(());
     }
@@ -29,6 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
+    if let Some(json) = input.strip_prefix("codeconvoy-fixture-gate\n") {
+        return gate(json, &input, &args, copilot);
+    }
     if input == "spawn-child"
         || (input == "cancel-test"
             && std::env::current_dir()?
@@ -75,5 +79,69 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "{{\"type\":\"item.completed\",\"item\":{{\"type\":\"agent_message\",\"text\":\"done\"}}}}"
     );
     println!("{{\"type\":\"turn.completed\",\"usage\":{{}}}}");
+    Ok(())
+}
+
+// Handshake-controlled integration jobs. The test releases a named gate; elapsed
+// sleeps never determine whether a scheduling assertion passes. All files are in
+// disposable test directories, and the lock file is Git-internal test metadata.
+fn gate(
+    json: &str,
+    input: &str,
+    args: &[String],
+    copilot: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use fs2::FileExt;
+    let config: serde_json::Value = serde_json::from_str(json)?;
+    let root = std::path::Path::new(config["control"].as_str().ok_or("missing control path")?);
+    let ticket = config["ticket"].as_str().ok_or("missing ticket")?;
+    let cwd = std::env::current_dir()?;
+    let name = cwd
+        .file_name()
+        .ok_or("missing repo name")?
+        .to_string_lossy();
+    let marker = format!("{ticket}-{name}");
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(".git/codeconvoy-fixture.lock")?;
+    lock.try_lock_exclusive()
+        .map_err(|_| "same repository overlap")?;
+    std::fs::write(root.join(format!("{marker}.input")), input)?;
+    std::fs::write(
+        root.join(format!("{marker}.args")),
+        serde_json::to_vec(args)?,
+    )?;
+    if copilot {
+        println!("fixture gate ready {marker}");
+    } else {
+        println!(
+            "{}",
+            serde_json::json!({"type":"item.completed", "item":{"type":"agent_message", "text":format!("fixture gate ready {marker}")}})
+        );
+    }
+    std::io::stdout().flush()?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    while !root.join(format!("{marker}.release")).exists() {
+        if std::time::Instant::now() > deadline {
+            return Err("fixture gate timed out".into());
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    if config["fail"].as_bool() == Some(true) {
+        if !copilot {
+            println!("{{\"type\":\"turn.failed\",\"error\":\"controlled failure\"}}");
+        }
+        std::process::exit(7);
+    }
+    if config["edit"].as_bool() == Some(true) {
+        std::fs::write("fixture-change.txt", "controlled repository edit")?;
+    }
+    if copilot {
+        println!("done");
+    } else {
+        println!("{{\"type\":\"turn.completed\",\"usage\":{{}}}}");
+    }
     Ok(())
 }

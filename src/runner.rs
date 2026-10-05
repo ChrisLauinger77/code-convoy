@@ -1,25 +1,47 @@
 use crate::{
     agents::AgentBackend,
-    domain::{GitSummary, JobStatus, Repository, TaskConfig},
+    domain::{self, GitSummary, Job, JobStatus, QueueReason, Repository, Run, TaskConfig},
     git::{self, WorkingTree},
     process::{self, Cancellation},
 };
 use anyhow::{Context, Result};
-use std::sync::{Arc, Mutex};
-use tokio::{
-    sync::{Semaphore, mpsc},
-    task::JoinHandle,
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, Ordering},
 };
+use tokio::sync::mpsc;
+mod manager;
+mod schedule;
+pub use manager::RunManager;
 
+#[derive(Clone)]
 pub struct PreparedRepository {
     pub repository: Repository,
     pub state: WorkingTree,
 }
+#[derive(Clone)]
 pub struct PreparedRun {
     pub task: TaskConfig,
     pub repositories: Vec<PreparedRepository>,
 }
 impl PreparedRun {
+    pub fn snapshot(&self, id: u64) -> Run {
+        Run {
+            id,
+            created_at: domain::now(),
+            task: self.task.clone(),
+            jobs: self
+                .repositories
+                .iter()
+                .map(|r| {
+                    let mut job = Job::queued(r.repository.clone());
+                    job.before = Some(r.state.summary.clone());
+                    job
+                })
+                .collect(),
+        }
+    }
+
     pub fn dirty(&self) -> bool {
         self.repositories
             .iter()
@@ -47,6 +69,11 @@ pub async fn prepare(mut task: TaskConfig, repositories: Vec<Repository>) -> Res
 }
 #[derive(Debug)]
 pub enum Event {
+    Queued {
+        run: u64,
+        job: usize,
+        reason: QueueReason,
+    },
     Started {
         run: u64,
         job: usize,
@@ -65,93 +92,6 @@ pub enum Event {
         detail: String,
     },
 }
-pub struct RunHandle {
-    cancellations: Vec<Cancellation>,
-    pub join: JoinHandle<()>,
-}
-impl RunHandle {
-    pub fn cancel(&self, job: usize) {
-        if let Some(c) = self.cancellations.get(job) {
-            c.cancel();
-        }
-    }
-    pub fn cancel_all(&self) {
-        for c in &self.cancellations {
-            c.cancel();
-        }
-    }
-}
-impl Drop for RunHandle {
-    fn drop(&mut self) {
-        self.cancel_all();
-    }
-}
-
-pub fn start(
-    run: u64,
-    prepared: PreparedRun,
-    backend: Arc<dyn AgentBackend>,
-    tx: mpsc::Sender<Event>,
-) -> RunHandle {
-    let semaphore = Arc::new(Semaphore::new(prepared.task.concurrency));
-    let task = Arc::new(prepared.task);
-    let mut cancellations = Vec::new();
-    let mut workers = Vec::new();
-    for (job, repository) in prepared.repositories.into_iter().enumerate() {
-        let cancellation = Cancellation::default();
-        cancellations.push(cancellation.clone());
-        let (semaphore, task, backend, tx) =
-            (semaphore.clone(), task.clone(), backend.clone(), tx.clone());
-        workers.push((
-            job,
-            tokio::spawn(async move {
-                let result = job_work(
-                    run,
-                    job,
-                    &repository,
-                    task.as_ref(),
-                    backend.as_ref(),
-                    &cancellation,
-                    semaphore,
-                    &tx,
-                )
-                .await;
-                let (status, exit_code, detail) = match result {
-                    Ok(result) => result,
-                    Err(error) => (JobStatus::Failed, None, format!("{error:#}")),
-                };
-                let _ = tx
-                    .send(Event::Finished {
-                        run,
-                        job,
-                        status,
-                        exit_code,
-                        detail,
-                    })
-                    .await;
-            }),
-        ));
-    }
-    let join = tokio::spawn(async move {
-        for (job, worker) in workers {
-            if let Err(error) = worker.await {
-                let _ = tx
-                    .send(Event::Finished {
-                        run,
-                        job,
-                        status: JobStatus::Failed,
-                        exit_code: None,
-                        detail: format!("Job worker stopped unexpectedly: {error}"),
-                    })
-                    .await;
-            }
-        }
-    });
-    RunHandle {
-        cancellations,
-        join,
-    }
-}
 #[allow(clippy::too_many_arguments)]
 async fn job_work(
     run: u64,
@@ -160,7 +100,7 @@ async fn job_work(
     task: &TaskConfig,
     backend: &dyn AgentBackend,
     cancellation: &Cancellation,
-    semaphore: Arc<Semaphore>,
+    repository_safe: &AtomicBool,
     tx: &mpsc::Sender<Event>,
 ) -> Result<(JobStatus, Option<i32>, String)> {
     let cancelled = || {
@@ -169,11 +109,6 @@ async fn job_work(
             None,
             "Cancelled; any existing edits are retained.".into(),
         )
-    };
-    let _permit = tokio::select! {
-        biased;
-        _ = cancellation.cancelled() => return Ok(cancelled()),
-        permit = semaphore.acquire_owned() => permit.context("Execution queue closed.")?,
     };
     let state = tokio::select! {
         biased;
@@ -189,13 +124,16 @@ async fn job_work(
     }
     let spec = backend.build(task, &prepared.repository)?;
     let child = backend.spawn(&spec)?;
-    tx.send(Event::Started {
+    repository_safe.store(false, Ordering::Release);
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => {},
+        result = tx.send(Event::Started {
         run,
         job,
         before: state.summary,
-    })
-    .await
-    .context("Application closed.")?;
+        }) => { result.context("Application closed.")?; }
+    }
     let decoder = Mutex::new((backend.output(), 0usize));
     let result = process::execute(
         child,
@@ -215,6 +153,7 @@ async fn job_work(
         },
     )
     .await?;
+    repository_safe.store(true, Ordering::Release);
     let (tail, dropped, outcome) = {
         let mut data = decoder
             .lock()

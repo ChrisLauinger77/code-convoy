@@ -14,13 +14,15 @@ Backend status: Codex and Copilot are implemented and user-verified end-to-end o
 | `agents/copilot` | Copilot flags, bundled-version checks, raw text streaming, exit-status interpretation |
 | `process` | Shell-free process spawning, pipes, cancellation tokens, process-tree ownership, short-command timeouts |
 | `git` | Root validation, working-tree inspection, staged/unstaged diff and untracked status |
-| `runner` | Preflight, per-job safety recheck, concurrency semaphore, job lifecycle events |
+| `runner` | Preflight, immutable snapshots, per-job Git recheck and execution events |
+| `runner/manager` | Application-owned multi-convoy lifecycle, worker ownership, cancellation, shutdown |
+| `runner/schedule` | Pure round-robin admission policy, both concurrency limits, canonical path leases |
 | `persistence` | Platform data directory, single-instance lock, atomic JSON replacement and recovery |
 | `ui` | Task/options/repository editor, preflight review, history/results/output/diff views |
 
 ## Presentation
 
-`ui/editor` groups task, backend options, repositories, and execution controls. `ui/results` presents history, job selection, and result tabs. `ui/theme` centralizes both palettes, typography, spacing, focus/selection, and primary actions. `ui/format` contains presentation-only duration and run/status summaries.
+`ui/editor` groups task, backend options, repositories, and execution controls. `ui/results` presents history, job selection, and result tabs. `ui/theme` centralizes both palettes, typography, spacing, focus/selection, and primary actions. `ui/format` formats duration and run summaries; overall status and progress are derived in the domain.
 
 `ui/text_view` caches a line index for the selected output/diff and uses egui's visible-row layout. Copy actions preserve the original retained text. Diff coloring is presentation-only: no agent protocol parsing, Git behavior, or stored output format is changed. Main panes and long details scroll independently; execution controls remain visible at the bottom of the editor. Appearance follows the system by default; overrides are session-local, without a state-schema change.
 
@@ -42,7 +44,17 @@ Copilot's default grants `write` permission and denies `shell`; choices also sup
 
 ## Scheduling and shutdown
 
-One batch may execute at a time. Independent Tokio workers wait on a shared semaphore, keeping jobs queued until a slot is available. Failed jobs release their slot and do not cancel unrelated workers. A watch-based cancellation token avoids lost notifications, including cancellation before a queued job acquires its slot.
+The editor draft is separate from execution. Preflight takes owned copies of task/options and selected canonical repositories; confirmation saves `PreparedRun::snapshot` before handing owned data to `RunManager`. Each convoy keeps its own task/backend and job cancellation tokens. Run IDs route every event and cancellation, so selecting or editing another convoy does not affect workers.
+
+One Tokio manager owns all admission decisions and a `JoinSet` of executing workers. A small pure scheduler rotates convoys after each admission. It selects the first eligible repository in that convoy, skipping busy paths and saturated convoys. A continuously eligible convoy therefore gets a turn per round; existing jobs are not preempted. There are no priorities or dependencies. Command arrival, completion, or cancellation wakes scheduling; the UI never waits for a slot.
+
+Admission reserves the global slot, per-convoy slot, and canonical-path lease together, including the final Git recheck. Waiting jobs hold none of these resources. The global preference defaults to 4 (range 1–16); per-convoy limits are immutable snapshots. Raising the global limit admits more work immediately; lowering it stops new admissions until usage falls below the limit. Queued reasons distinguish each limit, repository access, and the Git recheck.
+
+Path leases exclude identical and nested canonical roots across convoys. Success, ordinary failure, or confirmed cancellation releases the lease. A worker panic/process error after spawn with unconfirmed cleanup conservatively reserves its repository and capacity for the rest of the session, with a diagnostic; users must inspect remaining processes before restarting. External applications are outside this lease system. After waiting, Git state must still match preflight: previous-convoy changes require fresh review, rather than silently accepting a stale baseline.
+
+Stop Convoy signals only its cancellation tokens, including queued jobs. Individual Stop uses `(run ID, job index)`. Stop All and application close signal every convoy. Watch tokens prevent lost cancellation; queued cancellation never needs a scheduling slot. Completion events precede replacement starts, and a failed job cannot terminate unrelated workers. Shutdown drains lifecycle events and waits for process cleanup; interrupted metadata is recovered on restart, never resumed.
+
+Overall status is Running while any job is running, otherwise Queued while work remains. Once terminal, any failure wins, then cancellation, then success only if every job succeeded. Progress counts terminal jobs, not just successes; job rows preserve the individual outcomes.
 
 `process-wrap` is a deliberate dependency: it supplies Unix process groups and Windows Job Objects without application-owned unsafe platform code. Windows children start suspended, join their Job Object, and then resume. Cancellation forcefully stops the process group/job and waits for termination. A drop guard also initiates cleanup if a worker future is dropped. Normal application close cancels all jobs and keeps servicing events until workers finish; an exit fallback attempts bounded cleanup.
 
@@ -54,18 +66,18 @@ Stdout and stderr are drained concurrently in fixed-size chunks. Codex line asse
 
 Git CLI is the source of truth. Repository roots are canonicalized; subdirectories, bare repositories, duplicates, and overlapping selections are rejected. Linked worktrees can be registered as existing roots; CodeConvoy does not create or manage them. Paths remain OS-native when passed to subprocesses. Porcelain `-z` parsing handles rename records and unusual filenames. Display names use lossy conversion when filenames are not Unicode.
 
-The review step shows a fresh status for every selected repository and requires explicit acknowledgment of dirty trees. Jobs check status again after acquiring a concurrency permit. This detects branch/HEAD/status changes during queueing, not every content change in an already-modified file. It is not a filesystem snapshot or exclusive repository lock. Separate staged and unstaged diff calls also support repositories without an initial commit; untracked file contents are not added to the index just to generate a diff.
+The review step shows a fresh status for every selected repository and requires explicit acknowledgment of dirty trees. Jobs check status again after acquiring admission and a path lease. This detects branch/HEAD/status changes during queueing, not every content change in an already-modified file. It is not a filesystem snapshot or a lock against external tools. Separate staged and unstaged diff calls also support repositories without an initial commit; untracked file contents are not added to the index just to generate a diff.
 
 Application state is versioned JSON written to an owner-only temporary file, synced, then atomically replaced. A data-directory lock prevents simultaneous writes and duplicate batch execution from two instances using that directory. Initial run metadata is saved before spawning agents. Updates and draft changes are saved periodically and at exit. Output and diagnostics use `serde(skip)` so CLI material cannot accidentally enter saved history. Prompt and option fields are user input and are intentionally persisted.
 
 An additive `agent_options` map preserves preferences independently when switching backends. It defaults to empty when loading old version-1 state; the existing draft remains authoritative for the selected backend, and historical run schemas are unchanged. No migration or rewriting of CLI configuration is necessary.
 
-The most recent 30 runs are retained. Relaunch converts unfinished saved jobs to cancelled/interrupted. There is no automatic resume or replay. History records initial Git metadata, but diff inspection always queries the current repository.
+All active convoys and the most recent 30 completed convoys are retained; active snapshots are never evicted by the history cap. The additive `global_concurrency` preference defaults to 4 for old state; invalid stored values are clamped to 1–16. Relaunch converts unfinished saved jobs to cancelled/interrupted. There is no automatic resume or replay. History records initial Git metadata, but diff inspection always queries the current repository.
 
 ## Dependencies and scope
 
 - `eframe`/egui: native windowing and widgets. Version 0.33.3 targets Rust 1.88; OpenGL is used to avoid a direct WGPU renderer dependency. Wayland, X11, fonts, and accessibility are enabled.
-- Tokio: background process I/O, timers, semaphore, cancellation notifications.
+- Tokio: background process I/O, timers, task ownership, cancellation notifications.
 - serde/serde_json: local state and Codex JSONL.
 - `directories`: conventional platform data paths.
 - `tempfile`: atomic state replacement and isolated tests.
