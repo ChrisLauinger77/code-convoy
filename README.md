@@ -1,17 +1,25 @@
 # CodeConvoy
 
+[![CI](https://github.com/ChrisLauinger77/stream-gui-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ChrisLauinger77/stream-gui-rs/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/v/release/ChrisLauinger77/code-convoy)](https://github.com/ChrisLauinger77/code-convoy/releases)
+[![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/code-convoy/total.svg)](https://github.com/ChrisLauinger77/code-convoy/releases)
+[![MIT](https://img.shields.io/github/license/ChrisLauinger77/code-convoy)](LICENSE)
+![Static Badge](https://img.shields.io/badge/Linux%20%7C%20MacOS%20%7C%20Windows-blue)
+
+<img src="assets/codeconvoy-128.png" alt="Code Convoy application icon" width="128">
+
 A local, native desktop task runner for coding-agent CLIs.
 
 **Write one task → choose an agent → select local Git repositories → run with a concurrency limit → inspect each result.**
 
 CodeConvoy 0.1 is a native Rust/egui implementation with four independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
 
-| Backend | Status | Authenticated E2E status |
-| --- | --- | --- |
-| Codex CLI | Supported | User-verified on Linux with two concurrent repositories |
-| GitHub Copilot CLI | Supported | User-verified on Linux with two concurrent repositories |
-| OpenCode | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally |
-| Claude Code | Supported | Unverified; official documentation/source and deterministic fixtures tested, CLI unavailable locally |
+| Backend            | Status    | Authenticated E2E status                                                                             |
+| ------------------ | --------- | ---------------------------------------------------------------------------------------------------- |
+| Codex CLI          | Supported | User-verified on Linux with two concurrent repositories                                              |
+| GitHub Copilot CLI | Supported | User-verified on Linux with two concurrent repositories                                              |
+| OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally      |
+| Claude Code        | Supported | Unverified; official documentation/source and deterministic fixtures tested, CLI unavailable locally |
 
 ## Downloads and installation
 
@@ -19,14 +27,14 @@ The `v0.1.0` release workflow produces the following assets on the
 [GitHub Releases page](https://github.com/ChrisLauinger77/code-convoy/releases).
 Packages are available after the maintainer publishes the release tag.
 
-| Platform | Package | Installation |
-| --- | --- | --- |
-| Linux x86-64, Debian/Ubuntu | `code-convoy_0.1.0_amd64.deb` | `sudo apt install ./code-convoy_0.1.0_amd64.deb` |
-| Linux x86-64, Fedora/RPM | `code-convoy-0.1.0-1.x86_64.rpm` | `sudo dnf install ./code-convoy-0.1.0-1.x86_64.rpm` |
-| Linux x86-64, portable | `CodeConvoy-0.1.0-x86_64.AppImage` | Make executable and run; no installation or sandbox |
-| Windows x86-64 | `CodeConvoy-0.1.0-windows-x86_64-setup.exe` | Run the per-user installer; Start Menu and uninstall support included |
-| Windows x86-64, portable | `CodeConvoy-0.1.0-windows-x86_64.zip` | Extract and run `CodeConvoy.exe` |
-| macOS, Apple Silicon and Intel | `CodeConvoy-0.1.0-macos-universal.dmg` | Drag CodeConvoy.app onto Applications |
+| Platform                       | Package                                     | Installation                                                          |
+| ------------------------------ | ------------------------------------------- | --------------------------------------------------------------------- |
+| Linux x86-64, Debian/Ubuntu    | `code-convoy_0.1.0_amd64.deb`               | `sudo apt install ./code-convoy_0.1.0_amd64.deb`                      |
+| Linux x86-64, Fedora/RPM       | `code-convoy-0.1.0-1.x86_64.rpm`            | `sudo dnf install ./code-convoy-0.1.0-1.x86_64.rpm`                   |
+| Linux x86-64, portable         | `CodeConvoy-0.1.0-x86_64.AppImage`          | Make executable and run; no installation or sandbox                   |
+| Windows x86-64                 | `CodeConvoy-0.1.0-windows-x86_64-setup.exe` | Run the per-user installer; Start Menu and uninstall support included |
+| Windows x86-64, portable       | `CodeConvoy-0.1.0-windows-x86_64.zip`       | Extract and run `CodeConvoy.exe`                                      |
+| macOS, Apple Silicon and Intel | `CodeConvoy-0.1.0-macos-universal.dmg`      | Drag CodeConvoy.app onto Applications                                 |
 
 `SHA256SUMS` covers the six final downloads. On Linux use `sha256sum -c
 SHA256SUMS` with the downloaded files; on macOS use `shasum -a 256`; on Windows
@@ -155,15 +163,15 @@ CodeConvoy sets the selected repository as the process working directory and wri
 
 Available controls:
 
-| Control | CLI behavior |
-| --- | --- |
-| Executable | `copilot` on PATH or an absolute executable path |
-| Model | Blank uses the CLI default; otherwise `--model VALUE` (including `auto`) |
-| Reasoning effort | Blank uses the CLI default; otherwise `--reasoning-effort none/low/medium/high/xhigh/max`, as supported by bundled 1.0.65 |
-| File edits; shell denied (default) | `--allow-tool=write --deny-tool=shell` |
-| Existing CLI approvals | No tool-approval override; unapproved actions may fail in unattended mode |
-| Allow all tools, including shell | `--allow-all-tools`; this is an explicit permission to run shell tools automatically |
-| Temporary directory | CLI default access, or `--disallow-temp-dir` |
+| Control                            | CLI behavior                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Executable                         | `copilot` on PATH or an absolute executable path                                                                          |
+| Model                              | Blank uses the CLI default; otherwise `--model VALUE` (including `auto`)                                                  |
+| Reasoning effort                   | Blank uses the CLI default; otherwise `--reasoning-effort none/low/medium/high/xhigh/max`, as supported by bundled 1.0.65 |
+| File edits; shell denied (default) | `--allow-tool=write --deny-tool=shell`                                                                                    |
+| Existing CLI approvals             | No tool-approval override; unapproved actions may fail in unattended mode                                                 |
+| Allow all tools, including shell   | `--allow-all-tools`; this is an explicit permission to run shell tools automatically                                      |
+| Temporary directory                | CLI default access, or `--disallow-temp-dir`                                                                              |
 
 Copilot path checks and its existing configured permissions apply. CodeConvoy never enables `--allow-all-paths`, `--allow-all-urls`, or `--yolo`. It removes an inherited `COPILOT_ALLOW_ALL` blanket grant from the child environment so it does not bypass the UI choice. Authentication variables, `COPILOT_HOME`, and the user's configuration/authentication files are not changed by CodeConvoy. Existing MCP servers, instructions, hooks, and other CLI settings remain the CLI's responsibility. Tool approvals are **not an OS sandbox**; file-edit mode can edit files, and all-tools mode can run shell commands with the user's permissions.
 
@@ -197,13 +205,13 @@ opencode run --format json --dir <absolute-repository-path>
 
 CodeConvoy spawns the executable directly with separate arguments, sets its working directory to the selected repository, writes the exact prompt to stdin and closes the pipe. No shell interpolation, positional prompt, `-` prompt sentinel, shared server, or session resume is used. Each job owns a fresh local process. Inherited `PWD` and `GIT_*` overrides are removed so repository discovery stays with that job.
 
-| Control | Behavior |
-| --- | --- |
-| Executable | `opencode` on PATH or an absolute path |
-| Model | **OpenCode default** when blank; otherwise `--model=provider/model`. Use `opencode models` separately to discover configured models. No fixed catalog or provider entitlement checks. |
-| Agent | OpenCode default when blank; otherwise `--agent=NAME`. Choose a primary agent from `opencode agent list`. |
-| Variant | OpenCode default when blank; otherwise `--variant=NAME`. Provider/model-specific setting, including reasoning effort; not a shared Codex/Copilot scale. |
-| Permissions | **Existing rules; reject asks** by default. **Auto-approve; keep denies** adds `--auto`. |
+| Control     | Behavior                                                                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Executable  | `opencode` on PATH or an absolute path                                                                                                                                                |
+| Model       | **OpenCode default** when blank; otherwise `--model=provider/model`. Use `opencode models` separately to discover configured models. No fixed catalog or provider entitlement checks. |
+| Agent       | OpenCode default when blank; otherwise `--agent=NAME`. Choose a primary agent from `opencode agent list`.                                                                             |
+| Variant     | OpenCode default when blank; otherwise `--variant=NAME`. Provider/model-specific setting, including reasoning effort; not a shared Codex/Copilot scale.                               |
+| Permissions | **Existing rules; reject asks** by default. **Auto-approve; keep denies** adds `--auto`.                                                                                              |
 
 OpenCode owns login, credentials, providers, model availability and configuration. CodeConvoy does not ask for or store keys, inspect credential files, edit OpenCode configuration, or create accounts. Existing configuration/environment, repository instructions, plugins, MCP tools and session retention remain under OpenCode's control. This includes automatic sharing if the user has configured it; CodeConvoy does not add `--share` or disable the user's configuration.
 
@@ -245,13 +253,13 @@ claude --print --input-format text --output-format stream-json --verbose \
 
 CodeConvoy passes separate arguments directly, sets the selected repository as the working directory, writes the exact task bytes to stdin and closes it. It removes inherited `GIT_*`/`PWD` overrides and inherits Claude authentication, provider environment and configuration. Each job is a fresh invocation; CodeConvoy does not log in, request keys, change Claude settings, attach to a server or resume a session.
 
-| Control | Behavior |
-| --- | --- |
-| Executable | `claude` on PATH or an absolute executable path; native `claude.exe` on Windows |
-| Model | **Claude default** when blank; otherwise `--model=ALIAS_OR_ID`, without a fixed model catalog |
-| Effort | Claude default, or `--effort=low/medium/high/xhigh/max`; CLI/model support applies |
-| Permissions | **Existing approvals; deny asks** (`dontAsk`, default), or **Accept edits / file commands** (`acceptEdits`) |
-| Max turns | Blank preserves Claude's default; otherwise `--max-turns=POSITIVE_INTEGER`. Reaching it fails completion. This is not a time limit. |
+| Control     | Behavior                                                                                                                            |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Executable  | `claude` on PATH or an absolute executable path; native `claude.exe` on Windows                                                     |
+| Model       | **Claude default** when blank; otherwise `--model=ALIAS_OR_ID`, without a fixed model catalog                                       |
+| Effort      | Claude default, or `--effort=low/medium/high/xhigh/max`; CLI/model support applies                                                  |
+| Permissions | **Existing approvals; deny asks** (`dontAsk`, default), or **Accept edits / file commands** (`acceptEdits`)                         |
+| Max turns   | Blank preserves Claude's default; otherwise `--max-turns=POSITIVE_INTEGER`. Reaching it fails completion. This is not a time limit. |
 
 These are [Claude tool permissions](https://code.claude.com/docs/en/permissions), **not an OS sandbox**. Existing approvals can allow writes and shell commands. `acceptEdits` additionally auto-approves edits and common filesystem commands such as `mkdir`, `touch`, `mv` and `cp`. Unresolved permission requests are denied because CodeConvoy supplies no interactive permission host. Existing permission hooks still apply. No additional directories or blanket bypass are enabled by CodeConvoy; configured access remains Claude's responsibility.
 
