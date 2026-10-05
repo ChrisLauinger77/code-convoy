@@ -94,7 +94,14 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
     #[cfg(unix)]
     command.wrap(process_wrap::tokio::ProcessGroup::leader());
     #[cfg(windows)]
-    command.wrap(process_wrap::tokio::JobObject);
+    {
+        command.wrap(process_wrap::tokio::JobObject);
+        // Use the wrapper so JobObject preserves this flag when adding
+        // CREATE_SUSPENDED for race-free descendant containment.
+        command.wrap(process_wrap::tokio::CreationFlags(
+            windows::Win32::System::Threading::CREATE_NO_WINDOW,
+        ));
+    }
     let child = command.spawn().with_context(|| {
         format!(
             "Cannot start {:?} in {}. Check the executable path and installation.",

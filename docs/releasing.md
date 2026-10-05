@@ -1,0 +1,167 @@
+# Releasing CodeConvoy
+
+## Maintainer procedure
+
+`Cargo.toml` is the version authority. About, Windows resources, package
+metadata, bundle versions and final filenames derive from it. For this release
+it is `0.1.0`, with tag `v0.1.0`, without a prerelease suffix.
+
+1. Review and commit the release changes. Confirm normal CI is green.
+2. Run **Native release packages → Run workflow** on the reviewed branch. This
+   builds and verifies packages and uploads the complete `release-assets`
+   workflow artifact, including checksums. It never publishes a release.
+3. Download those packages and complete the outstanding desktop checks in
+   [release-validation.md](release-validation.md), particularly Linux and Windows.
+4. Review [release-notes.md](release-notes.md). Create and push `v0.1.0` on the
+   reviewed commit when satisfied. Tag creation is a maintainer action.
+
+The tag workflow checks exact tag/version equality before starting native jobs.
+It builds Linux x86-64 on Ubuntu 22.04, Windows x86-64 on Windows 2022, and both
+macOS architectures using Apple's SDK on macOS 15. Rust 1.95.0 and the committed
+lockfile are used. Each platform runs formatting, strict Clippy and all
+non-ignored tests; no authenticated agent tasks or provider credentials are used.
+
+Only the final publishing job has `contents: write`. All six packages must be
+nonempty and have exactly the expected final filenames before checksums are
+generated. A single publisher creates a **draft**, uploads all seven assets,
+checks their names/sizes and GitHub-provided digests, then makes the release
+public. A failed upload leaves a draft, never an intentionally partial public
+release. Existing releases are not overwritten. If publication fails after
+draft creation, inspect/delete that draft before rerunning the publisher; do
+not move a published tag. A new release requires a new version/tag.
+
+Normal pushes and pull requests run checks/builds only. A manual release workflow
+run cannot publish, even when its selected ref is a tag. The workflow never
+creates a Git tag.
+
+## Packaging choice
+
+| Tool | Role | Reason and limitations |
+| --- | --- | --- |
+| [cargo-packager 0.11.8](https://docs.rs/cargo-packager/0.11.8/cargo_packager/) | DEB, NSIS setup.exe, macOS app | Maintained Rust executable packager, independent of the UI framework. Shares identity, icons and metadata across three platforms. Does not support RPM. It is a build tool, not an application dependency. |
+| [RPM's rpmbuild](https://rpm.org/docs/6.0.x/man/rpmbuild.8) | RPM | Native RPM spec and automatic ELF requirements; no conversion of Debian dependencies into RPM names. Uses the runner's distribution tool. |
+| [linuxdeploy](https://github.com/linuxdeploy/linuxdeploy), [appimagetool](https://github.com/AppImage/appimagetool), [type2-runtime](https://github.com/AppImage/type2-runtime) | AppImage | Explicit deployment and image creation let us preserve the host environment. Each downloaded executable/runtime has a fixed release URL and SHA-256 in `appimage-tools.json`. |
+| Apple's lipo, codesign, hdiutil | Universal binary, signing, DMG | Native Apple tools make both slices and signature verification explicit, including verification after mounting the finished image. |
+| Python standard library | Metadata, ZIP, inventory, checksums, orchestration | Already available on CI, no pip dependencies or application framework. Requires Python 3.11+. |
+
+The cargo-packager AppImage backend was not selected: its helper downloads and
+default launcher provide less control over pins and inherited environment. Our
+AppRun executes the binary directly. `linuxdeploy` places dependencies alongside
+it using relative ELF library paths; AppRun does not alter `PATH` or
+`LD_LIBRARY_PATH`. No filesystem sandbox or bundled Git/agent installations are
+introduced. CI creates a disposable probe image using the same launcher/runtime
+and CodeConvoy's real process/Git layer to verify access to a host repository,
+host Git, all four CLI-name fixtures and unchanged search paths. The probe is
+never distributed and never contacts an agent service.
+
+`cargo-packager` downloads its NSIS toolchain/helpers on Windows; its pinned
+version fixes that tool selection. These are installer helpers, not a Tauri
+runtime or WebView. No Node, Tauri, Electron or JavaScript application dependency
+was added. Rust dependencies introduced by hardening are Windows-only
+`winresource` (build-time icon/version resources) and an explicit dependency on
+the already-locked `windows` crate (the typed `CREATE_NO_WINDOW` constant).
+The existing process-wrap dependency supplies the creation-flags wrapper.
+
+Actions are pinned to full commits; the existing Renovate digest policy maintains
+them. A local Renovate regex manager maintains the pinned cargo-packager version.
+Review Rust compiler changes explicitly. Update AppImage tool URLs and their
+verified SHA-256 values together; mismatches fail before downloaded tools run.
+Native runner SDKs, system package versions and package timestamps can vary;
+this is a repeatable, locked build recipe, not a claim of byte-identical artifacts.
+
+## Identity and payload
+
+The crate and source executable remain `codeconvoy`. The visible application is
+**CodeConvoy**. DEB/RPM package name is `code-convoy`; Linux desktop file is
+`codeconvoy.desktop`, matching Wayland app ID `codeconvoy`, icon name `codeconvoy`,
+category `Development`. Linux installs
+under `/usr/bin` and `/usr/share`. There are no services or post-install agents.
+The common bundle/installer identifier is
+`io.github.chrislauinger77.code-convoy`. Windows staging names the executable
+`CodeConvoy.exe`, without renaming the crate or backend executable settings.
+
+The Windows setup is per-user (`currentUser`), requests no elevation, supplies
+Start Menu integration and an uninstaller, and does not remove user state.
+The ZIP contains only `CodeConvoy.exe`; the release build statically links the
+MSVC CRT. Both use the same normal per-user state location. Release GUI builds
+hide their console; debug builds keep it. A native startup error dialog preserves
+visibility when state loading or application startup fails. Child processes use
+`CreationFlags(CREATE_NO_WINDOW)` together with JobObject, preserving the wrapper's
+suspended-spawn/assignment sequence and descendant cancellation.
+
+macOS builds `aarch64-apple-darwin` and `x86_64-apple-darwin` independently with
+deployment target 11.0. Packaging merges them, requires exactly `arm64 x86_64`,
+assembles the app, sets both bundle version strings from Cargo, then signs the
+**final** bundle with identity `-`. It verifies `--deep --strict
+--all-architectures` and checks ad-hoc signature metadata. The DMG contains the
+app and `/Applications` link; the mounted copy is verified again. Future
+Developer ID signing, notarization and stapling belong at `sign_mac_app`, between
+assembly and DMG creation. They are intentionally not implemented now.
+
+Ad-hoc signing supplies integrity, not an Apple-verified publisher identity or
+notarization. Gatekeeper acceptance is not guaranteed. Windows Authenticode
+signing is also absent. See the README for first-launch guidance.
+
+The project-owned icon's source and generated PNG/ICO/ICNS files are in `assets/`.
+The application window and all package formats share this artwork. No icon
+generator dependency is needed to build or package committed assets.
+
+## Local packaging
+
+Install the pinned packager (see `PACKAGER_VERSION` in the release workflow):
+
+```sh
+cargo install --locked --version 0.11.8 cargo-packager
+python3 -m unittest discover -s packaging -p 'test_*.py'
+```
+
+`packaging/build.py` always uses `--locked`, remaps checkout/home/Cargo source
+paths out of release diagnostics, and selects a static CRT on Windows. It does
+not change global environment settings. Package assembly expects the repository's
+normal `target/` directory; do not override `CARGO_TARGET_DIR` for these commands.
+
+On Linux, install the README's source prerequisites plus packaging/test-only
+packages: `rpm desktop-file-utils file patchelf squashfs-tools xvfb xauth`.
+
+```sh
+python3 packaging/build.py
+python3 packaging/build.py --probe
+python3 packaging/release.py linux
+xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.1.0-x86_64.AppImage
+```
+
+On Windows, from a development shell with Python, Rust MSVC and Windows SDK:
+
+```powershell
+python packaging/build.py
+python packaging/release.py windows
+```
+
+`windows-smoke.ps1` is intended for a disposable CI user profile, not an existing
+user installation. It checks metadata, silent per-user install, Start Menu,
+portable identity and uninstall. The normal Rust tests exercise process-tree
+cancellation on the native Windows runner. An interactive desktop check remains
+separate; a hosted runner does not establish real desktop graphics behavior.
+
+On macOS:
+
+```sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+export MACOSX_DEPLOYMENT_TARGET=11.0
+python3 packaging/build.py --target aarch64-apple-darwin
+python3 packaging/build.py --target x86_64-apple-darwin
+python3 packaging/release.py macos
+```
+
+Outputs go to ignored `dist/`, intermediates to `target/packaging/`. Assembly
+recreates only its platform-specific intermediate directory. Do not put personal
+files there. `python3 packaging/release.py aggregate` requires all six packages
+and writes their final checksums. Do not run `publish.py` locally as a build test.
+
+Linux runtime packages are separate from CI packaging tools: desktop graphics,
+X11/Wayland libraries, fontconfig, libdbus, Git, URL-opening utilities and the
+desktop's portal/backend. The Debian dependency list and RPM requirements use
+their respective distribution names; RPM also derives ELF requirements. Packages
+built on Ubuntu 22.04 require glibc >= 2.35; older enterprise RPM distributions
+are not a supported baseline. AppImage still uses the host graphics/session
+services and portal; it is not an entire Linux distribution.

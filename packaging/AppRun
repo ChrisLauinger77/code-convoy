@@ -1,0 +1,6 @@
+#!/bin/sh
+# Libraries use relative ELF RPATHs. Do not redirect PATH or LD_LIBRARY_PATH:
+# Git and coding-agent processes must inherit the user's host environment.
+set -eu
+appdir=${APPDIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+exec "$appdir/usr/bin/codeconvoy" "$@"

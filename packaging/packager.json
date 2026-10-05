@@ -1,0 +1,24 @@
+{
+  "productName": "CodeConvoy",
+  "identifier": "io.github.chrislauinger77.code-convoy",
+  "publisher": "CodeConvoy contributors",
+  "authors": ["CodeConvoy contributors"],
+  "copyright": "Copyright 2026 CodeConvoy contributors",
+  "category": "DeveloperTool",
+  "licenseFile": "LICENSE",
+  "icons": ["assets/codeconvoy-*.png", "assets/codeconvoy.ico", "assets/codeconvoy.icns"],
+  "deb": {
+    "packageName": "code-convoy",
+    "section": "devel",
+    "priority": "optional",
+    "desktopTemplate": "packaging/codeconvoy.desktop",
+    "depends": ["libc6 (>= 2.35)", "libgcc-s1", "libstdc++6", "libx11-6", "libxcursor1", "libxi6", "libxrandr2", "libxkbcommon0", "libwayland-client0", "libwayland-cursor0", "libegl1", "libgl1", "libdbus-1-3", "libfontconfig1", "git", "xdg-utils", "xdg-desktop-portal"],
+    "files": {"LICENSE": "usr/share/doc/code-convoy/copyright"}
+  },
+  "nsis": {
+    "installMode": "currentUser",
+    "installerIcon": "assets/codeconvoy.ico",
+    "languages": ["English"]
+  },
+  "macos": {"minimumSystemVersion": "11.0"}
+}

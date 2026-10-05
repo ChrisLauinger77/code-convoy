@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=CodeConvoy
+Comment=Run coding-agent tasks across local Git repositories
+Exec=codeconvoy
+Icon=codeconvoy
+Terminal=false
+Type=Application
+Categories=Development;
+StartupNotify=true

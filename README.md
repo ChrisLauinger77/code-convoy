@@ -13,6 +13,52 @@ CodeConvoy 0.1 is a native Rust/egui implementation with four independent coding
 | OpenCode | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally |
 | Claude Code | Supported | Unverified; official documentation/source and deterministic fixtures tested, CLI unavailable locally |
 
+## Downloads and installation
+
+The `v0.1.0` release workflow produces the following assets on the
+[GitHub Releases page](https://github.com/ChrisLauinger77/code-convoy/releases).
+Packages are available after the maintainer publishes the release tag.
+
+| Platform | Package | Installation |
+| --- | --- | --- |
+| Linux x86-64, Debian/Ubuntu | `code-convoy_0.1.0_amd64.deb` | `sudo apt install ./code-convoy_0.1.0_amd64.deb` |
+| Linux x86-64, Fedora/RPM | `code-convoy-0.1.0-1.x86_64.rpm` | `sudo dnf install ./code-convoy-0.1.0-1.x86_64.rpm` |
+| Linux x86-64, portable | `CodeConvoy-0.1.0-x86_64.AppImage` | Make executable and run; no installation or sandbox |
+| Windows x86-64 | `CodeConvoy-0.1.0-windows-x86_64-setup.exe` | Run the per-user installer; Start Menu and uninstall support included |
+| Windows x86-64, portable | `CodeConvoy-0.1.0-windows-x86_64.zip` | Extract and run `CodeConvoy.exe` |
+| macOS, Apple Silicon and Intel | `CodeConvoy-0.1.0-macos-universal.dmg` | Drag CodeConvoy.app onto Applications |
+
+`SHA256SUMS` covers the six final downloads. On Linux use `sha256sum -c
+SHA256SUMS` with the downloaded files; on macOS use `shasum -a 256`; on Windows
+use `Get-FileHash -Algorithm SHA256` and compare the corresponding entry.
+
+Linux packages target glibc 2.35 or later (Ubuntu 22.04 build baseline), with a
+working X11 or Wayland desktop and OpenGL/EGL driver. The folder picker needs
+`libdbus` and an XDG Desktop Portal with a FileChooser-capable backend appropriate
+to your desktop; `zenity` is its fallback. Manual path entry remains available.
+Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
+`./CodeConvoy-0.1.0-x86_64.AppImage --appimage-extract-and-run`.
+
+The macOS app targets macOS 11 or later and is **ad-hoc signed, not Developer ID
+signed or notarized**. Gatekeeper may block the first launch. After verifying the
+download and attempting to open it, use **System Settings → Privacy & Security →
+Open Anyway** for CodeConvoy if you trust the source. See
+[Apple's per-application guidance](https://support.apple.com/en-us/102445).
+Do not disable Gatekeeper globally. Windows packages are not Authenticode signed;
+Windows may show an unknown-publisher warning.
+
+No package installs Git, coding-agent CLIs, credentials, services, or an updater.
+Install and authenticate the agents separately. Desktop launchers may have a
+different `PATH` from your terminal, particularly Finder on macOS; provide the
+agent's absolute executable path in CodeConvoy if needed, and ensure Git is on the
+application's `PATH`. The portable ZIP uses the same per-user application data
+location as the installed Windows app; its executable is portable, its state is
+not stored beside it.
+
+See [release procedure and packaging design](docs/releasing.md) and the
+[release validation record](docs/release-validation.md) for tested behavior and
+remaining platform checks.
+
 ## Build and run
 
 Requirements:
@@ -22,7 +68,7 @@ Requirements:
 - A working desktop graphics environment.
 - The CLI for the agent you want to use, already installed and authenticated using its own login flow. Its executable must be on the desktop application's `PATH`, or supply its absolute path in the UI. No agent CLI is required for CodeConvoy to start; **Check CLI** checks only the selected agent.
 
-On Debian/GNOME, the usual native development prerequisites are:
+On Debian/Ubuntu, the native source-build prerequisites are:
 
 ```sh
 sudo apt install build-essential pkg-config libx11-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev
@@ -35,7 +81,12 @@ For a distributable local binary:
 cargo build --locked --release
 ```
 
-The executable is `target/release/codeconvoy` (`codeconvoy.exe` on Windows). Installers and desktop integration are not yet provided. A native macOS UI smoke check has passed; authenticated macOS execution and Windows native runtime verification remain outstanding. A CI matrix is included for all three platforms.
+The executable is `target/release/codeconvoy` (`codeconvoy.exe` on Windows).
+Windows source builds need the MSVC C++ build tools and Windows SDK; macOS needs
+Xcode Command Line Tools. Packaging additionally needs the tools listed in the
+[release procedure](docs/releasing.md); those are not application runtime
+requirements. Native macOS UI and Universal DMG checks have passed; authenticated
+macOS execution and Windows interactive runtime verification remain outstanding.
 
 **Browse…** uses the desktop's folder picker: an XDG Desktop Portal on Linux, an NSOpenPanel sheet on macOS, and the native Windows file dialog in folder mode. Linux needs a FileChooser-capable portal backend (such as GTK/GNOME/KDE) and runtime `libdbus`; `zenity` is the fallback when the portal is unavailable. Manual path entry remains available. See [folder-picker implementation and validation](docs/folder-picker-validation.md).
 

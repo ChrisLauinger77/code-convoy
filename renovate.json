@@ -1,3 +1,11 @@
 {
-  "extends": ["github>ChrisLauinger77/ChrisLauinger77//renovate-config/code-convoy"]
+  "extends": ["github>ChrisLauinger77/ChrisLauinger77//renovate-config/code-convoy"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/release\\.yml$/"],
+      "matchStrings": ["# renovate: datasource=(?<datasource>crate) depName=(?<depName>cargo-packager)\\s+PACKAGER_VERSION: '(?<currentValue>[^']+)'"],
+      "versioningTemplate": "semver"
+    }
+  ]
 }
