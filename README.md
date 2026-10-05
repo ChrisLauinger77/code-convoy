@@ -47,6 +47,10 @@ to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
 `./CodeConvoy-0.1.0-x86_64.AppImage --appimage-extract-and-run`.
 
+X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
+`libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,
+including when using AppImage. DEB/RPM declare this runtime dependency.
+
 The macOS app targets macOS 11 or later and is **ad-hoc signed, not Developer ID
 signed or notarized**. Gatekeeper may block the first launch. After verifying the
 download and attempting to open it, use **System Settings → Privacy & Security →
@@ -79,7 +83,7 @@ Requirements:
 On Debian/Ubuntu, the native source-build prerequisites are:
 
 ```sh
-sudo apt install build-essential pkg-config libx11-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev
+sudo apt install build-essential pkg-config libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev
 cargo run --locked
 ```
 

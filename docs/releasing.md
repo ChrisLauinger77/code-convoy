@@ -165,3 +165,10 @@ their respective distribution names; RPM also derives ELF requirements. Packages
 built on Ubuntu 22.04 require glibc >= 2.35; older enterprise RPM distributions
 are not a supported baseline. AppImage still uses the host graphics/session
 services and portal; it is not an entire Linux distribution.
+
+The X11 backend loads `libxkbcommon-x11.so.0` with `dlopen`, so ELF dependency
+scanning does not discover it. CI and DEB explicitly require
+`libxkbcommon-x11-0`; RPM requires `libxkbcommon-x11`. AppImage uses this host
+desktop library too. Keep it in the source prerequisites and release runner's
+package list: compilation and unit tests can pass without it, but X11 startup
+(including the Xvfb smoke check) cannot.
