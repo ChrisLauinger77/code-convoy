@@ -4,7 +4,7 @@ A local, native desktop task runner for coding-agent CLIs.
 
 **Write one task → choose an agent → select local Git repositories → run with a concurrency limit → inspect each result.**
 
-CodeConvoy 0.1 is an initial Rust/egui implementation. Codex and GitHub Copilot CLI are independent, implemented backends. Codex has been E2E verified with two real repositories running concurrently; Copilot is ready for manual E2E verification. Claude Code and OpenCode are planned next, in that order. There is no web frontend, provider API integration, built-in terminal, or cloud service.
+CodeConvoy 0.1 is an initial Rust/egui implementation. Codex and GitHub Copilot CLI are independent, implemented backends. Both have been user-verified end-to-end on Linux with two real repositories running concurrently. Claude Code and OpenCode are planned next, in that order. There is no web frontend, provider API integration, built-in terminal, or cloud service.
 
 ## Build and run
 
@@ -35,12 +35,14 @@ The executable is `target/release/codeconvoy` (`codeconvoy.exe` on Windows). Ins
 1. Enter a task and select Codex or GitHub Copilot CLI.
 2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. Model and reasoning support depends on the selected CLI/model.
 3. Register existing repository **root directories**. Select the checkboxes for this task.
-4. Choose the number of concurrent jobs, then **Review & run**.
-5. Review branches and existing changes. Dirty working trees require acknowledgment before **Run jobs**.
+4. Choose the number of concurrent jobs, then **Run Convoy**.
+5. Review branches and existing changes. Dirty working trees require acknowledgment before **Start convoy**.
 6. Select a job to read its live output. Use **Stop** for one job or **Stop all jobs** for the run.
-7. Open **Current Git diff** and load the staged and unstaged changes. Untracked filenames are listed, but their contents are not included in Git's diff.
+7. Open **Diff** and use **Refresh diff** to load the staged and unstaged changes. Untracked filenames are listed, but their contents are not included in Git's diff.
 
 Each backend keeps its own preferences when you switch agents. Existing version-1 state and historical Codex tasks remain readable without a destructive migration. The task editor remains available while jobs run. Only one batch runs at a time, so the concurrency limit applies to the whole application. History retains the latest 30 batches, with the original prompt, effective backend settings, repository paths, initial branch/HEAD, timestamps, exit codes, and statuses. **Use this task again** copies a historical task into the editor.
+
+The execution controls stay visible while the task and repository pane scrolls. **Appearance** follows the system theme by default and offers dark/light overrides for the current session. Output and diffs render only visible lines, with Copy actions for the full retained text. Diff headers, additions, and removals have distinct styling; wide lines scroll horizontally.
 
 Keyboard navigation uses egui's Tab / Shift+Tab focus traversal; buttons and checkboxes support keyboard activation. Path entry supports paste. No file chooser is required.
 
@@ -61,7 +63,7 @@ See the official [Codex noninteractive documentation](https://learn.chatgpt.com/
 
 ## Copilot contract
 
-Copilot is implemented and ready for a manual two-repository E2E test. Its installed help/version output and generated CLI flags have been checked locally; no authenticated Copilot task was submitted during implementation.
+Copilot has been user-verified end-to-end on Linux with two real repositories running concurrently. Its installed help/version output and generated CLI flags have also been checked locally.
 
 This installation has two versions: the normal launcher reports **1.0.91**, while `copilot --no-auto-update --version` reports the bundled **1.0.65**. CodeConvoy passes `--no-auto-update` to both detection and execution, so they consistently use the bundled executable and do not initiate CLI updates. **Check CLI** reports that effective version. If your bundled CLI is too old, it reports the missing capability; updating Copilot is a separate user action.
 
@@ -131,7 +133,7 @@ The `test-support` feature builds a deterministic local test executable. It is n
 cargo test --all-features --test copilot installed_copilot_accepts_the_exact_command_flags -- --ignored --nocapture
 ```
 
-Read [the architecture](docs/architecture.md) for module boundaries and implementation tradeoffs. The next step is the manual Copilot E2E check above, followed by Claude Code and then OpenCode backends. Before a public release, verify native behavior on macOS/Windows.
+Read [the architecture](docs/architecture.md) for module boundaries and implementation tradeoffs. Claude Code and then OpenCode are the next planned backends. Before a public release, verify native behavior on macOS/Windows.
 
 ## License
 

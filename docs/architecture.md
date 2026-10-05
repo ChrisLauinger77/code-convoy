@@ -2,7 +2,7 @@
 
 CodeConvoy uses one egui UI thread and a small Tokio runtime. The unit of work is a task configuration applied to a set of existing repository roots. A run is a saved snapshot of that configuration plus one job per repository.
 
-Backend status: Codex is implemented and user-verified E2E with two concurrent real repositories. Copilot is implemented, with local contract/process tests passing and manual authenticated E2E verification pending. Claude Code and OpenCode are planned, in that order.
+Backend status: Codex and Copilot are implemented and user-verified end-to-end on Linux with two concurrent real repositories each. Claude Code and OpenCode are planned, in that order.
 
 ## Modules
 
@@ -17,6 +17,12 @@ Backend status: Codex is implemented and user-verified E2E with two concurrent r
 | `runner` | Preflight, per-job safety recheck, concurrency semaphore, job lifecycle events |
 | `persistence` | Platform data directory, single-instance lock, atomic JSON replacement and recovery |
 | `ui` | Task/options/repository editor, preflight review, history/results/output/diff views |
+
+## Presentation
+
+`ui/editor` groups task, backend options, repositories, and execution controls. `ui/results` presents history, job selection, and result tabs. `ui/theme` centralizes both palettes, typography, spacing, focus/selection, and primary actions. `ui/format` contains presentation-only duration and run/status summaries.
+
+`ui/text_view` caches a line index for the selected output/diff and uses egui's visible-row layout. Copy actions preserve the original retained text. Diff coloring is presentation-only: no agent protocol parsing, Git behavior, or stored output format is changed. Main panes and long details scroll independently; execution controls remain visible at the bottom of the editor. Appearance follows the system by default; overrides are session-local, without a state-schema change.
 
 ## Backend extension
 

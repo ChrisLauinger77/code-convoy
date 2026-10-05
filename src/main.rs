@@ -9,7 +9,7 @@ fn main() -> anyhow::Result<()> {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("CodeConvoy")
             .with_inner_size([1180.0, 820.0])
-            .with_min_inner_size([860.0, 600.0]),
+            .with_min_inner_size([780.0, 560.0]),
         ..Default::default()
     };
     eframe::run_native(

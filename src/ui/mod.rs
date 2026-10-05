@@ -1,5 +1,8 @@
 mod editor;
+mod format;
 mod results;
+mod text_view;
+mod theme;
 
 use crate::{
     agents,
@@ -8,7 +11,7 @@ use crate::{
     persistence::Store,
     runner::{self, Event, PreparedRun, RunHandle},
 };
-use eframe::egui::{self, Color32};
+use eframe::egui;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -44,7 +47,13 @@ pub struct App {
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     busy: bool,
     notice: String,
-    detection: Option<(domain::AgentId, domain::AgentOptions, String)>,
+    detection: Option<(
+        domain::AgentId,
+        domain::AgentOptions,
+        Result<String, String>,
+    )>,
+    output_view: text_view::TextView,
+    diff_view: text_view::TextView,
     tx: mpsc::Sender<Message>,
     rx: mpsc::Receiver<Message>,
     events_tx: async_mpsc::Sender<Event>,
@@ -68,7 +77,7 @@ impl App {
         state: AppState,
         runtime: Runtime,
     ) -> Self {
-        cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        theme::install(&cc.egui_ctx);
         let (tx, rx) = mpsc::channel();
         let (events_tx, events_rx) = async_mpsc::channel(256);
         let selected_run = state.runs.first().map(|r| r.id);
@@ -82,6 +91,8 @@ impl App {
             busy: false,
             notice: String::new(),
             detection: None,
+            output_view: text_view::TextView::default(),
+            diff_view: text_view::TextView::default(),
             tx,
             rx,
             events_tx,
@@ -103,6 +114,92 @@ impl App {
         }
         app
     }
+    fn current_detection(
+        &self,
+    ) -> Option<&(
+        domain::AgentId,
+        domain::AgentOptions,
+        Result<String, String>,
+    )> {
+        self.detection.as_ref().filter(|(agent, options, _)| {
+            *agent == self.state.draft.agent && *options == self.state.draft.options
+        })
+    }
+
+    fn header(&mut self, ctx: &egui::Context) {
+        egui::TopBottomPanel::top("header")
+            .frame(
+                egui::Frame::side_top_panel(&ctx.style())
+                    .inner_margin(egui::Margin::symmetric(theme::PANEL_MARGIN, 10)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading("CodeConvoy");
+                    if ui.available_width() > 650.0 {
+                        ui.weak("One task. Multiple repositories.");
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.menu_button("Appearance", |ui| {
+                            let mut preference = ctx.options(|o| o.theme_preference);
+                            for (value, name) in [
+                                (egui::ThemePreference::System, "System"),
+                                (egui::ThemePreference::Dark, "Dark"),
+                                (egui::ThemePreference::Light, "Light"),
+                            ] {
+                                if ui.selectable_value(&mut preference, value, name).changed() {
+                                    ctx.set_theme(preference);
+                                }
+                            }
+                        });
+                        if self.active.is_some()
+                            && ui.add(theme::quiet("Stop all jobs")).clicked()
+                            && let Some(handle) = &self.active
+                        {
+                            handle.cancel_all();
+                        }
+                        let p = theme::Palette::of(ui);
+                        if self.closing {
+                            ui.colored_label(p.warning, "Stopping processes…");
+                        } else {
+                            let (suffix, color) = match self.current_detection().map(|(_, _, r)| r)
+                            {
+                                Some(Ok(_)) => ("available", p.success),
+                                Some(Err(_)) => ("check failed", p.error),
+                                None => ("not checked", p.muted),
+                            };
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "{} · {suffix}",
+                                    format::agent_name(self.state.draft.agent)
+                                ))
+                                .small()
+                                .color(color),
+                            );
+                        }
+                    });
+                });
+            });
+    }
+
+    fn footer(&mut self, ctx: &egui::Context) {
+        egui::TopBottomPanel::bottom("footer")
+            .frame(egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(theme::PANEL_MARGIN, 5)))
+            .show(ctx, |ui| {
+                if !self.notice.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.colored_label(theme::Palette::of(ui).error, &self.notice);
+                        if ui.add(theme::quiet("Dismiss").small()).clicked() { self.notice.clear(); }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    ui.small("Tab / Shift+Tab to navigate · Enter / Space to activate");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.small("Local session").on_hover_text(format!("Local state: {}\nPrompts and run metadata are saved locally. Output stays in memory. Do not put credentials in the task.", self.store.directory().display()));
+                    });
+                });
+            });
+    }
+
     fn dispatch(&self, ctx: egui::Context, future: impl Future<Output = Message> + Send + 'static) {
         let tx = self.tx.clone();
         self.runtime.spawn(async move {
@@ -251,7 +348,7 @@ impl App {
                 }
                 Message::Detected(agent, options, result) => {
                     self.busy = false;
-                    self.detection = Some((agent, options, result.unwrap_or_else(|e| e)));
+                    self.detection = Some((agent, options, result));
                 }
                 Message::Diff(path, result) => {
                     if self.diff_target.as_ref() == Some(&path) {
@@ -328,49 +425,33 @@ impl eframe::App for App {
             self.save();
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
-        egui::TopBottomPanel::top("header").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("CodeConvoy");
-                ui.label("One task. Multiple repositories.");
-                if self.active.is_some()
-                    && ui.button("Stop all jobs").clicked()
-                    && let Some(handle) = &self.active
-                {
-                    handle.cancel_all();
-                }
-                if self.closing {
-                    ui.colored_label(Color32::YELLOW, "Stopping processes before closing…");
-                }
-            });
-        });
-        egui::TopBottomPanel::bottom("footer").show(ctx, |ui| {
-            if !self.notice.is_empty() {
-                ui.horizontal_wrapped(|ui| {
-                    ui.colored_label(Color32::LIGHT_RED, &self.notice);
-                    if ui.small_button("Dismiss").clicked() {
-                        self.notice.clear();
-                    }
-                });
-            }
-            ui.small(format!(
-                "Local state: {} · Output stays in memory · Tab / Shift+Tab to navigate",
-                self.store.directory().display()
-            ));
-        });
+        self.header(ctx);
+        self.footer(ctx);
         egui::SidePanel::left("task_editor")
             .resizable(true)
-            .default_width(390.0)
-            .min_width(320.0)
+            .default_width(360.0)
+            .width_range(310.0..=(ctx.content_rect().width() * 0.55).max(310.0))
+            .frame(egui::Frame::side_top_panel(&ctx.style()).inner_margin(theme::PANEL_MARGIN))
             .show(ctx, |ui| {
+                egui::TopBottomPanel::bottom("execution_controls")
+                    .frame(egui::Frame::NONE)
+                    .show_inside(ui, |ui| {
+                        ui.add_enabled_ui(self.prepared.is_none() && !self.closing, |ui| {
+                            self.execution_section(ui, ctx)
+                        });
+                    });
                 egui::ScrollArea::vertical()
                     .id_salt("editor_scroll")
+                    .auto_shrink([false, false])
                     .show(ui, |ui| {
                         ui.add_enabled_ui(self.prepared.is_none() && !self.closing, |ui| {
                             self.editor(ui, ctx)
                         });
                     });
             });
-        egui::CentralPanel::default().show(ctx, |ui| self.results(ui, ctx));
+        egui::CentralPanel::default()
+            .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(theme::PANEL_MARGIN))
+            .show(ctx, |ui| self.results(ui, ctx));
         self.preflight_window(ctx);
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
             self.save();
