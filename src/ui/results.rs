@@ -12,6 +12,7 @@ impl App {
 
     fn results_content(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, bottom: f32) {
         theme::eyebrow(ui, "RUNS / RESULTS");
+        self.run_navigation(ui);
         if self.state.runs.is_empty() {
             ui.add_space(theme::SECTION_GAP * 2.0);
             ui.heading("One task. Independent jobs.");
@@ -19,41 +20,6 @@ impl App {
             ui.label("Describe your task, choose an agent and add repositories in New Convoy.");
             ui.weak("Review their Git state, then start your convoy. Each repository gets its own output and diff.");
             return;
-        }
-        let old = self.selected_run;
-        let label = self
-            .state
-            .runs
-            .iter()
-            .find(|r| Some(r.id) == self.selected_run)
-            .map_or_else(|| "Select a run".into(), run_label);
-        egui::ComboBox::from_id_salt("run_history")
-            .width(ui.available_width())
-            .truncate()
-            .selected_text(label)
-            .show_ui(ui, |ui| {
-                for run in &self.state.runs {
-                    let summary: String = run
-                        .task
-                        .prompt
-                        .lines()
-                        .next()
-                        .unwrap_or("Untitled task")
-                        .chars()
-                        .take(64)
-                        .collect();
-                    ui.selectable_value(
-                        &mut self.selected_run,
-                        Some(run.id),
-                        format!("{}\n{summary}", run_label(run)),
-                    )
-                    .on_hover_text(&run.task.prompt);
-                }
-            });
-        if self.selected_run != old {
-            self.selected_job = 0;
-            self.diff = None;
-            self.diff_target = None;
         }
         let Some(run) = self
             .state
@@ -213,7 +179,6 @@ impl App {
         });
         ui.add_space(theme::GAP);
         let mut load_diff = None;
-        let mut reuse_task = None;
         match self.tab {
             Tab::Output => {
                 ui.horizontal(|ui| {
@@ -308,14 +273,7 @@ impl App {
                 if let Some(code) = job.exit_code {
                     ui.label(format!("Exit code: {code}"));
                 }
-                if ui.button("Use this task again").clicked() {
-                    reuse_task = Some(run.task.clone());
-                }
             }
-        }
-        if let Some(task) = reuse_task {
-            self.state.reuse_task(task);
-            self.dirty = true;
         }
         if let Some(path) = load_diff {
             self.diff_target = Some(path.clone());
@@ -324,6 +282,103 @@ impl App {
                 let result = git::diff(&path).await.map_err(|e| format!("{e:#}"));
                 Message::Diff(path, result)
             });
+        }
+    }
+
+    fn run_navigation(&mut self, ui: &mut egui::Ui) {
+        if self.state.runs.is_empty() {
+            return;
+        }
+        let active = self.state.runs.iter().filter(|r| r.active()).count();
+        let history = self.state.runs.len() - active;
+        ui.small(format!("Active {active} · History {history}"));
+        let label = self
+            .state
+            .runs
+            .iter()
+            .find(|r| Some(r.id) == self.selected_run)
+            .map_or_else(
+                || "Select a convoy".into(),
+                |run| {
+                    format!(
+                        "{} · {}",
+                        if run.active() { "Active" } else { "History" },
+                        run_label(run)
+                    )
+                },
+            );
+        let mut selected = self.selected_run;
+        egui::ComboBox::from_id_salt("run_history")
+            .width(ui.available_width())
+            .height(280.0)
+            .truncate()
+            .selected_text(label)
+            .show_ui(ui, |ui| {
+                for (is_active, title, count) in
+                    [(true, "ACTIVE", active), (false, "HISTORY", history)]
+                {
+                    theme::eyebrow(ui, &format!("{title} ({count})"));
+                    if count == 0 {
+                        ui.weak(if is_active {
+                            "No active convoys"
+                        } else {
+                            "No history"
+                        });
+                    }
+                    for run in self.state.runs.iter().filter(|r| r.active() == is_active) {
+                        let summary: String = run
+                            .task
+                            .prompt
+                            .lines()
+                            .next()
+                            .unwrap_or("Untitled task")
+                            .chars()
+                            .take(64)
+                            .collect();
+                        ui.selectable_value(
+                            &mut selected,
+                            Some(run.id),
+                            format!("{}\n{summary}", run_label(run)),
+                        )
+                        .on_hover_text(&run.task.prompt);
+                    }
+                    if is_active {
+                        ui.separator();
+                    }
+                }
+            });
+        self.select_run(selected);
+        let mut reuse = None;
+        let mut remove = None;
+        let mut clear = false;
+        ui.horizontal_wrapped(|ui| {
+            if let Some(run) = self.state.runs.iter().find(|r| Some(r.id) == self.selected_run) {
+                if ui.add_enabled(!self.busy && self.prepared.is_none() && !self.closing,
+                    theme::quiet("Reuse convoy").small())
+                    .on_hover_text("Replace the draft with this convoy's task, agent settings, concurrency and still-registered repositories. Review before launching; this does not start jobs.")
+                    .clicked() { reuse = Some(run.id); }
+                if !run.active() && ui.add(theme::quiet("Remove from history").small())
+                    .on_hover_text("Remove only this convoy's local history and session output. Repository files and Git changes are untouched.")
+                    .clicked() { remove = Some(run.id); }
+            }
+            if history > 0 {
+                ui.menu_button("History cleanup", |ui| {
+                    ui.label("Removes local history and session output only.");
+                    ui.weak("Active convoys and repository files are untouched.");
+                    if ui.button(format!("Clear history ({history})")).clicked() {
+                        clear = true;
+                        ui.close();
+                    }
+                });
+            }
+        });
+        if let Some(id) = reuse {
+            self.reuse_convoy(id);
+        }
+        if clear {
+            self.remove_history(None);
+        } else if let Some(id) = remove {
+            self.remove_history(Some(id));
         }
     }
 }

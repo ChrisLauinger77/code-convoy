@@ -1,6 +1,8 @@
 mod editor;
 mod format;
 mod results;
+#[cfg(test)]
+mod tests;
 mod text_view;
 mod theme;
 
@@ -43,6 +45,8 @@ pub struct App {
     state: AppState,
     runtime: Runtime,
     selected: HashSet<PathBuf>,
+    draft_message: String,
+    focus_draft: bool,
     repository_input: String,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     busy: bool,
@@ -76,7 +80,10 @@ impl App {
         state: AppState,
         runtime: Runtime,
     ) -> Self {
-        theme::install(&cc.egui_ctx);
+        Self::with_context(&cc.egui_ctx, store, state, runtime)
+    }
+    fn with_context(ctx: &egui::Context, store: Store, state: AppState, runtime: Runtime) -> Self {
+        theme::install(ctx);
         let (tx, rx) = mpsc::channel();
         let (events_tx, events_rx) = async_mpsc::channel(256);
         let selected_run = state.runs.first().map(|r| r.id);
@@ -89,6 +96,8 @@ impl App {
             state,
             runtime,
             selected: HashSet::new(),
+            draft_message: String::new(),
+            focus_draft: false,
             repository_input: String::new(),
             repository_states: HashMap::new(),
             busy: false,
@@ -112,7 +121,7 @@ impl App {
             closing: false,
         };
         if !app.state.repositories.is_empty() {
-            app.refresh(cc.egui_ctx.clone());
+            app.refresh(ctx.clone());
         }
         app
     }
@@ -291,14 +300,16 @@ impl App {
                     format!("Could not queue convoy: {error:#}"),
                 );
             }
+        } else {
+            self.state.draft.prompt.clear();
+            self.selected.clear();
+            self.draft_message = format!("Convoy #{id} launched. Ready for your next task.");
+            self.focus_draft = true;
         }
         self.state.trim_history();
         self.dirty = true;
-        self.selected_run = Some(id);
-        self.selected_job = 0;
+        self.select_run(Some(id));
         self.tab = Tab::Output;
-        self.diff = None;
-        self.diff_target = None;
         self.dirty_ack = false;
     }
     fn poll(&mut self) {
@@ -362,17 +373,81 @@ impl App {
         self.state.trim_logs();
         self.manager.reap();
         self.state.trim_history();
+        self.reconcile_run_selection();
+    }
+    fn select_run(&mut self, id: Option<u64>) {
+        if self.selected_run != id {
+            self.selected_run = id;
+            self.selected_job = 0;
+            self.diff = None;
+            self.diff_target = None;
+            self.output_view = text_view::TextView::default();
+            self.diff_view = text_view::TextView::default();
+        }
+    }
+    fn reconcile_run_selection(&mut self) {
         if !self
             .state
             .runs
             .iter()
             .any(|r| Some(r.id) == self.selected_run)
         {
-            self.selected_run = self.state.runs.first().map(|r| r.id);
-            self.selected_job = 0;
-            self.diff = None;
-            self.diff_target = None;
+            let next = self
+                .state
+                .runs
+                .iter()
+                .find(|r| r.active())
+                .or_else(|| self.state.runs.first())
+                .map(|r| r.id);
+            self.select_run(next);
         }
+    }
+    fn remove_history(&mut self, id: Option<u64>) {
+        let changed = match id {
+            Some(id) => self.state.remove_from_history(id),
+            None => self.state.clear_history() > 0,
+        };
+        if changed {
+            self.reconcile_run_selection();
+            self.dirty = true;
+            self.save();
+        }
+    }
+    fn reuse_convoy(&mut self, id: u64) {
+        if self.busy || self.prepared.is_some() || self.closing {
+            return;
+        }
+        let Some(run) = self.state.runs.iter().find(|r| r.id == id) else {
+            return;
+        };
+        self.selected = run
+            .jobs
+            .iter()
+            .filter(|job| {
+                self.state
+                    .repositories
+                    .iter()
+                    .any(|r| r.path == job.repository.path)
+            })
+            .map(|job| job.repository.path.clone())
+            .collect();
+        let missing = run.jobs.len().saturating_sub(self.selected.len());
+        let task = run.task.clone();
+        self.state.reuse_task(task);
+        self.draft_message =
+            format!("Copied convoy #{id} into the draft. Review it before launching.");
+        if missing > 0 {
+            let noun = if missing == 1 {
+                "repository"
+            } else {
+                "repositories"
+            };
+            self.draft_message.push_str(&format!(
+                " Not selected: {missing} unregistered {noun}. Re-register to include them."
+            ));
+        }
+        self.focus_draft = true;
+        self.dirty = true;
     }
     fn apply_event(&mut self, event: Event) {
         let (id, job) = match &event {

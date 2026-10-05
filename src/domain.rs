@@ -272,6 +272,17 @@ impl AppState {
             .insert(self.draft.agent, self.draft.options.clone());
         self.draft = task;
     }
+    /// History cleanup only touches local run metadata, never execution or Git.
+    pub fn remove_from_history(&mut self, id: u64) -> bool {
+        let before = self.runs.len();
+        self.runs.retain(|run| run.id != id || run.active());
+        self.runs.len() != before
+    }
+    pub fn clear_history(&mut self) -> usize {
+        let before = self.runs.len();
+        self.runs.retain(Run::active);
+        before - self.runs.len()
+    }
     /// Never evict an active convoy, even when it is older than the history cap.
     pub fn trim_history(&mut self) {
         let mut completed = 0;

@@ -24,6 +24,10 @@ Backend status: Codex and Copilot are implemented and user-verified end-to-end o
 
 `ui/editor` groups task, backend options, repositories, and execution controls. `ui/results` presents history, job selection, and result tabs. `ui/theme` centralizes both palettes, typography, spacing, focus/selection, and primary actions. `ui/format` formats duration and run summaries; overall status and progress are derived in the domain.
 
+The compact run selector groups active and terminal runs in a height-bounded scrolling popup. Active means any queued/running job, including a partially failed convoy that still has work. History cleanup methods in `AppState` guard against removing active runs; the UI offers individual removal only for terminal runs and bulk removal through History cleanup. Removal immediately saves metadata and reconciles selection (prefer an active convoy, then the newest history, then empty), clearing stale job/diff/output views. It never calls Git, the scheduler, cancellation, or agent configuration APIs.
+
+Reuse copies a run's task/options and selects its still-registered canonical repository paths. It reports skipped registrations, leaves the global limit alone, and requires the normal preflight for any subsequent launch. Reuse is unavailable during preflight/review/shutdown. No historical configuration is mutated or automatically executed.
+
 `ui/text_view` caches a line index for the selected output/diff and uses egui's visible-row layout. Copy actions preserve the original retained text. Diff coloring is presentation-only: no agent protocol parsing, Git behavior, or stored output format is changed. Main panes and long details scroll independently; execution controls remain visible at the bottom of the editor. Appearance follows the system by default; overrides are session-local, without a state-schema change.
 
 ## Backend extension
@@ -45,6 +49,8 @@ Copilot's default grants `write` permission and denies `shell`; choices also sup
 ## Scheduling and shutdown
 
 The editor draft is separate from execution. Preflight takes owned copies of task/options and selected canonical repositories; confirmation saves `PreparedRun::snapshot` before handing owned data to `RunManager`. Each convoy keeps its own task/backend and job cancellation tokens. Run IDs route every event and cancellation, so selecting or editing another convoy does not affect workers.
+
+Only successful manager admission clears the draft prompt and repository selection. Backend/options, concurrency preferences, and registrations remain. Preflight, persistence, backend, or admission failure preserves the draft. The cleared prompt is saved through the existing draft persistence path; repository checkboxes remain session-local.
 
 One Tokio manager owns all admission decisions and a `JoinSet` of executing workers. A small pure scheduler rotates convoys after each admission. It selects the first eligible repository in that convoy, skipping busy paths and saturated convoys. A continuously eligible convoy therefore gets a turn per round; existing jobs are not preempted. There are no priorities or dependencies. Command arrival, completion, or cancellation wakes scheduling; the UI never waits for a slot.
 

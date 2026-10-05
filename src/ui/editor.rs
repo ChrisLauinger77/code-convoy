@@ -6,6 +6,9 @@ use crate::{
 
 impl App {
     pub(super) fn editor(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        if self.focus_draft {
+            ui.scroll_to_cursor(Some(egui::Align::Min));
+        }
         theme::eyebrow(ui, "NEW CONVOY");
         self.task_section(ui);
         self.agent_section(ui, ctx);
@@ -15,14 +18,20 @@ impl App {
     fn task_section(&mut self, ui: &mut egui::Ui) {
         theme::section(ui, "Task");
         ui.weak("One instruction, applied to each repository.");
-        self.dirty |= ui
-            .add(
-                egui::TextEdit::multiline(&mut self.state.draft.prompt)
-                    .desired_rows(5)
-                    .desired_width(f32::INFINITY)
-                    .hint_text("Describe the change or review…"),
-            )
-            .changed();
+        if !self.draft_message.is_empty() {
+            ui.small(&self.draft_message);
+        }
+        let response = ui.add(
+            egui::TextEdit::multiline(&mut self.state.draft.prompt)
+                .desired_rows(5)
+                .desired_width(f32::INFINITY)
+                .hint_text("Describe the change or review…"),
+        );
+        self.dirty |= response.changed();
+        if self.focus_draft {
+            response.request_focus();
+            self.focus_draft = false;
+        }
     }
 
     fn agent_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -321,7 +330,7 @@ impl App {
         } else if self.selected.is_empty() {
             "Select at least one repository."
         } else {
-            "Starts an independent convoy; your draft stays here."
+            "After launch, task text and selections clear; settings stay."
         };
         ui.small(hint);
     }
