@@ -37,11 +37,13 @@ cargo build --locked --release
 
 The executable is `target/release/codeconvoy` (`codeconvoy.exe` on Windows). Installers and desktop integration are not yet provided. A native macOS UI smoke check has passed; authenticated macOS execution and Windows native runtime verification remain outstanding. A CI matrix is included for all three platforms.
 
+**Browse…** uses the desktop's folder picker: an XDG Desktop Portal on Linux, an NSOpenPanel sheet on macOS, and the native Windows file dialog in folder mode. Linux needs a FileChooser-capable portal backend (such as GTK/GNOME/KDE) and runtime `libdbus`; `zenity` is the fallback when the portal is unavailable. Manual path entry remains available. See [folder-picker implementation and validation](docs/folder-picker-validation.md).
+
 ## First run
 
 1. Enter a task and select Codex, GitHub Copilot CLI, OpenCode, or Claude Code.
 2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. OpenCode offers its own model, agent, variant and permission controls. Claude offers model, effort, turn limit and tool permissions. Model and reasoning support depends on the selected CLI/model.
-3. Register existing repository **root directories**. Select the checkboxes for this task.
+3. Enter an existing repository **root directory**, or use **Browse…** to fill the path field, then choose **Add repository**. Cancelling the picker preserves the field; choosing a folder never registers it automatically. Select the repository checkboxes for this task.
 4. Set **This convoy** (its job limit) and **Global job limit** (shared by every convoy), then **Run Convoy**.
 5. Review branches and existing changes. Dirty working trees require acknowledgment before **Start convoy**.
 6. Select a job to read its live output. Use **Stop** for one job or **Stop Convoy** for the selected convoy. Other convoys continue.

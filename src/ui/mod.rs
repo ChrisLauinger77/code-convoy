@@ -28,6 +28,7 @@ use std::{
 use tokio::{runtime::Runtime, sync::mpsc as async_mpsc};
 
 enum Message {
+    RepositoryFolder(Option<PathBuf>),
     Registered(Result<(Repository, WorkingTree), String>),
     Refreshed(Vec<(PathBuf, Result<WorkingTree, String>)>),
     Prepared(Result<PreparedRun, String>),
@@ -53,6 +54,10 @@ pub struct App {
     draft_message: String,
     focus_draft: bool,
     repository_input: String,
+    picked_repository_path: Option<PathBuf>,
+    repository_dialog: rfd::AsyncFileDialog,
+    browsing_repository: bool,
+    focus_repository_input: bool,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     busy: bool,
     checking_cli: Option<(domain::AgentId, domain::AgentOptions)>,
@@ -89,7 +94,10 @@ impl App {
         state: AppState,
         runtime: Runtime,
     ) -> Self {
-        Self::with_context(&cc.egui_ctx, store, state, runtime)
+        let mut app = Self::with_context(&cc.egui_ctx, store, state, runtime);
+        // eframe owns this root window for the lifetime of the app.
+        app.repository_dialog = app.repository_dialog.set_parent(cc);
+        app
     }
     fn with_context(ctx: &egui::Context, store: Store, state: AppState, runtime: Runtime) -> Self {
         theme::install(ctx);
@@ -108,6 +116,12 @@ impl App {
             draft_message: String::new(),
             focus_draft: false,
             repository_input: String::new(),
+            picked_repository_path: None,
+            repository_dialog: rfd::AsyncFileDialog::new()
+                .set_title("Choose a Git repository root")
+                .set_can_create_directories(false),
+            browsing_repository: false,
+            focus_repository_input: false,
             repository_states: HashMap::new(),
             busy: false,
             checking_cli: None,
@@ -262,7 +276,14 @@ impl App {
             self.notice = format!("At most {MAX_REPOSITORIES} repositories can be registered.");
             return;
         }
-        let path = PathBuf::from(self.repository_input.trim());
+        // Preserve a picked directory exactly, including trailing whitespace.
+        // An edited/manual field retains the existing whitespace-trimming behavior.
+        let path = self
+            .picked_repository_path
+            .as_ref()
+            .filter(|path| path.to_str() == Some(self.repository_input.as_str()))
+            .cloned()
+            .unwrap_or_else(|| PathBuf::from(self.repository_input.trim()));
         self.busy = true;
         self.dispatch(ctx, async move {
             let result = async {
@@ -338,6 +359,7 @@ impl App {
     fn poll(&mut self) {
         while let Ok(message) = self.rx.try_recv() {
             match message {
+                Message::RepositoryFolder(path) => self.repository_folder_selected(path),
                 Message::Registered(result) => {
                     self.busy = false;
                     match result {
@@ -355,6 +377,7 @@ impl App {
                                     .insert(repository.path.clone(), Ok(state));
                                 self.state.repositories.push(repository);
                                 self.repository_input.clear();
+                                self.picked_repository_path = None;
                                 self.notice.clear();
                                 self.dirty = true;
                             }

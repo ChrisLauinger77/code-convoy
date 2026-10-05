@@ -1,6 +1,41 @@
 use super::*;
 
 impl App {
+    fn browse_repository(&mut self, ctx: egui::Context) {
+        if self.browsing_repository || self.busy {
+            return;
+        }
+        self.browsing_repository = true;
+        // Construct on the UI thread for macOS's NSOpenPanel sheet, then await
+        // on Tokio. rfd handles Linux portal / Windows COM work off-thread.
+        let selection = self
+            .repository_dialog
+            .clone()
+            .set_directory(self.repository_input.trim())
+            .pick_folder();
+        self.dispatch(ctx, async move {
+            Message::RepositoryFolder(selection.await.map(|folder| folder.path().to_owned()))
+        });
+    }
+
+    pub(super) fn repository_folder_selected(&mut self, path: Option<PathBuf>) {
+        self.browsing_repository = false;
+        self.focus_repository_input = true;
+        if let Some(path) = path {
+            match path.to_str() {
+                Some(text) => {
+                    self.repository_input = text.to_owned();
+                    self.picked_repository_path = Some(path);
+                }
+                None => {
+                    self.notice = "The selected path cannot be represented as text. Choose a directory with a Unicode path.".into();
+                }
+            }
+        }
+        // Cancellation preserves the field. Selection never registers a repo:
+        // only the explicit Add action calls the existing Git validation path.
+    }
+
     pub(super) fn select_repositories(&mut self, selected: bool) {
         self.selected.clear();
         if selected {
@@ -11,15 +46,35 @@ impl App {
 
     pub(super) fn repositories_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         theme::section(ui, "Repositories");
-        ui.add(
+        let path = ui.add(
             egui::TextEdit::singleline(&mut self.repository_input)
                 .hint_text("/path/to/git/repository")
                 .desired_width(f32::INFINITY),
         );
-        ui.horizontal(|ui| {
+        if path.changed() {
+            self.picked_repository_path = None;
+        }
+        if self.focus_repository_input {
+            path.request_focus();
+            path.scroll_to_me(None);
+            self.focus_repository_input = false;
+        }
+        ui.horizontal_wrapped(|ui| {
             if ui
                 .add_enabled(
-                    !self.busy && !self.repository_input.trim().is_empty(),
+                    !self.busy && !self.browsing_repository,
+                    theme::quiet("Browse…"),
+                )
+                .on_hover_text("Choose a folder, then use Add repository to register it")
+                .clicked()
+            {
+                self.browse_repository(ctx.clone());
+            }
+            if ui
+                .add_enabled(
+                    !self.busy
+                        && !self.browsing_repository
+                        && !self.repository_input.trim().is_empty(),
                     egui::Button::new("Add repository"),
                 )
                 .clicked()
@@ -33,6 +88,9 @@ impl App {
                 self.refresh(ctx.clone());
             }
         });
+        if self.browsing_repository {
+            ui.weak("Choosing a folder…");
+        }
         if self.state.repositories.is_empty() {
             ui.weak("Add an existing Git working tree to get started.");
         }

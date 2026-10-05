@@ -22,6 +22,192 @@ fn app() -> (tempfile::TempDir, App) {
 }
 
 #[test]
+fn folder_results_only_fill_the_draft_and_do_not_release_git_work() {
+    let (_temp, mut app) = app();
+    app.dirty = false;
+    app.busy = true; // A refresh may complete independently of the picker.
+    app.repository_input = "manually entered path".into();
+    app.notice = "Existing diagnostic".into();
+    let state = serde_json::to_value(&app.state).unwrap();
+
+    for selection in [Some(PathBuf::from("/chosen/repo with spaces")), None] {
+        app.browsing_repository = true;
+        app.tx.send(Message::RepositoryFolder(selection)).unwrap();
+        app.poll();
+        assert_eq!(app.repository_input, "/chosen/repo with spaces");
+        assert!(!app.browsing_repository);
+        assert!(app.focus_repository_input);
+        assert!(app.busy);
+        assert!(!app.dirty);
+        assert!(app.selected.is_empty());
+        assert!(app.repository_states.is_empty());
+        assert!(app.manager.is_idle());
+        assert_eq!(serde_json::to_value(&app.state).unwrap(), state);
+        assert_eq!(app.notice, "Existing diagnostic");
+    }
+
+    // Keep edits made while a portal is open, including whitespace, on cancel.
+    app.repository_input = "  another manual path  ".into();
+    app.tx.send(Message::RepositoryFolder(None)).unwrap();
+    app.poll();
+    assert_eq!(app.repository_input, "  another manual path  ");
+}
+
+#[cfg(unix)]
+#[test]
+fn unrepresentable_folder_path_does_not_silently_select_a_different_directory() {
+    use std::os::unix::ffi::OsStringExt;
+    let (_temp, mut app) = app();
+    app.repository_input = "keep this path".into();
+    app.browsing_repository = true;
+    let path = std::ffi::OsString::from_vec(b"/tmp/invalid-\xff".to_vec());
+    app.tx
+        .send(Message::RepositoryFolder(Some(path.into())))
+        .unwrap();
+    app.poll();
+    assert_eq!(app.repository_input, "keep this path");
+    assert!(!app.browsing_repository);
+    assert!(app.notice.contains("Unicode path"));
+    assert!(app.state.repositories.is_empty());
+}
+
+fn add_repository_and_wait(app: &mut App) {
+    app.register(egui::Context::default());
+    assert!(app.busy);
+    let message = app.runtime.block_on(async {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if let Ok(message) = app.rx.try_recv() {
+                    break message;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .unwrap()
+    });
+    assert!(matches!(message, Message::Registered(_)));
+    app.tx.send(message).unwrap();
+    app.poll();
+    assert!(!app.busy);
+}
+
+#[test]
+fn selected_and_manual_paths_share_explicit_registration_and_git_validation() {
+    let (temp, mut app) = app();
+    let valid = temp.path().join("repository with spaces ü");
+    assert!(
+        std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .arg(&valid)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let untouched = valid.join("untracked.txt");
+    std::fs::write(&untouched, "Preserve existing changes").unwrap();
+    let non_git = temp.path().join("ordinary folder");
+    std::fs::create_dir(&non_git).unwrap();
+    let nested = valid.join("subdirectory");
+    std::fs::create_dir(&nested).unwrap();
+
+    app.tx
+        .send(Message::RepositoryFolder(Some(valid.clone())))
+        .unwrap();
+    app.poll();
+    assert!(app.state.repositories.is_empty());
+    assert!(!app.busy);
+    add_repository_and_wait(&mut app);
+    assert_eq!(app.state.repositories.len(), 1);
+    assert_eq!(
+        app.state.repositories[0].path,
+        valid.canonicalize().unwrap()
+    );
+    assert!(app.repository_input.is_empty());
+    assert!(app.notice.is_empty());
+
+    for path in [&valid, &non_git, &nested] {
+        app.tx
+            .send(Message::RepositoryFolder(Some(path.clone())))
+            .unwrap();
+        app.poll();
+        add_repository_and_wait(&mut app);
+        assert_eq!(app.state.repositories.len(), 1);
+        assert_eq!(app.repository_input, path.to_str().unwrap());
+        assert!(!app.notice.is_empty());
+        if path == &valid {
+            assert_eq!(app.notice, "This repository is already registered.");
+        }
+    }
+
+    app.repository_input = temp.path().join("does not exist").display().to_string();
+    let manual = app.repository_input.clone();
+    add_repository_and_wait(&mut app);
+    assert_eq!(app.repository_input, manual);
+    assert!(app.notice.contains("Repository path does not exist"));
+    assert_eq!(app.state.repositories.len(), 1);
+
+    // The original manual whitespace and canonical duplicate behavior remains.
+    app.repository_input = format!("  {}  ", valid.join(".").display());
+    add_repository_and_wait(&mut app);
+    assert_eq!(app.notice, "This repository is already registered.");
+    assert_eq!(app.state.repositories.len(), 1);
+    app.state.repositories.clear();
+    add_repository_and_wait(&mut app);
+    assert_eq!(app.state.repositories.len(), 1);
+    assert!(app.repository_input.is_empty());
+    assert!(app.notice.is_empty());
+    assert_eq!(
+        std::fs::read_to_string(untouched).unwrap(),
+        "Preserve existing changes"
+    );
+    assert!(app.manager.is_idle());
+}
+
+#[cfg(unix)]
+#[test]
+fn picked_paths_with_trailing_whitespace_are_not_trimmed_to_another_repository() {
+    let (temp, mut app) = app();
+    let picked = temp.path().join("repo ");
+    let other = temp.path().join("repo");
+    for path in [&picked, &other] {
+        assert!(
+            std::process::Command::new("git")
+                .args(["init", "--quiet"])
+                .arg(path)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    }
+    app.tx
+        .send(Message::RepositoryFolder(Some(picked.clone())))
+        .unwrap();
+    app.poll();
+    add_repository_and_wait(&mut app);
+    assert_eq!(
+        app.state.repositories[0].path,
+        picked.canonicalize().unwrap()
+    );
+    assert!(app.picked_repository_path.is_none());
+
+    // Editing the field after a pick must use the edited value, not a stale pick.
+    app.tx
+        .send(Message::RepositoryFolder(Some(picked)))
+        .unwrap();
+    app.poll();
+    app.repository_input = other.display().to_string();
+    add_repository_and_wait(&mut app);
+    assert_eq!(app.state.repositories.len(), 2);
+    assert_eq!(
+        app.state.repositories[1].path,
+        other.canonicalize().unwrap()
+    );
+}
+
+#[test]
 fn bulk_selection_includes_dirty_and_nested_repositories_without_mutating_them() {
     let (_temp, mut app) = app();
     for count in [0, 1, 5, 10, 24, MAX_REPOSITORIES] {

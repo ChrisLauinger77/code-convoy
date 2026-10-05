@@ -34,6 +34,8 @@ Reuse copies a run's task/options and selects its still-registered canonical rep
 
 `build.rs` reads an optional short Git revision at compile time, tracks Git reference changes, and tolerates missing Git/source metadata. About performs no process or network work at runtime. A source archive nested in another checkout does not inherit that checkout's revision.
 
+Repository browsing uses `rfd::AsyncFileDialog`, parented to eframe's root window. The UI thread constructs the folder-picker future (required for native macOS sheet setup); the existing Tokio runtime awaits it and sends an optional path through the UI message channel, requesting repaint. A separate in-flight flag prevents duplicate pickers and disables Add while a selection is pending, without changing repository/runner busy state. Completion returns keyboard focus to the editable path. Cancellation leaves its contents untouched. A picked path retains its exact spelling until edited, including trailing whitespace; unrepresentable Unicode paths are rejected instead of being converted lossily. Only the explicit Add action invokes the existing `git::register` / `git::status` and canonical duplicate checks. See [implementation rationale and validation](folder-picker-validation.md).
+
 ## Backend extension
 
 `AgentBackend` owns executable/help/version detection, supported options, invocation construction, and the execution summary shown in the editor/preflight UI. Its `output()` factory creates an independent `AgentOutput` for each job; that object owns byte framing, stream handling, and exit interpretation. It exposes overridable spawn/cancel methods and delegates ordinary subprocess handling to `process`. Async pipe I/O and scheduling remain shared, rather than being copied into every backend.
