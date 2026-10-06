@@ -1,6 +1,6 @@
 # CodeConvoy
 
-[![CI](https://github.com/ChrisLauinger77/stream-gui-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ChrisLauinger77/stream-gui-rs/actions/workflows/ci.yml)
+[![CI](https://github.com/ChrisLauinger77/code-convoy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ChrisLauinger77/code-convoy/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/github/v/release/ChrisLauinger77/code-convoy)](https://github.com/ChrisLauinger77/code-convoy/releases)
 [![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/code-convoy/total.svg)](https://github.com/ChrisLauinger77/code-convoy/releases)
 [![MIT](https://img.shields.io/github/license/ChrisLauinger77/code-convoy)](LICENSE)
@@ -16,8 +16,8 @@ CodeConvoy 0.1 is a native Rust/egui implementation with four independent coding
 
 | Backend            | Status    | Authenticated E2E status                                                                             |
 | ------------------ | --------- | ---------------------------------------------------------------------------------------------------- |
-| Codex CLI          | Supported | User-verified on Linux with two concurrent repositories                                              |
-| GitHub Copilot CLI | Supported | User-verified on Linux with two concurrent repositories                                              |
+| Codex CLI          | Supported | User-verified on Linux (two concurrent repositories) and macOS                                       |
+| GitHub Copilot CLI | Supported | User-verified on Linux (two concurrent repositories) and macOS                                       |
 | OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally      |
 | Claude Code        | Supported | Unverified; official documentation/source and deterministic fixtures tested, CLI unavailable locally |
 
@@ -40,10 +40,13 @@ Packages are available after the maintainer publishes the release tag.
 SHA256SUMS` with the downloaded files; on macOS use `shasum -a 256`; on Windows
 use `Get-FileHash -Algorithm SHA256` and compare the corresponding entry.
 
-Linux packages target glibc 2.35 or later (Ubuntu 22.04 build baseline), with a
-working X11 or Wayland desktop and OpenGL/EGL driver. The folder picker needs
-`libdbus` and an XDG Desktop Portal with a FileChooser-capable backend appropriate
-to your desktop; `zenity` is its fallback. Manual path entry remains available.
+Linux packages are built on Ubuntu 26.04. The DEB is user-verified to install
+and run on Debian Forky; AppImage startup is also user-verified there. The minimum
+glibc version and compatibility with older distributions need verification after
+the runner update.
+A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
+picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
+backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
 `./CodeConvoy-0.1.0-x86_64.AppImage --appimage-extract-and-run`.
 
@@ -107,8 +110,9 @@ The executable is `target/release/codeconvoy` (`codeconvoy.exe` on Windows).
 Windows source builds need the MSVC C++ build tools and Windows SDK; macOS needs
 Xcode Command Line Tools. Packaging additionally needs the tools listed in the
 [release procedure](docs/releasing.md); those are not application runtime
-requirements. Native macOS UI and Universal DMG checks have passed; authenticated
-macOS execution and Windows interactive runtime verification remain outstanding.
+requirements. Native macOS UI and Universal DMG checks have passed, and Codex
+and Copilot execution is user-verified on macOS. Windows interactive runtime
+verification and authenticated OpenCode/Claude execution remain outstanding.
 
 ### Windows VMs and graphics
 
@@ -172,11 +176,11 @@ codex --no-daemon --ask-for-approval never exec \
 
 The application sends the prompt through stdin and sets the working directory to the selected repository. Optional model and reasoning overrides are separate arguments. It never constructs a shell command string, manages API keys, or reads CLI credential files. Sandbox bypass is not exposed. Existing CLI configuration, repository instructions, hooks, tools, authentication, and network behavior remain under Codex's control. `--ephemeral` disables Codex session history for these invocations; resume is deferred.
 
-See the official [Codex noninteractive documentation](https://learn.chatgpt.com/docs/non-interactive-mode). The user has successfully verified authenticated execution against two real repositories concurrently, including independent changes, output capture, and Git diff inspection. This behavior and the Codex invocation are preserved when adding Copilot.
+See the official [Codex noninteractive documentation](https://learn.chatgpt.com/docs/non-interactive-mode). The user has successfully verified authenticated execution on Linux against two real repositories concurrently, including independent changes, output capture, and Git diff inspection. Successful macOS execution is also user-verified. This behavior and the Codex invocation are preserved when adding Copilot.
 
 ## Copilot contract
 
-Copilot has been user-verified end-to-end on Linux with two real repositories running concurrently. Its installed help/version output and generated CLI flags have also been checked locally.
+Copilot has been user-verified end-to-end on Linux and macOS. Linux testing used two real repositories running concurrently. Its installed help/version output and generated CLI flags have also been checked locally.
 
 This installation has two versions: the normal launcher reports **1.0.91**, while `copilot --no-auto-update --version` reports the bundled **1.0.65**. CodeConvoy passes `--no-auto-update` to both detection and execution, so they consistently use the bundled executable and do not initiate CLI updates. **Check CLI** reports that effective version. If your bundled CLI is too old, it reports the missing capability; updating Copilot is a separate user action.
 
@@ -335,11 +339,24 @@ A lock prevents two instances sharing the same state directory. On Unix the dire
 
 ## Development
 
+The [CI workflow](.github/workflows/ci.yml) runs on pushes to `main` and pull
+requests targeting `main`. Changes consisting entirely of `**/*.md` files skip
+CI; changes that also include other files still run it. CI uses stable Rust and
+Python 3.14 on `ubuntu-latest`, `macos-latest`, and `windows-latest`, runs the
+packaging tests and checks below, and additionally checks software graphics
+initialization on Windows. No authenticated agent tasks are run.
+
 ```sh
+python3 -m unittest discover -s packaging -p 'test_*.py'
 cargo fmt --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --all-features
+cargo build --locked --release --bin codeconvoy
 ```
+
+Renovate maintains dependencies and CI/release tooling. See
+[CI and Renovate policy](docs/releasing.md#ci-and-renovate) for the inherited
+preset, approval rules, and release compatibility checks.
 
 The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous Codex/Copilot/OpenCode/Claude convoys, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover all four backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
 

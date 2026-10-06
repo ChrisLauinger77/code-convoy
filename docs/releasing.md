@@ -6,7 +6,8 @@
 metadata, bundle versions and final filenames derive from it. For this release
 it is `0.1.0`, with tag `v0.1.0`, without a prerelease suffix.
 
-1. Review and commit the release changes. Confirm normal CI is green.
+1. Review and commit the release changes. Confirm applicable normal CI checks
+   are green; Markdown-only changes skip CI.
 2. Run **Native release packages → Run workflow** on the reviewed branch. This
    builds and verifies packages and uploads the complete `release-assets`
    workflow artifact, including checksums. It never publishes a release.
@@ -16,10 +17,11 @@ it is `0.1.0`, with tag `v0.1.0`, without a prerelease suffix.
    reviewed commit when satisfied. Tag creation is a maintainer action.
 
 The tag workflow checks exact tag/version equality before starting native jobs.
-It builds Linux x86-64 on Ubuntu 22.04, Windows x86-64 on Windows 2022, and both
-macOS architectures using Apple's SDK on macOS 15. Rust 1.95.0 and the committed
-lockfile are used. Each platform runs formatting, strict Clippy and all
-non-ignored tests; no authenticated agent tasks or provider credentials are used.
+It builds Linux x86-64 on `ubuntu-26.04`, Windows x86-64 on `windows-2025`, and
+both macOS architectures using Apple's SDK on `macos-26`. Rust 1.99.0,
+Python 3.14 and the committed lockfile are used. Each platform runs formatting,
+strict Clippy and all non-ignored tests; no authenticated agent tasks or provider
+credentials are used.
 
 Only the final publishing job has `contents: write`. All six packages must be
 nonempty and have exactly the expected final filenames before checksums are
@@ -30,9 +32,42 @@ release. Existing releases are not overwritten. If publication fails after
 draft creation, inspect/delete that draft before rerunning the publisher; do
 not move a published tag. A new release requires a new version/tag.
 
-Normal pushes and pull requests run checks/builds only. A manual release workflow
-run cannot publish, even when its selected ref is a tag. The workflow never
-creates a Git tag.
+Normal CI runs checks/builds only. A manual release workflow run cannot publish,
+even when its selected ref is a tag. The workflow never creates a Git tag.
+
+## CI and Renovate
+
+[Normal CI](../.github/workflows/ci.yml) runs on pushes to `main` and pull
+requests targeting `main`, excluding changes consisting entirely of `**/*.md`
+files. Mixed Markdown/code/configuration changes still run CI. Its matrix uses
+`ubuntu-latest`, `macos-latest`, and `windows-latest`, stable Rust, and Python
+3.14. Packaging unit tests, formatting, strict Clippy, all non-ignored Rust tests
+and a locked release build run on each platform; Windows also runs the explicit
+software graphics initialization test. Markdown-only edits have no new CI run.
+
+[Release packaging](../.github/workflows/release.yml) has separate triggers:
+`v*` tag pushes and manual dispatch. It has no Markdown path filter and uses
+the explicit runners and Rust version listed above. The source-build minimum
+remains Rust 1.95 as declared in `Cargo.toml`; the release compiler pin does not
+change that requirement.
+
+[renovate.json](../renovate.json) inherits the shared
+[CodeConvoy preset](https://github.com/ChrisLauinger77/ChrisLauinger77/blob/main/renovate-config/code-convoy.json)
+and its [default preset](https://github.com/ChrisLauinger77/ChrisLauinger77/blob/main/renovate-config/default.json).
+These disable automerge, pin GitHub Actions to full commits and group their
+updates. Major updates, Rust 0.x minor/patch updates and
+`dtolnay/rust-toolchain` action updates require Dependency Dashboard approval.
+A local regex manager maintains `PACKAGER_VERSION` for cargo-packager in the
+release workflow. Renovate updates also cover runner labels and the Rust/Python
+versions selected by the workflows.
+
+Review compiler and runner changes for their effect on package compatibility,
+including Linux glibc requirements and the macOS deployment target. After such
+changes, update these docs and run the non-publishing release workflow to
+revalidate the packages before tagging. Update AppImage tool URLs and their
+verified SHA-256 values together; mismatches fail before downloaded tools run.
+Native runner SDKs, system package versions and package timestamps can vary;
+this is a repeatable, locked build recipe, not a claim of byte-identical artifacts.
 
 ## Packaging choice
 
@@ -61,13 +96,6 @@ was added. Rust dependencies introduced by hardening are Windows-only
 `winresource` (build-time icon/version resources) and an explicit dependency on
 the already-locked `windows` crate (the typed `CREATE_NO_WINDOW` constant).
 The existing process-wrap dependency supplies the creation-flags wrapper.
-
-Actions are pinned to full commits; the existing Renovate digest policy maintains
-them. A local Renovate regex manager maintains the pinned cargo-packager version.
-Review Rust compiler changes explicitly. Update AppImage tool URLs and their
-verified SHA-256 values together; mismatches fail before downloaded tools run.
-Native runner SDKs, system package versions and package timestamps can vary;
-this is a repeatable, locked build recipe, not a claim of byte-identical artifacts.
 
 ## Identity and payload
 
@@ -161,10 +189,17 @@ and writes their final checksums. Do not run `publish.py` locally as a build tes
 Linux runtime packages are separate from CI packaging tools: desktop graphics,
 X11/Wayland libraries, fontconfig, libdbus, Git, URL-opening utilities and the
 desktop's portal/backend. The Debian dependency list and RPM requirements use
-their respective distribution names; RPM also derives ELF requirements. Packages
-built on Ubuntu 22.04 require glibc >= 2.35; older enterprise RPM distributions
-are not a supported baseline. AppImage still uses the host graphics/session
-services and portal; it is not an entire Linux distribution.
+their respective distribution names; RPM also derives ELF requirements.
+The DEB is user-verified to install and run on Debian Forky; AppImage startup is
+also user-verified there.
+The release runner now uses Ubuntu 26.04, so the previous Ubuntu 22.04 / glibc
+2.35 compatibility claim needs revalidation. `packaging/packager.json` still
+declares `libc6 (>= 2.35)` for DEB; that declaration does not establish the
+binary's actual minimum. Before publishing, inspect the final executable and
+bundled libraries' required GLIBC symbol versions, align the DEB dependency
+with those requirements, and test the oldest intended distribution. AppImage
+still uses the host graphics/session services and portal; it is not an entire
+Linux distribution.
 
 The X11 backend loads `libxkbcommon-x11.so.0` with `dlopen`, so ELF dependency
 scanning does not discover it. CI and DEB explicitly require

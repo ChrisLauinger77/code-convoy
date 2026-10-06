@@ -25,7 +25,8 @@ Windows execution tests remain required; source inspection is not runtime proof.
 
 Host: Apple Silicon macOS. Application checks used the installed Rust 1.99.0;
 both Universal slices were also built with isolated Rust 1.95.0, matching the
-release workflow. No installed agent was invoked for an authenticated task.
+release workflow at the time of that audit. No installed agent was invoked for
+an authenticated task.
 
 | Check | Result |
 | --- | --- |
@@ -75,21 +76,38 @@ These checks supplement the existing [folder-picker](folder-picker-validation.md
 continue to cover dirty state, revalidation, nested/canonical locks, admission,
 bounded output, descendant cancellation and state recovery.
 
+## User confirmation recorded 2026-10-06
+
+The user confirmed successful macOS testing with Codex CLI and GitHub Copilot
+CLI. Both now have user-verified authenticated E2E coverage on Linux and macOS.
+OpenCode and Claude Code authenticated E2E remain unverified.
+
+The user also confirmed successful installation and use of the DEB package on
+Debian Forky. AppImage startup on Debian Forky is also user-verified.
+
 ## Required hosted and desktop follow-through
 
-The new release workflow has been statically validated; it has **not yet run on
-GitHub Actions** in this work. Linux/Windows packages were not built or executed
-on this macOS host. Run its non-publishing manual mode before tagging and inspect
-its native package/installer checks. The AppImage host-process test is committed
-and is a release-job gate; its Linux runtime result is still pending.
+At the time of the 2026-10-05 audit, the new release workflow had been statically
+validated but had **not yet run on GitHub Actions** in that work. Linux/Windows
+packages were not built or executed on that macOS host. That record does not
+validate later workflow changes.
+
+The 2026-10-06 CI/Renovate review found that release packaging now selects
+`ubuntu-26.04`, `windows-2025`, `macos-26`, Rust 1.99.0 and Python 3.14. Normal
+CI uses latest runners and stable Rust, targets pushes/PRs to `main`, and skips
+Markdown-only changes. These are configuration observations, not new hosted or
+desktop test results. Run the current release workflow's non-publishing manual
+mode before tagging and inspect its native package/installer checks. The AppImage
+host-process test is a release-job gate; validate it on the updated Linux runner.
 
 | Platform | Remaining validation |
 | --- | --- |
-| Linux X11 and Wayland | Install DEB/RPM on compatible distributions; launch AppImage; test portal selection/cancellation, clipboard/URLs, host Git and installed agent lookup, concurrent cancellation and shutdown |
+| Linux X11 and Wayland | Inspect final GLIBC requirements after the Ubuntu 26.04 runner update and reconcile the DEB's declared `libc6 (>= 2.35)` dependency; test the oldest intended distribution; install RPM; test portal selection/cancellation, clipboard/URLs, host Git and installed agent lookup, concurrent cancellation and shutdown |
 | Windows x86-64 | Verify CI installer/uninstaller and Job Object fixture results; on a real desktop check no console flashes, picker, keyboard navigation, installed/portable startup and descendant cancellation on Stop/Stop Convoy/Stop All/close |
 | Intel macOS | Intel slice is built/inspected but was not run on Intel hardware |
 | Downloaded macOS app | Local ad-hoc integrity was verified; actual browser quarantine/Gatekeeper first-launch flow and oldest supported macOS version remain unverified |
-| Agent authentication | No new authenticated E2E claims; OpenCode and Claude remain unverified |
+| Agent authentication | Codex and Copilot are user-verified on Linux and macOS; OpenCode and Claude remain unverified |
 
-No Git tag or public release was created. The signing pipeline needs no Apple
-Developer account secrets; ad-hoc verification does not imply Apple trust.
+No Git tag or public release was created during the 2026-10-05 audit. The signing
+pipeline needs no Apple Developer account secrets; ad-hoc verification does not
+imply Apple trust.
