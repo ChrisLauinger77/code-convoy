@@ -1,5 +1,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod graphics;
+
 fn main() -> anyhow::Result<()> {
     let result = run();
     // Release GUI applications have no console; startup failures must stay visible.
@@ -35,6 +37,7 @@ fn run() -> anyhow::Result<()> {
             .with_min_inner_size([780.0, 560.0]),
         ..Default::default()
     };
+    let options = graphics::configure(options)?;
     eframe::run_native(
         "CodeConvoy",
         options,
@@ -44,5 +47,5 @@ fn run() -> anyhow::Result<()> {
             )))
         }),
     )
-    .map_err(|error| anyhow::anyhow!("Unable to open CodeConvoy: {error}"))
+    .map_err(graphics::startup_error)
 }

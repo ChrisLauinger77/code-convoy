@@ -129,7 +129,7 @@ All active convoys and the most recent 30 completed convoys are retained; active
 
 ## Dependencies and scope
 
-- `eframe`/egui: native windowing and widgets. Version 0.36 is used with Rust 1.95 or newer; OpenGL is used to avoid a direct WGPU renderer dependency. Wayland, X11, fonts, and accessibility are enabled.
+- `eframe`/egui: native windowing and widgets. Version 0.36 is used with Rust 1.95 or newer. Linux/macOS explicitly use OpenGL; Windows enables wgpu with DX12/WGSL, allowing GPU or WARP software rendering without a VM OpenGL driver. `graphics` owns this platform setup. Windows-only `CODECONVOY_RENDERER=software` selects a surface-compatible CPU adapter; `auto` uses normal GPU-preferred selection and `opengl` retains the former renderer for troubleshooting. Wayland, X11, fonts, and accessibility are enabled. Graphics choices do not affect application persistence or process execution.
 - Tokio: background process I/O, timers, task ownership, cancellation notifications.
 - serde/serde_json: local state and backend-specific Codex/OpenCode/Claude JSON records.
 - `directories`: conventional platform data paths.

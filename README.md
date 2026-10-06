@@ -110,6 +110,21 @@ Xcode Command Line Tools. Packaging additionally needs the tools listed in the
 requirements. Native macOS UI and Universal DMG checks have passed; authenticated
 macOS execution and Windows interactive runtime verification remain outstanding.
 
+### Windows VMs and graphics
+
+Windows builds use Direct3D 12 through wgpu. Adapter selection can use Windows' WARP software renderer when no compatible hardware GPU is available. This avoids requiring modern OpenGL from a VM's virtual display driver. Linux and macOS continue to use OpenGL.
+
+If a virtual GPU is detected but does not render correctly, explicitly select software rendering in PowerShell before starting a **rebuilt Windows binary**:
+
+```powershell
+$env:CODECONVOY_RENDERER = 'software'
+.\CodeConvoy.exe
+```
+
+This uses the CPU and can be slower. Remove the variable or set it to `auto` to restore normal Direct3D adapter selection. `opengl` selects the previous renderer for driver troubleshooting and requires a suitable OpenGL driver. These Windows-only overrides are not saved in CodeConvoy or agent settings.
+
+The old `egui_glow requires OpenGL 2.0+` startup dialog means the OpenGL renderer could not initialize; the setting above requires the new build. Direct3D 12/WARP still requires a supported, up-to-date Windows installation. Windows CI includes an explicit software-adapter/device/egui-pipeline initialization check; actual VM window presentation needs testing in the guest.
+
 **Browse…** uses the desktop's folder picker: an XDG Desktop Portal on Linux, an NSOpenPanel sheet on macOS, and the native Windows file dialog in folder mode. Linux needs a FileChooser-capable portal backend (such as GTK/GNOME/KDE) and runtime `libdbus`; `zenity` is the fallback when the portal is unavailable. Manual path entry remains available. See [folder-picker implementation and validation](docs/folder-picker-validation.md).
 
 ## First run
