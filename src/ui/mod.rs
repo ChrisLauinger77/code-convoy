@@ -349,6 +349,12 @@ impl App {
         if self.closing || self.quit_requested {
             return;
         }
+        // Discovery must be applied before the immutable preflight snapshot.
+        // Also reconcile executable edits made since the last UI poll.
+        self.sync_cli_checks();
+        if self.current_cli_check() {
+            return;
+        }
         let task = self.state.draft.clone();
         let repositories = self
             .state

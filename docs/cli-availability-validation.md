@@ -37,6 +37,13 @@ changed executable starts its check automatically. Switching away leaves other
 backend checks and results intact. Check CLI bypasses the session result and
 forces fresh validation when the backend is idle.
 
+Run Convoy waits for the selected backend's check to settle. The preflight
+entry point also reconciles executable edits before allowing a snapshot, so a
+pending discovery cannot leave preflight using the old launcher name. The
+resolved path is adopted before review becomes available. Checks for other
+backends do not gate review, and task editing and repository/history loading
+remain usable.
+
 There is at most one availability check per backend. A per-backend async mutex
 also serializes the existing fresh preflight probe with startup/manual probes.
 Successful help checks retain the existing optional version probe: Codex uses
@@ -80,6 +87,13 @@ candidate selection during existing checks, compact forms in both themes and
 nonblocking exit with a deliberately blocked filesystem worker. Existing backend,
 Git, persistence, scheduler and cancellation tests remain required.
 
+Preflight regression tests verify that startup checks, executable edits before
+the next poll, and manual refreshes prevent an early snapshot. An isolated Unix
+test uses a gated help-only fixture outside the GUI-style PATH and a temporary
+Git repository: repository loading completes during the check, early review is
+refused, and review then succeeds with the adopted absolute executable path.
+A different backend's pending check does not prevent that review.
+
 Required commands:
 
 ```sh
@@ -89,8 +103,8 @@ cargo test --all-features
 cargo build --release
 ```
 
-Results on this Linux host, including the Agent selection follow-up: all four
-commands passed; **122 tests passed**,
+Results on this Linux host, including the Agent selection and preflight follow-ups:
+all four commands passed; **124 tests passed**,
 3 optional installed-CLI probes were ignored, and no tests failed. The release
 binary was built successfully. The GUI-style PATH test and headless egui input
 tests are automated evidence; they do not establish native packaged macOS
@@ -118,4 +132,6 @@ to verify this change.
    already checked backend should retain its result; Check CLI should refresh it.
 6. Edit a task, inspect restored history/repositories and close the app while
    checks run. Confirm the UI remains responsive and CLI probes do not hold exit
-   open. Record macOS/app build versions, launcher paths and observed results.
+   open. Confirm Run Convoy becomes available after the selected CLI check settles
+   and review uses its resolved executable. Record macOS/app build versions,
+   launcher paths and observed results.

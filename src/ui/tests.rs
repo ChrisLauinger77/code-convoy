@@ -453,6 +453,151 @@ fn complete_cli_checks(app: &mut App) {
 }
 
 #[test]
+fn preflight_reconciles_executable_changes_before_snapshotting() {
+    let (temp, mut app) = app();
+    app.state.draft.prompt = "Review the repository".into();
+    app.preflight(egui::Context::default());
+    assert!(app.current_cli_check());
+    assert!(!app.busy && app.prepared.is_none());
+
+    complete_cli_checks(&mut app);
+    app.state.draft.options.insert(
+        "executable".into(),
+        temp.path().join("new-codex").display().to_string(),
+    );
+    // An edit must gate preflight even before the next poll/render cycle.
+    app.preflight(egui::Context::default());
+    assert!(app.current_cli_check());
+    assert!(!app.busy && app.prepared.is_none());
+    assert_eq!(app.state.draft.prompt, "Review the repository");
+    assert!(app.state.runs.is_empty() && app.manager.is_idle());
+
+    complete_cli_checks(&mut app);
+    app.check_cli(egui::Context::default());
+    app.preflight(egui::Context::default());
+    assert!(app.current_cli_check());
+    assert!(!app.busy && app.prepared.is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn preflight_waits_for_discovered_cli_before_snapshotting() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    const ROOT: &str = "CODECONVOY_TEST_PREFLIGHT_DISCOVERY_ROOT";
+    let Ok(root) = std::env::var(ROOT) else {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        for name in ["bin", "path", "repo"] {
+            std::fs::create_dir(root.join(name)).unwrap();
+        }
+        let cli = root.join("bin/codex");
+        // Only help is supported; this fixture cannot run an agent task.
+        std::fs::write(
+            &cli,
+            "#!/bin/sh\n[ \"$1\" = '--help' ] || exit 2\n: > \"$0.started\"\nwhile [ ! -f \"$0.release\" ]; do /bin/sleep 0.01; done\nprintf '%s\\n' 'Codex exec --no-daemon --ask-for-approval'\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let git = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+            .map(|path| path.join("git"))
+            .find(|path| path.is_file())
+            .unwrap()
+            .canonicalize()
+            .unwrap();
+        symlink(&git, root.join("path/git")).unwrap();
+        assert!(
+            std::process::Command::new(&git)
+                .args(["init", "--quiet"])
+                .current_dir(root.join("repo"))
+                .status()
+                .unwrap()
+                .success()
+        );
+        // Isolate GUI-style PATH changes from all other tests. Git is available,
+        // but the CLI is discoverable only in the common installation directory.
+        assert!(
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "ui::tests::preflight_waits_for_discovered_cli_before_snapshotting",
+                    "--nocapture",
+                ])
+                .env(ROOT, root)
+                .env("PATH", root.join("path"))
+                .env("XDG_BIN_DIR", root.join("bin"))
+                .status()
+                .unwrap()
+                .success()
+        );
+        return;
+    };
+    let root = PathBuf::from(root);
+    let store = Store::open(&root.join("app")).unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let mut state = AppState::default();
+    for agent in [AgentId::Copilot, AgentId::OpenCode, AgentId::Claude] {
+        state.agent_options.insert(
+            agent,
+            [(
+                "executable".into(),
+                root.join("missing").display().to_string(),
+            )]
+            .into(),
+        );
+    }
+    let repository = runtime.block_on(git::register(&root.join("repo"))).unwrap();
+    state.repositories.push(repository.clone());
+    state.draft.prompt = "Review the repository".into();
+    let ctx = egui::Context::default();
+    let mut app = App::with_context(&ctx, store, state, runtime);
+    app.selected.insert(repository.path.clone());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !root.join("bin/codex.started").exists() || app.busy {
+        assert!(Instant::now() < deadline);
+        app.runtime().block_on(async {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        });
+        app.poll();
+    }
+    assert!(app.current_cli_check());
+    assert!(!app.state.draft.options.contains_key("executable"));
+    app.preflight(ctx.clone());
+    assert!(!app.busy && app.prepared.is_none());
+    assert!(app.selected.contains(&repository.path));
+    assert_eq!(app.state.draft.prompt, "Review the repository");
+
+    std::fs::write(root.join("bin/codex.release"), "release").unwrap();
+    complete_cli_checks(&mut app);
+    let resolved = root.join("bin/codex").display().to_string();
+    assert_eq!(app.state.draft.options["executable"], resolved);
+    assert!(app.current_detection().unwrap().is_ok());
+
+    // A different backend's refresh must not prevent the selected CLI's review.
+    app.cli_checks.recheck(AgentId::Copilot);
+    assert!(app.cli_checks.checking(AgentId::Copilot));
+    app.preflight(ctx);
+    assert!(app.busy);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.busy {
+        assert!(Instant::now() < deadline);
+        app.runtime().block_on(async {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        });
+        app.poll();
+    }
+    assert!(app.notice.is_empty(), "{}", app.notice);
+    assert_eq!(
+        app.prepared.as_ref().unwrap().task.options["executable"],
+        resolved
+    );
+    assert!(app.state.runs.is_empty() && app.manager.is_idle());
+}
+
+#[test]
 fn agent_selection_starts_an_unchecked_backend_without_waiting_for_a_frame() {
     let (_temp, mut app) = app();
     // Model an unchecked backend without driving startup's scheduled tasks.

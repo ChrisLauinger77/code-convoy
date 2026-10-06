@@ -151,7 +151,7 @@ The old `egui_glow requires OpenGL 2.0+` startup dialog means the OpenGL rendere
 1. Enter a task and select Codex, GitHub Copilot CLI, OpenCode, or Claude Code.
 2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. OpenCode offers its own model, agent, variant and permission controls. Claude offers model, effort, turn limit and tool permissions. Model and reasoning support depends on the selected CLI/model.
 3. Enter an existing repository **root directory**, or use **Browse…** to fill the path field, then choose **Add repository**. Cancelling the picker preserves the field; choosing a folder never registers it automatically. Select the repository checkboxes for this task.
-4. Set **This convoy** (its job limit) and **Global job limit** (shared by every convoy), then **Run Convoy**.
+4. Set **This convoy** (its job limit) and **Global job limit** (shared by every convoy), then **Run Convoy**. This action becomes available once the selected agent's CLI check settles, so review uses the resolved executable.
 5. Review branches and existing changes. Dirty working trees require acknowledgment before **Start convoy**.
 6. Select a job to read its live output. Use **Stop** for one job or **Stop Convoy** for the selected convoy. Other convoys continue.
 7. Open **Diff** and use **Refresh diff** to load the staged and unstaged changes. Untracked filenames are listed, but their contents are not included in Git's diff.
