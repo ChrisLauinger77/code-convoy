@@ -6,11 +6,12 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use std::sync::{
-    Mutex,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 use tokio::sync::mpsc;
 mod manager;
+mod raw_output;
 mod schedule;
 pub use manager::RunManager;
 
@@ -51,12 +52,19 @@ impl PreparedRun {
 pub async fn prepare(mut task: TaskConfig, repositories: Vec<Repository>) -> Result<PreparedRun> {
     task.validate(&repositories)?;
     let backend = crate::agents::backend(task.agent)?;
+    backend.validate_attachments(&task)?;
+    let attachments = task.attachments.clone();
+    tokio::task::spawn_blocking(move || crate::attachments::revalidate(&attachments))
+        .await
+        .context("Attachment validation worker failed.")??;
     for option in backend.options() {
         task.options
             .entry(option.key.to_owned())
             .or_insert_with(|| option.default.to_owned());
     }
     crate::agents::detect(backend.as_ref(), &task.options, &repositories[0].path).await?;
+    crate::agents::check_attachment_interface(backend.as_ref(), &task, &repositories[0].path)
+        .await?;
     let mut prepared = Vec::new();
     for repository in repositories {
         let state = git::status(&repository.path).await?;
@@ -83,6 +91,7 @@ pub enum Event {
         run: u64,
         job: usize,
         text: String,
+        raw: String,
     },
     Finished {
         run: u64,
@@ -98,7 +107,7 @@ async fn job_work(
     job: usize,
     prepared: &PreparedRepository,
     task: &TaskConfig,
-    backend: &dyn AgentBackend,
+    backend: &Arc<dyn AgentBackend>,
     cancellation: &Cancellation,
     stopping: &AtomicBool,
     repository_safe: &AtomicBool,
@@ -111,6 +120,18 @@ async fn job_work(
             "Cancelled; any existing edits are retained.".into(),
         )
     };
+    let builder = backend.clone();
+    let task_snapshot = task.clone();
+    let repository = prepared.repository.clone();
+    let spec = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => return Ok(cancelled()),
+        result = tokio::task::spawn_blocking(move || {
+            builder.validate_attachments(&task_snapshot)?;
+            crate::attachments::revalidate(&task_snapshot.attachments)?;
+            builder.build(&task_snapshot, &repository)
+        }) => result.context("Command preparation worker failed.")??,
+    };
     let state = tokio::select! {
         biased;
         _ = cancellation.cancelled() => return Ok(cancelled()),
@@ -120,7 +141,6 @@ async fn job_work(
         state.summary == prepared.state.summary && state.entries == prepared.state.entries,
         "Repository state changed after preflight. Inspect the working tree and start a fresh run."
     );
-    let spec = backend.build(task, &prepared.repository)?;
     if stopping.load(Ordering::Acquire) || cancellation.is_cancelled() {
         return Ok(cancelled());
     }
@@ -135,7 +155,7 @@ async fn job_work(
         before: state.summary,
         }) => { result.context("Application closed.")?; }
     }
-    let decoder = Mutex::new((backend.output(), 0usize));
+    let decoder = Mutex::new((backend.output(), 0usize, raw_output::RawOutput::default()));
     let result = process::execute(
         child,
         spec.input,
@@ -144,9 +164,19 @@ async fn job_work(
         |stream, bytes| {
             if let Ok(mut data) = decoder.lock() {
                 let text = data.0.push(stream, bytes);
-                if !text.is_empty() {
-                    let size = text.len();
-                    if tx.try_send(Event::Output { run, job, text }).is_err() {
+                let text = data.0.take_activity().unwrap_or(text);
+                let raw = data.2.push(stream, bytes);
+                if !text.is_empty() || !raw.is_empty() {
+                    let size = text.len() + raw.len();
+                    if tx
+                        .try_send(Event::Output {
+                            run,
+                            job,
+                            text,
+                            raw,
+                        })
+                        .is_err()
+                    {
                         data.1 += size;
                     }
                 }
@@ -155,20 +185,23 @@ async fn job_work(
     )
     .await?;
     repository_safe.store(true, Ordering::Release);
-    let (tail, dropped, outcome) = {
+    let (tail, raw_tail, dropped, outcome) = {
         let mut data = decoder
             .lock()
             .map_err(|_| anyhow::anyhow!("Output decoder failed."))?;
         let tail = data.0.finish();
+        let tail = data.0.take_activity().unwrap_or(tail);
+        let raw_tail = data.2.finish();
         let outcome = result.status.map(|status| data.0.interpret(status));
-        (tail, data.1, outcome)
+        (tail, raw_tail, data.1, outcome)
     };
-    if !tail.is_empty() {
+    if !tail.is_empty() || !raw_tail.is_empty() {
         let _ = tx
             .send(Event::Output {
                 run,
                 job,
                 text: tail,
+                raw: raw_tail,
             })
             .await;
     }
@@ -178,6 +211,7 @@ async fn job_work(
                 run,
                 job,
                 text: format!("\n[Output exceeded UI throughput: {dropped} bytes omitted.]\n"),
+                raw: format!("\n[Output exceeded UI throughput: {dropped} bytes omitted.]\n"),
             })
             .await;
     }

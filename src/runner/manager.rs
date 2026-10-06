@@ -313,7 +313,7 @@ async fn manage(
                     key.1,
                     &repository,
                     &task,
-                    backend.as_ref(),
+                    &backend,
                     &cancellation,
                     &worker_stopping,
                     &worker_safe,

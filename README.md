@@ -178,6 +178,30 @@ See [release procedure and packaging design](docs/releasing.md) and the
 [release validation record](docs/release-validation.md) for tested behavior and
 remaining platform checks.
 
+## Repeated maintenance tasks
+
+Use **Manage groups…** to save named repository selections, and **Templates**
+to save/load task text independently of backend settings and repositories.
+Selecting a group adds available members; deselecting removes all its current
+members, including overlapping or individual selections. Unavailable memberships
+stay visible and repairable. Loading a template never starts work.
+
+**Add files…** opens a native multi-file picker for Markdown, text, JSON, YAML,
+PNG, JPEG and WebP. Files can also be dropped onto the attachment area. Each
+job receives the task context through its backend's documented interface.
+Preflight and queued jobs check the original files; changes or missing files
+fail explicitly. History saves references/metadata, and Reuse reports files it
+cannot restore. Attachment contents are not saved by CodeConvoy. The selected
+CLI/provider still processes supplied context under its own data policy.
+
+Results offer **Activity | Diff | Raw output | Task & settings**. Activity
+summarizes actual backend events; Raw output preserves CLI details. Both are
+bounded session-only views. See [task context and backend evidence](docs/task-context.md)
+for selection semantics, attachment limits, privacy and validation coverage.
+[Codex session investigation](docs/codex-sessions.md) explains why ephemeral jobs
+have no Resume/Open buttons. See the [v0.2 development validation](docs/v0.2-validation.md)
+for automated coverage and native UI checks.
+
 ## Build and run
 
 Requirements:
@@ -247,7 +271,7 @@ Use the bounded, scrollable run selector's **ACTIVE** and **HISTORY** groups to 
 
 History retains all active convoys plus the latest 30 completed convoys, including snapshots, repository paths, initial Git state, timestamps, exit codes, and statuses. Logs remain session-only. Existing version-1 state loads with the default global limit. **History cleanup → Remove convoy #… from history** removes the selected terminal convoy; **History cleanup → Clear history** removes all terminal convoys, including failed, cancelled, and interrupted runs. These actions save immediately and only remove CodeConvoy metadata and session output. Repository files, Git changes, registered repositories, and active convoys are untouched.
 
-**Reuse convoy** copies the selected convoy's prompt, backend settings, per-convoy limit, and still-registered repository selection into NEW CONVOY, replacing the current draft. It leaves the global limit unchanged and does not start jobs. Unregistered repositories are skipped with a message; add them again if needed. Review the draft and use Run Convoy for a fresh Git check.
+**Reuse convoy** copies the selected convoy's prompt, valid attachment references, backend settings, per-convoy limit, and still-registered repository selection into NEW CONVOY, replacing the current draft. It leaves the global limit unchanged and does not start jobs. Unregistered repositories are skipped with a message; add them again if needed. Review the draft and use Run Convoy for a fresh Git check.
 
 The execution controls stay visible while the task and repository pane scrolls. **Appearance** follows the system theme by default and offers dark/light overrides for the current session. Output and diffs render only visible lines, with Copy actions for the full retained text. Diff headers, additions, and removals have distinct styling; wide lines scroll horizontally.
 
@@ -286,7 +310,7 @@ copilot --no-auto-update --no-ask-user --no-color --plain-diff \
   --allow-tool=write --deny-tool=shell
 ```
 
-CodeConvoy sets the selected repository as the process working directory and writes the exact task to **stdin**, then closes it. Copilot documents piped input as noninteractive prompt mode. There is no shell pipeline in the implementation, no `exec` subcommand, and no `-p -` argument: that would be a literal prompt in Copilot. Each job starts a fresh local invocation; there is no resume, remote connection, fleet mode, session sharing, or worktree creation.
+CodeConvoy sets the selected repository as the process working directory and writes task/context to **stdin**, then closes it. Without attachments, prompt bytes remain exact; images add native file arguments as described in [task context](docs/task-context.md). Copilot documents piped input as noninteractive prompt mode. There is no shell pipeline in the implementation, no `exec` subcommand, and no `-p -` argument: that would be a literal prompt in Copilot. Each job starts a fresh local invocation; there is no resume, remote connection, fleet mode, session sharing, or worktree creation.
 
 Available controls:
 
@@ -346,7 +370,7 @@ OpenCode owns login, credentials, providers, model availability and configuratio
 
 Automatic checks and `Check CLI` inspect `run --help` for the required capabilities and report `--version` where available. No version-number ordering is imposed. Older versions missing a required flag are rejected with an actionable message. Authentication is exercised only by an actual job.
 
-OpenCode's output handler reads its own JSON event stream. Assistant text is readable; tool records, step metadata, errors and unknown events stay visible as JSON, and stderr is labelled. A job succeeds only with exit zero, a final `step_finish` whose reason is `stop`, no session error events, and no malformed/oversized JSON records. Tool errors can be recovered by the agent and remain visible; success does not prove the requested change was made. Token-limit stops, missing completion and nonzero/signal exits fail conservatively. Stop uses the existing process-tree cancellation and retains partial edits. Output remains session-only; no Activity view is introduced.
+OpenCode's output handler reads its own JSON event stream. Assistant text is readable; tool records, step metadata, errors and unknown events stay visible as JSON, and stderr is labelled. A job succeeds only with exit zero, a final `step_finish` whose reason is `stop`, no session error events, and no malformed/oversized JSON records. Tool errors can be recovered by the agent and remain visible; success does not prove the requested change was made. Token-limit stops, missing completion and nonzero/signal exits fail conservatively. Stop uses the existing process-tree cancellation and retains partial edits. Activity summarizes actual events, while Raw output retains the CLI records. Both remain session-only.
 
 OpenCode settings participate in draft persistence, launch snapshots, history and **Reuse convoy**. Old Codex/Copilot version-1 state still loads. Concurrency, round-robin scheduling, canonical repository locks, dirty-tree review and baseline revalidation are unchanged.
 
@@ -378,7 +402,7 @@ claude --print --input-format text --output-format stream-json --verbose \
   --no-session-persistence --permission-mode dontAsk
 ```
 
-CodeConvoy passes separate arguments directly, sets the selected repository as the working directory, writes the exact task bytes to stdin and closes it. It removes inherited `GIT_*`/`PWD` overrides and inherits Claude authentication, provider environment and configuration. Each job is a fresh invocation; CodeConvoy does not log in, request keys, change Claude settings, attach to a server or resume a session.
+CodeConvoy passes separate arguments directly, sets the selected repository as the working directory, writes task/context to stdin and closes it. Tasks with images use structured stream-json input; tasks without attachments retain exact prompt bytes. It removes inherited `GIT_*`/`PWD` overrides and inherits Claude authentication, provider environment and configuration. Each job is a fresh invocation; CodeConvoy does not log in, request keys, change Claude settings, attach to a server or resume a session.
 
 | Control     | Behavior                                                                                                                            |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -429,7 +453,7 @@ State is saved atomically in the conventional per-user application data director
 
 A lock prevents two instances sharing the same state directory. On Unix the directory is owner-only and state files are created with mode `0600`. Invalid or newer-format state fails startup with an actionable error and is preserved. Unfinished saved jobs are marked cancelled/interrupted at next startup; they are never silently resumed.
 
-**Prompts and metadata are saved, so do not paste credentials into tasks.** CLI stdout/stderr, diagnostic messages, and diffs are never persisted by CodeConvoy. Output is bounded to the latest 512 KiB per job (32 MiB total, oldest job logs evicted first) and retained only for the application session. The UI reports truncated/dropped output. Diffs are live views, including pre-existing changes; they are not historical patch snapshots. The agent CLIs may maintain their own operational logs according to their configuration.
+**Prompts, templates, groups and attachment metadata are saved, so do not paste credentials into tasks.** Attachment contents are not saved. CLI stdout/stderr, diagnostic messages, and diffs are never persisted by CodeConvoy. Output is bounded to the latest 512 KiB per job/view (32 MiB shared total, oldest job logs evicted first) and retained only for the application session. The UI reports truncated/dropped output. Diffs are live views, including pre-existing changes; they are not historical patch snapshots. The agent CLIs may maintain their own operational logs according to their configuration.
 
 ## Development
 
@@ -458,7 +482,7 @@ The `test-support` feature builds a deterministic local test executable. It is n
 cargo test --all-features --test copilot installed_copilot_accepts_the_exact_command_flags -- --ignored --nocapture
 ```
 
-Read [the architecture](docs/architecture.md) for module boundaries and implementation tradeoffs. Claude is the fourth and final backend for the v0.1.0 cycle. The backend abstraction is feature-frozen except for bug fixes. Authenticated Claude/OpenCode E2E and Windows runtime verification remain outstanding.
+Read [the architecture](docs/architecture.md) for module boundaries and implementation tradeoffs. Claude is the fourth and final backend for the v0.1.0 cycle. The v0.2 task-context changes add only backend-owned attachment validation/transport and optional Activity summaries; no additional backend is added. Authenticated Claude/OpenCode E2E and Windows runtime verification remain outstanding.
 
 ## License
 

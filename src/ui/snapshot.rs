@@ -7,6 +7,24 @@ pub(super) fn show(ui: &mut egui::Ui, run: &Run, job: &domain::Job) {
         ui.ctx().copy_text(run.task.prompt.clone());
     }
     ui.separator();
+    if !run.task.attachments.is_empty() {
+        ui.strong(format!("Attachments ({})", run.task.attachments.len()));
+        ui.small("Original references and metadata; file contents are not saved. Files may have changed or disappeared.");
+        for attachment in &run.task.attachments {
+            ui.label(format!(
+                "{} · {} · {}",
+                attachment.filename,
+                attachment.kind.label(),
+                attachments_ui::size_label(attachment.size)
+            ));
+            ui.add(
+                egui::Label::new(attachment.path.display().to_string())
+                    .wrap()
+                    .selectable(true),
+            );
+        }
+        ui.separator();
+    }
     ui.strong(run.task.agent.label());
     if let Ok(backend) = agents::backend(run.task.agent) {
         for spec in backend.options() {

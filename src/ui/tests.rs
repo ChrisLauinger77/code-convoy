@@ -30,6 +30,187 @@ fn app_with_state(mut state: AppState) -> (tempfile::TempDir, App) {
 }
 
 #[test]
+fn group_selection_is_explicit_deduplicated_and_missing_members_remain_repairable() {
+    let (_temp, mut app) = app();
+    app.state.repositories = vec![repository("a"), repository("b"), repository("c")];
+    let paths: Vec<_> = app
+        .state
+        .repositories
+        .iter()
+        .map(|r| r.path.clone())
+        .collect();
+    let missing = repository("missing").path;
+    app.state.groups = vec![
+        domain::RepositoryGroup {
+            name: "First".into(),
+            repositories: vec![paths[0].clone(), paths[1].clone(), missing.clone()],
+        },
+        domain::RepositoryGroup {
+            name: "Overlap".into(),
+            repositories: vec![paths[1].clone(), paths[2].clone()],
+        },
+    ];
+    app.repository_states
+        .insert(paths[2].clone(), Err("unavailable".into()));
+    app.select_group(0, true);
+    assert_eq!(app.selected, [paths[0].clone(), paths[1].clone()].into());
+    assert!(app.notice.contains("Membership is retained"));
+    app.select_group(1, true);
+    assert_eq!(app.selected.len(), 2);
+    assert!(app.state.groups[0].repositories.contains(&missing));
+    assert!(app.state.groups[1].repositories.contains(&paths[2]));
+    app.repository_states.remove(&paths[2]);
+    app.select_group(1, true);
+    assert_eq!(app.selected.len(), 3);
+    app.selected.remove(&paths[0]); // Individual edits have no hidden group state.
+    app.select_group(0, false);
+    assert_eq!(app.selected, [paths[2].clone()].into());
+    app.state.groups.clear();
+    assert_eq!(app.selected, [paths[2].clone()].into());
+    assert_eq!(app.state.repositories.len(), 3);
+    assert!(app.manager.is_idle());
+}
+
+#[test]
+fn template_load_changes_only_task_text_and_never_launches_or_mutates_history() {
+    let (temp, mut app) = app();
+    prepare(&mut app, AgentId::Copilot);
+    app.prepared = None;
+    let path = temp.path().join("context.md");
+    std::fs::write(&path, "specification").unwrap();
+    app.state
+        .draft
+        .attachments
+        .push(crate::attachments::Attachment::inspect(&path).unwrap());
+    app.state.templates.push(domain::TaskTemplate {
+        name: "Review".into(),
+        prompt: "Review README".into(),
+    });
+    app.state.runs.push(run(20, &[JobStatus::Succeeded]));
+    let before = serde_json::to_value(&app.state).unwrap();
+    let selection = app.selected.clone();
+    app.load_template(0);
+    let mut expected = before;
+    expected["draft"]["prompt"] = "Review README".into();
+    assert_eq!(serde_json::to_value(&app.state).unwrap(), expected);
+    assert_eq!(app.selected, selection);
+    assert!(app.focus_draft && app.dirty);
+    assert!(app.manager.is_idle());
+    assert!(app.prepared.is_none());
+    app.state.draft.prompt = "User edit".into();
+    assert_eq!(app.state.templates[0].prompt, "Review README");
+}
+
+#[test]
+fn reused_attachment_validation_is_async_visible_and_stale_results_cannot_replace_draft() {
+    let (temp, mut app) = app();
+    let valid_path = temp.path().join("valid.md");
+    let missing_path = temp.path().join("missing.txt");
+    std::fs::write(&valid_path, "valid").unwrap();
+    std::fs::write(&missing_path, "missing").unwrap();
+    let files: Vec<_> = [&valid_path, &missing_path]
+        .into_iter()
+        .map(|p| crate::attachments::Attachment::inspect(p).unwrap())
+        .collect();
+    let mut history = run(20, &[JobStatus::Succeeded]);
+    history.task.attachments = files.clone();
+    app.state.runs.push(history);
+    std::fs::remove_file(&missing_path).unwrap();
+    app.reuse_convoy(20);
+    assert!(app.attachment_work.pending);
+    app.preflight(egui::Context::default());
+    assert!(!app.busy && app.prepared.is_none());
+    let messages = app.runtime.as_ref().unwrap().block_on(async {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut messages = Vec::new();
+            loop {
+                if let Ok(message) = app.rx.try_recv() {
+                    let done = matches!(message, Message::ReusedAttachments(..));
+                    messages.push(message);
+                    if done {
+                        return messages;
+                    }
+                } else {
+                    tokio::time::sleep(Duration::from_millis(2)).await;
+                }
+            }
+        })
+        .await
+        .unwrap()
+    });
+    for message in messages {
+        app.tx.send(message).unwrap();
+    }
+    app.poll();
+    assert!(!app.attachment_work.pending);
+    assert_eq!(app.state.draft.attachments, [files[0].clone()]);
+    assert!(
+        app.notice.contains("missing.txt") && app.draft_message.contains("could not be restored")
+    );
+    assert_eq!(app.state.runs[0].task.attachments, files);
+    app.attachment_work.invalidate();
+    app.attachments_added(0, vec![files[1].clone()], vec![]);
+    app.attachments_reused(0, vec![], vec![]);
+    assert_eq!(app.state.draft.attachments, [files[0].clone()]);
+    assert!(app.manager.is_idle());
+}
+
+#[test]
+fn new_library_and_attachment_controls_fit_compact_editor_in_both_themes() {
+    let (temp, mut app) = app();
+    app.state.repositories = vec![repository("registered")];
+    app.state.groups.push(domain::RepositoryGroup {
+        name: "A very long repository group name that must fit the compact editor".into(),
+        repositories: vec![
+            app.state.repositories[0].path.clone(),
+            repository("unregistered").path,
+        ],
+    });
+    let path = temp
+        .path()
+        .join("A very long attachment filename Grüße $(echo nope) that needs truncation.png");
+    std::fs::write(&path, include_bytes!("../../assets/codeconvoy-256.png")).unwrap();
+    app.state
+        .draft
+        .attachments
+        .push(crate::attachments::Attachment::inspect(&path).unwrap());
+    let ctx = egui::Context::default();
+    theme::install(&ctx);
+    for dark in [false, true] {
+        ctx.set_visuals(if dark {
+            egui::Visuals::dark()
+        } else {
+            egui::Visuals::light()
+        });
+        for width in [310.0, 360.0, 520.0] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width, 820.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::NONE.inner_margin(theme::PANEL_MARGIN))
+                        .show(ui, |ui| {
+                            let width = ui.available_width();
+                            let rendered = ui.scope(|ui| app.editor(ui, &ctx));
+                            assert!(
+                                rendered.response.rect.width() <= width + 1.0,
+                                "{} > {width}",
+                                rendered.response.rect.width()
+                            );
+                        });
+                },
+            );
+            output.textures_delta.clear();
+        }
+    }
+}
+
+#[test]
 fn idle_close_needs_no_confirmation_and_closes_launch_admission() {
     let (_temp, mut app) = app();
     app.state.runs.push(run(40, &[JobStatus::Succeeded]));
@@ -1000,6 +1181,7 @@ fn run(id: u64, statuses: &[JobStatus]) -> Run {
 
 fn prepare(app: &mut App, agent: AgentId) {
     app.state.draft = TaskConfig {
+        attachments: Vec::new(),
         prompt: "Make a focused change".into(),
         agent,
         concurrency: 3,
@@ -1036,14 +1218,22 @@ fn prepare(app: &mut App, agent: AgentId) {
 #[test]
 fn accepted_launch_clears_only_task_and_selection_and_persists_preferences() {
     for agent in AgentId::ALL {
-        let (_temp, mut app) = app();
+        let (temp, mut app) = app();
         prepare(&mut app, agent);
+        let path = temp.path().join("specification.md");
+        std::fs::write(&path, "task context").unwrap();
+        app.state
+            .draft
+            .attachments
+            .push(crate::attachments::Attachment::inspect(&path).unwrap());
+        app.prepared.as_mut().unwrap().task.attachments = app.state.draft.attachments.clone();
         let expected = serde_json::to_value(app.prepared.as_ref().unwrap().task.clone()).unwrap();
         let preferences = app.state.agent_options.clone();
         let registered = app.state.repositories.clone();
         app.start();
         assert!(app.manager.is_active(1));
         assert!(app.state.draft.prompt.is_empty());
+        assert!(app.state.draft.attachments.is_empty());
         assert!(app.selected.is_empty());
         assert_eq!(app.state.draft.agent, agent);
         assert_eq!(app.state.draft.options, app.state.runs[0].task.options);
@@ -1060,6 +1250,7 @@ fn accepted_launch_clears_only_task_and_selection_and_persists_preferences() {
         app.save();
         let restored = app.store.load().unwrap();
         assert!(restored.draft.prompt.is_empty());
+        assert!(restored.draft.attachments.is_empty());
         assert_eq!(restored.draft.agent, agent);
         assert_eq!(restored.draft.concurrency, 3);
         assert_eq!(restored.global_concurrency, 6);
@@ -1194,6 +1385,7 @@ fn reuse_copies_full_configuration_and_registered_selection_without_starting_job
     let original_options = app.state.draft.options.clone();
     let mut history = run(20, &[JobStatus::Cancelled]);
     history.task = TaskConfig {
+        attachments: Vec::new(),
         prompt: "Historical task".into(),
         agent: AgentId::Copilot,
         concurrency: 1,

@@ -28,6 +28,10 @@ pub trait AgentOutput: Send {
     fn push(&mut self, stream: Stream, bytes: &[u8]) -> String;
     fn finish(&mut self) -> String;
     fn interpret(&self, status: ExitStatus) -> (JobStatus, String);
+    /// Optional concise presentation of actual events; raw bytes stay separate.
+    fn take_activity(&mut self) -> Option<String> {
+        None
+    }
 }
 pub trait AgentBackend: Send + Sync {
     fn id(&self) -> AgentId;
@@ -44,6 +48,29 @@ pub trait AgentBackend: Send + Sync {
     fn build(&self, task: &TaskConfig, repository: &Repository) -> Result<CommandSpec>;
     fn output(&self) -> Box<dyn AgentOutput>;
     fn execution_summary(&self, options: &AgentOptions) -> String;
+    fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
+        crate::attachments::validate_limits(&task.attachments)?;
+        for attachment in &task.attachments {
+            anyhow::ensure!(
+                !attachment.kind.is_image(),
+                "{} cannot receive image attachment {} through this backend. Remove it or choose a supported backend.",
+                self.id().label(),
+                attachment.filename
+            );
+        }
+        Ok(())
+    }
+    /// Probe a native attachment flag only when a task actually needs it.
+    fn attachment_help(
+        &self,
+        _task: &TaskConfig,
+        _directory: &Path,
+    ) -> Result<Option<(CommandSpec, &'static str)>> {
+        Ok(None)
+    }
+    fn attachment_summary(&self) -> &'static str {
+        "UTF-8 text context via stdin. Image attachments are unsupported."
+    }
     fn spawn(&self, spec: &CommandSpec) -> Result<ManagedChild> {
         process::spawn(spec)
     }
@@ -109,18 +136,7 @@ pub async fn detect_cancellable(
 ) -> Result<String> {
     // Startup/manual checks and launch preflight share the same probe lifecycle.
     // Hold this across help and version so neither can spawn a duplicate check.
-    static PROBES: [tokio::sync::Mutex<()>; 4] = [const { tokio::sync::Mutex::const_new(()) }; 4];
-    let index = match backend.id() {
-        AgentId::Codex => 0,
-        AgentId::Copilot => 1,
-        AgentId::OpenCode => 2,
-        AgentId::Claude => 3,
-    };
-    let _probe = tokio::select! {
-        biased;
-        _ = cancellation.cancelled() => anyhow::bail!("CLI check cancelled."),
-        probe = PROBES[index].lock() => probe,
-    };
+    let _probe = probe_lock(backend.id(), cancellation).await?;
     backend.validate(options)?;
     let result = process::capture_cancellable(
         backend.detection(options, directory)?,
@@ -157,4 +173,53 @@ pub async fn detect_cancellable(
     Ok(format!(
         "{version} detected. CLI compatibility checked; authentication is used when a job runs."
     ))
+}
+
+async fn probe_lock(
+    agent: AgentId,
+    cancellation: &process::Cancellation,
+) -> Result<tokio::sync::MutexGuard<'static, ()>> {
+    static PROBES: [tokio::sync::Mutex<()>; 4] = [const { tokio::sync::Mutex::const_new(()) }; 4];
+    let index = match agent {
+        AgentId::Codex => 0,
+        AgentId::Copilot => 1,
+        AgentId::OpenCode => 2,
+        AgentId::Claude => 3,
+    };
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => anyhow::bail!("CLI check cancelled."),
+        probe = PROBES[index].lock() => Ok(probe),
+    }
+}
+
+pub(crate) async fn check_attachment_interface(
+    backend: &dyn AgentBackend,
+    task: &crate::domain::TaskConfig,
+    directory: &Path,
+) -> Result<()> {
+    let Some((command, flag)) = backend.attachment_help(task, directory)? else {
+        return Ok(());
+    };
+    let cancellation = process::Cancellation::default();
+    let _probe = probe_lock(backend.id(), &cancellation).await?;
+    let result = process::capture_cancellable(command, 128 * 1024, &cancellation).await?;
+    let supported = String::from_utf8_lossy(&result.stdout)
+        .split_whitespace()
+        .any(|word| {
+            word.strip_prefix(flag)
+                .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['[', '=', ',']))
+        });
+    anyhow::ensure!(
+        result.status.success() && !result.truncated && supported,
+        "{} cannot supply the requested image attachments: {}. The installed CLI must support {flag}; update it or remove the images.",
+        task.agent.label(),
+        task.attachments
+            .iter()
+            .filter(|a| a.kind.is_image())
+            .map(|a| a.filename.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    Ok(())
 }

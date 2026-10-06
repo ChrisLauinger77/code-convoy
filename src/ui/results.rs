@@ -206,33 +206,50 @@ impl App {
                     });
             }
         }
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.tab, Tab::Output, "Output");
+        ui.horizontal_wrapped(|ui| {
+            ui.selectable_value(&mut self.tab, Tab::Activity, "Activity");
             ui.selectable_value(&mut self.tab, Tab::Diff, "Diff");
+            ui.selectable_value(&mut self.tab, Tab::Raw, "Raw output");
             ui.selectable_value(&mut self.tab, Tab::Task, "Task & settings");
         });
         ui.add_space(theme::GAP);
         let mut load_diff = None;
         match self.tab {
-            Tab::Output => {
+            Tab::Activity | Tab::Raw => {
+                let raw = self.tab == Tab::Raw;
+                let log = if raw { &job.raw_log } else { &job.log };
+                if !raw {
+                    ui.small(if run.task.agent == domain::AgentId::Copilot {
+                        "Copilot supplies plain text; Activity shows its actual CLI messages."
+                    } else {
+                        "Backend events summarized; full details remain in Raw output."
+                    });
+                }
                 ui.horizontal(|ui| {
                     if ui
-                        .add_enabled(!job.log.text.is_empty(), theme::quiet("Copy output"))
+                        .add_enabled(
+                            !log.text.is_empty(),
+                            theme::quiet(if raw {
+                                "Copy raw output"
+                            } else {
+                                "Copy activity"
+                            }),
+                        )
                         .clicked()
                     {
-                        ctx.copy_text(job.log.text.clone());
+                        ctx.copy_text(log.text.clone());
                     }
                     ui.small("Session output").on_hover_text(
                         "Output stays in memory and is not restored after restarting.",
                     );
                 });
-                if job.log.truncated {
+                if log.truncated {
                     ui.colored_label(
                         p.warning,
                         "Earlier output omitted by the session's log memory limit.",
                     );
                 }
-                if job.log.text.is_empty() {
+                if log.text.is_empty() {
                     ui.weak(format::output_empty(
                         job,
                         self.session_runs.contains(&run.id),
@@ -240,8 +257,12 @@ impl App {
                 } else {
                     self.output_view.show(
                         ui,
-                        ("output", run.id, self.selected_job),
-                        &job.log.text,
+                        (
+                            if raw { "raw" } else { "activity" },
+                            run.id,
+                            self.selected_job,
+                        ),
+                        &log.text,
                         false,
                         bottom - ui.cursor().top() - 26.0,
                     );
@@ -284,7 +305,13 @@ impl App {
                     None => {}
                 }
             }
-            Tab::Task => snapshot::show(ui, run, job),
+            Tab::Task => {
+                egui::ScrollArea::vertical()
+                    .id_salt(("task_snapshot", run.id, self.selected_job))
+                    .max_height((bottom - ui.cursor().top() - 26.0).max(60.0))
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| snapshot::show(ui, run, job));
+            }
         }
         if let Some(path) = load_diff {
             self.diff_target = Some(path.clone());

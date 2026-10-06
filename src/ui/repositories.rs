@@ -121,6 +121,10 @@ impl App {
                 }
             });
         }
+        self.groups_section(ui);
+        if !self.state.groups.is_empty() {
+            ui.small("Individual repositories");
+        }
         let mut remove = None;
         let p = theme::Palette::of(ui);
         for (index, repository) in self.state.repositories.iter().enumerate() {

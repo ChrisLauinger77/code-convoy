@@ -7,6 +7,7 @@ Options:
   --help
   --version
   --format   [choices: "default", "json"]
+  --file     [array] File(s) to attach to message
   --dir      [string]
   --model    [string]
   --agent    [string]

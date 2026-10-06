@@ -80,6 +80,7 @@ impl AgentBackend for Codex {
     }
     fn build(&self, task: &TaskConfig, repository: &Repository) -> Result<CommandSpec> {
         self.validate(&task.options)?;
+        self.validate_attachments(task)?;
         let mut spec = self.detection(&task.options, &repository.path)?;
         spec.args.clear();
         spec = spec.args(&[
@@ -102,8 +103,12 @@ impl AgentBackend for Codex {
         if !effort.is_empty() {
             spec = spec.args(&["--config", &format!("model_reasoning_effort=\"{effort}\"")]);
         }
+        for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
+            spec.args.push("--image".into());
+            spec.args.push(attachment.path.as_os_str().to_owned());
+        }
         spec = spec.args(&["-"]);
-        spec.input = Some(task.prompt.as_bytes().to_vec());
+        spec.input = Some(crate::attachments::text_prompt(task)?.into_bytes());
         // Do not inherit another invocation's repository overrides.
         spec.remove_env = std::env::vars_os()
             .filter_map(|(key, _)| {
@@ -113,6 +118,32 @@ impl AgentBackend for Codex {
             })
             .collect();
         Ok(spec)
+    }
+    fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
+        crate::attachments::validate_limits(&task.attachments)?;
+        for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
+            anyhow::ensure!(
+                !attachment.path.as_os_str().to_string_lossy().contains(','),
+                "Codex's image flag treats commas as separators: {}. Move or rename this image before attaching it.",
+                attachment.filename
+            );
+        }
+        Ok(())
+    }
+    fn attachment_help(
+        &self,
+        task: &TaskConfig,
+        directory: &Path,
+    ) -> Result<Option<(CommandSpec, &'static str)>> {
+        if !task.attachments.iter().any(|a| a.kind.is_image()) {
+            return Ok(None);
+        }
+        let mut spec = self.detection(&task.options, directory)?;
+        spec.args.clear();
+        Ok(Some((spec.args(&["exec", "--help"]), "--image")))
+    }
+    fn attachment_summary(&self) -> &'static str {
+        "Text context via stdin; images via Codex's --image flag. The selected model must accept images."
     }
     fn output(&self) -> Box<dyn AgentOutput> {
         Box::<CodexOutput>::default()
@@ -136,15 +167,81 @@ struct Observation {
 struct CodexOutput {
     pending: [Vec<u8>; 2],
     observation: Observation,
+    activity: String,
 }
 impl CodexOutput {
-    fn format_output(stream: Stream, line: &str, observation: &mut Observation) -> String {
+    fn format_output(
+        stream: Stream,
+        line: &str,
+        observation: &mut Observation,
+        activity: &mut String,
+    ) -> String {
         if stream == Stream::Stderr {
-            return format!("[stderr] {}\n", line.trim_end());
+            let text = format!("[stderr] {}\n", line.trim_end());
+            activity.push_str(&text);
+            return text;
         }
         let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
-            return format!("{}\n", line.trim_end());
+            let text = format!("{}\n", line.trim_end());
+            activity.push_str(&text);
+            return text;
         };
+        let kind = event["type"].as_str().unwrap_or("unknown");
+        match kind {
+            "thread.started" => activity.push_str(&format!(
+                "Codex thread started: {}\n",
+                event["thread_id"]
+                    .as_str()
+                    .unwrap_or("identifier unavailable")
+            )),
+            "turn.started" => activity.push_str("Codex turn started\n"),
+            "turn.completed" => activity.push_str(&format!(
+                "Codex turn completed\nUsage: {}\n",
+                event["usage"]
+            )),
+            "turn.failed" => activity.push_str(&format!("Codex turn failed: {}\n", event["error"])),
+            "error" => activity.push_str(&format!("Error: {}\n", event["message"])),
+            "item.started" | "item.updated" | "item.completed" => {
+                let item = &event["item"];
+                match item["type"].as_str().unwrap_or("unknown") {
+                    "agent_message" | "reasoning" => {
+                        if let Some(text) = item["text"].as_str() {
+                            activity.push_str(text);
+                            activity.push('\n');
+                        }
+                    }
+                    "command_execution" => activity.push_str(&format!(
+                        "Command ({}): {}\n",
+                        item["status"].as_str().unwrap_or(kind),
+                        item["command"].as_str().unwrap_or("see raw output")
+                    )),
+                    "file_change" => {
+                        if let Some(changes) = item["changes"].as_array() {
+                            for change in changes {
+                                activity.push_str(&format!(
+                                    "File change ({}): {}\n",
+                                    change["kind"].as_str().unwrap_or("reported"),
+                                    change["path"].as_str().unwrap_or("see raw output")
+                                ));
+                            }
+                        }
+                    }
+                    "mcp_tool_call" => activity.push_str(&format!(
+                        "Tool ({}): {} / {}\n",
+                        item["status"].as_str().unwrap_or(kind),
+                        item["server"].as_str().unwrap_or("MCP"),
+                        item["tool"].as_str().unwrap_or("see raw output")
+                    )),
+                    "web_search" => activity.push_str(&format!(
+                        "Web search: {}\n",
+                        item["query"].as_str().unwrap_or("see raw output")
+                    )),
+                    other => activity
+                        .push_str(&format!("Codex {other} · {kind} (details in Raw output)\n")),
+                }
+            }
+            other => activity.push_str(&format!("Codex {other} (details in Raw output)\n")),
+        }
         match event["type"].as_str().unwrap_or("") {
             "turn.failed" => {
                 observation.failed = true;
@@ -186,6 +283,7 @@ impl AgentOutput for CodexOutput {
                     stream,
                     &String::from_utf8_lossy(&self.pending[index]),
                     &mut self.observation,
+                    &mut self.activity,
                 ));
                 self.pending[index].clear();
             }
@@ -200,6 +298,7 @@ impl AgentOutput for CodexOutput {
                     stream,
                     &String::from_utf8_lossy(&self.pending[index]),
                     &mut self.observation,
+                    &mut self.activity,
                 ));
                 self.pending[index].clear();
             }
@@ -221,5 +320,8 @@ impl AgentOutput for CodexOutput {
                 ),
             )
         }
+    }
+    fn take_activity(&mut self) -> Option<String> {
+        Some(std::mem::take(&mut self.activity))
     }
 }

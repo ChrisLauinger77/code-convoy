@@ -8,7 +8,8 @@ Backend status: Codex and Copilot are implemented and user-verified end-to-end o
 
 | Module | Responsibility |
 | --- | --- |
-| `domain` | Serializable tasks, repositories, runs, job states, validation, bounded in-memory logs |
+| `domain` | Serializable tasks, repositories, groups, task-only templates, runs, job states, validation and bounded logs |
+| `attachments` | Canonical attachment metadata, bounded reads, digest validation and text-context escaping; no saved contents |
 | `agents` | Backend registry, backend-owned option descriptions, `AgentBackend` / per-job `AgentOutput` contracts |
 | `agents/discovery` | Filesystem-only executable discovery; candidates still require the selected backend's compatibility check |
 | `agents/availability` | Session-local per-backend asynchronous checks, executable resolution, cancellation and stale-result rejection |
@@ -19,6 +20,7 @@ Backend status: Codex and Copilot are implemented and user-verified end-to-end o
 | `process` | Shell-free process spawning, pipes, cancellation tokens, process-tree ownership, short-command timeouts |
 | `git` | Root validation, working-tree inspection, staged/unstaged diff and untracked status |
 | `runner` | Preflight, immutable snapshots, per-job Git recheck and execution events |
+| `runner/raw_output` | Bounded UTF-8 stream decoding for original CLI text, separate from Activity |
 | `runner/manager` | Application-owned multi-convoy lifecycle, worker ownership, cancellation, shutdown |
 | `runner/schedule` | Pure round-robin admission policy, both concurrency limits, canonical path leases |
 | `persistence` | Platform data directory, single-instance lock, atomic JSON replacement and recovery |
@@ -26,7 +28,7 @@ Backend status: Codex and Copilot are implemented and user-verified end-to-end o
 
 ## Presentation
 
-`ui/editor` coordinates the task, scrolling editor, fixed execution controls, and modal preflight review. `ui/agent_config` renders only the selected backend's option specifications; `ui/repositories` handles registration, Git-state presentation and bulk selection. `ui/results` presents run navigation, cleanup, jobs and result tabs; `ui/snapshot` displays declared option labels, repository paths and UTC timestamps. `ui/diagnostics` keeps concise messages separate from expandable, copyable raw details. `ui/about` shows offline application metadata. `ui/theme` centralizes palettes, typography, spacing, focus/selection, primary actions and a painted success mark (the bundled fonts lack check glyphs). `ui/format` formats duration, dates, options and status text; overall status and progress remain domain-derived.
+`ui/library` owns group/template editing and explicit selection actions. `ui/attachments_ui` owns native file selection, optional drops, background inspection/reuse and stale-result rejection. `ui/editor` coordinates the task, scrolling editor, fixed execution controls, and modal preflight review. `ui/agent_config` renders only the selected backend's option specifications; `ui/repositories` handles registration, Git-state presentation and bulk selection. `ui/results` presents run navigation, cleanup, jobs and result tabs; `ui/snapshot` displays declared option labels, repository paths and UTC timestamps. `ui/diagnostics` keeps concise messages separate from expandable, copyable raw details. `ui/about` shows offline application metadata. `ui/theme` centralizes palettes, typography, spacing, focus/selection, primary actions and a painted success mark (the bundled fonts lack check glyphs). `ui/format` formats duration, dates, options and status text; overall status and progress remain domain-derived.
 
 The compact run selector groups active and terminal runs in a height-bounded scrolling popup. Active means any queued/running job, including a partially failed convoy that still has work. History cleanup methods in `AppState` guard against removing active runs; the UI offers individual removal only for terminal runs and bulk removal through History cleanup. Removal immediately saves metadata and reconciles selection (prefer an active convoy, then the newest history, then empty), clearing stale job/diff/output views. It never calls Git, the scheduler, cancellation, or agent configuration APIs.
 
@@ -40,7 +42,7 @@ Run Convoy is disabled while the selected backend's check is pending. The prefli
 
 The Agent selector restores that backend's preferences and explicitly requests validation for its executable. The existing session result or in-flight check is reused when the executable matches; an unchecked backend or a changed executable starts its asynchronous check. Switching away does not cancel another backend's work or discard its result. `Check CLI` bypasses the session result and requests fresh validation, while still suppressing duplicate in-flight probes.
 
-Changing an executable immediately invalidates the result, cancels its old probe and queues only the latest selection. A 300 ms delay coalesces typing. Generation IDs reject late results, including A → B → A edits and discovery results arriving after manual selection. Process cancellation is awaited before a replacement starts. `Check CLI` explicitly refreshes an idle backend; duplicate requests during a check are ignored. Unchanged settings only compare in-memory values, with no continuous rediscovery. Availability checks use executable options only; model/permission edits do not spawn probes and full job settings still receive normal preflight validation. A per-backend async mutex also serializes these probes with preflight help/version checks. Agent execution commands and authentication are unchanged. See [CLI lifecycle validation](cli-availability-validation.md).
+Changing an executable immediately invalidates the result, cancels its old probe and queues only the latest selection. A 300 ms delay coalesces typing. Generation IDs reject late results, including A → B → A edits and discovery results arriving after manual selection. Process cancellation is awaited before a replacement starts. `Check CLI` explicitly refreshes an idle backend; duplicate requests during a check are ignored. Unchanged settings only compare in-memory values, with no continuous rediscovery. Availability checks use executable options only; model/permission edits do not spawn probes and full job settings still receive normal preflight validation. A per-backend async mutex also serializes these probes with preflight help/version and conditional attachment-interface checks. For tasks without attachments, agent execution commands and authentication remain unchanged. See [CLI lifecycle validation](cli-availability-validation.md).
 
 `build.rs` reads an optional short Git revision at compile time, tracks Git reference changes, and tolerates missing Git/source metadata. Rendering About metadata performs no process or network work at runtime. Its project hyperlink uses eframe's explicitly enabled `links` feature (and its `webbrowser` dependency) to open the host's browser when activated. A source archive nested in another checkout does not inherit that checkout's revision.
 
@@ -58,7 +60,11 @@ Repository browsing uses `rfd::AsyncFileDialog`, parented to eframe's root windo
 
 `OptionSpec` provides rendering metadata (text fields or backend-specific choice values). Persisted option keys belong to the selected backend. There is no cross-agent reasoning, model, or permission translation. Backends validate keys and values before invocation. The generic renderer only renders that backend's descriptions. Adding Copilot exposed two concrete Codex assumptions: shared line-based output with `turn.completed` observation fields, and hardcoded Codex approval/sandbox UI text. Both now live in the Codex backend. The runner only sends bytes and an exit status to an opaque per-job output handler. This permits Copilot to stream partial text immediately and interpret its own exit status, without inventing a common event schema. Codex's formatter and success criteria are unchanged. No plugin system or hypothetical capability layer was added.
 
-With four real backends implemented, `AgentBackend` / `AgentOutput` are feature-frozen for the v0.1.0 stabilization cycle unless a bug requires changes. No additional backend or speculative capability layer is in scope.
+The v0.1.0 abstraction was frozen during stabilization. The requested v0.2
+work adds backend-owned attachment validation, conditional native-flag probes,
+transport descriptions, and optional `take_activity()` summaries of actual
+backend events. Raw bytes are separately decoded by the runner. No universal
+provider/model/permission semantics or additional backend is introduced.
 
 Codex uses stdin for the prompt to avoid shell injection and command-line length limits. It sets `--no-daemon`, explicit sandbox permissions, and `--ask-for-approval never`; no interactive approval UI exists. Authentication remains entirely with the CLI. Session resume is intentionally absent while ephemeral execution is enabled. A successful exit must also have a `turn.completed` event and no `turn.failed` event. Unknown JSONL events remain visible for diagnostics.
 
@@ -70,7 +76,7 @@ Copilot's default grants `write` permission and denies `shell`; choices also sup
 
 ### Third-backend review: OpenCode
 
-OpenCode fits the existing `AgentBackend` / `AgentOutput` contracts. No orchestration refactor or new universal capability is needed: options, help/version checks, command construction and output interpretation already belong to the backend. Codex and Copilot implementation files, process machinery, preflight and scheduler are unchanged. Adding the enum/registry entry and display label makes existing draft, results, history and reuse flows available automatically. No Claude-specific abstractions were added.
+The initial OpenCode addition fitted the existing `AgentBackend` / `AgentOutput` contracts. No orchestration refactor or new universal capability is needed: options, help/version checks, command construction and output interpretation already belong to the backend. That initial addition left Codex, Copilot, process machinery, preflight and scheduler unchanged. Adding the enum/registry entry and display label makes existing draft, results, history and reuse flows available automatically. No Claude-specific abstractions were added.
 
 `agents/opencode` uses a dedicated local `run --format json --dir <repository>` invocation with exact stdin bytes. `--model=provider/model`, `--agent=NAME`, `--variant=NAME` and `--auto` are optional. `--key=value` preserves a leading dash in a configured value as data. The process working directory and explicit native path agree; removing inherited `PWD` is necessary because the inspected OpenCode source also reads that variable. `GIT_*` overrides are removed as in the existing backends. Provider/auth/config variables are inherited and never persisted by the backend. Permission selection relies on the CLI's unattended rejection or explicit auto-approval behavior; it does not rewrite permission files or manufacture a sandbox.
 
@@ -80,11 +86,11 @@ Completion requires process exit zero, no session `error` event, and the last st
 
 The persisted enum value is `opencode`; its backend-owned option map uses `executable`, `model`, `agent`, `variant`, and `permissions`. Defaults are resolved during preflight and frozen in the run snapshot. The additive enum variant requires no version-1 migration: older Codex/Copilot state and missing option defaults keep their prior behavior. Downgrading to an older binary after saving an OpenCode run is not supported by that older binary. CodeConvoy saves only user-entered non-secret settings and prompt/run metadata, not OpenCode credentials or emitted events.
 
-See [OpenCode validation](opencode-validation.md) for authoritative sources, tests and unverified E2E/platform work. The UI uses the existing backend option renderer and scrolling panes; no Activity view or general redesign is included.
+See [OpenCode validation](opencode-validation.md) for authoritative sources, tests and unverified E2E/platform work. The UI uses the existing backend option renderer and scrolling panes; the initial backend addition included no Activity view or general redesign. The requested v0.2 presentation adds Activity alongside retained Raw output.
 
 ### Fourth-backend review: Claude Code
 
-Claude fits `AgentBackend` / `AgentOutput` unchanged. Registration replaces the existing Claude placeholder; the enum's serialized `claude` value already existed. No shared trait, scheduler, process, persistence or Git implementation change is required. Codex, Copilot and OpenCode implementation files remain unchanged. The abstraction is feature-frozen for v0.1.0 except for genuine bugs.
+The initial Claude addition fitted `AgentBackend` / `AgentOutput` unchanged. Registration replaces the existing Claude placeholder; the enum's serialized `claude` value already existed. No shared trait, scheduler, process, persistence or Git implementation change is required. That addition left the other backend implementations unchanged. The requested v0.2 attachment and Activity extensions are described above.
 
 `agents/claude` owns print-mode arguments, stdin prompt transport, working context, help/version checks and five option keys: `executable`, `model`, `effort`, `permission_mode`, `max_turns`. Preflight resolves defaults into the immutable snapshot. Old version-1 drafts and history continue loading; no credential fields are introduced. Per-agent preferences, accepted-launch clearing, restart interruption recovery, terminal-history cleanup and reuse follow the existing paths.
 
@@ -102,7 +108,7 @@ Permissions and omitted capabilities are explained in [Claude validation](claude
 
 The editor draft is separate from execution. Preflight takes owned copies of task/options and selected canonical repositories; confirmation saves `PreparedRun::snapshot` before handing owned data to `RunManager`. Each convoy keeps its own task/backend and job cancellation tokens. Run IDs route every event and cancellation, so selecting or editing another convoy does not affect workers.
 
-Only successful manager admission clears the draft prompt and repository selection. Backend/options, concurrency preferences, and registrations remain. Preflight, persistence, backend, or admission failure preserves the draft. The cleared prompt is saved through the existing draft persistence path; repository checkboxes remain session-local.
+Only successful manager admission clears the draft prompt, attachment references and repository selection. Backend/options, concurrency preferences, and registrations remain. Preflight, persistence, backend, or admission failure preserves the draft. The cleared prompt is saved through the existing draft persistence path; repository checkboxes remain session-local.
 
 One Tokio manager owns all admission decisions and a `JoinSet` of executing workers. A small pure scheduler rotates convoys after each admission. It selects the first eligible repository in that convoy, skipping busy paths and saturated convoys. A continuously eligible convoy therefore gets a turn per round; existing jobs are not preempted. There are no priorities or dependencies. Command arrival, completion, or cancellation wakes scheduling; the UI never waits for a slot.
 
@@ -122,7 +128,7 @@ Overall status is Running while any job is running, otherwise Queued while work 
 
 Unix process groups cannot contain a descendant that deliberately creates a new session/group. Abrupt OS termination or a crash cannot guarantee cleanup on Unix. No promise is made to recover or kill stale processes by persisted PID (PID reuse would make that unsafe). The application does not manage detached sessions. These constraints should be tested further before packaging a release.
 
-Stdout and stderr are drained concurrently in fixed-size chunks. Codex and OpenCode line assembly is capped at 256 KiB. Claude permits 1 MiB per record, matching the official Python Agent SDK's default; oversized stdout records invalidate completion without reinterpreting fragments. Copilot forwards each chunk immediately, retaining at most three bytes per stream to complete a split UTF-8 character; invalid bytes are replaced for display. Stderr is labelled, and no Copilot event normalization is performed. The event queue is bounded; if the UI cannot keep up, log events can be omitted with a visible count. Backend output processing continues even if a display event is dropped. Logs retain their latest 512 KiB per job, with a 32 MiB session budget that evicts the oldest job logs first. Stream interleaving is arrival order, not a claim about exact cross-stream ordering. Short Git/detection commands have a 20-second timeout and output caps.
+Stdout and stderr are drained concurrently in fixed-size chunks. Codex and OpenCode line assembly is capped at 256 KiB. Claude permits 1 MiB per record, matching the official Python Agent SDK's default; oversized stdout records invalidate completion without reinterpreting fragments. Copilot forwards each chunk immediately, retaining at most three bytes per stream to complete a split UTF-8 character; invalid bytes are replaced for display. Stderr is labelled, and no Copilot event normalization is performed. The event queue is bounded; if the UI cannot keep up, log events can be omitted with a visible count. Backend output processing continues even if a display event is dropped. Activity and raw logs each retain their latest 512 KiB per job/view, with a shared 32 MiB session budget that evicts the oldest job logs first. Stream interleaving is arrival order, not a claim about exact cross-stream ordering. Short Git/detection commands have a 20-second timeout and output caps.
 
 ## Git and state
 
@@ -144,7 +150,36 @@ All active convoys and the most recent 30 completed convoys are retained; active
 - `directories`: conventional platform data paths.
 - `tempfile`: atomic state replacement and isolated tests.
 - `fs2`: cross-platform file locking.
+- `sha2`: SHA-256 detects changed attachment contents without persisting them.
+- `base64`: Claude's documented structured image input. Both additions use small, established crates already available in the dependency cache.
 - `process-wrap`: Unix/Windows process-tree lifecycle.
 - `anyhow`: actionable contextual errors at I/O boundaries.
 
 No provider SDK, secret store, shell interpreter, database, plugin loading, Git hosting integration, or remote execution is included. Test-only fixtures exercise real local process and Git behavior without calling a model provider.
+
+## v0.2 task context
+
+Version-1 state gains additive, default-empty groups/templates and task
+attachments. Groups reference existing canonical registration paths. Selection
+is an explicit path set; group actions never alter jobs or create execution
+units. Templates contain only name/prompt. Snapshot copies preserve tasks and
+attachment metadata regardless of subsequent library edits. Missing group
+memberships remain repairable. See [selection and lifecycle semantics](task-context.md).
+
+Attachments are references plus size/digest/type, never persisted contents.
+Background workers inspect and hash files; preflight validates them before Git
+review. Once admitted, a job validates its references and builds stdin/arguments
+on a blocking worker, then revalidates the Git baseline immediately before spawn.
+Cancellation can drop this read-only worker wait without exposing repository
+writes; the existing manager releases confirmed-safe capacity and leases.
+All four backends choose their actual text/image transport without copying
+files into repositories or adding directory grants. A stale add/reuse request
+cannot overwrite a newer draft. Pending validation blocks preflight.
+
+Activity is a backend-owned optional string drained after each input chunk.
+It describes actual reported events; limited plain-text backends fall back to
+normal messages. Raw output has independent bounded stream decoding, including
+split UTF-8, and both logs share the session memory budget. Completion rules
+remain independent from presentation. Session metadata is not newly persisted;
+[Codex investigation](codex-sessions.md) retains ephemeral invocation and adds
+no continuation actions.
