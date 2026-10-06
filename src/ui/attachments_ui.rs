@@ -5,16 +5,23 @@ use crate::attachments::{self, Attachment};
 pub(super) struct AttachmentWork {
     pub pending: bool,
     request: u64,
+    focus_add: bool,
 }
 impl AttachmentWork {
     pub fn invalidate(&mut self) {
         self.request = self.request.wrapping_add(1);
         self.pending = false;
+        self.focus_add = false;
     }
     fn begin(&mut self) -> u64 {
         self.invalidate();
         self.pending = true;
         self.request
+    }
+    pub(super) fn begin_picker(&mut self) -> u64 {
+        let request = self.begin();
+        self.focus_add = true;
+        request
     }
 }
 
@@ -70,7 +77,7 @@ impl App {
         if self.attachment_work.pending {
             return;
         }
-        let request = self.attachment_work.begin();
+        let request = self.attachment_work.begin_picker();
         // Construction stays on the UI thread, matching the existing macOS sheet.
         let selection = self
             .repository_dialog
@@ -181,21 +188,26 @@ impl App {
 
     pub(super) fn attachments_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let section = ui.scope(|ui| {
-            ui.horizontal(|ui| {
-                ui.strong("Attachments");
-                if ui
-                    .add_enabled(
+            let add_button = ui
+                .horizontal(|ui| {
+                    ui.strong("Attachments");
+                    let response = ui.add_enabled(
                         !self.attachment_work.pending,
                         theme::quiet("Add files…").small(),
-                    )
-                    .clicked()
-                {
-                    self.browse_attachments(ctx.clone());
-                }
-                if self.attachment_work.pending {
-                    ui.spinner();
-                }
-            });
+                    );
+                    if self.attachment_work.focus_add && response.enabled() {
+                        response.request_focus();
+                        self.attachment_work.focus_add = false;
+                    }
+                    if response.clicked() {
+                        self.browse_attachments(ctx.clone());
+                    }
+                    if self.attachment_work.pending {
+                        ui.spinner();
+                    }
+                    response.id
+                })
+                .inner;
             if self.state.draft.attachments.is_empty() {
                 ui.weak("Add files or drop them here.");
             }
@@ -217,13 +229,18 @@ impl App {
                         attachment.kind.label(),
                         size_label(attachment.size)
                     ));
-                    if ui
-                        .add_enabled(
-                            !self.attachment_work.pending,
-                            theme::quiet("Remove").small(),
+                    let response = ui.add_enabled(
+                        !self.attachment_work.pending,
+                        theme::quiet("Remove").small(),
+                    );
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::WidgetType::Button,
+                            response.enabled(),
+                            format!("Remove attachment {}", attachment.filename),
                         )
-                        .clicked()
-                    {
+                    });
+                    if response.clicked() {
                         remove = Some(index);
                     }
                 });
@@ -231,6 +248,7 @@ impl App {
             if let Some(index) = remove {
                 self.state.draft.attachments.remove(index);
                 self.dirty = true;
+                ui.memory_mut(|memory| memory.request_focus(add_button));
             }
             if let Some(error) = self.attachment_error() {
                 ui.colored_label(theme::Palette::of(ui).error, error);

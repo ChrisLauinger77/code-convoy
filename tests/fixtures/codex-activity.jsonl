@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"fixture-thread"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"mcp_tool_call","server":"fixture","tool":"lookup","status":"in_progress"}}
+{"type":"item.completed","item":{"type":"command_execution","command":"cargo fmt --check","status":"completed","aggregated_output":"raw-only command payload"}}
+{"type":"item.completed","item":{"type":"file_change","changes":[{"kind":"update","path":"README.md"}]}}
+{"type":"item.completed","item":{"type":"agent_message","text":"Reviewed README. Grüße"}}
+{"type":"turn.completed","usage":{"input_tokens":12,"output_tokens":8}}

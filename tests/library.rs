@@ -3,6 +3,40 @@ use codeconvoy::{attachments::Attachment, domain::*, persistence::Store};
 use std::fs;
 
 #[test]
+fn populated_v01_fixture_retains_registrations_history_and_all_preferences() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = Store::open(temp.path()).unwrap();
+    let bytes = include_bytes!("fixtures/state-v0.1.json");
+    fs::write(temp.path().join("state.json"), bytes).unwrap();
+    let original: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+    let state = store.load().unwrap();
+    let loaded = serde_json::to_value(&state).unwrap();
+    for field in [
+        "version",
+        "next_run",
+        "repositories",
+        "agent_options",
+        "global_concurrency",
+    ] {
+        assert_eq!(loaded[field], original[field], "{field}");
+    }
+    assert_eq!(state.next_run, 42);
+    assert!(state.groups.is_empty() && state.templates.is_empty());
+    assert!(state.draft.attachments.is_empty());
+    let mut expected = original.clone();
+    expected["groups"] = serde_json::json!([]);
+    expected["templates"] = serde_json::json!([]);
+    expected["draft"]["attachments"] = serde_json::json!([]);
+    expected["runs"][0]["task"]["attachments"] = serde_json::json!([]);
+    assert_eq!(loaded, expected);
+    store.save(&state).unwrap();
+    assert_eq!(
+        serde_json::to_value(store.load().unwrap()).unwrap(),
+        expected
+    );
+}
+
+#[test]
 fn old_version_one_state_defaults_new_features_without_changing_run_ids() {
     let temp = tempfile::tempdir().unwrap();
     let store = Store::open(temp.path()).unwrap();

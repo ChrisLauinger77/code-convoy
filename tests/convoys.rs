@@ -218,6 +218,60 @@ async fn queued_attachment_changes_fail_before_spawn_and_release_repository_capa
 }
 
 #[tokio::test]
+#[cfg(unix)]
+async fn attachment_that_becomes_unreadable_while_queued_never_reaches_the_agent() {
+    use std::{fs, os::unix::fs::PermissionsExt};
+    let mut h = Harness::new(1);
+    let repo = h.repo("queued-unreadable").await;
+    let path = h.directory.path().join("private.md");
+    fs::write(&path, "private context").unwrap();
+    let attachment = codeconvoy::attachments::Attachment::inspect(&path).unwrap();
+    let permissions = fs::metadata(&path).unwrap().permissions();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+    let mode_bits_enforced = fs::File::open(&path).is_err();
+    fs::set_permissions(&path, permissions.clone()).unwrap();
+    if !mode_bits_enforced {
+        eprintln!("Skipping queued unreadable-file assertions: this account can bypass mode bits");
+        return;
+    }
+    let first = h
+        .prepared(1, AgentId::Codex, 1, false, std::slice::from_ref(&repo))
+        .await;
+    let mut task = h.task(2, AgentId::Codex, 1, false);
+    task.attachments.push(attachment);
+    let second = runner::prepare(task, vec![repo.clone()]).await.unwrap();
+    h.start(1, first);
+    h.until(|events| Harness::ready(events, 1, 0)).await;
+    h.start(2, second);
+    h.until(|events| {
+        events
+            .iter()
+            .any(|event| matches!(event, Event::Queued { run: 2, .. }))
+    })
+    .await;
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+    h.release(1, &repo);
+    h.finish_all(2).await;
+    fs::set_permissions(&path, permissions).unwrap();
+    assert!(Harness::finished(&h.events, 2, 0, JobStatus::Failed));
+    assert!(!h.control.join("2-queued-unreadable.input").exists());
+    assert!(
+        !h.events
+            .iter()
+            .any(|event| matches!(event, Event::Started { run: 2, .. }))
+    );
+    assert!(h.events.iter().any(|event| matches!(event, Event::Finished {run: 2, detail, ..} if detail.contains("Cannot read attachment") && detail.contains("private.md"))));
+    let third = h
+        .prepared(3, AgentId::Copilot, 1, false, std::slice::from_ref(&repo))
+        .await;
+    h.start(3, third);
+    h.until(|events| Harness::ready(events, 3, 0)).await;
+    h.release(3, &repo);
+    h.finish_all(3).await;
+    assert!(Harness::finished(&h.events, 3, 0, JobStatus::Succeeded));
+}
+
+#[tokio::test]
 async fn every_backend_delivers_attachment_context_and_keeps_separate_raw_output() {
     let mut h = Harness::new(4);
     let path = h.directory.path().join("requirements.md");

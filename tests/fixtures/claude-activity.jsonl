@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"fixture-session"}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"read-1","name":"Read","input":{"file_path":"README.md"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"read-1","content":"raw-only file payload"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"bash-1","name":"Bash","input":{"command":"cargo fmt --check"}},{"type":"text","text":"Reviewed README. Grüße"}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"Review complete","session_id":"fixture-session","duration_ms":100,"duration_api_ms":50,"num_turns":2,"usage":{"input_tokens":12,"output_tokens":8},"permission_denials":[{"tool_name":"Write","tool_input":{"file_path":"README.md"}}]}

@@ -266,3 +266,37 @@ fn backend_specific_image_limits_identify_the_affected_file() {
         .to_string();
     assert!(error.contains("comma,name.png") && error.contains("base64"));
 }
+
+#[test]
+#[cfg(unix)]
+fn unreadable_file_is_rejected_on_add_revalidation_and_reuse() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let attachment = file(temp.path(), "unreadable.md", b"private context");
+    let permissions = fs::metadata(&attachment.path).unwrap().permissions();
+    fs::set_permissions(&attachment.path, fs::Permissions::from_mode(0o000)).unwrap();
+    if fs::File::open(&attachment.path).is_ok() {
+        fs::set_permissions(&attachment.path, permissions).unwrap();
+        eprintln!("Skipping unreadable-file assertions: this account can bypass mode bits");
+        return;
+    }
+    let added = Attachment::inspect(&attachment.path);
+    let validated = attachment.read_validated();
+    let (reused, errors) = attachments::for_reuse(std::slice::from_ref(&attachment));
+    fs::set_permissions(&attachment.path, permissions).unwrap();
+    assert!(
+        added
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot read attachment")
+    );
+    assert!(
+        validated
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot read attachment")
+    );
+    assert!(reused.is_empty());
+    assert_eq!(errors.len(), 1);
+    assert!(errors[0].contains("unreadable.md"));
+}

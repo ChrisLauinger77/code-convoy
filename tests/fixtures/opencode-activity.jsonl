@@ -1,0 +1,5 @@
+{"type":"step_start","part":{"type":"step-start"}}
+{"type":"tool_use","part":{"tool":"read","state":{"status":"completed","input":{"filePath":"README.md"},"output":"raw-only file payload"}}}
+{"type":"tool_use","part":{"tool":"bash","state":{"status":"completed","input":{"command":"cargo fmt --check"},"output":"raw-only command payload"}}}
+{"type":"text","part":{"text":"Reviewed README. Grüße"}}
+{"type":"step_finish","part":{"reason":"stop","tokens":{"input":12,"output":8}}}
