@@ -26,9 +26,11 @@ credentials are used.
 Only the final publishing job has `contents: write`. All six packages must be
 nonempty and have exactly the expected final filenames before checksums are
 generated. A single publisher creates a **draft**, uploads all seven assets,
-checks their names/sizes and GitHub-provided digests, then makes the release
-public. A failed upload leaves a draft, never an intentionally partial public
-release. Existing releases are not overwritten. If publication fails after
+resolves the draft's numeric release ID with `gh release view`, checks its
+names/sizes and GitHub-provided digests through the release-ID API, then publishes
+that same ID. The REST tag endpoint only returns published releases and cannot
+verify a draft. A failed upload leaves a draft, never an intentionally partial
+public release. Existing releases are not overwritten. If publication fails after
 draft creation, inspect/delete that draft before rerunning the publisher; do
 not move a published tag. A new release requires a new version/tag.
 

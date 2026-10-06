@@ -85,6 +85,18 @@ OpenCode and Claude Code authenticated E2E remain unverified.
 The user also confirmed successful installation and use of the DEB package on
 Debian Forky. AppImage startup on Debian Forky is also user-verified.
 
+## Hosted tag run, 2026-10-06
+
+[Native release packages for `v0.1.0`](https://github.com/ChrisLauinger77/code-convoy/actions/runs/37490087086)
+passed version validation, all three native build/package jobs, and aggregation
+of the six packages and checksums. The publisher uploaded all seven assets to a
+draft, then failed when the published-only REST tag endpoint returned 404.
+
+The corrected publisher resolves the draft's numeric release ID, verifies its
+tag and asset inventory/sizes/digests, and publishes that same ID. Local publisher
+regression tests cover the draft lookup and rejection of invalid uploads. A new
+tag run is still needed to validate the corrected publisher on GitHub Actions.
+
 ## Required hosted and desktop follow-through
 
 At the time of the 2026-10-05 audit, the new release workflow had been statically
@@ -95,15 +107,15 @@ validate later workflow changes.
 The 2026-10-06 CI/Renovate review found that release packaging now selects
 `ubuntu-26.04`, `windows-2025`, `macos-26`, Rust 1.99.0 and Python 3.14. Normal
 CI uses latest runners and stable Rust, targets pushes/PRs to `main`, and skips
-Markdown-only changes. These are configuration observations, not new hosted or
-desktop test results. Run the current release workflow's non-publishing manual
-mode before tagging and inspect its native package/installer checks. The AppImage
-host-process test is a release-job gate; validate it on the updated Linux runner.
+Markdown-only changes. These were configuration observations; the subsequent
+hosted tag run above passed the native build/package gates, including the
+AppImage host-process and virtual-desktop startup checks on the updated Linux
+runner. Desktop checks beyond those hosted gates remain below.
 
 | Platform | Remaining validation |
 | --- | --- |
 | Linux X11 and Wayland | Inspect final GLIBC requirements after the Ubuntu 26.04 runner update and reconcile the DEB's declared `libc6 (>= 2.35)` dependency; test the oldest intended distribution; install RPM; test portal selection/cancellation, clipboard/URLs, host Git and installed agent lookup, concurrent cancellation and shutdown |
-| Windows x86-64 | Verify CI installer/uninstaller and Job Object fixture results; on a real desktop check no console flashes, picker, keyboard navigation, installed/portable startup and descendant cancellation on Stop/Stop Convoy/Stop All/close |
+| Windows x86-64 | On a real desktop check no console flashes, picker, keyboard navigation, installed/portable startup and descendant cancellation on Stop/Stop Convoy/Stop All/close |
 | Intel macOS | Intel slice is built/inspected but was not run on Intel hardware |
 | Downloaded macOS app | Local ad-hoc integrity was verified; actual browser quarantine/Gatekeeper first-launch flow and oldest supported macOS version remain unverified |
 | Agent authentication | Codex and Copilot are user-verified on Linux and macOS; OpenCode and Claude remain unverified |
