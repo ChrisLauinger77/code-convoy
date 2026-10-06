@@ -1,7 +1,7 @@
 name: Native release packages
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   # renovate: datasource=crate depName=cargo-packager
-  PACKAGER_VERSION: '0.11.8'
+  PACKAGER_VERSION: "0.11.8"
 
 jobs:
   validate:
@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.14'
+          python-version: "3.14"
       - name: Validate Cargo version and release gates
         env:
           RELEASE_REF: ${{ github.ref_name }}
@@ -46,11 +46,11 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
-          toolchain: '1.99.0'
+          toolchain: "1.99.0"
           components: rustfmt, clippy
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.14'
+          python-version: "3.14"
       - name: Native build and package dependencies
         run: |
           sudo apt-get update
@@ -80,11 +80,11 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
-          toolchain: '1.99.0'
+          toolchain: "1.99.0"
           components: rustfmt, clippy
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.14'
+          python-version: "3.14"
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - run: cargo test --locked --all-features
@@ -103,19 +103,19 @@ jobs:
     needs: validate
     runs-on: macos-26
     env:
-      MACOSX_DEPLOYMENT_TARGET: '11.0'
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
-          toolchain: '1.99.0'
+          toolchain: "1.99.0"
           components: rustfmt, clippy
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.14'
+          python-version: "3.14"
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - run: cargo test --locked --all-features
@@ -141,7 +141,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.14'
+          python-version: "3.14"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: packages-*
@@ -167,7 +167,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.14'
+          python-version: "3.14"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-assets
@@ -178,3 +178,21 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: python packaging/publish.py
+
+  update-package-repositories:
+    name: Request package repository updates
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    needs: publish
+    runs-on: ubuntu-26.04
+    env:
+      GH_TOKEN: ${{ secrets.PACKAGE_REPOSITORIES_TOKEN }}
+    steps:
+      - name: Use scheduled fallback when no cross-repository token exists
+        if: ${{ env.GH_TOKEN == '' }}
+        run: echo 'PACKAGE_REPOSITORIES_TOKEN is not configured; the daily Scoop and Homebrew updaters will publish this version.'
+      - name: Dispatch Scoop and Homebrew updates
+        if: ${{ env.GH_TOKEN != '' }}
+        shell: bash
+        run: |
+          gh api --method POST repos/ChrisLauinger77/scoop-bucket/dispatches -f event_type=update-scoop
+          gh api --method POST repos/ChrisLauinger77/homebrew-cask/dispatches -f event_type=update-cask -F 'client_payload[cask]=code-convoy'
