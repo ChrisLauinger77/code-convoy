@@ -323,6 +323,40 @@ fn finish_attachment_work(app: &mut App) {
 }
 
 #[test]
+fn reused_missing_context_survives_save_and_unrelated_add_until_explicit_removal() {
+    let (temp, mut app) = app();
+    let missing = temp.path().join("requirements.md");
+    let other = temp.path().join("other.md");
+    std::fs::write(&missing, "original context").unwrap();
+    std::fs::write(&other, "additional context").unwrap();
+    let attachment = crate::attachments::Attachment::inspect(&missing).unwrap();
+    let mut history = run(20, &[JobStatus::Succeeded]);
+    history.task.attachments.push(attachment.clone());
+    app.state.runs.push(history);
+    std::fs::remove_file(&missing).unwrap();
+    app.reuse_convoy(20);
+    finish_attachment_work(&mut app);
+    assert!(app.attachment_error().is_some());
+    app.store.save(&app.state).unwrap();
+    let saved = app.store.load().unwrap();
+    assert_eq!(saved.draft.attachments, std::slice::from_ref(&attachment));
+    // Adding valid context cannot silently resolve or replace a missing reference.
+    let mut keys = Keyboard::new(|app, ui, ctx| app.attachments_section(ui, ctx));
+    keys.frame(&mut app, vec![]);
+    keys.input(&mut app, drop_input(&[other], egui::pos2(30.0, 20.0)));
+    finish_attachment_work(&mut app);
+    assert_eq!(app.state.draft.attachments.len(), 2);
+    assert!(app.attachment_error().is_some());
+    keys.activate(&mut app, "Remove attachment requirements.md");
+    assert!(app.attachment_error().is_none());
+    assert!(app.notice.is_empty());
+    assert!(app.draft_message.contains("Review the remaining context"));
+    assert_eq!(app.state.draft.attachments.len(), 1);
+    assert_eq!(app.state.runs[0].task.attachments, [attachment]);
+    assert!(app.manager.is_idle());
+}
+
+#[test]
 fn dropped_paths_are_inspected_off_thread_deduplicated_and_errors_are_explicit() {
     let (temp, mut app) = app();
     let text = temp.path().join("external Grüße specification.md");

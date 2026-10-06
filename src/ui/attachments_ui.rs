@@ -6,6 +6,7 @@ pub(super) struct AttachmentWork {
     pub pending: bool,
     request: u64,
     focus_add: bool,
+    unavailable: HashSet<PathBuf>,
 }
 impl AttachmentWork {
     pub fn invalidate(&mut self) {
@@ -49,6 +50,18 @@ fn inspect_files(paths: Vec<PathBuf>) -> (Vec<Attachment>, Vec<String>) {
 
 impl App {
     pub(super) fn attachment_error(&self) -> Option<String> {
+        if let Some(file) = self
+            .state
+            .draft
+            .attachments
+            .iter()
+            .find(|file| self.attachment_work.unavailable.contains(&file.path))
+        {
+            return Some(format!(
+                "Attachment needs attention: {}. Remove and re-add the restored file, or remove it to run without that context.",
+                file.filename
+            ));
+        }
         let backend = agents::backend(self.state.draft.agent).ok()?;
         backend
             .validate_attachments(&self.state.draft)
@@ -139,6 +152,7 @@ impl App {
 
     pub(super) fn validate_reused_attachments(&mut self) {
         self.attachment_work.invalidate();
+        self.attachment_work.unavailable.clear();
         if self.state.draft.attachments.is_empty() {
             return;
         }
@@ -172,15 +186,24 @@ impl App {
             return;
         }
         self.attachment_work.pending = false;
-        self.state.draft.attachments = files;
-        self.dirty = true;
+        // Keep the immutable references in the draft. Omitting unavailable context
+        // must be an explicit Remove action, not a side effect of reuse validation.
+        let valid: HashSet<_> = files.iter().map(|file| &file.path).collect();
+        self.attachment_work.unavailable = self
+            .state
+            .draft
+            .attachments
+            .iter()
+            .filter(|file| !valid.contains(&file.path))
+            .map(|file| file.path.clone())
+            .collect();
         if !errors.is_empty() {
             self.draft_message.push_str(&format!(
-                " {} attachment(s) could not be restored; see the notice.",
+                " {} attachment(s) need attention before launch; their references are retained.",
                 errors.len()
             ));
             self.notice = format!(
-                "Reused convoy has missing, unreadable or changed attachments. Restore or re-add them before running:\n{}",
+                "Reused convoy has missing, unreadable or changed attachments. Restore and re-add them, or explicitly remove them to run without that context:\n{}",
                 errors.join("\n")
             );
         }
@@ -244,9 +267,32 @@ impl App {
                         remove = Some(index);
                     }
                 });
+                if self.attachment_work.unavailable.contains(&attachment.path) {
+                    ui.colored_label(
+                        theme::Palette::of(ui).warning,
+                        "Unavailable or changed · restore and re-add, or Remove to omit.",
+                    );
+                }
             }
             if let Some(index) = remove {
-                self.state.draft.attachments.remove(index);
+                let removed = self.state.draft.attachments.remove(index);
+                if self.attachment_work.unavailable.remove(&removed.path) {
+                    self.draft_message = if self.attachment_work.unavailable.is_empty() {
+                        "Unavailable attachment removed. Review the remaining context before launching."
+                            .into()
+                    } else {
+                        format!(
+                            "{} attachment(s) still need attention before launch.",
+                            self.attachment_work.unavailable.len()
+                        )
+                    };
+                    if self.attachment_work.unavailable.is_empty()
+                        && (self.notice.starts_with("Reused convoy has missing")
+                            || self.notice.starts_with("Attachment needs attention"))
+                    {
+                        self.notice.clear();
+                    }
+                }
                 self.dirty = true;
                 ui.memory_mut(|memory| memory.request_focus(add_button));
             }

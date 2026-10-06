@@ -84,10 +84,12 @@ attachment never adds filesystem directories or broader approvals to a command.
 Launch snapshots save references and metadata, not file contents. **Task &
 settings** can show those references even after files disappear. Successful
 launch clears draft attachments along with task text and repository selection.
-**Reuse convoy** restores valid original references, visibly lists missing,
-unreadable or changed ones, and requires a new review. Reuse validation is
-asynchronous; Run remains disabled while it is pending. Templates do not store
-attachments.
+**Reuse convoy** restores all original references and marks missing, unreadable
+or changed ones in the draft. They are never silently dropped. Run remains
+disabled during asynchronous validation and while any marked reference remains.
+Restore the file, then Remove and re-add it; or explicitly Remove its reference
+to run without that context. Adding another file does not clear this requirement.
+Reuse always requires a new review. Templates do not store attachments.
 
 Attachment contents are transient CLI input; CodeConvoy does not persist them,
 copy them into application data, or echo them in its diagnostics. Paths and
@@ -117,8 +119,12 @@ Research date: **2026-10-06**. Only Codex was installed on this development Mac
 The other interfaces are checked against authoritative documentation/source and
 deterministic fixture processes. Prior Codex/Copilot authenticated E2E evidence
 does not establish attachment E2E for these new transports. Authenticated
-attachment tests for all four, Windows path/native-picker runtime checks, and
-Linux desktop drag-and-drop checks remain outstanding.
+attachment tests for all four remain outstanding. Part 2.3 adds a deliberate,
+ignored Codex provider probe and verifies text/image receipt with fixture
+processes for all four transports. Its native macOS picker, combined workflows,
+history reuse and result checks are recorded in the
+[completion report](v0.2-completion.md). Windows native-picker runtime checks
+and Linux desktop drag-and-drop checks remain outstanding.
 
 - Codex documents exec image input and ephemeral/session behavior in the
   [CLI reference](https://developers.openai.com/codex/cli/reference/). Its model

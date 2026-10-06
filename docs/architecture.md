@@ -175,6 +175,18 @@ writes; the existing manager releases confirmed-safe capacity and leases.
 All four backends choose their actual text/image transport without copying
 files into repositories or adding directory grants. A stale add/reuse request
 cannot overwrite a newer draft. Pending validation blocks preflight.
+Reuse retains unavailable references and keeps an in-memory set of paths needing
+attention; both the launch button and preflight entry point enforce it. Removing
+a flagged reference explicitly resolves it, without modifying the historical
+snapshot. A restarted draft still undergoes full file validation at preflight.
+
+Group rendering builds one borrowed registration/availability index per frame,
+then counts membership and selection without cloning paths or repeatedly scanning
+registrations. Missing-path display strings are created only when hovered.
+Attachment rendering uses stored metadata; no file reads or hashes run per frame.
+CLI checks are event-driven as described above. Output copies/indexes are updated
+when retained text changes, rather than once per frame. State writes require a
+dirty flag and the existing save interval (or an explicit lifecycle save).
 
 Activity is a backend-owned optional string drained after each input chunk.
 It describes actual reported events; limited plain-text backends fall back to
@@ -183,3 +195,13 @@ split UTF-8, and both logs share the session memory budget. Completion rules
 remain independent from presentation. Session metadata is not newly persisted;
 [Codex investigation](codex-sessions.md) retains ephemeral invocation and adds
 no continuation actions.
+
+The `test-support`-gated `v02_validation` example runs the real native UI with a
+temporary Store, 24 disposable repositories and fixture executable settings for
+all four backends. The fixture mode requires an explicit marker inside each
+temporary repository's `.git` directory and records received text/image digests
+there for assertions. It neither invokes installed coding agents nor reads their
+authentication. `tests/workflows.rs` exercises this mode through the real runner
+and scheduler; its separate authenticated Codex probe is ignored unless explicitly
+requested. Neither helper is shipped as the application. No dependency was added
+for Part 2.3.

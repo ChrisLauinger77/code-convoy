@@ -4,6 +4,7 @@ use std::{
     process::Command,
     time::Duration,
 };
+mod workflow;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let mut _probe_lock = None;
@@ -56,6 +57,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.iter().any(|a| a == "--help") {
         println!("Codex fixture: --no-daemon --ask-for-approval exec");
+        if std::env::current_dir()?
+            .join(".git/codeconvoy-workflow.json")
+            .is_file()
+        {
+            println!("--image PATH (disposable workflow fixture only)");
+        }
         print!("{}", include_str!("../fixtures/copilot-1.0.65-help.txt"));
         print!("{}", include_str!("../fixtures/claude-help-contract.txt"));
         return Ok(());
@@ -84,6 +91,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
+    if std::env::current_dir()?
+        .join(".git/codeconvoy-workflow.json")
+        .is_file()
+    {
+        return workflow::run(&input, &args, copilot, opencode, claude);
+    }
     if let Some(json) = input.strip_prefix("codeconvoy-fixture-gate\n") {
         return gate(json, &input, &args, copilot, opencode);
     }

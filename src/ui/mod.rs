@@ -361,6 +361,10 @@ impl App {
         if self.attachment_work.pending {
             return;
         }
+        if let Some(error) = self.attachment_error() {
+            self.notice = error;
+            return;
+        }
         // Discovery must be applied before the immutable preflight snapshot.
         // Also reconcile executable edits made since the last UI poll.
         self.sync_cli_checks();

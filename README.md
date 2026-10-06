@@ -190,8 +190,9 @@ stay visible and repairable. Loading a template never starts work.
 PNG, JPEG and WebP. Files can also be dropped onto the attachment area. Each
 job receives the task context through its backend's documented interface.
 Preflight and queued jobs check the original files; changes or missing files
-fail explicitly. History saves references/metadata, and Reuse reports files it
-cannot restore. Attachment contents are not saved by CodeConvoy. The selected
+fail explicitly. History saves references/metadata. Reuse keeps missing or changed
+references visible and blocks launch until you restore and re-add them, or
+explicitly remove them. Attachment contents are not saved by CodeConvoy. The selected
 CLI/provider still processes supplied context under its own data policy.
 
 Results offer **Activity | Diff | Raw output | Task & settings**. Activity
@@ -199,8 +200,16 @@ summarizes actual backend events; Raw output preserves CLI details. Both are
 bounded session-only views. See [task context and backend evidence](docs/task-context.md)
 for selection semantics, attachment limits, privacy and validation coverage.
 [Codex session investigation](docs/codex-sessions.md) explains why ephemeral jobs
-have no Resume/Open buttons. See the [v0.2 development validation](docs/v0.2-validation.md)
-for automated coverage and native UI checks.
+have no Resume/Open buttons. See the [Part 2.3 completion report](docs/v0.2-completion.md)
+for workflow evidence, native UI checks and remaining platform/provider limits.
+
+For recurring maintenance, register your existing repositories, create a group
+such as **GNOME Extensions** or **Package Repositories**, and save a task template.
+Load the template, select the group, adjust individual selections, and attach
+the current requirements or screenshot. Review the explicit repository list and
+Git state before starting. Each repository receives the same task and context,
+with an independent result and diff. Groups and templates add no package-specific
+automation, commits or pushes.
 
 ## Build and run
 
@@ -271,7 +280,7 @@ Use the bounded, scrollable run selector's **ACTIVE** and **HISTORY** groups to 
 
 History retains all active convoys plus the latest 30 completed convoys, including snapshots, repository paths, initial Git state, timestamps, exit codes, and statuses. Logs remain session-only. Existing version-1 state loads with the default global limit. **History cleanup → Remove convoy #… from history** removes the selected terminal convoy; **History cleanup → Clear history** removes all terminal convoys, including failed, cancelled, and interrupted runs. These actions save immediately and only remove CodeConvoy metadata and session output. Repository files, Git changes, registered repositories, and active convoys are untouched.
 
-**Reuse convoy** copies the selected convoy's prompt, valid attachment references, backend settings, per-convoy limit, and still-registered repository selection into NEW CONVOY, replacing the current draft. It leaves the global limit unchanged and does not start jobs. Unregistered repositories are skipped with a message; add them again if needed. Review the draft and use Run Convoy for a fresh Git check.
+**Reuse convoy** copies the selected convoy's prompt, original attachment references, backend settings, per-convoy limit, and still-registered repository selection into NEW CONVOY, replacing the current draft. It leaves the global limit unchanged and does not start jobs. Attachment checks run in the background; missing or changed references remain visible and require an explicit resolution before launch. Unregistered repositories are skipped with a message; add them again if needed. Review the draft and use Run Convoy for a fresh Git check.
 
 The execution controls stay visible while the task and repository pane scrolls. **Appearance** follows the system theme by default and offers dark/light overrides for the current session. Output and diffs render only visible lines, with Copy actions for the full retained text. Diff headers, additions, and removals have distinct styling; wide lines scroll horizontally.
 

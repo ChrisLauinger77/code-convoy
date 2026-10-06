@@ -165,6 +165,18 @@ Blocked repository jobs must not consume execution slots.
 
 Cancelling one convoy must not affect unrelated convoys.
 
+## Task context
+
+Repository groups are selection helpers, never scheduling or execution units.
+Task templates contain reusable task text, not backend settings or workflows.
+Keep launched task and attachment snapshots independent of later draft/library
+edits. Missing context must remain explicit; reuse must not silently omit it.
+
+Backends own attachment capabilities and transport. Inspect attachment files off
+the UI thread and persist only references/metadata, never contents. Activity
+summaries must describe actual backend events and keep bounded Raw output
+available for diagnostics.
+
 ## Process management
 
 Agent processes must never block the egui UI thread.
