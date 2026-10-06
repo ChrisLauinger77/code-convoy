@@ -4,7 +4,7 @@
 
 `Cargo.toml` is the version authority. About, Windows resources, package
 metadata, bundle versions and final filenames derive from it. For this release
-it is `0.1.0`, with tag `v0.1.0`, without a prerelease suffix.
+it is `0.2.0`, with tag `v0.2.0`, without a prerelease suffix.
 
 1. Review and commit the release changes. Confirm applicable normal CI checks
    are green; Markdown-only changes skip CI.
@@ -13,7 +13,7 @@ it is `0.1.0`, with tag `v0.1.0`, without a prerelease suffix.
    workflow artifact, including checksums. It never publishes a release.
 3. Download those packages and complete the outstanding desktop checks in
    [release-validation.md](release-validation.md), particularly Linux and Windows.
-4. Review [release-notes.md](release-notes.md). Create and push `v0.1.0` on the
+4. Review [release-notes.md](release-notes.md). Create and push `v0.2.0` on the
    reviewed commit when satisfied. Tag creation is a maintainer action.
 
 The tag workflow checks exact tag/version equality before starting native jobs.
@@ -191,7 +191,7 @@ packages: `rpm desktop-file-utils file patchelf squashfs-tools xvfb xauth`.
 python3 packaging/build.py
 python3 packaging/build.py --probe
 python3 packaging/release.py linux
-xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.1.0-x86_64.AppImage
+xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.2.0-x86_64.AppImage
 ```
 
 On Windows, from a development shell with Python, Rust MSVC and Windows SDK:

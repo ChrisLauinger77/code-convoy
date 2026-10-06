@@ -25,18 +25,18 @@ CodeConvoy is a native Rust/egui implementation with four independent coding-age
 
 ## Downloads and installation
 
-The `v0.1.0` release workflow produces the following assets on the
+The `v0.2.0` release workflow produces the following assets on the
 [GitHub Releases page](https://github.com/ChrisLauinger77/code-convoy/releases).
 Packages are available after the maintainer publishes the release tag.
 
 | Platform                       | Package                                     | Installation                                                          |
 | ------------------------------ | ------------------------------------------- | --------------------------------------------------------------------- |
-| Linux x86-64, Debian/Ubuntu    | `code-convoy_0.1.0_amd64.deb`               | `sudo apt install ./code-convoy_0.1.0_amd64.deb`                      |
-| Linux x86-64, Fedora/RPM       | `code-convoy-0.1.0-1.x86_64.rpm`            | `sudo dnf install ./code-convoy-0.1.0-1.x86_64.rpm`                   |
-| Linux x86-64, portable         | `CodeConvoy-0.1.0-x86_64.AppImage`          | Make executable and run; no installation or sandbox                   |
-| Windows x86-64                 | `CodeConvoy-0.1.0-windows-x86_64-setup.exe` | Run the per-user installer; Start Menu and uninstall support included |
-| Windows x86-64, portable       | `CodeConvoy-0.1.0-windows-x86_64.zip`       | Extract and run `CodeConvoy.exe`                                      |
-| macOS, Apple Silicon and Intel | `CodeConvoy-0.1.0-macos-universal.dmg`      | Drag CodeConvoy.app onto Applications                                 |
+| Linux x86-64, Debian/Ubuntu    | `code-convoy_0.2.0_amd64.deb`               | `sudo apt install ./code-convoy_0.2.0_amd64.deb`                      |
+| Linux x86-64, Fedora/RPM       | `code-convoy-0.2.0-1.x86_64.rpm`            | `sudo dnf install ./code-convoy-0.2.0-1.x86_64.rpm`                   |
+| Linux x86-64, portable         | `CodeConvoy-0.2.0-x86_64.AppImage`          | Make executable and run; no installation or sandbox                   |
+| Windows x86-64                 | `CodeConvoy-0.2.0-windows-x86_64-setup.exe` | Run the per-user installer; Start Menu and uninstall support included |
+| Windows x86-64, portable       | `CodeConvoy-0.2.0-windows-x86_64.zip`       | Extract and run `CodeConvoy.exe`                                      |
+| macOS, Apple Silicon and Intel | `CodeConvoy-0.2.0-macos-universal.dmg`      | Drag CodeConvoy.app onto Applications                                 |
 
 `SHA256SUMS` covers the six final downloads. On Linux use `sha256sum -c
 SHA256SUMS` with the downloaded files; on macOS use `shasum -a 256`; on Windows
@@ -129,7 +129,7 @@ A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
-`./CodeConvoy-0.1.0-x86_64.AppImage --appimage-extract-and-run`.
+`./CodeConvoy-0.2.0-x86_64.AppImage --appimage-extract-and-run`.
 
 X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
 `libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,
