@@ -37,6 +37,40 @@ not move a published tag. A new release requires a new version/tag.
 Normal CI runs checks/builds only. A manual release workflow run cannot publish,
 even when its selected ref is a tag. The workflow never creates a Git tag.
 
+## Homebrew and Scoop updates
+
+CodeConvoy is also distributed through the maintainer's
+[Homebrew tap](https://github.com/ChrisLauinger77/homebrew-cask/blob/main/Casks/code-convoy.rb)
+and [Scoop bucket](https://github.com/ChrisLauinger77/scoop-bucket/blob/main/bucket/code-convoy.json).
+The cask uses the Universal macOS DMG; the Scoop manifest uses the Windows x86-64
+ZIP. Both reference published GitHub release assets and their SHA-256 values.
+Keep their asset names compatible when changing packaging. User installation
+and update commands are in the [README](../README.md#homebrew-on-macos).
+
+After successful publication, the release workflow's **Request package repository
+updates** job sends `repository_dispatch` events to both repositories:
+
+- `update-cask` to `ChrisLauinger77/homebrew-cask`, with
+  `client_payload.cask=code-convoy`.
+- `update-scoop` to `ChrisLauinger77/scoop-bucket`.
+
+Immediate dispatch requires the optional `PACKAGE_REPOSITORIES_TOKEN` repository
+secret, authorized to send these events to both package repositories. Without
+it, the job reports the scheduled fallback and succeeds. Each package repository
+also checks daily: the Homebrew updater at 04:17 UTC and the Scoop updater at
+00:00 UTC. Their workflows also support manual dispatch. These updates are
+separate from publishing the CodeConvoy release and can finish later.
+
+For a release published manually, or a failed dispatch, let the scheduled checks
+run or manually run **Update casks** with `cask=code-convoy` and **Update Scoop
+manifests** in the respective repositories. Confirm their update runs succeed
+and the package definitions on `main` have the intended version, asset URL and
+checksum before announcing package-manager availability. Check the
+[Homebrew workflow](https://github.com/ChrisLauinger77/homebrew-cask/blob/main/.github/workflows/update-casks.yml)
+and [Scoop workflow](https://github.com/ChrisLauinger77/scoop-bucket/blob/main/.github/workflows/update.yml)
+when diagnosing delayed updates. They currently commit successful updates directly
+to their package repositories' `main` branches.
+
 ## CI and Renovate
 
 [Normal CI](../.github/workflows/ci.yml) runs on pushes to `main` and pull

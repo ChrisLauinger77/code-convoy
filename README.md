@@ -42,6 +42,55 @@ Packages are available after the maintainer publishes the release tag.
 SHA256SUMS` with the downloaded files; on macOS use `shasum -a 256`; on Windows
 use `Get-FileHash -Algorithm SHA256` and compare the corresponding entry.
 
+### Homebrew on macOS
+
+With [Homebrew](https://brew.sh/) installed, add the maintainer's
+[tap](https://github.com/ChrisLauinger77/homebrew-cask) and install CodeConvoy:
+
+```sh
+brew tap ChrisLauinger77/cask
+brew install --cask ChrisLauinger77/cask/code-convoy
+```
+
+The [cask](https://github.com/ChrisLauinger77/homebrew-cask/blob/main/Casks/code-convoy.rb)
+installs the published Universal macOS app into Applications. It currently clears
+the app's extended attributes, including Gatekeeper quarantine, after installation;
+the app remains ad-hoc signed and unnotarized.
+
+To update:
+
+```sh
+brew update
+brew upgrade --cask ChrisLauinger77/cask/code-convoy
+```
+
+### Scoop on Windows
+
+With [Scoop](https://scoop.sh/) installed, add the maintainer's
+[bucket](https://github.com/ChrisLauinger77/scoop-bucket) and install CodeConvoy
+from PowerShell:
+
+```powershell
+scoop bucket add ChrisLauinger77 https://github.com/ChrisLauinger77/scoop-bucket
+scoop install ChrisLauinger77/code-convoy
+```
+
+The [manifest](https://github.com/ChrisLauinger77/scoop-bucket/blob/main/bucket/code-convoy.json)
+uses the published Windows x86-64 ZIP and creates a CodeConvoy Start Menu shortcut.
+
+To update:
+
+```powershell
+scoop update
+scoop update code-convoy
+```
+
+Both methods use the existing release downloads. Package definitions can lag a
+new GitHub release until their repository updaters finish. Install Git and the
+agent CLIs separately; Homebrew and Scoop manage CodeConvoy updates externally.
+
+### Package requirements and first launch
+
 Linux packages are built on Ubuntu 26.04. The DEB is user-verified to install
 and run on Debian Forky; AppImage startup is also user-verified there. The minimum
 glibc version and compatibility with older distributions need verification after
