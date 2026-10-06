@@ -41,11 +41,6 @@ enum Message {
     Registered(Result<(Repository, WorkingTree), String>),
     Refreshed(Vec<(PathBuf, Result<WorkingTree, String>)>),
     Prepared(Result<PreparedRun, String>),
-    Detected(
-        domain::AgentId,
-        domain::AgentOptions,
-        Result<String, diagnostics::CliError>,
-    ),
     Diff(PathBuf, Result<String, String>),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -58,7 +53,8 @@ enum Tab {
 pub struct App {
     store: Store,
     state: AppState,
-    runtime: Runtime,
+    // Taken only by Drop, which shuts down without waiting for filesystem workers.
+    runtime: Option<Runtime>,
     selected: HashSet<PathBuf>,
     draft_message: String,
     focus_draft: bool,
@@ -69,7 +65,7 @@ pub struct App {
     focus_repository_input: bool,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     busy: bool,
-    checking_cli: Option<(domain::AgentId, domain::AgentOptions)>,
+    cli_checks: agents::availability::CliChecks,
     cli_search: Option<cli_discovery::CliSearch>,
     next_cli_search: u64,
     about_open: bool,
@@ -78,11 +74,6 @@ pub struct App {
     execution_height: f32,
     session_runs: HashSet<u64>,
     notice: String,
-    detection: Option<(
-        domain::AgentId,
-        domain::AgentOptions,
-        Result<String, diagnostics::CliError>,
-    )>,
     output_view: text_view::TextView,
     diff_view: text_view::TextView,
     tx: mpsc::Sender<Message>,
@@ -112,7 +103,7 @@ impl App {
     ) -> Self {
         let mut app = Self::with_context(&cc.egui_ctx, store, state, runtime);
         // eframe owns this root window for the lifetime of the app.
-        app.repository_dialog = app.repository_dialog.set_parent(cc);
+        app.repository_dialog = app.repository_dialog.clone().set_parent(cc);
         #[cfg(target_os = "macos")]
         {
             app.native_about = about_macos::NativeAbout::install();
@@ -129,10 +120,16 @@ impl App {
             let _entered = runtime.enter();
             RunManager::new(state.global_concurrency, events_tx)
         };
+        let repaint = ctx.clone();
+        let cli_checks = agents::availability::CliChecks::new(
+            store.directory().to_owned(),
+            runtime.handle().clone(),
+            move || repaint.request_repaint(),
+        );
         let mut app = Self {
             store,
             state,
-            runtime,
+            runtime: Some(runtime),
             selected: HashSet::new(),
             draft_message: String::new(),
             focus_draft: false,
@@ -145,7 +142,7 @@ impl App {
             focus_repository_input: false,
             repository_states: HashMap::new(),
             busy: false,
-            checking_cli: None,
+            cli_checks,
             cli_search: None,
             next_cli_search: 0,
             about_open: false,
@@ -154,7 +151,6 @@ impl App {
             execution_height: 184.0,
             session_runs: HashSet::new(),
             notice: String::new(),
-            detection: None,
             output_view: text_view::TextView::default(),
             diff_view: text_view::TextView::default(),
             tx,
@@ -178,24 +174,49 @@ impl App {
         if !app.state.repositories.is_empty() {
             app.refresh(ctx.clone());
         }
+        app.sync_cli_checks();
         app
     }
-    fn current_detection(
-        &self,
-    ) -> Option<&(
-        domain::AgentId,
-        domain::AgentOptions,
-        Result<String, diagnostics::CliError>,
-    )> {
-        self.detection.as_ref().filter(|(agent, options, _)| {
-            *agent == self.state.draft.agent && *options == self.state.draft.options
-        })
+    fn runtime(&self) -> &Runtime {
+        // All methods run before Drop takes ownership of the runtime.
+        self.runtime
+            .as_ref()
+            .expect("Application runtime exists until Drop")
     }
 
+    fn sync_cli_checks(&mut self) {
+        if self.closing {
+            return;
+        }
+        for agent in domain::AgentId::ALL {
+            let options = if agent == self.state.draft.agent {
+                Some(&self.state.draft.options)
+            } else {
+                self.state.agent_options.get(&agent)
+            };
+            self.cli_checks.ensure(
+                agent,
+                options
+                    .and_then(|options| options.get("executable"))
+                    .cloned(),
+            );
+        }
+    }
+
+    fn current_detection(
+        &self,
+    ) -> Option<&Result<agents::availability::CliInfo, diagnostics::CliError>> {
+        self.cli_checks.result(
+            self.state.draft.agent,
+            self.state
+                .draft
+                .options
+                .get("executable")
+                .map(String::as_str),
+        )
+    }
     fn current_cli_check(&self) -> bool {
-        self.checking_cli.as_ref().is_some_and(|(agent, options)| {
-            *agent == self.state.draft.agent && *options == self.state.draft.options
-        })
+        self.cli_checks.checking(self.state.draft.agent)
     }
 
     fn header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -236,7 +257,7 @@ impl App {
                         if self.closing {
                             ui.colored_label(p.warning, "Stopping processes…");
                         } else {
-                            let (suffix, color) = match self.current_detection().map(|(_, _, r)| r)
+                            let (suffix, color) = match self.current_detection()
                             {
                                 Some(Ok(_)) => ("Available", p.success),
                                 Some(Err(error)) => (error.label(), p.warning),
@@ -280,7 +301,7 @@ impl App {
 
     fn dispatch(&self, ctx: egui::Context, future: impl Future<Output = Message> + Send + 'static) {
         let tx = self.tx.clone();
-        self.runtime.spawn(async move {
+        self.runtime().spawn(async move {
             let _ = tx.send(future.await);
             ctx.request_repaint();
         });
@@ -326,6 +347,12 @@ impl App {
     }
     fn preflight(&mut self, ctx: egui::Context) {
         if self.closing || self.quit_requested {
+            return;
+        }
+        // Discovery must be applied before the immutable preflight snapshot.
+        // Also reconcile executable edits made since the last UI poll.
+        self.sync_cli_checks();
+        if self.current_cli_check() {
             return;
         }
         let task = self.state.draft.clone();
@@ -391,6 +418,12 @@ impl App {
         self.dirty_ack = false;
     }
     fn poll(&mut self) {
+        // Reconcile edits before receiving results, including task reuse and
+        // edits made while a previous generation's completion was queued.
+        self.sync_cli_checks();
+        for resolved in self.cli_checks.poll() {
+            self.apply_resolved_executable(resolved);
+        }
         while let Ok(message) = self.rx.try_recv() {
             match message {
                 Message::RepositoryFolder(path) => self.repository_folder_selected(path),
@@ -434,10 +467,6 @@ impl App {
                     }
                 }
                 Message::FoundCli(request, result) => self.cli_search_completed(request, result),
-                Message::Detected(agent, options, result) => {
-                    self.checking_cli = None;
-                    self.detection = Some((agent, options, result));
-                }
                 Message::Diff(path, result) => {
                     if self.diff_target.as_ref() == Some(&path) {
                         self.diff = Some(result);
@@ -457,6 +486,29 @@ impl App {
         self.session_runs
             .retain(|id| self.state.runs.iter().any(|run| run.id == *id));
         self.reconcile_run_selection();
+    }
+    fn apply_resolved_executable(&mut self, resolved: agents::availability::ResolvedExecutable) {
+        let options = if resolved.agent == self.state.draft.agent {
+            &mut self.state.draft.options
+        } else {
+            self.state.agent_options.entry(resolved.agent).or_default()
+        };
+        if options.get("executable") == resolved.configured.as_ref() {
+            // A startup resolution may finish while the user is choosing among
+            // installations. Keep that chooser open; actual edits still reject
+            // its snapshot through the usual stale-search checks.
+            if let Some(search) = self
+                .cli_search
+                .as_mut()
+                .filter(|search| search.agent == resolved.agent && search.options == *options)
+            {
+                search
+                    .options
+                    .insert("executable".into(), resolved.path.clone());
+            }
+            options.insert("executable".into(), resolved.path);
+            self.dirty = true;
+        }
     }
     fn select_run(&mut self, id: Option<u64>) {
         if self.selected_run != id {
@@ -594,7 +646,7 @@ impl eframe::App for App {
                 || self.closing
                 || self.state.runs.iter().any(Run::active)
                 || self.busy
-                || self.checking_cli.is_some()
+                || self.cli_checks.any_checking()
                 || self
                     .cli_search
                     .as_ref()
@@ -632,9 +684,10 @@ impl eframe::App for App {
         }
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
+        self.cli_checks.stop();
         self.manager.shutdown();
         // Continue draining lifecycle/output events while process trees stop.
-        let final_events = self.runtime.block_on(async {
+        let final_events = self.runtime.as_ref().expect("Runtime exists before Drop").block_on(async {
             let mut final_events = Vec::new();
             let deadline = tokio::time::sleep(Duration::from_secs(8));
             tokio::pin!(deadline);
@@ -656,5 +709,16 @@ impl eframe::App for App {
         }
         self.state.recover_interrupted();
         self.save();
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        self.cli_checks.stop();
+        if let Some(runtime) = self.runtime.take() {
+            // A stuck filesystem discovery worker must not hold application
+            // shutdown open. Async probe drops retain ManagedChild cleanup.
+            runtime.shutdown_background();
+        }
     }
 }

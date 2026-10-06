@@ -90,6 +90,7 @@ impl App {
             self.selected.len()
         ));
         let enabled = !self.busy
+            && !self.current_cli_check()
             && !self.selected.is_empty()
             && !self.state.draft.prompt.trim().is_empty()
             && agents::backend(self.state.draft.agent).is_ok();
@@ -100,7 +101,9 @@ impl App {
             self.preflight(ctx.clone());
         }
         let hint = if self.busy {
-            "Checking CLI or repository state…"
+            "Checking repository state…"
+        } else if self.current_cli_check() {
+            "Checking agent CLI before convoy review…"
         } else if self.state.draft.prompt.trim().is_empty() {
             "Enter a task, then select repositories."
         } else if self.selected.is_empty() {

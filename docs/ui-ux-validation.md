@@ -2,6 +2,11 @@
 
 Validated on macOS on 2026-10-05. This pass changes presentation and build metadata, not the backend contract or execution machinery.
 
+This records the preceding UI pass. The subsequent
+[CLI availability lifecycle fix](cli-availability-validation.md) replaces its
+explicit-only CLI checking behavior; packaged macOS validation of that change
+is recorded separately.
+
 ## Initial audit
 
 Before editing product code, a disposable launcher opened the real native `ui::App` with 24 Git repositories, clean and dirty working trees, and 30 synthetic historical convoys. The audit switched all four backend forms, launched concurrent local fixture jobs, inspected output and historical settings, stopped a queued job and a convoy, reused a convoy, and removed history.

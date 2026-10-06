@@ -9,12 +9,34 @@ use std::{
 
 /// Run on a blocking worker, never while rendering the UI.
 pub fn find(agent: AgentId, configured: &str) -> Vec<PathBuf> {
-    let name = match agent {
+    search(default_name(agent), configured, directories(agent))
+}
+
+/// Resolve the requested launcher name in the same GUI-safe locations as Find
+/// CLI. A custom name is never replaced with the backend's default launcher.
+pub fn resolve(agent: AgentId, name: &str) -> Option<PathBuf> {
+    let path = Path::new(name);
+    if path.is_absolute()
+        || path.components().count() != 1
+        || name.trim().is_empty()
+        || name.len() > 4096
+        || name.contains(['\0', '\n', '\r'])
+    {
+        return None;
+    }
+    search(name, "", directories(agent)).into_iter().next()
+}
+
+pub fn default_name(agent: AgentId) -> &'static str {
+    match agent {
         AgentId::Codex => "codex",
         AgentId::Copilot => "copilot",
         AgentId::OpenCode => "opencode",
         AgentId::Claude => "claude",
-    };
+    }
+}
+
+fn directories(agent: AgentId) -> Vec<PathBuf> {
     let mut directories: Vec<_> = env::var_os("PATH")
         .map(|path| env::split_paths(&path).collect())
         .unwrap_or_default();
@@ -60,7 +82,7 @@ pub fn find(agent: AgentId, configured: &str) -> Vec<PathBuf> {
     if let Some(local) = env::var_os("LOCALAPPDATA") {
         directories.push(PathBuf::from(local).join("Microsoft/WinGet/Links"));
     }
-    search(name, configured, directories)
+    directories
 }
 
 fn search(name: &str, configured: &str, directories: Vec<PathBuf>) -> Vec<PathBuf> {
@@ -77,7 +99,18 @@ fn search(name: &str, configured: &str, directories: Vec<PathBuf>) -> Vec<PathBu
             continue;
         }
         #[cfg(windows)]
-        candidates.push(directory.join(format!("{name}.exe")));
+        candidates.push(
+            directory.join(
+                if Path::new(name)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+                {
+                    name.to_owned()
+                } else {
+                    format!("{name}.exe")
+                },
+            ),
+        );
         #[cfg(not(windows))]
         candidates.push(directory.join(name));
     }

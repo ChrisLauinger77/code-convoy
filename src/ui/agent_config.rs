@@ -5,24 +5,22 @@ use crate::{
 };
 
 impl App {
-    pub(super) fn check_cli(&mut self, ctx: egui::Context) {
-        if self.checking_cli.is_some() {
+    pub(super) fn select_agent(&mut self, agent: AgentId) {
+        if self.closing {
             return;
         }
-        let agent = self.state.draft.agent;
-        let Ok(backend) = agents::backend(agent) else {
-            return;
-        };
-        let options = self.state.draft.options.clone();
-        self.checking_cli = Some((agent, options.clone()));
-        self.detection = None;
-        let directory = self.store.directory().to_owned();
-        self.dispatch(ctx, async move {
-            let result = agents::detect(backend.as_ref(), &options, &directory)
-                .await
-                .map_err(diagnostics::CliError::from_error);
-            Message::Detected(agent, options, result)
-        });
+        self.dirty |= agent != self.state.draft.agent;
+        self.state.select_agent(agent);
+        // Selection uses the session result for this restored executable, or
+        // starts its check if needed. Only Check CLI forces revalidation.
+        self.cli_checks
+            .ensure(agent, self.state.draft.options.get("executable").cloned());
+    }
+
+    pub(super) fn check_cli(&mut self, ctx: egui::Context) {
+        self.sync_cli_checks();
+        self.cli_checks.recheck(self.state.draft.agent);
+        ctx.request_repaint();
     }
 
     pub(super) fn agent_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -40,8 +38,7 @@ impl App {
             .response
             .on_hover_text("Agent used for every repository in this convoy");
         if chosen_agent != old_agent {
-            self.state.select_agent(chosen_agent);
-            self.dirty = true;
+            self.select_agent(chosen_agent);
         }
         match agents::backend(self.state.draft.agent) {
             Ok(backend) => {
@@ -80,7 +77,7 @@ impl App {
                                     .on_hover_text(spec.help);
                                     if executable {
                                         find_cli = ui.add_enabled(
-                                            self.checking_cli.is_none() && self.cli_search.is_none(),
+                                            self.cli_search.is_none(),
                                             theme::quiet("Find CLI").min_size(egui::vec2(68.0, 0.0)),
                                         ).on_hover_text("Find installed executables, then choose one to check")
                                             .clicked();
@@ -116,13 +113,14 @@ impl App {
                         });
                     });
                 }
+                self.sync_cli_checks();
                 if find_cli {
                     self.find_cli(ctx.clone());
                 }
                 ui.horizontal_wrapped(|ui| {
                     if ui
                         .add_enabled(
-                            self.checking_cli.is_none() && self.cli_search.is_none(),
+                            !self.current_cli_check() && self.cli_search.is_none(),
                             theme::quiet("Check CLI").small(),
                         )
                         .clicked()
@@ -134,9 +132,12 @@ impl App {
                         ui.spinner();
                         ui.weak("Checking…");
                     } else {
-                        match self.current_detection().map(|(_, _, r)| r) {
+                        match self.current_detection() {
                             Some(Ok(message)) => {
-                                theme::success_label(ui, "Available").on_hover_text(message);
+                                theme::success_label(ui, "Available").on_hover_text(format!(
+                                    "{}\n{}",
+                                    message.executable, message.detail
+                                ));
                             }
                             Some(Err(error)) => {
                                 ui.colored_label(p.warning, error.label());
@@ -147,7 +148,7 @@ impl App {
                         }
                     }
                 });
-                if let Some((_, _, Err(error))) = self.current_detection() {
+                if let Some(Err(error)) = self.current_detection() {
                     ui.small(error.hint());
                     diagnostics::details(ui, "cli_diagnostics", &error.detail);
                 }

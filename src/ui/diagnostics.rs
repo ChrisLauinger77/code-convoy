@@ -1,22 +1,8 @@
 //! Presentation-only summaries. Original diagnostics remain available verbatim.
 use super::*;
 
-#[derive(Debug)]
-pub(super) struct CliError {
-    pub missing: bool,
-    pub detail: String,
-}
+pub(super) use crate::agents::availability::CliError;
 impl CliError {
-    pub fn from_error(error: anyhow::Error) -> Self {
-        Self {
-            missing: error.chain().any(|cause| {
-                cause
-                    .downcast_ref::<std::io::Error>()
-                    .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound)
-            }),
-            detail: format!("{error:#}"),
-        }
-    }
     pub fn label(&self) -> &'static str {
         if self.missing {
             "Unavailable"
