@@ -42,6 +42,36 @@ Packages are available after the maintainer publishes the release tag.
 SHA256SUMS` with the downloaded files; on macOS use `shasum -a 256`; on Windows
 use `Get-FileHash -Algorithm SHA256` and compare the corresponding entry.
 
+### Linux
+
+Download the `.deb`, `.rpm` or `.AppImage` for your system from the
+[latest release](https://github.com/ChrisLauinger77/code-convoy/releases/latest).
+Run the matching commands in the directory containing your download, keeping
+only one version of that package in the directory so the wildcard matches one file.
+
+**Debian / Ubuntu (DEB):**
+
+```sh
+sudo apt install ./code-convoy_*_amd64.deb
+```
+
+**Fedora / distributions using DNF (RPM):**
+
+```sh
+sudo dnf install ./code-convoy-*-1.x86_64.rpm
+```
+
+**AppImage:**
+
+```sh
+chmod +x ./CodeConvoy-*-x86_64.AppImage
+./CodeConvoy-*-x86_64.AppImage
+```
+
+If AppImage mounting is unavailable, add `--appimage-extract-and-run` to the
+launch command. See [package requirements](#package-requirements-and-first-launch)
+for desktop libraries and distribution compatibility.
+
 ### Homebrew on macOS
 
 With [Homebrew](https://brew.sh/) installed, add the maintainer's
