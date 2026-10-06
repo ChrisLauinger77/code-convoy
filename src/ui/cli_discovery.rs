@@ -11,7 +11,7 @@ pub(super) struct CliSearch {
 
 impl App {
     pub(super) fn find_cli(&mut self, ctx: egui::Context) {
-        if self.cli_search.is_some() || self.checking_cli.is_some() {
+        if self.cli_search.is_some() {
             return;
         }
         let agent = self.state.draft.agent;
@@ -70,9 +70,6 @@ impl App {
     }
 
     pub(super) fn use_discovered_cli(&mut self, ctx: egui::Context) {
-        if self.checking_cli.is_some() {
-            return;
-        }
         let Some(search) = self.cli_search.take() else {
             return;
         };

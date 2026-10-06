@@ -5,6 +5,10 @@ use crate::domain::{AgentId, Job, TaskConfig};
 use crate::runner::PreparedRepository;
 
 fn app() -> (tempfile::TempDir, App) {
+    app_with_state(AppState::default())
+}
+
+fn app_with_state(mut state: AppState) -> (tempfile::TempDir, App) {
     let temp = tempfile::tempdir().unwrap();
     let store = Store::open(&temp.path().join("app")).unwrap();
     // Intentionally not driven: these lifecycle tests must never spawn agents.
@@ -12,12 +16,16 @@ fn app() -> (tempfile::TempDir, App) {
         .enable_all()
         .build()
         .unwrap();
-    let app = App::with_context(
-        &egui::Context::default(),
-        store,
-        AppState::default(),
-        runtime,
-    );
+    for agent in AgentId::ALL {
+        let options = [(
+            "executable".into(),
+            temp.path().join("missing-cli").display().to_string(),
+        )]
+        .into();
+        state.agent_options.insert(agent, options);
+    }
+    state.draft.options = state.agent_options[&state.draft.agent].clone();
+    let app = App::with_context(&egui::Context::default(), store, state, runtime);
     (temp, app)
 }
 
@@ -54,7 +62,7 @@ fn running_or_queued_close_is_a_single_side_effect_free_decision() {
 
         // Driving these deliberately nonexistent fixture repositories fails Git
         // validation. Cancelled instead would expose a signalled manager token.
-        let events = app.runtime.block_on(async {
+        let events = app.runtime.as_ref().unwrap().block_on(async {
             tokio::time::timeout(Duration::from_secs(5), async {
                 let mut events = Vec::new();
                 while !events
@@ -115,7 +123,7 @@ fn confirmed_quit_drains_and_persists_terminal_jobs_preserving_history() {
     let before = serde_json::to_value(&app.state).unwrap();
     app.start();
     assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
-    app.runtime.block_on(async {
+    app.runtime.as_ref().unwrap().block_on(async {
         tokio::time::timeout(Duration::from_secs(5), &mut app.manager.join)
             .await
             .unwrap()
@@ -247,7 +255,7 @@ fn unrepresentable_folder_path_does_not_silently_select_a_different_directory() 
 fn add_repository_and_wait(app: &mut App) {
     app.register(egui::Context::default());
     assert!(app.busy);
-    let message = app.runtime.block_on(async {
+    let message = app.runtime.as_ref().unwrap().block_on(async {
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 if let Ok(message) = app.rx.try_recv() {
@@ -400,27 +408,185 @@ fn bulk_selection_includes_dirty_and_nested_repositories_without_mutating_them()
 }
 
 #[test]
-fn cli_check_is_configuration_scoped_and_does_not_release_repository_work() {
+fn startup_cli_checks_are_independent_and_do_not_release_repository_work() {
     let (_temp, mut app) = app();
     app.busy = true; // Repository refresh is independently in progress.
-    let checked = app.state.draft.options.clone();
-    app.checking_cli = Some((AgentId::Codex, checked.clone()));
-    assert!(app.current_cli_check());
+    for agent in AgentId::ALL {
+        assert!(app.cli_checks.checking(agent));
+    }
     app.state.select_agent(AgentId::Claude);
-    assert!(!app.current_cli_check());
-    app.tx
-        .send(Message::Detected(
-            AgentId::Codex,
-            checked,
-            Ok("fixture".into()),
-        ))
-        .unwrap();
-    app.poll();
+    assert!(app.current_cli_check());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.cli_checks.any_checking() {
+        assert!(Instant::now() < deadline);
+        app.runtime.as_ref().unwrap().block_on(async {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        });
+        app.poll();
+    }
     assert!(app.busy);
-    assert!(app.checking_cli.is_none());
-    assert!(app.current_detection().is_none());
+    assert!(!app.cli_checks.any_checking());
+    assert!(
+        app.current_detection()
+            .unwrap()
+            .as_ref()
+            .unwrap_err()
+            .missing
+    );
     app.state.select_agent(AgentId::Codex);
     assert!(app.current_detection().is_some());
+    assert!(app.notice.is_empty());
+    app.check_cli(egui::Context::default());
+    assert!(app.current_cli_check());
+    assert!(app.current_detection().is_none());
+}
+
+fn complete_cli_checks(app: &mut App) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.cli_checks.any_checking() {
+        assert!(Instant::now() < deadline);
+        app.runtime.as_ref().unwrap().block_on(async {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        });
+        app.poll();
+    }
+}
+
+#[test]
+fn agent_selection_starts_an_unchecked_backend_without_waiting_for_a_frame() {
+    let (_temp, mut app) = app();
+    // Model an unchecked backend without driving startup's scheduled tasks.
+    app.cli_checks = agents::availability::CliChecks::new(
+        app.store.directory().to_owned(),
+        app.runtime().handle().clone(),
+        || {},
+    );
+    app.busy = true;
+    assert!(!app.cli_checks.any_checking());
+    app.select_agent(AgentId::Copilot);
+    assert_eq!(app.state.draft.agent, AgentId::Copilot);
+    assert!(app.current_cli_check());
+    assert!(app.current_detection().is_none());
+    assert!(!app.cli_checks.checking(AgentId::Codex));
+    assert!(app.busy && app.manager.is_idle());
+}
+
+#[test]
+fn agent_selection_reuses_session_results_but_check_cli_forces_refresh() {
+    let (_temp, mut app) = app();
+    complete_cli_checks(&mut app);
+    for agent in [
+        AgentId::Copilot,
+        AgentId::Codex,
+        AgentId::Claude,
+        AgentId::Copilot,
+    ] {
+        app.select_agent(agent);
+        assert!(app.current_detection().is_some()); // Missing CLIs are cached too.
+        assert!(!app.current_cli_check());
+        assert!(!app.cli_checks.any_checking());
+    }
+    app.check_cli(egui::Context::default());
+    assert!(app.current_cli_check());
+    assert!(app.current_detection().is_none());
+}
+
+#[test]
+fn agent_selection_checks_a_changed_executable_and_never_shows_its_old_result() {
+    let (temp, mut app) = app();
+    complete_cli_checks(&mut app);
+    let changed = temp.path().join("new-copilot").display().to_string();
+    app.state
+        .agent_options
+        .get_mut(&AgentId::Copilot)
+        .unwrap()
+        .insert("executable".into(), changed.clone());
+    app.select_agent(AgentId::Copilot);
+    assert_eq!(app.state.draft.options["executable"], changed);
+    assert!(app.current_cli_check());
+    assert!(app.current_detection().is_none());
+    // Switching away leaves the selected backend's cached result independent.
+    app.select_agent(AgentId::Codex);
+    assert!(!app.current_cli_check());
+    assert!(app.current_detection().is_some());
+    complete_cli_checks(&mut app);
+    app.select_agent(AgentId::Copilot);
+    assert!(!app.current_cli_check());
+    assert!(
+        app.current_detection()
+            .unwrap()
+            .as_ref()
+            .unwrap_err()
+            .detail
+            .contains("new-copilot")
+    );
+}
+
+#[test]
+fn startup_checks_leave_task_input_and_loaded_history_usable() {
+    let mut state = AppState::default();
+    state.runs.push(run(9, &[JobStatus::Succeeded]));
+    state.repositories.push(repository("registered"));
+    state.draft.prompt = "existing task".into();
+    let history = serde_json::to_value(&state.runs).unwrap();
+    let repositories = state.repositories.clone();
+    let (_temp, mut app) = app_with_state(state);
+    app.focus_draft = true;
+    let ctx = egui::Context::default();
+    theme::install(&ctx);
+    for events in [
+        vec![],
+        vec![egui::Event::Text(" typing during validation".into())],
+    ] {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1180.0, 820.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                app.header(ui, &ctx);
+                egui::Panel::left("task_editor")
+                    .default_size(360.0)
+                    .show(ui, |ui| app.editor_pane(ui, &ctx));
+                egui::CentralPanel::default().show(ui, |ui| app.results(ui, &ctx));
+            },
+        );
+        assert!(!output.shapes.is_empty());
+        output.textures_delta.clear();
+    }
+    assert!(app.state.draft.prompt.contains("typing during validation"));
+    assert!(app.current_cli_check());
+    assert!(app.busy && app.manager.is_idle()); // Independent repository refresh.
+    assert_eq!(serde_json::to_value(&app.state.runs).unwrap(), history);
+    assert_eq!(app.state.repositories, repositories);
+    assert_eq!(app.selected_run, Some(9));
+    app.state
+        .draft
+        .options
+        .insert("executable".into(), "/new/executable".into());
+    app.poll();
+    assert!(app.current_cli_check());
+    assert!(app.current_detection().is_none());
+}
+
+#[test]
+fn shutdown_does_not_wait_for_a_blocked_discovery_worker() {
+    let (_temp, app) = app();
+    let (started_tx, started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    app.runtime().spawn_blocking(move || {
+        started_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    let started = Instant::now();
+    drop(app);
+    assert!(started.elapsed() < Duration::from_secs(2));
+    release_tx.send(()).unwrap();
 }
 
 #[test]
@@ -452,7 +618,7 @@ fn cli_discovery_requires_explicit_selection_and_preserves_custom_paths_and_canc
             app.poll();
             assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
             assert!(!app.dirty);
-            assert!(app.checking_cli.is_none());
+            assert!(app.current_cli_check());
             assert!(app.busy);
             assert!(app.manager.is_idle());
             app.cli_search = None; // Cancel, then receive a late completion.
@@ -465,7 +631,7 @@ fn cli_discovery_requires_explicit_selection_and_preserves_custom_paths_and_canc
         assert!(app.cli_search.as_ref().unwrap().selected.is_none());
         app.use_discovered_cli(ctx.clone()); // No implicit choice among multiple matches.
         assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
-        assert!(app.checking_cli.is_none());
+        assert!(app.current_cli_check());
     }
 }
 
@@ -480,6 +646,40 @@ fn pending_cli_search(app: &mut App, request: u64) {
 }
 
 #[test]
+fn startup_resolution_preserves_an_open_chooser_and_never_overwrites_manual_edits() {
+    let (temp, mut app) = app();
+    app.state.draft.options.remove("executable");
+    pending_cli_search(&mut app, 2);
+    let first = temp.path().join("first-codex");
+    let second = temp.path().join("second-codex");
+    app.apply_resolved_executable(agents::availability::ResolvedExecutable {
+        agent: AgentId::Codex,
+        configured: None,
+        path: first.display().to_string(),
+    });
+    app.cli_search_completed(2, Ok(vec![first.clone(), second.clone()]));
+    assert_eq!(
+        app.cli_search.as_ref().unwrap().options,
+        app.state.draft.options
+    );
+    app.cli_search.as_mut().unwrap().selected = Some(1);
+    app.use_discovered_cli(egui::Context::default());
+    assert_eq!(
+        app.state.draft.options["executable"],
+        second.display().to_string()
+    );
+    app.apply_resolved_executable(agents::availability::ResolvedExecutable {
+        agent: AgentId::Codex,
+        configured: None,
+        path: first.display().to_string(),
+    });
+    assert_eq!(
+        app.state.draft.options["executable"],
+        second.display().to_string()
+    );
+}
+
+#[test]
 fn cli_discovery_ignores_stale_requests_agent_switches_and_manual_edits() {
     let (temp, mut app) = app();
     let candidate = temp.path().join("candidate");
@@ -489,7 +689,7 @@ fn cli_discovery_ignores_stale_requests_agent_switches_and_manual_edits() {
     app.state.select_agent(AgentId::Claude);
     app.cli_search_completed(2, Ok(vec![candidate.clone()]));
     assert!(app.cli_search.is_none());
-    assert!(app.state.draft.options.is_empty());
+    assert!(app.state.draft.options["executable"].ends_with("missing-cli"));
 
     pending_cli_search(&mut app, 3);
     app.state
@@ -508,11 +708,11 @@ fn cli_discovery_ignores_stale_requests_agent_switches_and_manual_edits() {
         .insert("model".into(), "new configuration".into());
     app.use_discovered_cli(egui::Context::default());
     assert_eq!(app.state.draft.options["executable"], "manual edit");
-    assert!(app.checking_cli.is_none());
+    assert!(app.current_cli_check());
 }
 
 #[test]
-fn choosing_a_cli_saves_only_the_executable_and_uses_normal_configuration_scoped_check() {
+fn choosing_a_cli_saves_only_the_executable_and_automatically_checks_it() {
     let (temp, mut app) = app();
     app.busy = true;
     for agent in AgentId::ALL {
@@ -529,10 +729,8 @@ fn choosing_a_cli_saves_only_the_executable_and_uses_normal_configuration_scoped
             candidate.display().to_string()
         );
         assert_eq!(app.state.draft.prompt, "unchanged task");
-        assert_eq!(
-            app.checking_cli,
-            Some((agent, app.state.draft.options.clone()))
-        );
+        assert!(app.current_cli_check());
+        assert!(app.current_detection().is_none());
         assert!(app.busy);
         assert!(app.manager.is_idle());
         assert!(app.state.runs.is_empty());
@@ -542,7 +740,6 @@ fn choosing_a_cli_saves_only_the_executable_and_uses_normal_configuration_scoped
             app.state.draft.options
         );
         // The current-thread runtime is not driven, so this never runs a CLI.
-        app.checking_cli = None;
     }
 }
 
@@ -927,7 +1124,7 @@ fn opencode_reuse_restores_backend_options_without_launching_or_mutating_history
 }
 
 #[test]
-fn backend_controls_fit_compact_editor_in_both_themes_and_detection_is_snapshot_scoped() {
+fn backend_controls_fit_compact_editor_in_both_themes_while_startup_checks_run() {
     let (_temp, mut app) = app();
     let ctx = egui::Context::default();
     theme::install(&ctx);
@@ -970,22 +1167,8 @@ fn backend_controls_fit_compact_editor_in_both_themes_and_detection_is_snapshot_
             }
         }
     }
-    app.state.select_agent(AgentId::OpenCode);
-    app.detection = Some((
-        AgentId::OpenCode,
-        app.state.draft.options.clone(),
-        Ok("version detected".into()),
-    ));
-    assert!(app.current_detection().is_some());
-    app.state.select_agent(AgentId::Codex);
-    assert!(app.current_detection().is_none());
-    app.state.select_agent(AgentId::OpenCode);
-    assert!(app.current_detection().is_some());
-    app.state
-        .draft
-        .options
-        .insert("agent".into(), "plan".into());
-    assert!(app.current_detection().is_none());
+    assert!(app.cli_checks.any_checking());
+    assert!(!app.busy);
 }
 #[test]
 fn claude_reuse_restores_backend_options_without_launching_or_mutating_history() {

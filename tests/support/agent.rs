@@ -6,6 +6,49 @@ use std::{
 };
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    let mut _probe_lock = None;
+    if args.iter().any(|arg| arg == "--help" || arg == "--version") {
+        let directory = std::env::current_dir()?;
+        if directory.join("probe-tracking").exists() {
+            let executable = std::env::current_exe()?;
+            let name = executable
+                .file_stem()
+                .ok_or("missing fixture name")?
+                .to_string_lossy();
+            let phase = if args.iter().any(|arg| arg == "--help") {
+                "help"
+            } else {
+                "version"
+            };
+            let lock = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(directory.join(format!("{name}.probe-lock")))?;
+            if fs2::FileExt::try_lock_exclusive(&lock).is_err() {
+                std::fs::write(directory.join(format!("{name}.overlap")), "duplicate check")?;
+                return Err("overlapping CLI probes".into());
+            }
+            _probe_lock = Some(lock);
+            let mut log = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(directory.join(format!("{name}.probes")))?;
+            writeln!(log, "{phase}")?;
+            std::fs::write(directory.join(format!("{name}.{phase}.ready")), "ready")?;
+            let deadline = std::time::Instant::now() + Duration::from_secs(60);
+            while directory.join(format!("{name}.{phase}.block")).exists() {
+                if std::time::Instant::now() > deadline {
+                    return Err("probe gate timed out".into());
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            if directory.join(format!("{name}.invalid")).exists() {
+                println!("unrelated executable");
+                return Ok(());
+            }
+        }
+    }
     let opencode = args.get(1).is_some_and(|a| a == "run");
     if opencode && args.iter().any(|a| a == "--help") {
         print!("{}", include_str!("../fixtures/opencode-run-help.txt"));

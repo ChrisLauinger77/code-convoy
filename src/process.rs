@@ -214,25 +214,49 @@ pub struct Captured {
 /// Used for short Git/detection commands, never for an agent task.
 pub async fn capture(spec: CommandSpec, limit: usize) -> Result<Captured> {
     let cancellation = Cancellation::default();
+    capture_cancellable(spec, limit, &cancellation).await
+}
+
+/// A short command that can also be cancelled by its lifecycle owner.
+/// Cancellation waits for process-tree cleanup before returning.
+pub async fn capture_cancellable(
+    spec: CommandSpec,
+    limit: usize,
+    cancellation: &Cancellation,
+) -> Result<Captured> {
+    anyhow::ensure!(!cancellation.is_cancelled(), "Command cancelled.");
+    let command_cancellation = Cancellation::default();
     let data = std::sync::Mutex::new((Vec::new(), Vec::new(), false));
     let child = spawn(&spec)?;
-    let execution = execute(child, spec.input, &cancellation, cancel, |stream, bytes| {
-        if let Ok(mut data) = data.lock() {
-            let target = if stream == Stream::Stdout {
-                &mut data.0
-            } else {
-                &mut data.1
-            };
-            let remaining = limit.saturating_sub(target.len());
-            target.extend_from_slice(&bytes[..bytes.len().min(remaining)]);
-            data.2 |= bytes.len() > remaining;
-        }
-    });
+    let execution = execute(
+        child,
+        spec.input,
+        &command_cancellation,
+        cancel,
+        |stream, bytes| {
+            if let Ok(mut data) = data.lock() {
+                let target = if stream == Stream::Stdout {
+                    &mut data.0
+                } else {
+                    &mut data.1
+                };
+                let remaining = limit.saturating_sub(target.len());
+                target.extend_from_slice(&bytes[..bytes.len().min(remaining)]);
+                data.2 |= bytes.len() > remaining;
+            }
+        },
+    );
     tokio::pin!(execution);
     let result = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => {
+            command_cancellation.cancel();
+            execution.await?;
+            anyhow::bail!("Command cancelled.")
+        }
         result = &mut execution => result?,
         _ = tokio::time::sleep(Duration::from_secs(20)) => {
-            cancellation.cancel();
+            command_cancellation.cancel();
             let _ = execution.await;
             anyhow::bail!("Command timed out after 20 seconds.")
         }
@@ -241,6 +265,7 @@ pub async fn capture(spec: CommandSpec, limit: usize) -> Result<Captured> {
         .lock()
         .map_err(|_| anyhow::anyhow!("Output lock failed."))?
         .clone();
+    anyhow::ensure!(!result.cancelled, "Command cancelled.");
     Ok(Captured {
         status: result.status.context("Command cancelled.")?,
         stdout,

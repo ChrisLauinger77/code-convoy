@@ -100,7 +100,7 @@ impl App {
             self.preflight(ctx.clone());
         }
         let hint = if self.busy {
-            "Checking CLI or repository state…"
+            "Checking repository state…"
         } else if self.state.draft.prompt.trim().is_empty() {
             "Enter a task, then select repositories."
         } else if self.selected.is_empty() {

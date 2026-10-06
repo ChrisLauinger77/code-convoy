@@ -1,4 +1,5 @@
 //! Backends own their options and CLI protocol; process machinery is reusable.
+pub mod availability;
 pub mod claude;
 pub mod codex;
 pub mod copilot;
@@ -91,8 +92,42 @@ pub async fn detect(
     options: &AgentOptions,
     directory: &Path,
 ) -> Result<String> {
+    detect_cancellable(
+        backend,
+        options,
+        directory,
+        &process::Cancellation::default(),
+    )
+    .await
+}
+
+pub async fn detect_cancellable(
+    backend: &dyn AgentBackend,
+    options: &AgentOptions,
+    directory: &Path,
+    cancellation: &process::Cancellation,
+) -> Result<String> {
+    // Startup/manual checks and launch preflight share the same probe lifecycle.
+    // Hold this across help and version so neither can spawn a duplicate check.
+    static PROBES: [tokio::sync::Mutex<()>; 4] = [const { tokio::sync::Mutex::const_new(()) }; 4];
+    let index = match backend.id() {
+        AgentId::Codex => 0,
+        AgentId::Copilot => 1,
+        AgentId::OpenCode => 2,
+        AgentId::Claude => 3,
+    };
+    let _probe = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => anyhow::bail!("CLI check cancelled."),
+        probe = PROBES[index].lock() => probe,
+    };
     backend.validate(options)?;
-    let result = process::capture(backend.detection(options, directory)?, 128 * 1024).await?;
+    let result = process::capture_cancellable(
+        backend.detection(options, directory)?,
+        128 * 1024,
+        cancellation,
+    )
+    .await?;
     anyhow::ensure!(
         result.status.success(),
         "CLI detection failed: {}",
@@ -105,7 +140,7 @@ pub async fn detect(
     let help = String::from_utf8_lossy(&result.stdout);
     backend.check_detection(&help)?;
     let version = if let Some(command) = backend.version_command(options, directory)? {
-        match process::capture(command, 8192).await {
+        match process::capture_cancellable(command, 8192, cancellation).await {
             Ok(result) if result.status.success() && !result.truncated => {
                 String::from_utf8_lossy(&result.stdout)
                     .lines()
@@ -118,6 +153,7 @@ pub async fn detect(
     } else {
         backend.id().label().to_owned()
     };
+    anyhow::ensure!(!cancellation.is_cancelled(), "CLI check cancelled.");
     Ok(format!(
         "{version} detected. CLI compatibility checked; authentication is used when a job runs."
     ))

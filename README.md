@@ -67,8 +67,9 @@ Windows may show an unknown-publisher warning.
 No package installs Git, coding-agent CLIs, credentials, services, or an updater.
 Install and authenticate the agents separately. Desktop launchers may have a
 different `PATH` from your terminal, particularly Finder on macOS; provide the
-agent's absolute executable path using **Find CLI** or manual entry, and ensure Git is on the
-application's `PATH`. The portable ZIP uses the same per-user application data
+agent's absolute executable path using **Find CLI** or manual entry if automatic
+discovery cannot locate it, and ensure Git is on the application's `PATH`.
+The portable ZIP uses the same per-user application data
 location as the installed Windows app; its executable is portable, its state is
 not stored beside it.
 
@@ -82,6 +83,18 @@ Discovery does not run candidates, install software, read shell profiles, change
 (such as Node) on the app's `PATH`. On Windows, discovery offers native `.exe`
 files, including WinGet links and Scoop shims; shell wrappers are not offered.
 
+On every launch, CodeConvoy checks all four agent CLIs in the background. The
+selected agent shows **Checking…**, then **Available**, **Unavailable**, or
+**Invalid configuration**. Hover Available for the resolved executable and
+supported version information. Missing agents are normal; repository/history
+loading and task editing continue while checks run. Configured absolute paths
+take precedence; launcher names resolve in the same locations as Find CLI.
+Changing or choosing an executable automatically rechecks it. Switching Agent
+reuses the session result for the same executable, or starts a check if it is
+unchecked or changed. **Check CLI** forces a fresh validation. Availability is
+checked again after restart. See the
+[CLI lifecycle validation record](docs/cli-availability-validation.md).
+
 See [release procedure and packaging design](docs/releasing.md) and the
 [release validation record](docs/release-validation.md) for tested behavior and
 remaining platform checks.
@@ -93,7 +106,7 @@ Requirements:
 - Rust 1.95 or later and Cargo.
 - Git on `PATH`.
 - A working desktop graphics environment.
-- The CLI for the agent you want to use, already installed and authenticated using its own login flow. Its executable must be on the desktop application's `PATH`, or supply its absolute path in the UI. No agent CLI is required for CodeConvoy to start; **Check CLI** checks only the selected agent.
+- The CLI for the agent you want to use, already installed and authenticated using its own login flow. Its executable must be in the desktop application's `PATH` or a common installation folder, or supply its absolute path in the UI. No agent CLI is required for CodeConvoy to start; availability is checked automatically, and **Check CLI** refreshes the selected agent.
 
 On Debian/Ubuntu, the native source-build prerequisites are:
 
@@ -161,7 +174,7 @@ The execution controls stay visible while the task and repository pane scrolls. 
 
 Keyboard navigation uses egui's Tab / Shift+Tab focus traversal, with task, backend settings, repositories, then execution controls in order. Use arrows within menus and Enter / Space to activate controls. Numeric fields become editable when focused. Launch review and About keep focus inside their dialog; Escape closes them. Path entry supports paste. No file chooser is required.
 
-**Select all / Select none** changes repository selection without hiding Git state or skipping launch review. **Check CLI** reports Unchecked, Available, Unavailable (executable not found), or Invalid configuration for the selected settings only. Detailed diagnostics can be expanded and copied. Availability confirms CLI compatibility, not authentication or model access.
+**Select all / Select none** changes repository selection without hiding Git state or skipping launch review. Automatic CLI checks report Checking…, Available, Unavailable (executable not found), or Invalid configuration for each executable independently. **Check CLI** refreshes the selected agent. Detailed diagnostics can be expanded and copied. Availability confirms CLI compatibility, not authentication or model access; job settings are validated during launch review.
 
 **Task & settings** shows friendly option labels, repository paths, the original per-convoy limit, and UTC timestamps. The live global limit is not part of a historical snapshot. **About**, in the footer, shows version, build-time base Git commit when available, project link, and license without a network request. See the [second UX pass validation](docs/ui-ux-validation.md) for native checks and remaining platform limitations.
 
@@ -252,7 +265,7 @@ OpenCode owns login, credentials, providers, model availability and configuratio
 
 [OpenCode permissions](https://opencode.ai/docs/permissions/) are tool rules, **not an OS sandbox**. Existing rules may already permit shell commands and file writes. In unattended run mode, requests that require approval are rejected; auto mode approves such requests while explicit denies remain enforced. There is no interactive approval UI. `--thinking` only affects displayed thinking blocks, so it is not offered as a reasoning control. Agent-specific rules still apply. OpenCode may warn and fall back to its default agent when a requested agent is unknown or is a subagent; review the output.
 
-`Check CLI` inspects `run --help` for the required capabilities and reports `--version` where available. No version-number ordering or startup detection is imposed. Older versions missing a required flag are rejected with an actionable message. Authentication is exercised only by an actual job.
+Automatic checks and `Check CLI` inspect `run --help` for the required capabilities and report `--version` where available. No version-number ordering is imposed. Older versions missing a required flag are rejected with an actionable message. Authentication is exercised only by an actual job.
 
 OpenCode's output handler reads its own JSON event stream. Assistant text is readable; tool records, step metadata, errors and unknown events stay visible as JSON, and stderr is labelled. A job succeeds only with exit zero, a final `step_finish` whose reason is `stop`, no session error events, and no malformed/oversized JSON records. Tool errors can be recovered by the agent and remain visible; success does not prove the requested change was made. Token-limit stops, missing completion and nonzero/signal exits fail conservatively. Stop uses the existing process-tree cancellation and retains partial edits. Output remains session-only; no Activity view is introduced.
 
