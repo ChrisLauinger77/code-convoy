@@ -127,6 +127,7 @@ impl AgentBackend for OpenCode {
             "OpenCode requires an OpenCode task configuration."
         );
         task.validate(std::slice::from_ref(repository))?;
+        self.validate_attachments(task)?;
         let mut spec = self.detection(&task.options, &repository.path)?;
         spec.args.clear();
         spec = spec.args(&["run", "--format", "json", "--dir"]);
@@ -141,7 +142,12 @@ impl AgentBackend for OpenCode {
         if value(&task.options, &OPTIONS[4]) == "auto" {
             spec = spec.args(&["--auto"]);
         }
-        spec.input = Some(task.prompt.as_bytes().to_vec());
+        for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
+            let mut argument = std::ffi::OsString::from("--file=");
+            argument.push(&attachment.path);
+            spec.args.push(argument);
+        }
+        spec.input = Some(crate::attachments::text_prompt(task)?.into_bytes());
         // OpenCode uses PWD as well as cwd. Keep repository discovery local to this
         // job, while leaving provider/auth/config environment variables untouched.
         spec.remove_env = std::env::vars_os()
@@ -156,6 +162,22 @@ impl AgentBackend for OpenCode {
     }
     fn output(&self) -> Box<dyn AgentOutput> {
         Box::<OpenCodeOutput>::default()
+    }
+    fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
+        crate::attachments::validate_limits(&task.attachments)
+    }
+    fn attachment_help(
+        &self,
+        task: &TaskConfig,
+        directory: &Path,
+    ) -> Result<Option<(CommandSpec, &'static str)>> {
+        if !task.attachments.iter().any(|a| a.kind.is_image()) {
+            return Ok(None);
+        }
+        Ok(Some((self.detection(&task.options, directory)?, "--file")))
+    }
+    fn attachment_summary(&self) -> &'static str {
+        "Text context via stdin; images via OpenCode's --file flag and local file reader. The selected provider/model must accept images."
     }
     fn execution_summary(&self, options: &AgentOptions) -> String {
         let permission = if value(options, &OPTIONS[4]) == "auto" {
@@ -178,11 +200,13 @@ struct OpenCodeOutput {
     failed: bool,
     protocol_error: bool,
     stopped: bool,
+    activity: String,
 }
 impl OpenCodeOutput {
     fn line(&mut self, stream: Stream, bytes: &[u8]) -> String {
         let line = String::from_utf8_lossy(bytes);
         if stream == Stream::Stderr {
+            self.activity.push_str(&format!("[stderr] {line}"));
             return format!("[stderr] {line}");
         }
         let event = match serde_json::from_slice::<serde_json::Value>(bytes) {
@@ -191,9 +215,53 @@ impl OpenCodeOutput {
                 // OpenCode also prints plain diagnostics (e.g. rejected approvals).
                 // A broken JSON record, however, cannot be trusted for completion.
                 self.protocol_error |= line.trim_start().starts_with('{');
+                if line.trim_start().starts_with('{') {
+                    self.activity
+                        .push_str("Invalid OpenCode JSON event (details in Raw output)\n");
+                } else {
+                    self.activity.push_str(&line);
+                }
                 return line.into_owned();
             }
         };
+        match event["type"].as_str().unwrap_or("unknown") {
+            "step_start" => self.activity.push_str("OpenCode step started\n"),
+            "step_finish" => {
+                self.activity.push_str(&format!(
+                    "OpenCode step finished: {}\n",
+                    event["part"]["reason"].as_str().unwrap_or("unknown")
+                ));
+                if !event["part"]["tokens"].is_null() {
+                    self.activity
+                        .push_str(&format!("Usage: {}\n", event["part"]["tokens"]));
+                }
+            }
+            "text" => {
+                if let Some(text) = event["part"]["text"].as_str() {
+                    self.activity.push_str(text);
+                    self.activity.push('\n');
+                }
+            }
+            "tool_use" => {
+                let part = &event["part"];
+                let input = &part["state"]["input"];
+                let detail = input["filePath"]
+                    .as_str()
+                    .or_else(|| input["command"].as_str())
+                    .unwrap_or("details in Raw output");
+                self.activity.push_str(&format!(
+                    "Tool ({}): {} · {detail}\n",
+                    part["state"]["status"].as_str().unwrap_or("reported"),
+                    part["tool"].as_str().unwrap_or("unknown")
+                ));
+            }
+            "error" => self
+                .activity
+                .push_str(&format!("OpenCode error: {}\n", event["error"])),
+            other => self
+                .activity
+                .push_str(&format!("OpenCode {other} (details in Raw output)\n")),
+        }
         match event["type"].as_str().unwrap_or("") {
             "error" => self.failed = true,
             "step_start" => self.stopped = false,
@@ -235,6 +303,7 @@ impl AgentOutput for OpenCodeOutput {
             } else if self.pending[index].len() >= LINE_LIMIT {
                 if !self.oversized[index] && stream == Stream::Stdout {
                     self.protocol_error = true;
+                    self.activity.push_str("OpenCode event exceeded 256 KiB; completion cannot be verified. See Raw output.\n");
                     text.push_str(
                         "[OpenCode event exceeded 256 KiB; completion cannot be verified.]\n",
                     );
@@ -265,5 +334,8 @@ impl AgentOutput for OpenCodeOutput {
                 ),
             )
         }
+    }
+    fn take_activity(&mut self) -> Option<String> {
+        Some(std::mem::take(&mut self.activity))
     }
 }

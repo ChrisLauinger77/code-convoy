@@ -186,7 +186,9 @@ fn gate(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use fs2::FileExt;
     let claude = args.iter().any(|a| a == "--print");
-    let config: serde_json::Value = serde_json::from_str(json)?;
+    // Attachment context follows the one-line control record. Capture the full
+    // stdin below while keeping this test-only handshake independent of it.
+    let config: serde_json::Value = serde_json::from_str(json.lines().next().unwrap_or(json))?;
     let root = std::path::Path::new(config["control"].as_str().ok_or("missing control path")?);
     let ticket = config["ticket"].as_str().ok_or("missing ticket")?;
     let cwd = std::env::current_dir()?;

@@ -416,7 +416,19 @@ async fn opencode_jobs_pass_stdin_and_cwd_and_isolate_failure_and_baseline_chang
         })
         .collect();
     assert!(log.contains("[stderr] fixture diagnostic"));
-    assert!(log.contains("step_start") && log.contains("done") && log.contains("fixture failure"));
+    assert!(
+        log.contains("OpenCode step started")
+            && log.contains("done")
+            && log.contains("fixture failure")
+    );
+    let raw: String = events
+        .iter()
+        .filter_map(|event| match event {
+            Event::Output { raw, .. } => Some(raw.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(raw.contains("step_start") && raw.contains("fixture failure"));
 }
 
 #[tokio::test]

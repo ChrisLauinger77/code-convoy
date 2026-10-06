@@ -40,12 +40,14 @@ impl App {
         }
         theme::eyebrow(ui, "NEW CONVOY");
         self.task_section(ui);
+        self.attachments_section(ui, ctx);
         self.agent_section(ui, ctx);
         self.repositories_section(ui, ctx);
     }
 
     fn task_section(&mut self, ui: &mut egui::Ui) {
         theme::section(ui, "Task");
+        self.template_menu(ui);
         ui.weak("One instruction, applied to each repository.");
         if !self.draft_message.is_empty() {
             ui.small(&self.draft_message);
@@ -90,6 +92,8 @@ impl App {
             self.selected.len()
         ));
         let enabled = !self.busy
+            && !self.attachment_work.pending
+            && self.attachment_error().is_none()
             && !self.current_cli_check()
             && !self.selected.is_empty()
             && !self.state.draft.prompt.trim().is_empty()
@@ -102,6 +106,10 @@ impl App {
         }
         let hint = if self.busy {
             "Checking repository state…"
+        } else if self.attachment_work.pending {
+            "Checking task attachments…"
+        } else if self.attachment_error().is_some() {
+            "Review attachment limitations before launching."
         } else if self.current_cli_check() {
             "Checking agent CLI before convoy review…"
         } else if self.state.draft.prompt.trim().is_empty() {
@@ -109,7 +117,7 @@ impl App {
         } else if self.selected.is_empty() {
             "Select at least one repository."
         } else {
-            "After launch, task text and selections clear; settings stay."
+            "After launch, task, attachments and selections clear; settings stay."
         };
         ui.small(hint);
     }
@@ -133,6 +141,15 @@ impl App {
                     ));
                     ui.label(prepared.task.agent.label());
                     ui.label(&prepared.task.prompt);
+                    for attachment in &prepared.task.attachments {
+                        ui.small(format!(
+                            "Attachment: {} · {} · {}",
+                            attachment.filename,
+                            attachment.kind.label(),
+                            attachments_ui::size_label(attachment.size)
+                        ))
+                        .on_hover_text(attachment.path.display().to_string());
+                    }
                     ui.small(format!(
                         "Global job limit: {} · busy repositories remain queued",
                         self.state.global_concurrency

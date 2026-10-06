@@ -41,10 +41,25 @@ pub struct Repository {
     pub name: String,
 }
 
+/// Selection conveniences reference the canonical identities of registrations.
+/// References remain when a registration is removed, so repair is explicit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepositoryGroup {
+    pub name: String,
+    pub repositories: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskTemplate {
+    pub name: String,
+    pub prompt: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TaskConfig {
     pub prompt: String,
+    pub attachments: Vec<crate::attachments::Attachment>,
     pub agent: AgentId,
     pub options: AgentOptions,
     pub concurrency: usize,
@@ -53,6 +68,7 @@ impl Default for TaskConfig {
     fn default() -> Self {
         Self {
             prompt: String::new(),
+            attachments: Vec::new(),
             agent: AgentId::Codex,
             options: AgentOptions::new(),
             concurrency: 2,
@@ -61,6 +77,7 @@ impl Default for TaskConfig {
 }
 impl TaskConfig {
     pub fn validate(&self, repositories: &[Repository]) -> anyhow::Result<()> {
+        crate::attachments::validate_limits(&self.attachments)?;
         anyhow::ensure!(
             !self.prompt.trim().is_empty(),
             "Enter a task before running."
@@ -159,6 +176,8 @@ pub struct Job {
     #[serde(skip)]
     pub log: LogBuffer,
     #[serde(skip)]
+    pub raw_log: LogBuffer,
+    #[serde(skip)]
     pub queue_reason: Option<QueueReason>,
 }
 impl Job {
@@ -173,6 +192,7 @@ impl Job {
             interrupted: false,
             detail: String::new(),
             log: LogBuffer::default(),
+            raw_log: LogBuffer::default(),
             queue_reason: None,
         }
     }
@@ -242,6 +262,8 @@ pub struct AppState {
     pub version: u32,
     pub next_run: u64,
     pub repositories: Vec<Repository>,
+    pub groups: Vec<RepositoryGroup>,
+    pub templates: Vec<TaskTemplate>,
     pub draft: TaskConfig,
     pub agent_options: BTreeMap<AgentId, AgentOptions>,
     pub runs: Vec<Run>,
@@ -253,6 +275,8 @@ impl Default for AppState {
             version: 1,
             next_run: 1,
             repositories: Vec::new(),
+            groups: Vec::new(),
+            templates: Vec::new(),
             draft: TaskConfig::default(),
             agent_options: BTreeMap::new(),
             runs: Vec::new(),
@@ -261,6 +285,64 @@ impl Default for AppState {
     }
 }
 impl AppState {
+    pub fn save_group(
+        &mut self,
+        index: Option<usize>,
+        mut group: RepositoryGroup,
+    ) -> anyhow::Result<()> {
+        validate_saved_name(&group.name)?;
+        anyhow::ensure!(
+            index.is_none_or(|i| i < self.groups.len()),
+            "This group no longer exists."
+        );
+        anyhow::ensure!(
+            self.groups
+                .iter()
+                .enumerate()
+                .all(|(i, existing)| Some(i) == index || existing.name.trim() != group.name.trim()),
+            "A group with this name already exists."
+        );
+        group.name = group.name.trim().to_owned();
+        let mut seen = std::collections::HashSet::new();
+        group.repositories.retain(|path| seen.insert(path.clone()));
+        if let Some(index) = index {
+            self.groups[index] = group;
+        } else {
+            self.groups.push(group);
+        }
+        Ok(())
+    }
+
+    pub fn save_template(
+        &mut self,
+        index: Option<usize>,
+        mut template: TaskTemplate,
+    ) -> anyhow::Result<()> {
+        validate_saved_name(&template.name)?;
+        anyhow::ensure!(
+            index.is_none_or(|i| i < self.templates.len()),
+            "This template no longer exists."
+        );
+        anyhow::ensure!(
+            self.templates
+                .iter()
+                .enumerate()
+                .all(|(i, existing)| Some(i) == index
+                    || existing.name.trim() != template.name.trim()),
+            "A template with this name already exists."
+        );
+        anyhow::ensure!(
+            !template.prompt.trim().is_empty() && template.prompt.len() <= 128 * 1024,
+            "Template task must contain text and be at most 128 KiB."
+        );
+        template.name = template.name.trim().to_owned();
+        if let Some(index) = index {
+            self.templates[index] = template;
+        } else {
+            self.templates.push(template);
+        }
+        Ok(())
+    }
     /// Keep backend preferences separate without changing old draft/run schemas.
     pub fn select_agent(&mut self, agent: AgentId) {
         if agent != self.draft.agent {
@@ -303,16 +385,20 @@ impl AppState {
             .runs
             .iter()
             .flat_map(|r| &r.jobs)
-            .map(|j| j.log.text.len())
+            .map(|j| j.log.text.len() + j.raw_log.text.len())
             .sum();
         for job in self.runs.iter_mut().rev().flat_map(|r| &mut r.jobs) {
             if total <= TOTAL_LOG_LIMIT {
                 break;
             }
-            total -= job.log.text.len();
+            total -= job.log.text.len() + job.raw_log.text.len();
             if !job.log.text.is_empty() {
                 job.log.text.clear();
                 job.log.truncated = true;
+            }
+            if !job.raw_log.text.is_empty() {
+                job.raw_log.text.clear();
+                job.raw_log.truncated = true;
             }
         }
     }
@@ -329,6 +415,14 @@ impl AppState {
             }
         }
     }
+}
+
+fn validate_saved_name(name: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control),
+        "Enter a name of at most 128 bytes without control characters."
+    );
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default)]

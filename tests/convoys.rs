@@ -52,6 +52,7 @@ impl Harness {
     }
     fn task(&self, ticket: u64, agent: AgentId, limit: usize, fail: bool) -> TaskConfig {
         TaskConfig {
+            attachments: Vec::new(),
             prompt: format!(
                 "codeconvoy-fixture-gate\n{}",
                 serde_json::json!({"control":self.control,"ticket":ticket.to_string(),"fail":fail})
@@ -96,6 +97,7 @@ impl Harness {
                     run: r,
                     job: j,
                     text,
+                    ..
                 } if *r == run && *j == job => Some(text.as_str()),
                 _ => None,
             })
@@ -123,6 +125,157 @@ impl Harness {
                 == count
         })
         .await;
+    }
+}
+
+#[tokio::test]
+async fn native_image_preflight_rejects_missing_cli_interfaces_without_starting_work() {
+    let h = Harness::new(1);
+    let repo = h.repo("image-preflight").await;
+    let path = h.directory.path().join("screenshot.png");
+    std::fs::write(&path, include_bytes!("../assets/codeconvoy-256.png")).unwrap();
+    let attachment = codeconvoy::attachments::Attachment::inspect(&path).unwrap();
+    for agent in AgentId::ALL {
+        let mut task = h.task(1, agent, 1, false);
+        task.attachments.push(attachment.clone());
+        let result = runner::prepare(task, vec![repo.clone()]).await;
+        if agent == AgentId::Codex {
+            // The fixture intentionally has no Codex exec image interface.
+            let error = result.err().unwrap().to_string();
+            assert!(error.contains("screenshot.png") && error.contains("--image"));
+        } else {
+            assert!(result.is_ok(), "{agent:?}");
+        }
+    }
+    assert!(h.manager.is_idle());
+    assert!(!h.control.join("1-image-preflight.input").exists());
+}
+
+#[tokio::test]
+async fn queued_attachment_changes_fail_before_spawn_and_release_repository_capacity() {
+    for missing in [false, true] {
+        let mut h = Harness::new(1);
+        let occupying = h.repo("occupying").await;
+        let queued = h.repo("queued").await;
+        let path = h.directory.path().join("requirements.md");
+        std::fs::write(&path, "before").unwrap();
+        let attachment = codeconvoy::attachments::Attachment::inspect(&path).unwrap();
+        let first = h
+            .prepared(
+                1,
+                AgentId::Codex,
+                1,
+                false,
+                std::slice::from_ref(&occupying),
+            )
+            .await;
+        let mut task = h.task(2, AgentId::Codex, 1, false);
+        task.attachments.push(attachment);
+        let second = runner::prepare(task, vec![queued.clone()]).await.unwrap();
+        h.start(1, first);
+        h.until(|events| Harness::ready(events, 1, 0)).await;
+        h.start(2, second);
+        h.until(|events| {
+            events
+                .iter()
+                .any(|event| matches!(event, Event::Queued { run: 2, .. }))
+        })
+        .await;
+        if missing {
+            std::fs::remove_file(&path).unwrap();
+        } else {
+            std::fs::write(&path, "after!").unwrap();
+        }
+        h.release(1, &occupying);
+        h.finish_all(2).await;
+        assert!(Harness::finished(&h.events, 1, 0, JobStatus::Succeeded));
+        assert!(Harness::finished(&h.events, 2, 0, JobStatus::Failed));
+        assert!(
+            !h.events
+                .iter()
+                .any(|event| matches!(event, Event::Started { run: 2, .. }))
+        );
+        assert!(!h.control.join("2-queued.input").exists());
+        let detail = h
+            .events
+            .iter()
+            .find_map(|event| match event {
+                Event::Finished { run: 2, detail, .. } => Some(detail),
+                _ => None,
+            })
+            .unwrap();
+        assert!(detail.contains("requirements.md"));
+        assert!(detail.contains(if missing { "missing" } else { "changed" }));
+        let third = h
+            .prepared(3, AgentId::Copilot, 1, false, std::slice::from_ref(&queued))
+            .await;
+        h.start(3, third);
+        h.until(|events| Harness::ready(events, 3, 0)).await;
+        h.release(3, &queued);
+        h.finish_all(3).await;
+        assert!(Harness::finished(&h.events, 3, 0, JobStatus::Succeeded));
+    }
+}
+
+#[tokio::test]
+async fn every_backend_delivers_attachment_context_and_keeps_separate_raw_output() {
+    let mut h = Harness::new(4);
+    let path = h.directory.path().join("requirements.md");
+    std::fs::write(&path, "attached context Grüße").unwrap();
+    let attachment = codeconvoy::attachments::Attachment::inspect(&path).unwrap();
+    let mut repos = Vec::new();
+    for (index, agent) in AgentId::ALL.into_iter().enumerate() {
+        let id = index as u64 + 1;
+        let repo = h.repo(&format!("repo{id}")).await;
+        let mut task = h.task(id, agent, 1, false);
+        task.attachments.push(attachment.clone());
+        let prepared = runner::prepare(task, vec![repo.clone()]).await.unwrap();
+        h.start(id, prepared);
+        repos.push((id, repo));
+    }
+    h.until(|events| (1..=4).all(|id| Harness::ready(events, id, 0)))
+        .await;
+    for (id, repo) in &repos {
+        let input =
+            std::fs::read_to_string(h.control.join(format!("{id}-{}.input", repo.name))).unwrap();
+        let context: serde_json::Value =
+            serde_json::from_str(input.lines().last().unwrap()).unwrap();
+        assert_eq!(context["content"], "attached context Grüße");
+        h.release(*id, repo);
+    }
+    h.finish_all(4).await;
+    for (index, agent) in AgentId::ALL.into_iter().enumerate() {
+        let id = index as u64 + 1;
+        assert!(Harness::finished(&h.events, id, 0, JobStatus::Succeeded));
+        let activity: String = h
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Output { run, text, .. } if *run == id => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        let raw: String = h
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Output { run, raw, .. } if *run == id => Some(raw.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(activity.contains("fixture gate ready"));
+        assert!(raw.contains("fixture gate ready"));
+        assert!(!activity.contains("attached context"));
+        assert!(!raw.contains("attached context"));
+        if agent == AgentId::Copilot {
+            assert_eq!(raw, activity);
+        } else {
+            assert!(
+                raw.lines()
+                    .all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok())
+            );
+            assert_ne!(raw, activity);
+        }
     }
 }
 

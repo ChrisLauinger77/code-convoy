@@ -133,6 +133,7 @@ impl AgentBackend for Copilot {
             "Copilot requires a Copilot task configuration."
         );
         task.validate(std::slice::from_ref(repository))?;
+        self.validate_attachments(task)?;
         let mut spec = self.detection(&task.options, &repository.path)?;
         spec.args.pop(); // retain --no-auto-update, remove --help
         spec = spec.args(&[
@@ -162,7 +163,12 @@ impl AgentBackend for Copilot {
         }
         // Copilot documents piped stdin as non-interactive prompt mode. Do not
         // pass -p "-": Copilot would treat that as a literal prompt and ignore stdin.
-        spec.input = Some(task.prompt.as_bytes().to_vec());
+        for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
+            let mut argument = std::ffi::OsString::from("--attachment=");
+            argument.push(&attachment.path);
+            spec.args.push(argument);
+        }
+        spec.input = Some(crate::attachments::text_prompt(task)?.into_bytes());
         spec.remove_env = std::env::vars_os()
             .filter_map(|(key, _)| {
                 key.to_str()
@@ -177,6 +183,25 @@ impl AgentBackend for Copilot {
     }
     fn output(&self) -> Box<dyn AgentOutput> {
         Box::<CopilotOutput>::default()
+    }
+    fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
+        crate::attachments::validate_limits(&task.attachments)
+    }
+    fn attachment_help(
+        &self,
+        task: &TaskConfig,
+        directory: &Path,
+    ) -> Result<Option<(CommandSpec, &'static str)>> {
+        if !task.attachments.iter().any(|a| a.kind.is_image()) {
+            return Ok(None);
+        }
+        Ok(Some((
+            self.detection(&task.options, directory)?,
+            "--attachment",
+        )))
+    }
+    fn attachment_summary(&self) -> &'static str {
+        "Text context via stdin; images via Copilot's --attachment flag. The CLI and selected model must accept images."
     }
     fn execution_summary(&self, options: &AgentOptions) -> String {
         let tools = match value(options, &OPTIONS[3]) {

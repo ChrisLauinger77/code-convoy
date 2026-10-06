@@ -2,10 +2,12 @@ mod about;
 #[cfg(target_os = "macos")]
 mod about_macos;
 mod agent_config;
+mod attachments_ui;
 mod cli_discovery;
 mod diagnostics;
 mod editor;
 mod format;
+mod library;
 mod quit;
 #[cfg(target_os = "macos")]
 mod quit_macos;
@@ -38,6 +40,8 @@ use tokio::{runtime::Runtime, sync::mpsc as async_mpsc};
 enum Message {
     FoundCli(u64, Result<Vec<PathBuf>, String>),
     RepositoryFolder(Option<PathBuf>),
+    Attachments(u64, Vec<crate::attachments::Attachment>, Vec<String>),
+    ReusedAttachments(u64, Vec<crate::attachments::Attachment>, Vec<String>),
     Registered(Result<(Repository, WorkingTree), String>),
     Refreshed(Vec<(PathBuf, Result<WorkingTree, String>)>),
     Prepared(Result<PreparedRun, String>),
@@ -45,7 +49,8 @@ enum Message {
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
-    Output,
+    Activity,
+    Raw,
     Diff,
     Task,
 }
@@ -58,6 +63,8 @@ pub struct App {
     selected: HashSet<PathBuf>,
     draft_message: String,
     focus_draft: bool,
+    library_editor: Option<library::LibraryEditor>,
+    attachment_work: attachments_ui::AttachmentWork,
     repository_input: String,
     picked_repository_path: Option<PathBuf>,
     repository_dialog: rfd::AsyncFileDialog,
@@ -133,6 +140,8 @@ impl App {
             selected: HashSet::new(),
             draft_message: String::new(),
             focus_draft: false,
+            library_editor: None,
+            attachment_work: attachments_ui::AttachmentWork::default(),
             repository_input: String::new(),
             picked_repository_path: None,
             repository_dialog: rfd::AsyncFileDialog::new()
@@ -161,7 +170,7 @@ impl App {
             dirty_ack: false,
             selected_run,
             selected_job: 0,
-            tab: Tab::Output,
+            tab: Tab::Activity,
             diff_target: None,
             diff: None,
             dirty: true,
@@ -349,6 +358,9 @@ impl App {
         if self.closing || self.quit_requested {
             return;
         }
+        if self.attachment_work.pending {
+            return;
+        }
         // Discovery must be applied before the immutable preflight snapshot.
         // Also reconcile executable edits made since the last UI poll.
         self.sync_cli_checks();
@@ -406,6 +418,8 @@ impl App {
             }
         } else {
             self.state.draft.prompt.clear();
+            self.state.draft.attachments.clear();
+            self.attachment_work.invalidate();
             self.selected.clear();
             self.draft_message = format!("Convoy #{id} launched. Ready for your next task.");
             self.focus_draft = true;
@@ -414,7 +428,7 @@ impl App {
         self.state.trim_history();
         self.dirty = true;
         self.select_run(Some(id));
-        self.tab = Tab::Output;
+        self.tab = Tab::Activity;
         self.dirty_ack = false;
     }
     fn poll(&mut self) {
@@ -427,6 +441,12 @@ impl App {
         while let Ok(message) = self.rx.try_recv() {
             match message {
                 Message::RepositoryFolder(path) => self.repository_folder_selected(path),
+                Message::Attachments(request, files, errors) => {
+                    self.attachments_added(request, files, errors)
+                }
+                Message::ReusedAttachments(request, files, errors) => {
+                    self.attachments_reused(request, files, errors)
+                }
                 Message::Registered(result) => {
                     self.busy = false;
                     match result {
@@ -569,6 +589,7 @@ impl App {
         let missing = run.jobs.len().saturating_sub(self.selected.len());
         let task = run.task.clone();
         self.state.reuse_task(task);
+        self.validate_reused_attachments();
         self.draft_message =
             format!("Copied convoy #{id} into the draft. Review it before launching.");
         if missing > 0 {
@@ -614,7 +635,10 @@ impl App {
                 job.before = Some(before);
                 self.dirty = true;
             }
-            Event::Output { text, .. } => job.log.append(&text),
+            Event::Output { text, raw, .. } => {
+                job.log.append(&text);
+                job.raw_log.append(&raw);
+            }
             Event::Finished {
                 status,
                 exit_code,
@@ -646,6 +670,7 @@ impl eframe::App for App {
                 || self.closing
                 || self.state.runs.iter().any(Run::active)
                 || self.busy
+                || self.attachment_work.pending
                 || self.cli_checks.any_checking()
                 || self
                     .cli_search
@@ -677,6 +702,7 @@ impl eframe::App for App {
             self.preflight_window(ctx);
             self.about_window(ctx);
             self.cli_search_window(ctx);
+            self.library_window(ctx);
         }
         self.quit_window(ctx);
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {

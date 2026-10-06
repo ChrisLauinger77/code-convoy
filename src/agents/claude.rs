@@ -139,12 +139,14 @@ impl AgentBackend for Claude {
             "Claude requires a Claude Code task configuration."
         );
         task.validate(std::slice::from_ref(repository))?;
+        self.validate_attachments(task)?;
+        let images = task.attachments.iter().any(|a| a.kind.is_image());
         let mut spec = self.detection(&task.options, &repository.path)?;
         spec.args.clear();
         spec = spec.args(&[
             "--print",
             "--input-format",
-            "text",
+            if images { "stream-json" } else { "text" },
             "--output-format",
             "stream-json",
             "--verbose",
@@ -158,7 +160,26 @@ impl AgentBackend for Claude {
                 spec.args.push(format!("{flag}={selected}").into());
             }
         }
-        spec.input = Some(task.prompt.as_bytes().to_vec());
+        let prompt = crate::attachments::text_prompt(task)?;
+        spec.input = Some(if images {
+            use base64::Engine;
+            let mut content = Vec::new();
+            for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
+                content.push(serde_json::json!({"type": "text", "text": format!("Attached image: {}", attachment.filename)}));
+                content.push(serde_json::json!({"type": "image", "source": {
+                    "type": "base64", "media_type": attachment.kind.mime(),
+                    "data": base64::engine::general_purpose::STANDARD.encode(attachment.read_validated()?),
+                }}));
+            }
+            content.push(serde_json::json!({"type": "text", "text": prompt}));
+            let mut input = serde_json::to_vec(
+                &serde_json::json!({"type": "user", "message": {"role": "user", "content": content}, "parent_tool_use_id": null}),
+            )?;
+            input.push(b'\n');
+            input
+        } else {
+            prompt.into_bytes()
+        });
         spec.remove_env = std::env::vars_os()
             .filter_map(|(key, _)| {
                 key.to_str()
@@ -173,6 +194,21 @@ impl AgentBackend for Claude {
     }
     fn output(&self) -> Box<dyn AgentOutput> {
         Box::<ClaudeOutput>::default()
+    }
+    fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
+        crate::attachments::validate_limits(&task.attachments)?;
+        for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
+            let encoded = attachment.size.div_ceil(3).saturating_mul(4);
+            anyhow::ensure!(
+                encoded <= 10_000_000,
+                "Claude image {} exceeds the documented 10 MB base64 image limit. Resize it before attaching. Partner-hosted Claude services may have stricter limits.",
+                attachment.filename
+            );
+        }
+        Ok(())
+    }
+    fn attachment_summary(&self) -> &'static str {
+        "Text context via stdin; images as base64 content blocks through stream-json stdin. Provider limits still apply; image contents are not saved by CodeConvoy."
     }
     fn execution_summary(&self, options: &AgentOptions) -> String {
         let mode = if value(options, &OPTIONS[3]) == "acceptEdits" {
@@ -198,6 +234,7 @@ struct ClaudeOutput {
     // Keep the parsed Claude result (including usage/denials/metadata) for outcome
     // interpretation, without introducing a shared activity/event abstraction.
     result: Option<Value>,
+    activity: String,
 }
 impl ClaudeOutput {
     fn record(&mut self, bytes: &[u8]) -> String {
@@ -208,6 +245,8 @@ impl ClaudeOutput {
             Ok(event) if event.is_object() && event["type"].as_str().is_some() => event,
             _ => {
                 self.protocol_error = true;
+                self.activity
+                    .push_str("Invalid Claude JSON record (details in Raw output)\n");
                 return format!(
                     "[Invalid Claude JSON record]\n{}\n",
                     String::from_utf8_lossy(bytes).trim_end()
@@ -218,6 +257,76 @@ impl ClaudeOutput {
         // record. A duplicate result or later activity is not a confirmed finish.
         self.protocol_error |= self.result.is_some();
         let kind = event["type"].as_str().unwrap_or("");
+        match kind {
+            "assistant" => {
+                if let Some(content) = event["message"]["content"].as_array() {
+                    for block in content {
+                        match block["type"].as_str().unwrap_or("") {
+                            "text" => {
+                                if let Some(text) = block["text"].as_str() {
+                                    self.activity.push_str(text);
+                                    self.activity.push('\n');
+                                }
+                            }
+                            "tool_use" => {
+                                let input = &block["input"];
+                                let detail = input["file_path"]
+                                    .as_str()
+                                    .or_else(|| input["command"].as_str())
+                                    .unwrap_or("details in Raw output");
+                                self.activity.push_str(&format!(
+                                    "Tool: {} · {detail}\n",
+                                    block["name"].as_str().unwrap_or("unknown")
+                                ));
+                            }
+                            other => self.activity.push_str(&format!(
+                                "Claude content: {other} (details in Raw output)\n"
+                            )),
+                        }
+                    }
+                }
+                if !event["error"].is_null() {
+                    self.activity
+                        .push_str(&format!("Claude assistant error: {}\n", event["error"]));
+                }
+            }
+            "user" => self
+                .activity
+                .push_str("Claude user message (details in Raw output)\n"),
+            "system" => self.activity.push_str(&format!(
+                "Claude system: {}\n",
+                event["subtype"].as_str().unwrap_or("event")
+            )),
+            "result" => {
+                self.activity.push_str(&format!(
+                    "Claude result: {}\n{}\n",
+                    event["subtype"].as_str().unwrap_or("unknown"),
+                    event["result"].as_str().unwrap_or("")
+                ));
+                if !event["usage"].is_null() {
+                    self.activity
+                        .push_str(&format!("Usage: {}\n", event["usage"]));
+                }
+                if let Some(denials) = event["permission_denials"].as_array()
+                    && !denials.is_empty()
+                {
+                    self.activity.push_str(&format!(
+                        "Warning: {} permission denial(s); see Raw output.\n",
+                        denials.len()
+                    ));
+                }
+                if !event["errors"].is_null() {
+                    self.activity
+                        .push_str(&format!("Result errors: {}\n", event["errors"]));
+                }
+            }
+            "error" => self
+                .activity
+                .push_str(&format!("Claude error: {}\n", event["error"])),
+            other => self
+                .activity
+                .push_str(&format!("Claude {other} (details in Raw output)\n")),
+        }
         self.explicit_error |= kind == "error"
             || (kind == "assistant" && !event["error"].is_null())
             || (kind == "system" && event["subtype"].as_str() == Some("error"));
@@ -240,7 +349,9 @@ impl ClaudeOutput {
     fn flush(&mut self, index: usize) -> String {
         let bytes = std::mem::take(&mut self.pending[index]);
         if index == 1 {
-            format!("[stderr] {}", String::from_utf8_lossy(&bytes))
+            let text = format!("[stderr] {}", String::from_utf8_lossy(&bytes));
+            self.activity.push_str(&text);
+            text
         } else if self.oversized[index] {
             String::from_utf8_lossy(&bytes).into_owned()
         } else {
@@ -287,6 +398,7 @@ impl AgentOutput for ClaudeOutput {
             } else if self.pending[index].len() > RECORD_LIMIT {
                 if index == 0 && !self.oversized[index] {
                     self.protocol_error = true;
+                    self.activity.push_str("Claude JSON record exceeded 1 MiB; completion cannot be verified. See Raw output.\n");
                     text.push_str(
                         "[Claude JSON record exceeded 1 MiB; completion cannot be verified.]\n",
                     );
@@ -321,5 +433,8 @@ impl AgentOutput for ClaudeOutput {
                 ),
             )
         }
+    }
+    fn take_activity(&mut self) -> Option<String> {
+        Some(std::mem::take(&mut self.activity))
     }
 }
