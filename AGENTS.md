@@ -260,6 +260,48 @@ genuinely guaranteed and documented.
 
 Do not add abstractions for hypothetical future requirements.
 
+## Maintainer release requests
+
+When the user asks `create release X.Y.Z`, prepare that CodeConvoy release and
+create a local release commit. This request explicitly authorizes the version
+updates, release documentation changes, validation, and commit; do not ask for
+another confirmation to create that commit.
+
+Follow this workflow:
+
+1. Read `docs/releasing.md` and inspect the working tree and index. Confirm the
+   requested version is a normal `X.Y.Z` version supported by the packaging
+   scripts and has not already been tagged or released. Preserve unrelated
+   staged and unstaged changes.
+2. Update `[package].version` in `Cargo.toml` and the `codeconvoy` package entry
+   in `Cargo.lock`. Keep dependency versions unchanged. Application and package
+   metadata already derive from Cargo; retain that single version authority.
+3. Search for current-release version references and update them where needed,
+   including README download filenames/install commands and the release version,
+   tag and packaging examples in `docs/releasing.md`. Update
+   `docs/release-notes.md` to describe the changes since the previous release.
+   Preserve historical versions in validation records, past-release evidence,
+   dependency versions, and CLI compatibility documentation; do not perform a
+   repository-wide version replacement.
+4. Run all checks under **Required validation**, plus:
+
+   ```sh
+   python3 -m unittest discover -s packaging -p 'test_*.py'
+   python3 packaging/release.py check-tag vX.Y.Z
+   ```
+
+   Substitute the requested version in the tag check. Resolve failures before
+   committing and report platform checks that were not performed truthfully.
+5. Review the final diff and create a commit containing only the release
+   preparation changes. Preserve unrelated work, including already-staged
+   changes. Use the Conventional Commit message:
+   `chore(release): prepare vX.Y.Z`.
+6. Report the version, commit ID, and validation results.
+
+This workflow ends with the local release commit. Create or push a tag, push
+commits, dispatch a workflow, or publish a release only when the user explicitly
+requests those actions. Never move or overwrite an existing release tag.
+
 ## Required validation
 
 Before considering a change complete, run:
@@ -269,3 +311,4 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 cargo build --release
+```

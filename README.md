@@ -12,7 +12,9 @@ A local, native desktop task runner for coding-agent CLIs.
 
 **Write one task → choose an agent → select local Git repositories → run with a concurrency limit → inspect each result.**
 
-CodeConvoy 0.1 is a native Rust/egui implementation with four independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
+CodeConvoy is a native Rust/egui implementation with four independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
+
+![image](assets/screenshot.png)
 
 | Backend            | Status    | Authenticated E2E status                                                                             |
 | ------------------ | --------- | ---------------------------------------------------------------------------------------------------- |
