@@ -100,6 +100,7 @@ async fn job_work(
     task: &TaskConfig,
     backend: &dyn AgentBackend,
     cancellation: &Cancellation,
+    stopping: &AtomicBool,
     repository_safe: &AtomicBool,
     tx: &mpsc::Sender<Event>,
 ) -> Result<(JobStatus, Option<i32>, String)> {
@@ -119,10 +120,10 @@ async fn job_work(
         state.summary == prepared.state.summary && state.entries == prepared.state.entries,
         "Repository state changed after preflight. Inspect the working tree and start a fresh run."
     );
-    if cancellation.is_cancelled() {
+    let spec = backend.build(task, &prepared.repository)?;
+    if stopping.load(Ordering::Acquire) || cancellation.is_cancelled() {
         return Ok(cancelled());
     }
-    let spec = backend.build(task, &prepared.repository)?;
     let child = backend.spawn(&spec)?;
     repository_safe.store(false, Ordering::Release);
     tokio::select! {

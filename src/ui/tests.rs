@@ -22,6 +22,159 @@ fn app() -> (tempfile::TempDir, App) {
 }
 
 #[test]
+fn idle_close_needs_no_confirmation_and_closes_launch_admission() {
+    let (_temp, mut app) = app();
+    app.state.runs.push(run(40, &[JobStatus::Succeeded]));
+    assert!(app.request_quit());
+    assert!(!app.quit_requested);
+    assert!(app.closing && app.exit_ready);
+    prepare(&mut app, AgentId::Codex);
+    app.start();
+    assert_eq!(app.state.runs.len(), 1);
+    assert!(app.manager.is_idle());
+}
+
+#[test]
+fn running_or_queued_close_is_a_single_side_effect_free_decision() {
+    for status in [JobStatus::Running, JobStatus::Queued] {
+        let (_temp, mut app) = app();
+        prepare(&mut app, AgentId::Codex);
+        app.start(); // Undriven manager: no Git commands or agent processes yet.
+        app.state.runs[0].jobs[0].status = status;
+        app.state.runs.push(run(40, &[JobStatus::Succeeded]));
+        let before = serde_json::to_value(&app.state).unwrap();
+        for _ in 0..3 {
+            assert!(!app.request_quit());
+            assert!(app.quit_requested && !app.closing);
+        }
+        app.cancel_quit();
+        assert!(!app.quit_requested && !app.closing);
+        assert!(app.manager.is_active(1));
+        assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
+
+        // Driving these deliberately nonexistent fixture repositories fails Git
+        // validation. Cancelled instead would expose a signalled manager token.
+        let events = app.runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                let mut events = Vec::new();
+                while !events
+                    .iter()
+                    .any(|event| matches!(event, Event::Finished { .. }))
+                {
+                    events.push(app.events_rx.recv().await.unwrap());
+                }
+                events
+            })
+            .await
+            .unwrap()
+        });
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Finished {
+                status: JobStatus::Failed,
+                ..
+            }
+        )));
+        assert!(!events.iter().any(|event| matches!(
+            event,
+            Event::Finished {
+                status: JobStatus::Cancelled,
+                ..
+            }
+        )));
+    }
+}
+
+#[test]
+fn close_observes_manager_work_even_before_ui_metadata_arrives() {
+    let (_temp, mut app) = app();
+    prepare(&mut app, AgentId::Codex);
+    let prepared = app.prepared.take().unwrap();
+    app.manager
+        .start(1, prepared, agents::backend(AgentId::Codex).unwrap())
+        .unwrap();
+    assert!(app.state.runs.is_empty());
+    assert!(!app.request_quit());
+    assert!(app.quit_requested);
+}
+
+#[test]
+fn confirmed_quit_drains_and_persists_terminal_jobs_preserving_history() {
+    let (_temp, mut app) = app();
+    prepare(&mut app, AgentId::Codex);
+    app.start();
+    app.state
+        .runs
+        .push(run(40, &[JobStatus::Succeeded, JobStatus::Failed]));
+    let history = serde_json::to_value(&app.state.runs[1]).unwrap();
+    assert!(!app.request_quit());
+    app.confirm_quit();
+    app.confirm_quit();
+    assert!(!app.request_quit()); // Cannot exit while cleanup is pending.
+    prepare(&mut app, AgentId::Codex); // Includes a late preflight result.
+    let before = serde_json::to_value(&app.state).unwrap();
+    app.start();
+    assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
+    app.runtime.block_on(async {
+        tokio::time::timeout(Duration::from_secs(5), &mut app.manager.join)
+            .await
+            .unwrap()
+            .unwrap();
+    });
+    // handle_close must drain Finished itself, even before the next poll.
+    app.handle_close(&egui::Context::default());
+    assert!(app.exit_ready);
+    let saved = app.store.load().unwrap();
+    assert_eq!(saved.runs[0].status(), JobStatus::Cancelled);
+    assert!(!saved.runs[0].jobs[0].interrupted); // Cleanup completion was persisted.
+    assert_eq!(serde_json::to_value(&saved.runs[1]).unwrap(), history);
+    assert!(app.request_quit());
+}
+
+#[test]
+fn close_event_is_cancelled_until_confirmation_and_escape_is_safe() {
+    let (_temp, mut app) = app();
+    app.state
+        .runs
+        .push(run(1, &[JobStatus::Running, JobStatus::Queued]));
+    let before = serde_json::to_value(&app.state).unwrap();
+    let ctx = egui::Context::default();
+    let mut input = egui::RawInput::default();
+    input
+        .viewports
+        .get_mut(&egui::ViewportId::ROOT)
+        .unwrap()
+        .events
+        .push(egui::ViewportEvent::Close);
+    let mut output = ctx.run_ui(input, |ui| {
+        app.handle_close(ui.ctx());
+        app.quit_window(ui.ctx());
+    });
+    output.textures_delta.clear();
+    assert!(
+        output.viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .contains(&egui::ViewportCommand::CancelClose)
+    );
+    assert!(ctx.memory(|m| m.focused().is_some())); // Cancel receives visible keyboard focus.
+    let input = egui::RawInput {
+        events: vec![egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::default(),
+        }],
+        ..Default::default()
+    };
+    ctx.run_ui(input, |ui| app.quit_window(ui.ctx()))
+        .textures_delta
+        .clear();
+    assert!(!app.quit_requested && !app.closing);
+    assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
+}
+
+#[test]
 fn folder_results_only_fill_the_draft_and_do_not_release_git_work() {
     let (_temp, mut app) = app();
     app.dirty = false;
@@ -51,6 +204,26 @@ fn folder_results_only_fill_the_draft_and_do_not_release_git_work() {
     app.tx.send(Message::RepositoryFolder(None)).unwrap();
     app.poll();
     assert_eq!(app.repository_input, "  another manual path  ");
+}
+
+#[test]
+fn hidden_window_close_is_cancelled_without_a_ui_pass() {
+    let (_temp, mut app) = app();
+    app.state.runs.push(run(1, &[JobStatus::Queued]));
+    let ctx = egui::Context::default();
+    let mut input = egui::RawInput::default();
+    input
+        .viewports
+        .get_mut(&egui::ViewportId::ROOT)
+        .unwrap()
+        .events
+        .push(egui::ViewportEvent::Close);
+    let output = ctx.run_logic(&input, |ctx| app.handle_close(ctx));
+    let commands = &output.viewport_commands[&egui::ViewportId::ROOT];
+    assert!(commands.contains(&egui::ViewportCommand::CancelClose));
+    assert!(commands.contains(&egui::ViewportCommand::Minimized(false)));
+    assert!(app.quit_requested && !app.closing);
+    assert_eq!(app.state.runs[0].status(), JobStatus::Queued);
 }
 
 #[cfg(unix)]

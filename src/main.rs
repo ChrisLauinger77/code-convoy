@@ -16,6 +16,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn run() -> anyhow::Result<()> {
+    #[cfg(target_os = "macos")]
+    codeconvoy::ui::init_native_application()?;
     let store = codeconvoy::persistence::Store::open_default()?;
     let state = store.load()?;
     let runtime = tokio::runtime::Builder::new_multi_thread()

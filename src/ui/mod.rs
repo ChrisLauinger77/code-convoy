@@ -6,7 +6,12 @@ mod cli_discovery;
 mod diagnostics;
 mod editor;
 mod format;
+mod quit;
+#[cfg(target_os = "macos")]
+mod quit_macos;
 mod repositories;
+#[cfg(target_os = "macos")]
+pub use quit_macos::init_native_application;
 mod results;
 mod snapshot;
 #[cfg(test)]
@@ -94,6 +99,9 @@ pub struct App {
     dirty: bool,
     last_save: Instant,
     closing: bool,
+    quit_requested: bool,
+    focus_quit_cancel: bool,
+    exit_ready: bool,
 }
 impl App {
     pub fn new(
@@ -108,6 +116,7 @@ impl App {
         #[cfg(target_os = "macos")]
         {
             app.native_about = about_macos::NativeAbout::install();
+            quit_macos::connect(&cc.egui_ctx);
         }
         app
     }
@@ -162,6 +171,9 @@ impl App {
             dirty: true,
             last_save: Instant::now(),
             closing: false,
+            quit_requested: false,
+            focus_quit_cancel: false,
+            exit_ready: false,
         };
         if !app.state.repositories.is_empty() {
             app.refresh(ctx.clone());
@@ -313,6 +325,9 @@ impl App {
         });
     }
     fn preflight(&mut self, ctx: egui::Context) {
+        if self.closing || self.quit_requested {
+            return;
+        }
         let task = self.state.draft.clone();
         let repositories = self
             .state
@@ -332,6 +347,9 @@ impl App {
         });
     }
     fn start(&mut self) {
+        if self.closing || self.quit_requested {
+            return;
+        }
         let Some(prepared) = self.prepared.take() else {
             return;
         };
@@ -566,39 +584,14 @@ impl App {
     }
 }
 impl eframe::App for App {
-    fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
-        let ctx = &ui.ctx().clone();
+    fn logic(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+        // eframe also calls logic for hidden/minimized windows. A native quit
+        // must never bypass confirmation just because no UI pass is rendered.
         self.poll();
-        if ctx.input(|i| i.viewport().close_requested()) && !self.manager.is_idle() {
-            self.closing = true;
-            self.manager.cancel_all();
-            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-        }
-        if self.closing && self.manager.is_idle() && !self.state.runs.iter().any(Run::active) {
-            self.save();
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-        }
-        self.header(ui, ctx);
-        self.footer(ui);
-        egui::Panel::left("task_editor")
-            .resizable(true)
-            .default_size(360.0)
-            .size_range(310.0..=(ui.available_width() * 0.55).max(310.0))
-            .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
-            .show(ui, |ui| {
-                self.editor_pane(ui, ctx);
-            });
-        egui::CentralPanel::default()
-            .frame(egui::Frame::central_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
-            .show(ui, |ui| self.results(ui, ctx));
-        self.preflight_window(ctx);
-        self.about_window(ctx);
-        self.cli_search_window(ctx);
-        if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
-            self.save();
-        }
+        self.handle_close(ctx);
         ctx.request_repaint_after(Duration::from_millis(
             if !self.manager.is_idle()
+                || self.closing
                 || self.state.runs.iter().any(Run::active)
                 || self.busy
                 || self.checking_cli.is_some()
@@ -612,6 +605,31 @@ impl eframe::App for App {
                 1000
             },
         ));
+    }
+    fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
+        let ctx = &ui.ctx().clone();
+        self.header(ui, ctx);
+        self.footer(ui);
+        egui::Panel::left("task_editor")
+            .resizable(true)
+            .default_size(360.0)
+            .size_range(310.0..=(ui.available_width() * 0.55).max(310.0))
+            .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
+            .show(ui, |ui| {
+                self.editor_pane(ui, ctx);
+            });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::central_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
+            .show(ui, |ui| self.results(ui, ctx));
+        if !self.quit_requested && !self.closing {
+            self.preflight_window(ctx);
+            self.about_window(ctx);
+            self.cli_search_window(ctx);
+        }
+        self.quit_window(ctx);
+        if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
+            self.save();
+        }
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
         self.manager.shutdown();

@@ -485,6 +485,13 @@ async fn shutdown_cancels_all_convoys_and_drains_the_manager() {
     h.until(|e| Harness::ready(e, 1, 0) && Harness::ready(e, 2, 0))
         .await;
     h.manager.shutdown();
+    h.manager.shutdown(); // Repeated close requests are idempotent.
+    let rejected = h.prepared(3, AgentId::Codex, 1, false, &b).await;
+    assert!(
+        h.manager
+            .start(3, rejected, agents::backend(AgentId::Codex).unwrap())
+            .is_err()
+    );
     h.finish_all(3).await;
     tokio::time::timeout(Duration::from_secs(5), &mut h.manager.join)
         .await
@@ -494,6 +501,51 @@ async fn shutdown_cancels_all_convoys_and_drains_the_manager() {
     for (run, job) in [(1, 0), (1, 1), (2, 0)] {
         assert!(Harness::finished(&h.events, run, job, JobStatus::Cancelled));
     }
+    assert!(!h.control.join("1-queued.input").exists());
+    assert!(!h.events.iter().any(|e| matches!(
+        e,
+        Event::Started { run: 1, job: 1, .. } | Event::Started { run: 3, .. }
+    )));
+}
+
+#[tokio::test]
+async fn shutdown_during_event_backpressure_never_starts_waiting_jobs() {
+    let h = Harness::new(1);
+    let repos = vec![h.repo("one").await, h.repo("two").await];
+    let prepared = h.prepared(1, AgentId::Codex, 2, false, &repos).await;
+    let (tx, mut rx) = mpsc::channel(1);
+    // Fill the event queue before admission. The manager will suspend while
+    // publishing CheckingRepository, so shutdown cannot rely on command polling.
+    tx.send(Event::Queued {
+        run: 99,
+        job: 0,
+        reason: QueueReason::GlobalLimit,
+    })
+    .await
+    .unwrap();
+    let mut manager = RunManager::new(2, tx);
+    manager
+        .start(1, prepared, agents::backend(AgentId::Codex).unwrap())
+        .unwrap();
+    tokio::task::yield_now().await;
+    manager.shutdown();
+    let finished = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut finished = 0;
+        while let Some(event) = rx.recv().await {
+            assert!(!matches!(event, Event::Started { .. }));
+            if let Event::Finished { status, .. } = event {
+                assert_eq!(status, JobStatus::Cancelled);
+                finished += 1;
+            }
+        }
+        finished
+    })
+    .await
+    .unwrap();
+    (&mut manager.join).await.unwrap();
+    assert_eq!(finished, 2);
+    assert!(!h.control.join("1-one.input").exists());
+    assert!(!h.control.join("1-two.input").exists());
 }
 
 #[test]

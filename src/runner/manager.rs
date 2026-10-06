@@ -46,16 +46,24 @@ pub struct RunManager {
     controls: BTreeMap<u64, Control>,
     pub join: JoinHandle<()>,
     closing: bool,
+    stopping: Arc<AtomicBool>,
 }
 impl RunManager {
     pub fn new(global_limit: usize, events: mpsc::Sender<Event>) -> Self {
         let (commands, rx) = mpsc::unbounded_channel();
-        let join = tokio::spawn(manage(rx, events, global_limit.clamp(1, MAX_CONCURRENCY)));
+        let stopping = Arc::new(AtomicBool::new(false));
+        let join = tokio::spawn(manage(
+            rx,
+            events,
+            global_limit.clamp(1, MAX_CONCURRENCY),
+            stopping.clone(),
+        ));
         Self {
             commands,
             controls: BTreeMap::new(),
             join,
             closing: false,
+            stopping,
         }
     }
     pub fn start(
@@ -152,7 +160,13 @@ impl RunManager {
         self.controls.retain(|_, r| !r.done.load(Ordering::Acquire));
     }
     pub fn shutdown(&mut self) {
+        if self.closing {
+            return;
+        }
         self.closing = true;
+        // Also visible while the manager is awaiting delivery of a lifecycle
+        // event; admission must not depend on when it reads Command::Shutdown.
+        self.stopping.store(true, Ordering::Release);
         self.cancel_all();
         let _ = self.commands.send(Command::Shutdown);
     }
@@ -221,6 +235,7 @@ async fn manage(
     mut commands: mpsc::UnboundedReceiver<Command>,
     events: mpsc::Sender<Event>,
     limit: usize,
+    stopping: Arc<AtomicBool>,
 ) {
     let mut schedule = Schedule::new(limit);
     let mut runs: BTreeMap<u64, Convoy> = BTreeMap::new();
@@ -237,7 +252,9 @@ async fn manage(
             .waiting()
             .into_iter()
             .map(|(key, _)| key)
-            .filter(|(run, job)| runs[run].cancellations[*job].is_cancelled())
+            .filter(|(run, job)| {
+                stopping.load(Ordering::Acquire) || runs[run].cancellations[*job].is_cancelled()
+            })
             .collect();
         for key in cancelled {
             schedule.cancel_pending(key);
@@ -254,7 +271,8 @@ async fn manage(
             )
             .await;
         }
-        while let Some(key) = schedule.next() {
+        while !closing && !stopping.load(Ordering::Acquire) {
+            let Some(key) = schedule.next() else { break };
             let convoy = runs.get_mut(&key.0).expect("scheduled convoy exists");
             let repository = convoy.repositories[key.1]
                 .take()
@@ -272,7 +290,23 @@ async fn manage(
                     reason: QueueReason::CheckingRepository,
                 })
                 .await;
+            if stopping.load(Ordering::Acquire) || cancellation.is_cancelled() {
+                finish(
+                    &events,
+                    &mut runs,
+                    key,
+                    (
+                        JobStatus::Cancelled,
+                        None,
+                        "Cancelled before execution; repository untouched.".into(),
+                    ),
+                )
+                .await;
+                schedule.finish(key, true);
+                continue;
+            }
             let tx = events.clone();
+            let worker_stopping = stopping.clone();
             let handle = workers.spawn(async move {
                 job_work(
                     key.0,
@@ -281,6 +315,7 @@ async fn manage(
                     &task,
                     backend.as_ref(),
                     &cancellation,
+                    &worker_stopping,
                     &worker_safe,
                     &tx,
                 )
