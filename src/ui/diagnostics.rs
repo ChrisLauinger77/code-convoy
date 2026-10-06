@@ -26,7 +26,7 @@ impl CliError {
     }
     pub fn hint(&self) -> &'static str {
         if self.missing {
-            "Executable not found. Install the CLI separately or choose its absolute path."
+            "Executable not found. Use Find CLI, enter its absolute path, or install the CLI separately."
         } else {
             "Check this backend's settings and executable compatibility."
         }

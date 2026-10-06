@@ -2,6 +2,7 @@
 pub mod claude;
 pub mod codex;
 pub mod copilot;
+pub mod discovery;
 pub mod opencode;
 use crate::{
     domain::{AgentId, AgentOptions, JobStatus, Repository, TaskConfig},

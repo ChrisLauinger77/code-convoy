@@ -251,6 +251,129 @@ fn cli_check_is_configuration_scoped_and_does_not_release_repository_work() {
 }
 
 #[test]
+fn cli_discovery_requires_explicit_selection_and_preserves_custom_paths_and_cancellation() {
+    let (temp, mut app) = app();
+    app.busy = true;
+    let ctx = egui::Context::default();
+    for agent in AgentId::ALL {
+        app.state.select_agent(agent);
+        let custom = temp.path().join("my manually configured executable");
+        app.state
+            .draft
+            .options
+            .insert("executable".into(), custom.display().to_string());
+        let before = serde_json::to_value(&app.state).unwrap();
+        let paths = vec![
+            temp.path().join("first candidate"),
+            temp.path().join("second candidate"),
+        ];
+        for result in [
+            Ok(vec![]),
+            Ok(vec![paths[0].clone()]),
+            Ok(paths.clone()),
+            Err("fixture search error".into()),
+        ] {
+            app.dirty = false;
+            pending_cli_search(&mut app, 1);
+            app.tx.send(Message::FoundCli(1, result)).unwrap();
+            app.poll();
+            assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
+            assert!(!app.dirty);
+            assert!(app.checking_cli.is_none());
+            assert!(app.busy);
+            assert!(app.manager.is_idle());
+            app.cli_search = None; // Cancel, then receive a late completion.
+            app.cli_search_completed(1, Ok(paths.clone()));
+            assert!(app.cli_search.is_none());
+            assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
+        }
+        pending_cli_search(&mut app, 2);
+        app.cli_search_completed(2, Ok(paths));
+        assert!(app.cli_search.as_ref().unwrap().selected.is_none());
+        app.use_discovered_cli(ctx.clone()); // No implicit choice among multiple matches.
+        assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
+        assert!(app.checking_cli.is_none());
+    }
+}
+
+fn pending_cli_search(app: &mut App, request: u64) {
+    app.cli_search = Some(cli_discovery::CliSearch {
+        request,
+        agent: app.state.draft.agent,
+        options: app.state.draft.options.clone(),
+        result: None,
+        selected: None,
+    });
+}
+
+#[test]
+fn cli_discovery_ignores_stale_requests_agent_switches_and_manual_edits() {
+    let (temp, mut app) = app();
+    let candidate = temp.path().join("candidate");
+    pending_cli_search(&mut app, 2);
+    app.cli_search_completed(1, Ok(vec![candidate.clone()]));
+    assert!(app.cli_search.as_ref().unwrap().result.is_none());
+    app.state.select_agent(AgentId::Claude);
+    app.cli_search_completed(2, Ok(vec![candidate.clone()]));
+    assert!(app.cli_search.is_none());
+    assert!(app.state.draft.options.is_empty());
+
+    pending_cli_search(&mut app, 3);
+    app.state
+        .draft
+        .options
+        .insert("executable".into(), "manual edit".into());
+    app.cli_search_completed(3, Ok(vec![candidate.clone()]));
+    assert!(app.cli_search.is_none());
+    assert_eq!(app.state.draft.options["executable"], "manual edit");
+
+    pending_cli_search(&mut app, 4);
+    app.cli_search_completed(4, Ok(vec![candidate]));
+    app.state
+        .draft
+        .options
+        .insert("model".into(), "new configuration".into());
+    app.use_discovered_cli(egui::Context::default());
+    assert_eq!(app.state.draft.options["executable"], "manual edit");
+    assert!(app.checking_cli.is_none());
+}
+
+#[test]
+fn choosing_a_cli_saves_only_the_executable_and_uses_normal_configuration_scoped_check() {
+    let (temp, mut app) = app();
+    app.busy = true;
+    for agent in AgentId::ALL {
+        app.state.select_agent(agent);
+        app.state.draft.prompt = "unchanged task".into();
+        let candidate = temp.path().join("chosen CLI with spaces");
+        pending_cli_search(&mut app, 1);
+        app.cli_search_completed(1, Ok(vec![candidate.clone()]));
+        assert_eq!(app.cli_search.as_ref().unwrap().selected, Some(0));
+        app.use_discovered_cli(egui::Context::default());
+        assert!(app.cli_search.is_none());
+        assert_eq!(
+            app.state.draft.options["executable"],
+            candidate.display().to_string()
+        );
+        assert_eq!(app.state.draft.prompt, "unchanged task");
+        assert_eq!(
+            app.checking_cli,
+            Some((agent, app.state.draft.options.clone()))
+        );
+        assert!(app.busy);
+        assert!(app.manager.is_idle());
+        assert!(app.state.runs.is_empty());
+        app.save();
+        assert_eq!(
+            app.store.load().unwrap().draft.options,
+            app.state.draft.options
+        );
+        // The current-thread runtime is not driven, so this never runs a CLI.
+        app.checking_cli = None;
+    }
+}
+
+#[test]
 fn editor_scroll_and_execution_fit_small_and_large_panes() {
     let (_temp, mut app) = app();
     let ctx = egui::Context::default();

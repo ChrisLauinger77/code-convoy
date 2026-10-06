@@ -5,6 +5,26 @@ use crate::{
 };
 
 impl App {
+    pub(super) fn check_cli(&mut self, ctx: egui::Context) {
+        if self.checking_cli.is_some() {
+            return;
+        }
+        let agent = self.state.draft.agent;
+        let Ok(backend) = agents::backend(agent) else {
+            return;
+        };
+        let options = self.state.draft.options.clone();
+        self.checking_cli = Some((agent, options.clone()));
+        self.detection = None;
+        let directory = self.store.directory().to_owned();
+        self.dispatch(ctx, async move {
+            let result = agents::detect(backend.as_ref(), &options, &directory)
+                .await
+                .map_err(diagnostics::CliError::from_error);
+            Message::Detected(agent, options, result)
+        });
+    }
+
     pub(super) fn agent_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         theme::section(ui, "Agent");
         let old_agent = self.state.draft.agent;
@@ -25,6 +45,7 @@ impl App {
         }
         match agents::backend(self.state.draft.agent) {
             Ok(backend) => {
+                let mut find_cli = false;
                 for spec in backend.options() {
                     ui.push_id(spec.key, |ui| {
                         ui.horizontal(|ui| {
@@ -44,6 +65,12 @@ impl App {
                             let field_width = ui.available_width();
                             match spec.kind {
                                 OptionKind::Text { hint } => {
+                                    let executable = spec.key == "executable";
+                                    let field_width = if executable {
+                                        field_width - 68.0 - ui.spacing().item_spacing.x
+                                    } else {
+                                        field_width
+                                    };
                                     ui.add(
                                         egui::TextEdit::singleline(&mut current)
                                             .hint_text(hint)
@@ -51,6 +78,13 @@ impl App {
                                     )
                                     .labelled_by(label.id)
                                     .on_hover_text(spec.help);
+                                    if executable {
+                                        find_cli = ui.add_enabled(
+                                            self.checking_cli.is_none() && self.cli_search.is_none(),
+                                            theme::quiet("Find CLI").min_size(egui::vec2(68.0, 0.0)),
+                                        ).on_hover_text("Find installed executables, then choose one to check")
+                                            .clicked();
+                                    }
                                 }
                                 OptionKind::Choice(choices) => {
                                     let selected = choices
@@ -82,26 +116,18 @@ impl App {
                         });
                     });
                 }
+                if find_cli {
+                    self.find_cli(ctx.clone());
+                }
                 ui.horizontal_wrapped(|ui| {
                     if ui
                         .add_enabled(
-                            self.checking_cli.is_none(),
+                            self.checking_cli.is_none() && self.cli_search.is_none(),
                             theme::quiet("Check CLI").small(),
                         )
                         .clicked()
                     {
-                        let options = self.state.draft.options.clone();
-                        let agent = self.state.draft.agent;
-                        self.checking_cli = Some((agent, options.clone()));
-                        self.detection = None;
-                        let directory = self.store.directory().to_owned();
-                        let backend = backend.clone();
-                        self.dispatch(ctx.clone(), async move {
-                            let result = agents::detect(backend.as_ref(), &options, &directory)
-                                .await
-                                .map_err(diagnostics::CliError::from_error);
-                            Message::Detected(agent, options, result)
-                        });
+                        self.check_cli(ctx.clone());
                     }
                     let p = theme::Palette::of(ui);
                     if self.current_cli_check() {

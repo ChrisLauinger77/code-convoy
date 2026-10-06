@@ -62,10 +62,20 @@ Windows may show an unknown-publisher warning.
 No package installs Git, coding-agent CLIs, credentials, services, or an updater.
 Install and authenticate the agents separately. Desktop launchers may have a
 different `PATH` from your terminal, particularly Finder on macOS; provide the
-agent's absolute executable path in CodeConvoy if needed, and ensure Git is on the
+agent's absolute executable path using **Find CLI** or manual entry, and ensure Git is on the
 application's `PATH`. The portable ZIP uses the same per-user application data
 location as the installed Windows app; its executable is portable, its state is
 not stored beside it.
+
+**Find CLI**, beside **Executable**, searches for the selected agent in the app's
+`PATH` and common installation folders, including Homebrew, `~/.local/bin`, and
+OpenCode's `~/.opencode/bin`. Choose a discovered path and click **Use and check**
+to save it and run the existing **Check CLI** compatibility check. Searching and
+cancelling leave your current setting unchanged; multiple matches require a choice.
+Discovery does not run candidates, install software, read shell profiles, change
+`PATH`, or start an agent task. A discovered script may still need its interpreter
+(such as Node) on the app's `PATH`. On Windows, discovery offers native `.exe`
+files, including WinGet links and Scoop shims; shell wrappers are not offered.
 
 See [release procedure and packaging design](docs/releasing.md) and the
 [release validation record](docs/release-validation.md) for tested behavior and

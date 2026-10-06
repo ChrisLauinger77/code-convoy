@@ -2,6 +2,7 @@ mod about;
 #[cfg(target_os = "macos")]
 mod about_macos;
 mod agent_config;
+mod cli_discovery;
 mod diagnostics;
 mod editor;
 mod format;
@@ -30,6 +31,7 @@ use std::{
 use tokio::{runtime::Runtime, sync::mpsc as async_mpsc};
 
 enum Message {
+    FoundCli(u64, Result<Vec<PathBuf>, String>),
     RepositoryFolder(Option<PathBuf>),
     Registered(Result<(Repository, WorkingTree), String>),
     Refreshed(Vec<(PathBuf, Result<WorkingTree, String>)>),
@@ -63,6 +65,8 @@ pub struct App {
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     busy: bool,
     checking_cli: Option<(domain::AgentId, domain::AgentOptions)>,
+    cli_search: Option<cli_discovery::CliSearch>,
+    next_cli_search: u64,
     about_open: bool,
     #[cfg(target_os = "macos")]
     native_about: Option<about_macos::NativeAbout>,
@@ -133,6 +137,8 @@ impl App {
             repository_states: HashMap::new(),
             busy: false,
             checking_cli: None,
+            cli_search: None,
+            next_cli_search: 0,
             about_open: false,
             #[cfg(target_os = "macos")]
             native_about: None,
@@ -409,6 +415,7 @@ impl App {
                         Err(e) => self.notice = e,
                     }
                 }
+                Message::FoundCli(request, result) => self.cli_search_completed(request, result),
                 Message::Detected(agent, options, result) => {
                     self.checking_cli = None;
                     self.detection = Some((agent, options, result));
@@ -586,6 +593,7 @@ impl eframe::App for App {
             .show(ui, |ui| self.results(ui, ctx));
         self.preflight_window(ctx);
         self.about_window(ctx);
+        self.cli_search_window(ctx);
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
             self.save();
         }
@@ -594,6 +602,10 @@ impl eframe::App for App {
                 || self.state.runs.iter().any(Run::active)
                 || self.busy
                 || self.checking_cli.is_some()
+                || self
+                    .cli_search
+                    .as_ref()
+                    .is_some_and(|search| search.result.is_none())
             {
                 100
             } else {
