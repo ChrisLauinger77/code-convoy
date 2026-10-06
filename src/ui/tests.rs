@@ -146,15 +146,16 @@ fn reused_attachment_validation_is_async_visible_and_stale_results_cannot_replac
     }
     app.poll();
     assert!(!app.attachment_work.pending);
-    assert_eq!(app.state.draft.attachments, [files[0].clone()]);
-    assert!(
-        app.notice.contains("missing.txt") && app.draft_message.contains("could not be restored")
-    );
+    assert_eq!(app.state.draft.attachments, files);
+    assert!(app.notice.contains("missing.txt") && app.draft_message.contains("need attention"));
     assert_eq!(app.state.runs[0].task.attachments, files);
     app.attachment_work.invalidate();
     app.attachments_added(0, vec![files[1].clone()], vec![]);
     app.attachments_reused(0, vec![], vec![]);
-    assert_eq!(app.state.draft.attachments, [files[0].clone()]);
+    assert_eq!(app.state.draft.attachments, files);
+    app.preflight(egui::Context::default());
+    assert!(!app.busy && app.prepared.is_none());
+    assert!(app.attachment_error().unwrap().contains("missing.txt"));
     assert!(app.manager.is_idle());
 }
 
@@ -1077,42 +1078,62 @@ fn editor_scroll_and_execution_fit_small_and_large_panes() {
     let (_temp, mut app) = app();
     let ctx = egui::Context::default();
     theme::install(&ctx);
-    app.state.repositories = (0..24)
-        .map(|i| repository(&format!("long-repository-name-{i}")))
-        .collect();
-    for agent in AgentId::ALL {
-        app.state.select_agent(agent);
-        for (width, height) in [(310.0, 450.0), (360.0, 710.0), (520.0, 890.0)] {
-            // The footer measures once and reserves its actual height next frame.
-            for frame in 0..3 {
-                let mut output = ctx.run_ui(
-                    egui::RawInput {
-                        screen_rect: Some(egui::Rect::from_min_size(
-                            egui::Pos2::ZERO,
-                            egui::vec2(width, height),
-                        )),
-                        ..Default::default()
-                    },
-                    |ui| {
-                        egui::CentralPanel::default()
-                            .frame(egui::Frame::NONE.inner_margin(theme::PANEL_MARGIN))
-                            .show(ui, |ui| {
-                                let bounds = ui.available_rect_before_wrap();
-                                let result = ui.scope(|ui| app.editor_pane(ui, &ctx));
-                                if frame > 0 {
-                                    assert!(
-                                        result.response.rect.right() <= bounds.right() + 1.0,
-                                        "{agent:?} width {width}"
-                                    );
-                                    assert!(
-                                        result.response.rect.bottom() <= bounds.bottom() + 1.0,
-                                        "{agent:?} height {height}"
-                                    );
-                                }
-                            });
-                    },
-                );
-                output.textures_delta.clear();
+    for count in [1, 5, 10, 24] {
+        for visuals in [egui::Visuals::dark(), egui::Visuals::light()] {
+            ctx.set_visuals(visuals);
+            app.state.repositories = (0..count)
+                .map(|i| repository(&format!("long-repository-name-{i}")))
+                .collect();
+            app.state.groups = vec![domain::RepositoryGroup {
+                name: "Maintenance repositories".into(),
+                repositories: app
+                    .state
+                    .repositories
+                    .iter()
+                    .map(|r| r.path.clone())
+                    .collect(),
+            }];
+            app.state.templates = vec![domain::TaskTemplate {
+                name: "Review".into(),
+                prompt: "Review requirements".into(),
+            }];
+            for agent in AgentId::ALL {
+                app.state.select_agent(agent);
+                for (width, height) in [(310.0, 450.0), (360.0, 710.0), (520.0, 890.0)] {
+                    // The footer measures once and reserves its actual height next frame.
+                    for frame in 0..3 {
+                        let mut output = ctx.run_ui(
+                            egui::RawInput {
+                                screen_rect: Some(egui::Rect::from_min_size(
+                                    egui::Pos2::ZERO,
+                                    egui::vec2(width, height),
+                                )),
+                                ..Default::default()
+                            },
+                            |ui| {
+                                egui::CentralPanel::default()
+                                    .frame(egui::Frame::NONE.inner_margin(theme::PANEL_MARGIN))
+                                    .show(ui, |ui| {
+                                        let bounds = ui.available_rect_before_wrap();
+                                        let result = ui.scope(|ui| app.editor_pane(ui, &ctx));
+                                        if frame > 0 {
+                                            assert!(
+                                                result.response.rect.right()
+                                                    <= bounds.right() + 1.0,
+                                                "{agent:?} width {width}"
+                                            );
+                                            assert!(
+                                                result.response.rect.bottom()
+                                                    <= bounds.bottom() + 1.0,
+                                                "{agent:?} height {height}"
+                                            );
+                                        }
+                                    });
+                            },
+                        );
+                        output.textures_delta.clear();
+                    }
+                }
             }
         }
     }

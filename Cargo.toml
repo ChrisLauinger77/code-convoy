@@ -60,3 +60,7 @@ bench = false
 [[example]]
 name = "package_probe"
 required-features = ["test-support"]
+
+[[example]]
+name = "v02_validation"
+required-features = ["test-support"]

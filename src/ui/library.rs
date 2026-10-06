@@ -136,24 +136,43 @@ impl App {
                 });
             }
         });
+        // Build a borrowed availability index once per render, instead of scanning
+        // registrations and cloning paths for every group/member on every frame.
+        let available: HashSet<_> = self
+            .state
+            .repositories
+            .iter()
+            .filter(|r| !matches!(self.repository_states.get(&r.path), Some(Err(_))))
+            .map(|r| &r.path)
+            .collect();
         let mut action = None;
         for (index, group) in self.state.groups.iter().enumerate() {
-            let (members, missing) = self.group_members(group);
-            let count = members
+            let members = group
+                .repositories
                 .iter()
-                .filter(|path| self.selected.contains(*path))
+                .filter(|path| available.contains(path))
                 .count();
-            let mut selected = !members.is_empty() && count == members.len();
+            let missing = group.repositories.len() - members;
+            let count = group
+                .repositories
+                .iter()
+                .filter(|path| available.contains(path) && self.selected.contains(*path))
+                .count();
+            let mut selected = members > 0 && count == members;
             ui.horizontal_wrapped(|ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-                let response = ui.add_enabled(!self.busy && !members.is_empty(),
+                let response = ui.add_enabled(!self.busy && members > 0,
                     egui::Checkbox::new(&mut selected, format!("{} · {} repos", group.name, group.repositories.len()))
-                        .indeterminate(count > 0 && (count < members.len() || !missing.is_empty())))
+                        .indeterminate(count > 0 && (count < members || missing > 0)))
                     .on_hover_text("Select adds available members. Deselect removes every current member, including individual and overlapping-group selections.");
                 if response.changed() { action = Some((index, selected)); }
-                if !missing.is_empty() {
-                    ui.colored_label(theme::Palette::of(ui).warning, format!("{} unavailable", missing.len()))
-                        .on_hover_text(missing.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
+                if missing > 0 {
+                    ui.colored_label(theme::Palette::of(ui).warning, format!("{missing} unavailable"))
+                        .on_hover_ui(|ui| {
+                            for path in group.repositories.iter().filter(|path| !available.contains(path)) {
+                                ui.label(path.display().to_string());
+                            }
+                        });
                 }
             });
         }
