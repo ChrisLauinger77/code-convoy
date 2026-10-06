@@ -55,10 +55,22 @@ pub(super) fn show(ui: &mut egui::Ui, run: &Run, job: &domain::Job) {
     ));
     ui.small("The global limit is a live preference and is not recorded in this snapshot.");
     ui.label(format!("Created: {}", format::timestamp(run.created_at)));
+    ui.label(format!(
+        "Convoy duration: {}",
+        format::duration(run.elapsed(domain::now()))
+    ));
     if let Some(start) = job.started_at {
         ui.label(format!(
             "Selected job started: {}",
             format::timestamp(start)
+        ));
+        ui.label(format!(
+            "Selected job duration: {}",
+            format::duration(
+                job.finished_at
+                    .unwrap_or_else(domain::now)
+                    .saturating_sub(start)
+            )
         ));
     }
     if let Some(end) = job.finished_at {

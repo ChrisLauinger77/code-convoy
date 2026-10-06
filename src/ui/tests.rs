@@ -4,6 +4,9 @@ use super::*;
 use crate::domain::{AgentId, Job, TaskConfig};
 use crate::runner::PreparedRepository;
 
+#[path = "task_context_tests.rs"]
+mod task_context;
+
 fn app() -> (tempfile::TempDir, App) {
     app_with_state(AppState::default())
 }
@@ -1227,6 +1230,16 @@ fn accepted_launch_clears_only_task_and_selection_and_persists_preferences() {
             .attachments
             .push(crate::attachments::Attachment::inspect(&path).unwrap());
         app.prepared.as_mut().unwrap().task.attachments = app.state.draft.attachments.clone();
+        app.state.groups.push(domain::RepositoryGroup {
+            name: "Keep group".into(),
+            repositories: vec![app.state.repositories[0].path.clone()],
+        });
+        app.state.templates.push(domain::TaskTemplate {
+            name: "Keep template".into(),
+            prompt: "Reusable text".into(),
+        });
+        let groups = app.state.groups.clone();
+        let templates = app.state.templates.clone();
         let expected = serde_json::to_value(app.prepared.as_ref().unwrap().task.clone()).unwrap();
         let preferences = app.state.agent_options.clone();
         let registered = app.state.repositories.clone();
@@ -1234,6 +1247,9 @@ fn accepted_launch_clears_only_task_and_selection_and_persists_preferences() {
         assert!(app.manager.is_active(1));
         assert!(app.state.draft.prompt.is_empty());
         assert!(app.state.draft.attachments.is_empty());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "task context");
+        assert_eq!(app.state.groups, groups);
+        assert_eq!(app.state.templates, templates);
         assert!(app.selected.is_empty());
         assert_eq!(app.state.draft.agent, agent);
         assert_eq!(app.state.draft.options, app.state.runs[0].task.options);
@@ -1255,6 +1271,8 @@ fn accepted_launch_clears_only_task_and_selection_and_persists_preferences() {
         assert_eq!(restored.draft.concurrency, 3);
         assert_eq!(restored.global_concurrency, 6);
         assert_eq!(restored.repositories, registered);
+        assert_eq!(restored.groups, groups);
+        assert_eq!(restored.templates, templates);
         assert_eq!(
             serde_json::to_value(&restored.runs[0].task).unwrap(),
             expected

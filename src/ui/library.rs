@@ -36,11 +36,27 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.add_sized([200.0, 24.0], egui::Label::new(&template.name).truncate())
                         .on_hover_text(&template.name);
-                    if ui.button("Load").clicked() {
+                    let load_button = ui.button("Load");
+                    load_button.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::WidgetType::Button,
+                            load_button.enabled(),
+                            format!("Load template {}", template.name),
+                        )
+                    });
+                    if load_button.clicked() {
                         load = Some(index);
                         ui.close();
                     }
-                    if ui.button("Edit…").clicked() {
+                    let edit_button = ui.button("Edit…");
+                    edit_button.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::WidgetType::Button,
+                            edit_button.enabled(),
+                            format!("Edit template {}", template.name),
+                        )
+                    });
+                    if edit_button.clicked() {
                         self.library_editor = Some(LibraryEditor::Template {
                             index: Some(index),
                             value: template.clone(),
@@ -157,18 +173,19 @@ impl App {
                 LibraryEditor::Group { index, value, error } => {
                     ui.heading("Repository groups");
                     let previous = *index;
+                    let group = ui.label("Group");
                     egui::ComboBox::from_id_salt("edit_group").width(ui.available_width())
                         .selected_text(index.and_then(|i| self.state.groups.get(i)).map_or("New group", |g| g.name.as_str()))
                         .show_ui(ui, |ui| {
                             ui.selectable_value(index, None, "New group");
                             for (i, group) in self.state.groups.iter().enumerate() { ui.selectable_value(index, Some(i), &group.name); }
-                        });
+                        }).response.labelled_by(group.id);
                     if previous != *index {
                         *value = index.and_then(|i| self.state.groups.get(i)).cloned().unwrap_or(RepositoryGroup { name: String::new(), repositories: Vec::new() });
                         error.clear();
                     }
-                    ui.label("Name");
-                    ui.text_edit_singleline(&mut value.name);
+                    let name = ui.label("Name");
+                    ui.text_edit_singleline(&mut value.name).labelled_by(name.id);
                     ui.small("Membership changes only the group. Runs and current selections stay unchanged.");
                     egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 320.0).max(100.0)).show(ui, |ui| {
                         for repository in &self.state.repositories {
@@ -204,11 +221,11 @@ impl App {
                 }
                 LibraryEditor::Template { index, value, error } => {
                     ui.heading(if index.is_some() { "Edit template" } else { "Save task template" });
-                    ui.label("Name");
-                    ui.text_edit_singleline(&mut value.name);
-                    ui.label("Task text");
+                    let name = ui.label("Name");
+                    ui.text_edit_singleline(&mut value.name).labelled_by(name.id);
+                    let task = ui.label("Task text");
                     egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 270.0).max(100.0)).show(ui, |ui| {
-                        ui.add(egui::TextEdit::multiline(&mut value.prompt).desired_rows(8).desired_width(f32::INFINITY));
+                        ui.add(egui::TextEdit::multiline(&mut value.prompt).desired_rows(8).desired_width(f32::INFINITY)).labelled_by(task.id);
                     });
                     ui.small("Templates store only name and task text. Load from Templates to populate the draft.");
                     if !error.is_empty() { ui.colored_label(theme::Palette::of(ui).error, error.as_str()); }

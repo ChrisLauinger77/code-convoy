@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "next_run": 42,
+  "repositories": [{"name": "Grüße repo", "path": "/fixture/Grüße repo"}],
+  "draft": {"prompt": "Continue the review", "agent": "claude", "options": {"model": "review-model", "permissions": "default"}, "concurrency": 3},
+  "agent_options": {
+    "codex": {"model": "codex-model", "sandbox": "read-only"},
+    "copilot": {"model": "copilot-model", "permissions": "existing"},
+    "opencode": {"model": "provider/model", "variant": "high"},
+    "claude": {"model": "review-model", "permissions": "default"}
+  },
+  "global_concurrency": 6,
+  "runs": [{
+    "id": 41,
+    "created_at": 1700000000,
+    "task": {"prompt": "Historical task", "agent": "copilot", "options": {"model": "historical-model"}, "concurrency": 2},
+    "jobs": [{"repository": {"name": "Grüße repo", "path": "/fixture/Grüße repo"}, "status": "succeeded", "started_at": 1700000001, "finished_at": 1700000010, "exit_code": 0, "before": {"branch": "main", "head": "fixture-head", "changed": 1}, "interrupted": false}]
+  }]
+}
