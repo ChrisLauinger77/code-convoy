@@ -96,6 +96,7 @@ async fn maintenance_groups_and_image_context_reach_independent_jobs_for_every_b
             .unwrap();
         state.save_template(None, TaskTemplate { name: "Packaged application release".into(), prompt: "Review this repository's package definition and README for the attached release requirements. Do not commit or push.".into() }).unwrap();
         let task = TaskConfig {
+            execution_mode: ExecutionMode::Direct,
             agent,
             prompt: state.templates[0].prompt.clone(),
             attachments: attachments.clone(),

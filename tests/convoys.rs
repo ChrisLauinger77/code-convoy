@@ -52,6 +52,7 @@ impl Harness {
     }
     fn task(&self, ticket: u64, agent: AgentId, limit: usize, fail: bool) -> TaskConfig {
         TaskConfig {
+            execution_mode: ExecutionMode::Direct,
             attachments: Vec::new(),
             prompt: format!(
                 "codeconvoy-fixture-gate\n{}",

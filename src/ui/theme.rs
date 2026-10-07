@@ -88,7 +88,7 @@ impl Palette {
     pub fn status(&self, status: JobStatus) -> Color32 {
         match status {
             JobStatus::Queued | JobStatus::Cancelled => self.muted,
-            JobStatus::Running => self.accent,
+            JobStatus::Running | JobStatus::Preparing => self.accent,
             JobStatus::Succeeded => self.success,
             JobStatus::Failed => self.error,
         }

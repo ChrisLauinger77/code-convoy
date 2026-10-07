@@ -224,10 +224,30 @@ pub async fn capture_cancellable(
     limit: usize,
     cancellation: &Cancellation,
 ) -> Result<Captured> {
+    capture_owned(
+        spec,
+        limit,
+        cancellation,
+        Duration::from_secs(20),
+        &std::sync::atomic::AtomicBool::new(true),
+    )
+    .await
+}
+
+/// Reports confirmed cleanup to the scheduler for mutating Git preparation too.
+pub(crate) async fn capture_owned(
+    spec: CommandSpec,
+    limit: usize,
+    cancellation: &Cancellation,
+    timeout: Duration,
+    safe: &std::sync::atomic::AtomicBool,
+) -> Result<Captured> {
+    use std::sync::atomic::Ordering;
     anyhow::ensure!(!cancellation.is_cancelled(), "Command cancelled.");
     let command_cancellation = Cancellation::default();
     let data = std::sync::Mutex::new((Vec::new(), Vec::new(), false));
     let child = spawn(&spec)?;
+    safe.store(false, Ordering::Release);
     let execution = execute(
         child,
         spec.input,
@@ -252,15 +272,18 @@ pub async fn capture_cancellable(
         _ = cancellation.cancelled() => {
             command_cancellation.cancel();
             execution.await?;
+            safe.store(true, Ordering::Release);
             anyhow::bail!("Command cancelled.")
         }
         result = &mut execution => result?,
-        _ = tokio::time::sleep(Duration::from_secs(20)) => {
+        _ = tokio::time::sleep(timeout) => {
             command_cancellation.cancel();
-            let _ = execution.await;
-            anyhow::bail!("Command timed out after 20 seconds.")
+            execution.await?;
+            safe.store(true, Ordering::Release);
+            anyhow::bail!("Command timed out after {} seconds.", timeout.as_secs())
         }
     };
+    safe.store(true, Ordering::Release);
     let (stdout, stderr, truncated) = data
         .lock()
         .map_err(|_| anyhow::anyhow!("Output lock failed."))?

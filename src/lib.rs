@@ -6,3 +6,4 @@ pub mod persistence;
 pub mod process;
 pub mod runner;
 pub mod ui;
+pub mod worktrees;

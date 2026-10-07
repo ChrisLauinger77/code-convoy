@@ -78,6 +78,7 @@ fn group_selection_is_explicit_deduplicated_and_missing_members_remain_repairabl
 fn template_load_changes_only_task_text_and_never_launches_or_mutates_history() {
     let (temp, mut app) = app();
     prepare(&mut app, AgentId::Copilot);
+    app.state.draft.execution_mode = domain::ExecutionMode::IsolatedWorktree;
     app.prepared = None;
     let path = temp.path().join("context.md");
     std::fs::write(&path, "specification").unwrap();
@@ -229,7 +230,7 @@ fn idle_close_needs_no_confirmation_and_closes_launch_admission() {
 
 #[test]
 fn running_or_queued_close_is_a_single_side_effect_free_decision() {
-    for status in [JobStatus::Running, JobStatus::Queued] {
+    for status in [JobStatus::Running, JobStatus::Queued, JobStatus::Preparing] {
         let (_temp, mut app) = app();
         prepare(&mut app, AgentId::Codex);
         app.start(); // Undriven manager: no Git commands or agent processes yet.
@@ -443,7 +444,9 @@ fn add_repository_and_wait(app: &mut App) {
     let message = app.runtime.as_ref().unwrap().block_on(async {
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
-                if let Ok(message) = app.rx.try_recv() {
+                if let Ok(message) = app.rx.try_recv()
+                    && matches!(message, Message::Registered(_))
+                {
                     break message;
                 }
                 tokio::time::sleep(Duration::from_millis(1)).await;
@@ -1205,6 +1208,7 @@ fn run(id: u64, statuses: &[JobStatus]) -> Run {
 
 fn prepare(app: &mut App, agent: AgentId) {
     app.state.draft = TaskConfig {
+        execution_mode: domain::ExecutionMode::Direct,
         attachments: Vec::new(),
         prompt: "Make a focused change".into(),
         agent,
@@ -1424,6 +1428,7 @@ fn reuse_copies_full_configuration_and_registered_selection_without_starting_job
     let original_options = app.state.draft.options.clone();
     let mut history = run(20, &[JobStatus::Cancelled]);
     history.task = TaskConfig {
+        execution_mode: domain::ExecutionMode::IsolatedWorktree,
         attachments: Vec::new(),
         prompt: "Historical task".into(),
         agent: AgentId::Copilot,
@@ -1438,6 +1443,10 @@ fn reuse_copies_full_configuration_and_registered_selection_without_starting_job
     let expected = serde_json::to_value(&history).unwrap();
     app.state.runs.push(history);
     app.reuse_convoy(20);
+    assert_eq!(
+        app.state.draft.execution_mode,
+        domain::ExecutionMode::IsolatedWorktree
+    );
     assert_eq!(app.state.draft.prompt, "Historical task");
     assert_eq!(app.state.draft.agent, AgentId::Copilot);
     assert_eq!(app.state.draft.options["tool_approvals"], "file-edits");
@@ -1582,4 +1591,262 @@ fn claude_reuse_restores_backend_options_without_launching_or_mutating_history()
     );
     app.save();
     assert_eq!(app.store.load().unwrap().draft.options["effort"], "low");
+}
+
+fn isolated_history(id: u64, status: JobStatus, changed: Option<bool>) -> Run {
+    let mut run = run(id, &[status]);
+    run.task.execution_mode = domain::ExecutionMode::IsolatedWorktree;
+    run.jobs[0].execution_mode = domain::ExecutionMode::IsolatedWorktree;
+    run.jobs[0].worktree = Some(domain::WorktreeMetadata {
+        owner: "codeconvoy.worktree.v1".into(),
+        run: id,
+        job: 0,
+        repository: run.jobs[0].repository.clone(),
+        common_dir: PathBuf::from("/fixtures/repo0/.git"),
+        path: PathBuf::from("/fixtures/owned/result/tree"),
+        base_commit: "1234567890abcdef1234567890abcdef12345678".into(),
+        execution_mode: domain::ExecutionMode::IsolatedWorktree,
+    });
+    run.jobs[0].worktree_result = changed.map(|changed| domain::WorktreeResult {
+        observed_this_session: true,
+        exists: true,
+        changed: Some(changed),
+    });
+    run
+}
+
+#[test]
+fn isolated_result_presentation_distinguishes_execution_observation_and_history() {
+    for status in [
+        JobStatus::Succeeded,
+        JobStatus::Failed,
+        JobStatus::Cancelled,
+    ] {
+        for changed in [false, true] {
+            let run = isolated_history(1, status, Some(changed));
+            let label = format::isolated_result(&run.jobs[0]).unwrap();
+            assert!(label.contains(if changed {
+                "changes retained"
+            } else {
+                "No repository changes"
+            }));
+            let loaded: Run = serde_json::from_value(serde_json::to_value(&run).unwrap()).unwrap();
+            let label = format::isolated_result(&loaded.jobs[0]).unwrap();
+            assert!(label.contains("not checked after restart"));
+            assert!(label.contains(if changed {
+                "changes retained"
+            } else {
+                "no changes"
+            }));
+            assert_eq!(loaded.jobs[0].status, status);
+        }
+    }
+    let unknown = isolated_history(1, JobStatus::Cancelled, None);
+    assert!(
+        format::isolated_result(&unknown.jobs[0])
+            .unwrap()
+            .contains("result not validated")
+    );
+    assert!(format::isolated_result(&run(1, &[JobStatus::Succeeded]).jobs[0]).is_none());
+}
+
+#[test]
+fn retained_results_allow_exit_and_cancel_quit_preserves_preparation_metadata() {
+    for status in [
+        JobStatus::Succeeded,
+        JobStatus::Failed,
+        JobStatus::Cancelled,
+    ] {
+        let (_temp, mut app) = app();
+        app.state.runs.push(isolated_history(1, status, Some(true)));
+        let before = serde_json::to_value(&app.state.runs).unwrap();
+        assert!(app.request_quit());
+        assert_eq!(
+            serde_json::to_value(&app.store.load().unwrap().runs).unwrap(),
+            before
+        );
+    }
+    for status in [JobStatus::Preparing, JobStatus::Running] {
+        let (_temp, mut app) = app();
+        app.state.runs.push(isolated_history(1, status, None));
+        let before = serde_json::to_value(&app.state.runs).unwrap();
+        assert!(!app.request_quit());
+        app.cancel_quit();
+        assert!(!app.closing && !app.exit_ready);
+        assert_eq!(serde_json::to_value(&app.state.runs).unwrap(), before);
+    }
+}
+
+#[test]
+fn confirmed_quit_persists_preparation_cancellation_and_retained_results() {
+    let (_temp, mut app) = app();
+    prepare(&mut app, AgentId::Codex);
+    app.prepared.as_mut().unwrap().task.execution_mode = domain::ExecutionMode::IsolatedWorktree;
+    app.start();
+    let metadata = isolated_history(1, JobStatus::Preparing, None).jobs[0]
+        .worktree
+        .clone();
+    app.apply_event(Event::Preparing {
+        run: 1,
+        job: 0,
+        worktree: metadata.clone(),
+    });
+    app.state
+        .runs
+        .push(isolated_history(40, JobStatus::Failed, Some(true)));
+    let retained = serde_json::to_value(&app.state.runs[1]).unwrap();
+    assert!(!app.request_quit());
+    app.confirm_quit();
+    app.runtime.as_ref().unwrap().block_on(async {
+        tokio::time::timeout(Duration::from_secs(5), &mut app.manager.join)
+            .await
+            .unwrap()
+            .unwrap();
+    });
+    app.handle_close(&egui::Context::default());
+    let saved = app.store.load().unwrap();
+    assert!(app.exit_ready);
+    assert_eq!(saved.runs[0].jobs[0].status, JobStatus::Cancelled);
+    assert!(!saved.runs[0].jobs[0].interrupted);
+    assert_eq!(saved.runs[0].jobs[0].worktree, metadata);
+    assert_eq!(serde_json::to_value(&saved.runs[1]).unwrap(), retained);
+}
+
+#[test]
+fn isolated_groups_templates_and_reuse_produce_only_fresh_explicit_jobs() {
+    let (_temp, mut app) = app();
+    prepare(&mut app, AgentId::Copilot);
+    app.prepared = None;
+    app.state.draft.execution_mode = domain::ExecutionMode::IsolatedWorktree;
+    app.state.groups = vec![
+        domain::RepositoryGroup {
+            name: "all".into(),
+            repositories: app
+                .state
+                .repositories
+                .iter()
+                .map(|r| r.path.clone())
+                .collect(),
+        },
+        domain::RepositoryGroup {
+            name: "overlap".into(),
+            repositories: vec![app.state.repositories[0].path.clone()],
+        },
+    ];
+    app.select_group(0, true);
+    app.select_group(1, true);
+    app.state.templates.push(domain::TaskTemplate {
+        name: "task only".into(),
+        prompt: "Original task".into(),
+    });
+    app.load_template(0);
+    let prepared = PreparedRun {
+        task: app.state.draft.clone(),
+        repositories: app
+            .state
+            .repositories
+            .iter()
+            .filter(|r| app.selected.contains(&r.path))
+            .map(|r| PreparedRepository {
+                repository: r.clone(),
+                state: WorkingTree {
+                    summary: domain::GitSummary::default(),
+                    entries: vec![],
+                },
+            })
+            .collect(),
+    };
+    let run = prepared.snapshot(42);
+    assert_eq!(run.jobs.len(), 2);
+    assert!(
+        run.jobs
+            .iter()
+            .all(|j| j.execution_mode == domain::ExecutionMode::IsolatedWorktree)
+    );
+    let snapshot = serde_json::to_value(&run).unwrap();
+    app.state.groups[0].repositories.clear();
+    app.state.groups.clear();
+    app.state.templates.clear();
+    assert_eq!(serde_json::to_value(&run).unwrap(), snapshot);
+    let mut history = isolated_history(42, JobStatus::Cancelled, Some(true));
+    history.task = run.task;
+    history.jobs[0].repository = app.state.repositories[0].clone();
+    app.state.runs.push(history);
+    app.reuse_convoy(42);
+    assert_eq!(
+        app.state.draft.execution_mode,
+        domain::ExecutionMode::IsolatedWorktree
+    );
+    assert_eq!(app.state.draft.prompt, "Original task");
+    let fresh = PreparedRun {
+        task: app.state.draft.clone(),
+        repositories: prepared.repositories,
+    }
+    .snapshot(43);
+    assert!(fresh.jobs.iter().all(|j| j.worktree.is_none()
+        && j.worktree_result.is_none()
+        && j.status == JobStatus::Queued
+        && j.started_at.is_none()));
+    assert!(
+        !serde_json::to_string(&app.state.draft)
+            .unwrap()
+            .contains("base_commit")
+    );
+    assert!(app.manager.is_idle());
+}
+
+#[test]
+fn recovered_result_messages_update_history_once_and_do_not_change_raw_output() {
+    use crate::{domain::ResultAvailability as A, worktrees::recovery::Report};
+    let (_temp, mut app) = app();
+    app.state.runs = vec![isolated_history(1, JobStatus::Failed, Some(true))];
+    let metadata = app.state.runs[0].jobs[0].worktree.clone().unwrap();
+    let report = Report::unavailable(
+        A::Missing,
+        "Isolated directory is missing; restore its location.",
+    );
+    app.state.runs[0].jobs[0]
+        .raw_log
+        .append("original backend output");
+    app.selected_run = Some(1);
+    app.diff_target = Some(metadata.path.clone());
+    app.diff = Some(Ok("old diff".into()));
+    for _ in 0..2 {
+        app.tx
+            .send(Message::Reconciled(
+                1,
+                0,
+                metadata.clone(),
+                report.clone(),
+                false,
+            ))
+            .unwrap();
+        app.poll();
+    }
+    let job = &app.state.runs[0].jobs[0];
+    assert_eq!(job.status, JobStatus::Failed);
+    assert_eq!(job.result_availability, A::Missing);
+    assert_eq!(job.raw_log.text, "original backend output");
+    assert_eq!(job.log.text.matches("Isolated result missing").count(), 1);
+    assert!(format::isolated_result(job).unwrap().contains("missing"));
+    assert!(matches!(app.diff, Some(Err(_))));
+    assert_eq!(
+        app.store.load().unwrap().runs[0].jobs[0].result_availability,
+        A::Missing
+    );
+}
+
+#[test]
+fn history_actions_preserve_unresolved_results_with_an_explanation() {
+    let (_temp, mut app) = app();
+    app.state.runs = vec![
+        isolated_history(1, JobStatus::Succeeded, Some(true)),
+        run(2, &[JobStatus::Succeeded]),
+    ];
+    app.remove_history(Some(1));
+    assert_eq!(app.state.runs.len(), 2);
+    assert!(app.notice.contains("unresolved isolated results"));
+    app.remove_history(None);
+    assert_eq!(app.state.runs.len(), 1);
+    assert_eq!(app.state.runs[0].id, 1);
 }

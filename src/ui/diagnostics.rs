@@ -20,7 +20,32 @@ impl CliError {
 }
 
 pub(super) fn summary(detail: &str) -> &str {
-    if detail.starts_with("Some attachments were not added") {
+    if detail.starts_with("Convoys with unresolved isolated results") {
+        "Convoys with unresolved isolated results stay in history. Their files are preserved."
+    } else if detail.starts_with("Unreferenced worktree resources found") {
+        detail.split('\n').next().unwrap_or(detail)
+    } else if detail.starts_with("Could not clean isolated result")
+        || detail.starts_with("Cleanup did not finish")
+    {
+        "Cleanup did not complete. Result metadata is preserved; inspect Diagnostics before retrying."
+    } else if detail.starts_with("Isolated result unavailable")
+        && detail.contains("Base commit is unavailable")
+    {
+        "Isolated base commit is unavailable. Restore repository objects before inspecting or cleaning this result."
+    } else if detail.contains("Base commit is unavailable") {
+        "Base commit is unavailable. Check the repository, then launch a fresh convoy."
+    } else if detail.contains("worktree creation failed")
+        || detail.contains("Could not prepare isolated worktree")
+    {
+        "Could not create isolated worktree. Check Git, storage permissions and free space in Diagnostics. Any partial state is retained."
+    } else if detail.contains("worktree storage") || detail.contains("worktree directory") {
+        "Worktree storage is unavailable. Check the data directory permissions and free space."
+    } else if detail.contains("ownership")
+        || detail.contains("Worktree path now resolves")
+        || detail.contains("Worktree belongs")
+    {
+        "Isolated result could not be verified. Inspect its location and Git state; no cleanup was performed."
+    } else if detail.starts_with("Some attachments were not added") {
         "Some files were not added. Check file access, supported types and size limits in Diagnostics, then add them again."
     } else if detail.starts_with("Reused convoy has missing")
         || detail.starts_with("Attachment needs attention")
@@ -87,6 +112,22 @@ mod tests {
     fn attachment_summaries_explain_recovery_without_showing_os_error_chains() {
         for (detail, action) in [
             (
+                "Base commit is unavailable. Git: fatal: private diagnostic",
+                "fresh convoy",
+            ),
+            (
+                "Git worktree creation failed at /private/path: private diagnostic",
+                "free space",
+            ),
+            (
+                "Cannot create worktree storage: Permission denied (os error 13)",
+                "permissions",
+            ),
+            (
+                "Worktree ownership record does not match this job. private diagnostic",
+                "no cleanup",
+            ),
+            (
                 "Cannot locate attachment /fixture/missing.md.: No such file (os error 2)",
                 "Restore",
             ),
@@ -139,6 +180,22 @@ mod tests {
         assert_eq!(
             summary("Claude Code completion was not confirmed (exit status: 0)."),
             "Agent completion could not be verified. Inspect Activity, Raw output and diagnostics."
+        );
+    }
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    #[test]
+    fn history_and_orphan_notices_are_not_misreported_as_ownership_errors() {
+        assert!(super::summary("Convoys with unresolved isolated results stay in history. Their files and ownership metadata are preserved.").contains("stay in history"));
+        assert!(
+            super::summary("Unreferenced worktree resources found (1). Preserved.\n/some/path")
+                .contains("Unreferenced")
+        );
+        assert!(
+            super::summary("Could not clean isolated result. ownership error")
+                .contains("did not complete")
         );
     }
 }

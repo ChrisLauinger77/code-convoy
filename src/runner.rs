@@ -1,6 +1,9 @@
 use crate::{
     agents::AgentBackend,
-    domain::{self, GitSummary, Job, JobStatus, QueueReason, Repository, Run, TaskConfig},
+    domain::{
+        self, ExecutionMode, GitSummary, Job, JobStatus, QueueReason, Repository, Run, TaskConfig,
+        WorktreeMetadata, WorktreeResult,
+    },
     git::{self, WorkingTree},
     process::{self, Cancellation},
 };
@@ -10,7 +13,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use tokio::sync::mpsc;
+mod lifecycle;
 mod manager;
+pub use lifecycle::LifecycleClient;
 mod raw_output;
 mod schedule;
 pub use manager::RunManager;
@@ -36,6 +41,7 @@ impl PreparedRun {
                 .iter()
                 .map(|r| {
                     let mut job = Job::queued(r.repository.clone());
+                    job.execution_mode = self.task.execution_mode;
                     job.before = Some(r.state.summary.clone());
                     job
                 })
@@ -82,6 +88,17 @@ pub enum Event {
         job: usize,
         reason: QueueReason,
     },
+    Preparing {
+        run: u64,
+        job: usize,
+        worktree: Option<WorktreeMetadata>,
+    },
+    Result {
+        run: u64,
+        job: usize,
+        result: Option<WorktreeResult>,
+        detail: String,
+    },
     Started {
         run: u64,
         job: usize,
@@ -101,6 +118,19 @@ pub enum Event {
         detail: String,
     },
 }
+pub(super) struct Administration {
+    mutex: tokio::sync::Mutex<()>,
+    healthy: AtomicBool,
+}
+impl Default for Administration {
+    fn default() -> Self {
+        Self {
+            mutex: tokio::sync::Mutex::new(()),
+            healthy: AtomicBool::new(true),
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn job_work(
     run: u64,
@@ -112,6 +142,160 @@ async fn job_work(
     stopping: &AtomicBool,
     repository_safe: &AtomicBool,
     tx: &mpsc::Sender<Event>,
+    storage: Option<std::path::PathBuf>,
+    administration: Arc<Administration>,
+) -> Result<(JobStatus, Option<i32>, String)> {
+    let mut launched = false;
+    if task.execution_mode == ExecutionMode::Direct {
+        return run_agent(
+            run,
+            job,
+            prepared,
+            task,
+            backend,
+            cancellation,
+            stopping,
+            repository_safe,
+            tx,
+            &mut launched,
+        )
+        .await;
+    }
+    let mut retained = None;
+    let mut ready = false;
+    let outcome = async {
+        tx.send(Event::Preparing { run, job, worktree: None }).await.context("Application closed.")?;
+        lifecycle(tx, run, job, "Preparing isolated worktree").await;
+        let guard = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => anyhow::bail!("Cancelled during worktree preparation."),
+            guard = administration.mutex.lock() => guard,
+        };
+        anyhow::ensure!(administration.healthy.load(Ordering::Acquire), "Git administration is blocked after unconfirmed process cleanup. Inspect processes before restarting CodeConvoy.");
+        anyhow::ensure!(!cancellation.is_cancelled(), "Cancelled during worktree preparation.");
+        let root = storage.context("Cannot locate worktree storage. Check the application data directory.")?;
+        let repo = prepared.repository.clone();
+        let common = prepared.state.summary.common_dir.clone().context("Missing Git repository identity; run preflight again.")?;
+        let base = prepared.state.summary.head.clone().context("Isolated execution requires a committed HEAD. Create an initial commit yourself, then start a fresh convoy.")?;
+        // Await this small filesystem worker even on cancellation, so its ownership
+        // record can always be delivered before the job becomes terminal.
+        let metadata = tokio::task::spawn_blocking(move || crate::worktrees::reserve(&root, run, job, repo, common, base)).await??;
+        retained = Some(metadata.clone());
+        tx.send(Event::Preparing { run, job, worktree: Some(metadata.clone()) }).await.context("Application closed.")?;
+        administration.healthy.store(false, Ordering::Release);
+        let creation = crate::worktrees::create(&metadata, cancellation, repository_safe).await;
+        administration.healthy.store(repository_safe.load(Ordering::Acquire), Ordering::Release);
+        let state = creation?;
+        drop(guard);
+        anyhow::ensure!(!cancellation.is_cancelled(), "Cancelled during worktree preparation.");
+        ready = true;
+        lifecycle(tx, run, job, "Worktree ready").await;
+        let execution = PreparedRepository {
+            repository: Repository { path: metadata.path.clone(), name: prepared.repository.name.clone() }, state,
+        };
+        run_agent(run, job, &execution, task, backend, cancellation, stopping, repository_safe, tx, &mut launched).await
+    }.await;
+    let cancelled = cancellation.is_cancelled() && repository_safe.load(Ordering::Acquire);
+    let message = if cancelled {
+        if ready {
+            "Agent cancelled"
+        } else {
+            "Preparation cancelled"
+        }
+    } else if !ready {
+        "Preparation failed"
+    } else if !launched {
+        "Agent could not start"
+    } else {
+        match &outcome {
+            Ok((JobStatus::Succeeded, ..)) => "Agent completed",
+            Ok((JobStatus::Cancelled, ..)) => "Agent cancelled",
+            _ => "Agent failed",
+        }
+    };
+    lifecycle(tx, run, job, message).await;
+    if let Some(metadata) = retained {
+        // Inspection needs its own token after Stop, but must not hold shutdown
+        // indefinitely. Cancel and await the inspection instead of dropping it.
+        let inspection_cancel = Cancellation::default();
+        let inspection =
+            crate::worktrees::inspect_owned(&metadata, &inspection_cancel, repository_safe);
+        tokio::pin!(inspection);
+        let observation = tokio::select! {
+            result = &mut inspection => result,
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                inspection_cancel.cancel();
+                let _ = inspection.await;
+                Err(anyhow::anyhow!("Result inspection timed out. Worktree and ownership metadata are retained; inspect the result before using it."))
+            }
+        };
+        let (result, detail) = match observation {
+            Ok(result) => (Some(result), String::new()),
+            Err(e) => (
+                None,
+                format!("Retained worktree inspection unavailable: {e:#}"),
+            ),
+        };
+        let message = match result.as_ref() {
+            Some(WorktreeResult {
+                exists: true,
+                changed: Some(true),
+                ..
+            }) => "Isolated changes retained",
+            Some(WorktreeResult {
+                exists: true,
+                changed: Some(false),
+                ..
+            }) => "No repository changes; isolated worktree retained",
+            Some(WorktreeResult { exists: false, .. }) => {
+                "No isolated checkout found; ownership metadata retained"
+            }
+            _ => "Isolated result changes unknown; ownership metadata retained",
+        };
+        lifecycle(tx, run, job, message).await;
+        let _ = tx
+            .send(Event::Result {
+                run,
+                job,
+                result,
+                detail,
+            })
+            .await;
+    }
+    if cancelled && repository_safe.load(Ordering::Acquire) {
+        Ok((JobStatus::Cancelled, None, if ready {
+            "Cancelled; any isolated changes are retained. Registered working tree untouched."
+        } else {
+            "Git worktree preparation was cancelled. Any partial state is retained; agent was not started."
+        }.into()))
+    } else {
+        outcome
+    }
+}
+
+async fn lifecycle(tx: &mpsc::Sender<Event>, run: u64, job: usize, message: &str) {
+    let _ = tx
+        .send(Event::Output {
+            run,
+            job,
+            text: format!("\n[CodeConvoy] {message}\n"),
+            raw: String::new(),
+        })
+        .await;
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_agent(
+    run: u64,
+    job: usize,
+    prepared: &PreparedRepository,
+    task: &TaskConfig,
+    backend: &Arc<dyn AgentBackend>,
+    cancellation: &Cancellation,
+    stopping: &AtomicBool,
+    repository_safe: &AtomicBool,
+    tx: &mpsc::Sender<Event>,
+    launched: &mut bool,
 ) -> Result<(JobStatus, Option<i32>, String)> {
     let cancelled = || {
         (
@@ -132,10 +316,18 @@ async fn job_work(
             builder.build(&task_snapshot, &repository)
         }) => result.context("Command preparation worker failed.")??,
     };
-    let state = tokio::select! {
-        biased;
-        _ = cancellation.cancelled() => return Ok(cancelled()),
-        result = git::status(&prepared.repository.path) => result?,
+    let state = match (git::Inspection {
+        cancellation,
+        safe: repository_safe,
+    })
+    .status(&prepared.repository.path)
+    .await
+    {
+        Ok(state) => state,
+        Err(_) if cancellation.is_cancelled() && repository_safe.load(Ordering::Acquire) => {
+            return Ok(cancelled());
+        }
+        Err(error) => return Err(error),
     };
     anyhow::ensure!(
         state.summary == prepared.state.summary && state.entries == prepared.state.entries,
@@ -145,6 +337,7 @@ async fn job_work(
         return Ok(cancelled());
     }
     let child = backend.spawn(&spec)?;
+    *launched = true;
     repository_safe.store(false, Ordering::Release);
     tokio::select! {
         biased;
@@ -154,6 +347,9 @@ async fn job_work(
         job,
         before: state.summary,
         }) => { result.context("Application closed.")?; }
+    }
+    if task.execution_mode == ExecutionMode::IsolatedWorktree {
+        lifecycle(tx, run, job, "Running agent in isolated worktree").await;
     }
     let decoder = Mutex::new((backend.output(), 0usize, raw_output::RawOutput::default()));
     let result = process::execute(

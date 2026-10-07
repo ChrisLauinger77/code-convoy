@@ -46,6 +46,14 @@ enum Message {
     Refreshed(Vec<(PathBuf, Result<WorkingTree, String>)>),
     Prepared(Result<PreparedRun, String>),
     Diff(PathBuf, Result<String, String>),
+    Reconciled(
+        u64,
+        usize,
+        domain::WorktreeMetadata,
+        crate::worktrees::recovery::Report,
+        bool,
+    ),
+    Orphans(Result<Vec<PathBuf>, String>),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
@@ -81,6 +89,7 @@ pub struct App {
     execution_height: f32,
     session_runs: HashSet<u64>,
     notice: String,
+    orphan_notice: String,
     output_view: text_view::TextView,
     diff_view: text_view::TextView,
     tx: mpsc::Sender<Message>,
@@ -125,7 +134,11 @@ impl App {
         let selected_run = state.runs.first().map(|r| r.id);
         let manager = {
             let _entered = runtime.enter();
-            RunManager::new(state.global_concurrency, events_tx)
+            RunManager::with_worktree_directory(
+                state.global_concurrency,
+                events_tx,
+                store.directory().join("worktrees"),
+            )
         };
         let repaint = ctx.clone();
         let cli_checks = agents::availability::CliChecks::new(
@@ -160,6 +173,7 @@ impl App {
             execution_height: 184.0,
             session_runs: HashSet::new(),
             notice: String::new(),
+            orphan_notice: String::new(),
             output_view: text_view::TextView::default(),
             diff_view: text_view::TextView::default(),
             tx,
@@ -184,7 +198,52 @@ impl App {
             app.refresh(ctx.clone());
         }
         app.sync_cli_checks();
+        app.reconcile_results(ctx.clone());
         app
+    }
+    fn reconcile_results(&self, ctx: egui::Context) {
+        let jobs: Vec<_> = self
+            .state
+            .runs
+            .iter()
+            .flat_map(|r| {
+                r.jobs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, j)| j.worktree.is_some() && j.status.is_terminal())
+                    .map(move |(index, job)| (r.id, index, job.clone()))
+            })
+            .collect();
+        let referenced: HashSet<_> = self
+            .state
+            .runs
+            .iter()
+            .flat_map(|r| &r.jobs)
+            .filter_map(|j| j.worktree.as_ref().map(|m| m.path.clone()))
+            .collect();
+        let root = self.store.directory().join("worktrees");
+        let lifecycle = self.manager.lifecycle();
+        let tx = self.tx.clone();
+        let repaint = ctx.clone();
+        self.dispatch(ctx, async move {
+            // Sequential requests also avoid simultaneous inspections of one Git
+            // repository. Each result is delivered promptly, off the UI thread.
+            for (run, index, job) in jobs {
+                let report = lifecycle.inspect(run, index, &job, false).await;
+                if let Some(metadata) = job.worktree {
+                    let _ = tx.send(Message::Reconciled(run, index, metadata, report, false));
+                    repaint.request_repaint();
+                }
+            }
+            let orphans = tokio::task::spawn_blocking(move || {
+                crate::worktrees::recovery::orphans(&root, &referenced)
+            })
+            .await;
+            Message::Orphans(match orphans {
+                Ok(result) => result.map_err(|e| format!("{e:#}")),
+                Err(e) => Err(e.to_string()),
+            })
+        });
     }
     fn runtime(&self) -> &Runtime {
         // All methods run before Drop takes ownership of the runtime.
@@ -291,6 +350,10 @@ impl App {
         egui::Panel::bottom("footer")
             .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(theme::PANEL_MARGIN, 5)))
             .show(ui, |ui| {
+                if !self.orphan_notice.is_empty() {
+                    ui.colored_label(theme::Palette::of(ui).warning, diagnostics::summary(&self.orphan_notice));
+                    diagnostics::details(ui, "orphan_diagnostics", &self.orphan_notice);
+                }
                 if !self.notice.is_empty() {
                     ui.horizontal_wrapped(|ui| {
                         ui.colored_label(theme::Palette::of(ui).error, diagnostics::summary(&self.notice));
@@ -442,6 +505,7 @@ impl App {
         for resolved in self.cli_checks.poll() {
             self.apply_resolved_executable(resolved);
         }
+        let mut recovered = false;
         while let Ok(message) = self.rx.try_recv() {
             match message {
                 Message::RepositoryFolder(path) => self.repository_folder_selected(path),
@@ -491,12 +555,53 @@ impl App {
                     }
                 }
                 Message::FoundCli(request, result) => self.cli_search_completed(request, result),
+                Message::Orphans(result) => {
+                    self.orphan_notice = match result {
+                        Ok(paths) if paths.is_empty() => String::new(),
+                        Ok(paths) => format!(
+                            "Unreferenced worktree resources found ({}{}). They were preserved; inspect these locations before removing anything.\n{}",
+                            paths.len(),
+                            if paths.len() == 100 { "+" } else { "" },
+                            paths
+                                .iter()
+                                .map(|p| p.display().to_string())
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        ),
+                        Err(e) => format!("Could not inspect worktree storage. {e}"),
+                    };
+                }
+                Message::Reconciled(run, index, metadata, report, with_diff) => {
+                    if let Some(job) = self
+                        .state
+                        .runs
+                        .iter_mut()
+                        .find(|r| r.id == run)
+                        .and_then(|r| r.jobs.get_mut(index))
+                        && job.worktree.as_ref() == Some(&metadata)
+                        && (job.status.is_terminal() || with_diff)
+                    {
+                        report.apply(job);
+                        if self.diff_target.as_ref() == Some(&metadata.path) {
+                            if with_diff {
+                                self.diff = Some(report.diff.ok_or_else(|| report.detail.clone()));
+                            } else if report.availability != domain::ResultAvailability::Available {
+                                self.diff = Some(Err(report.detail));
+                            }
+                        }
+                        recovered = true;
+                    }
+                }
                 Message::Diff(path, result) => {
                     if self.diff_target.as_ref() == Some(&path) {
                         self.diff = Some(result);
                     }
                 }
             }
+        }
+        if recovered {
+            self.dirty = true;
+            self.save();
         }
         for _ in 0..256 {
             let Ok(event) = self.events_rx.try_recv() else {
@@ -562,6 +667,14 @@ impl App {
         }
     }
     fn remove_history(&mut self, id: Option<u64>) {
+        if self
+            .state
+            .runs
+            .iter()
+            .any(|r| id.is_none_or(|id| r.id == id) && r.unresolved_results())
+        {
+            self.notice = "Convoys with unresolved isolated results stay in history. Their files and ownership metadata are preserved; Apply/Discard is planned for Part 3.2.".into();
+        }
         let changed = match id {
             Some(id) => self.state.remove_from_history(id),
             None => self.state.clear_history() > 0,
@@ -612,6 +725,8 @@ impl App {
     fn apply_event(&mut self, event: Event) {
         let (id, job) = match &event {
             Event::Queued { run, job, .. }
+            | Event::Preparing { run, job, .. }
+            | Event::Result { run, job, .. }
             | Event::Started { run, job, .. }
             | Event::Output { run, job, .. }
             | Event::Finished { run, job, .. } => (*run, *job),
@@ -631,12 +746,33 @@ impl App {
                     job.queue_reason = Some(reason);
                 }
             }
+            Event::Preparing { worktree, .. } => {
+                job.status = JobStatus::Preparing;
+                job.queue_reason = None;
+                job.worktree = worktree;
+                self.dirty = true;
+            }
+            Event::Result { result, detail, .. } => {
+                job.result_availability = match result.as_ref() {
+                    Some(r) if r.exists && r.changed.is_some() => {
+                        domain::ResultAvailability::Available
+                    }
+                    Some(r) if !r.exists => domain::ResultAvailability::Missing,
+                    _ => domain::ResultAvailability::Stale,
+                };
+                job.result_checked = true;
+                job.worktree_result = result;
+                job.worktree_detail = detail;
+                self.dirty = true;
+            }
             Event::Started { before, .. } => {
                 job.status = JobStatus::Running;
                 job.queue_reason = None;
                 self.repository_states.remove(&job.repository.path);
                 job.started_at = Some(domain::now());
-                job.before = Some(before);
+                if job.execution_mode == domain::ExecutionMode::Direct {
+                    job.before = Some(before);
+                }
                 self.dirty = true;
             }
             Event::Output { text, raw, .. } => {
