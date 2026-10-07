@@ -34,7 +34,7 @@ pub(super) fn show(ui: &mut egui::Ui, run: &Run, job: &domain::Job) {
         if let Some(label) = format::isolated_result(job) {
             ui.label(label);
         }
-        ui.small("Worktrees are retained, including unchanged results. Recovery and cleanup are not available yet.");
+        ui.small("Results are retained working directories, checked after restart. External edits remain visible. Apply/Discard is planned for Part 3.2.");
         egui::CollapsingHeader::new("Worktree location").show(ui, |ui| {
             ui.add(
                 egui::Label::new(worktree.path.display().to_string())

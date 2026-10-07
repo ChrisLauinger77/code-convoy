@@ -173,6 +173,21 @@ pub(super) fn isolated_result(job: &domain::Job) -> Option<&'static str> {
     if job.execution_mode != domain::ExecutionMode::IsolatedWorktree {
         return None;
     }
+    use domain::ResultAvailability as A;
+    if job.result_checked {
+        let label = match job.result_availability {
+            A::Missing => Some("Isolated result missing · restore its original location"),
+            A::Stale => Some("Isolated result unavailable · inspect repository and Git state"),
+            A::Invalid => Some("Isolated ownership mismatch · files preserved"),
+            A::CleanupFailed => Some("Cleanup failed · result metadata preserved"),
+            A::CleanupPending => Some("Cleanup pending"),
+            A::Cleaned => Some("Isolated result cleaned up"),
+            _ => None,
+        };
+        if label.is_some() {
+            return label;
+        }
+    }
     Some(match &job.worktree_result {
         Some(result) if !result.observed_this_session => match (result.exists, result.changed) {
             (true, Some(true)) => "Saved result: changes retained · not checked after restart",

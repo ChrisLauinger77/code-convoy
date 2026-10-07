@@ -180,11 +180,21 @@ no automatic deletion or pruning. Isolated diffs always compare with the saved b
 commit. Reuse restores mode and creates a fresh path. Keep agent status distinct
 from result observations. Saved observations are not recovery validation. Determine
 changes with Git against the fixed base (working tree, index and nonignored untracked
-files), never from agent status. Retain unchanged worktrees too until safe cleanup
-exists. Cancellation must await Git/process cleanup before releasing leases; do not
+files), never from agent status. Retain unchanged worktrees too until explicit cleanup. Cancellation must await Git/process cleanup before releasing leases; do not
 turn unconfirmed cleanup into a safe result through a later inspection. Prefix
 application Activity events with `[CodeConvoy]` and leave backend Raw output intact.
-Part 3.1A provides neither restart reconciliation nor cleanup or Apply/Discard.
+Reconcile persisted results off the UI thread before claiming availability. Never
+resume agents, recreate missing worktrees, or infer deletion permission from an
+unavailable repository. Pin unresolved ownership metadata through history trimming,
+Remove and Clear history. Recovery must not purge changed or unchanged results.
+
+Internal cleanup must use the Store transaction and manager lifecycle lease:
+persist intent first, verify the trusted storage boundary, sibling manifest,
+canonical Git identity, detached ownership lock and Git backlink, then remove only
+the exact owned worktree through Git. Reject symlinks/reparse points and uncertain
+ownership. Coordinate cleanup exclusively against active work in that repository;
+never use broad prune or recursive deletion as a fallback. Preserve failure state
+and crash evidence. Apply and user-facing Discard remain Part 3.2.
 
 ## Task context
 

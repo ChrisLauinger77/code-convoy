@@ -141,7 +141,7 @@ Application state is versioned JSON written to an owner-only temporary file, syn
 
 An additive `agent_options` map preserves preferences independently when switching backends. It defaults to empty when loading old version-1 state; the existing draft remains authoritative for the selected backend, and historical run schemas are unchanged. No migration or rewriting of CLI configuration is necessary.
 
-All active convoys and the most recent 30 completed convoys are retained; active snapshots are never evicted by the history cap. The additive `global_concurrency` preference defaults to 4 for old state; invalid stored values are clamped to 1–16. Relaunch converts unfinished saved jobs to cancelled/interrupted. There is no automatic resume or replay. History records initial Git metadata. Direct diffs query the registered working tree; isolated diffs query the retained checkout against its saved base commit.
+All active convoys, unresolved isolated results, and the most recent 30 other completed convoys are retained; protected snapshots are never evicted by the history cap. The additive `global_concurrency` preference defaults to 4 for old state; invalid stored values are clamped to 1–16. Relaunch converts unfinished saved jobs to cancelled/interrupted. There is no automatic resume or replay. History records initial Git metadata. Direct diffs query the registered working tree; isolated diffs query the retained checkout against its saved base commit.
 
 ## Dependencies and scope
 
@@ -245,8 +245,9 @@ an ownership format marker, run ID, job index, registered repository, canonical
 common directory, exact checkout path, base commit and execution mode. The random
 attempt path distinguishes repeated attempts without recycling old paths.
 Inspection checks the record against job metadata and verifies canonical checkout
-and common Git identity; a path prefix alone is insufficient. No code here deletes,
-prunes, repairs, unlocks or recursively removes retained or uncertain paths.
+and common Git identity; a path prefix alone is insufficient. Part 3.1B strengthens
+these checks for recovery and adds exact internal removal, described below. No
+broad pruning, repair, unlock or raw recursive removal is performed.
 
 Admission reserves both concurrency slots before **Preparing isolated worktree**.
 A preparing job holds its slots through checkout, agent execution and final result
@@ -303,8 +304,8 @@ names without reading their contents into a patch. Source HEAD changes do not
 change the baseline. Results remain live files, so external edits can change them
 and missing base objects produce an error. All results remain on disk, including
 unchanged, failed, cancelled and partial checkouts; useful ignored data is not
-removed. History cleanup only removes history metadata; ownership records and
-worktrees remain.
+removed. History cleanup only removes eligible metadata; unresolved ownership
+records and their convoys are protected.
 
 Activity prefixes application lifecycle messages with `[CodeConvoy]`; backend
 decoders and Raw output are unchanged. Job rows use Preparing/Running/terminal
@@ -315,13 +316,11 @@ counts preparation separately, Cancel has no job side effects, and confirmed qui
 closes admission before cancellation and persists terminal events after draining.
 Completed retained results are not active work.
 
-Persisted mode, worktree metadata and last result observation allow identification,
-not automatic restart recovery. Preparing/Running/Queued history becomes interrupted
-on load using the existing mechanism. Scanning/reconciliation of orphan manifests,
-crash recovery, stale-state validation and safe cleanup UX belong to Part 3.1B.
-This is compatibility and truthful history presentation only. Apply/Discard,
-Retry, convoy-wide Review and Part 3.2 remain outside this implementation.
-See [integration validation and remaining work](worktree-validation.md).
+Part 3.1B builds restart reconciliation and internal safe cleanup on these persisted
+fields, as described below. Preparing/Running/Queued history becomes interrupted
+on load using the existing mechanism. Apply/Discard, Retry and convoy-wide Review
+remain outside Part 3.1. See the historical [Part 3.1A validation](worktree-validation.md)
+and current [Part 3.1B validation](worktree-recovery-validation.md).
 
 `tests/worktrees.rs` uses real Git, disposable sources and fixture processes for
 all four backends. It covers mode compatibility/reuse, fixed HEAD and dirty-source
@@ -361,3 +360,102 @@ Validated on native macOS with the local Git installation and fixture CLIs:
 Linux/Windows native execution and authenticated provider runs were not performed
 for this step. The cross-platform fixture tests and existing packaging tests remain
 available for those platforms; no release or publication was performed.
+
+## v0.3 Part 3.1B: retained result recovery and internal cleanup
+
+The existing `owner.json` layout and application schema version (1) are unchanged.
+Jobs gain a defaulted `ResultAvailability`: Unchecked, Available, Missing, Stale,
+Invalid, CleanupPending, CleanupFailed or Cleaned. The last Git observation remains
+separate, as does agent success/failure/cancellation/interruption. Session-only
+validation flags reset on load; saved availability is not fresh evidence. Old
+v0.1/v0.2 jobs default to Direct and require no ownership metadata. No repository
+contents, attachments, output, diagnostics or credentials are newly persisted.
+
+Startup first marks unfinished jobs interrupted, then inspects every retained job
+on the Tokio runtime. Checks are sequential, with individual results delivered to
+the UI promptly; neither Git nor filesystem scanning runs in rendering. The UI
+applies identity-matching replies and saves each received batch deliberately. It
+adds one CodeConvoy recovery Activity entry per job/session or availability
+transition, never backend progress, and leaves Raw output intact. Quitting cancels
+inspection subprocesses and waits for lifecycle leases alongside execution; no
+agent is resumed or rerun and no checkout is recreated.
+
+Available requires all of: the trusted Store storage boundary; exact sibling
+manifest equality; canonical source/common-directory identity; usable original
+base object; exact detached Git registration with CodeConvoy's ownership lock;
+matching private Git administration/backlink; and successful fixed-base Git change
+inspection. Missing means checkout/storage is absent. Stale means Git/source/base
+inspection cannot currently establish availability. Invalid means an ownership,
+layout, link or identity mismatch. CleanupFailed preserves incomplete/failed
+removal evidence. Diagnostics distinguish these without rewriting repository data.
+**Refresh diff** repeats validation and uses the original commit; source commits
+cannot alter that base. Retained directories remain editable, not immutable archives.
+
+All changed, unchanged, failed, cancelled and interrupted results are retained.
+No age-based, startup or automatic unchanged-result deletion occurs. Any unresolved
+metadata (including missing/invalid/failed cleanup) pins its whole convoy outside
+the ordinary 30-run cap, Remove and Clear history. A saved Cleaned result is also
+protected until revalidated in this session. Direct history retains its old policy.
+Reuse copies only task/settings/context/repository selection, never resources,
+base commits, observations or process state.
+
+`RunManager::lifecycle` grants scoped result-operation leases through the same
+scheduler repository boundary. Inspections serialize with other lifecycle operations
+and CodeConvoy Git administration for that common repository. Cleanup refuses any
+conflicting active preparation, agent, quarantined process state or result operation;
+a queued instance of the same job is also protected. While a lease exists, new jobs
+for that repository wait without consuming a job slot. Other repositories and
+round-robin order are unaffected. Inspection may read a running isolated checkout;
+cleanup cannot. RAII releases leases, and unconfirmed process termination quarantines
+the repository rather than declaring it safe. This coordinates CodeConvoy operations,
+not external Git tools, agents' own Git administration, or other data-directory instances.
+
+`Store::cleanup_result` is an **internal** primitive with no user-facing action.
+It rejects nonterminal jobs, identity mismatches and any currently registered source
+inside/around the target. It atomically saves CleanupPending before requesting the
+exclusive lease. The worker verifies ownership, writes and syncs a sibling
+`cleanup.json` intent bound to the exact manifest, then rechecks immediately before
+`git worktree remove --force --force -- <exact native path>`. The two force flags
+are Git's supported removal of an intentionally locked, potentially dirty retained
+result. The command is only reachable through this explicit internal transaction;
+startup never calls it. No reset, clean, stash, branch deletion or broad prune is used.
+Afterward, absence of both checkout and exact Git registration is verified, the
+journal is atomically marked completed, and the Store saves Cleaned. All failures
+preserve metadata and save CleanupFailed. A still-valid checkout remains inspectable
+(including its diff) after a failed cleanup, while that failure state remains visible. Already-missing directories can be resolved
+only with verified ownership and a reachable source; an unregistered directory that
+still contains files is preserved. Small owner/hooks/journal tombstones remain;
+there is no raw recursive filesystem removal fallback.
+
+The Store's root is canonicalized once. Recovery rejects traversal, paths outside
+that exact root/attempt/tree layout, symlinked directories or records, and Windows
+reparse points/junctions. Git porcelain `-z`, native path bytes on Unix and Unicode
+paths on Windows avoid quoted/lossy identity comparisons; paths are direct process
+arguments. Canonicalization accounts for drive/extended-path spelling and platform
+temporary-directory aliases. Git-backed removal failures (including open Windows
+files) remain failures; ownership does not grant permission to guess a fallback.
+Repeated verification narrows substitution races, but this is not a security sandbox
+against hostile processes with the same filesystem permissions. Users must not race
+external filesystem/Git replacement with cleanup.
+
+Crash boundaries deliberately preserve data:
+
+- Reserved/created before a run save: startup scans immediate storage entries and
+  reports unreferenced or malformed attempts without deleting/importing them.
+- Saved before checkout creation finishes: missing or inconsistent partial state
+  remains represented, with no recreation or automatic removal.
+- Cleanup intent saved before removal: interrupted cleanup becomes CleanupFailed.
+- Git removal completed before final state/journal update: a matching durable intent
+  plus verified absence of checkout and registration establishes Cleaned on restart;
+  reconciliation finishes the CodeConvoy journal before releasing history protection.
+- Removal partially failed or source unavailable: preserve state and diagnose;
+  absence of a source is never deletion permission.
+- Reconciliation interrupted before save: the next startup simply inspects again.
+
+The orphan scan follows no directory links and reports up to 100 suspicious entries
+(with a `100+` indication at the bound). Completed tombstones with absent checkouts
+are excluded. Ambiguous resources are never purged. A data-directory lock and atomic
+state replacement remain the persistence boundary. Abrupt exits still cannot promise
+termination of Unix descendants that escaped their managed process group; persisted
+PIDs are not used to kill potentially unrelated processes. No agent continuation,
+storage manager, Apply, user-facing Discard or convoy-wide Review is implemented.

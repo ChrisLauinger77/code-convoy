@@ -86,6 +86,21 @@ pub struct WorktreeMetadata {
     pub execution_mode: ExecutionMode,
 }
 
+/// Availability is separate from agent status and last observed Git changes.
+/// Persisted values must be reconciled before they are trusted in this session.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResultAvailability {
+    #[default]
+    Unchecked,
+    Available,
+    Missing,
+    Stale,
+    Invalid,
+    CleanupPending,
+    CleanupFailed,
+    Cleaned,
+}
+
 /// Last observation, independent of the agent's success/failure status.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -190,6 +205,7 @@ pub enum QueueReason {
     GlobalLimit,
     Repository(u64),
     CheckingRepository,
+    Maintenance,
     CleanupFailed(u64),
 }
 impl QueueReason {
@@ -200,6 +216,7 @@ impl QueueReason {
             Self::Repository(run) => {
                 format!("Waiting for repository access held by convoy #{run}.")
             }
+            Self::Maintenance => "Waiting for isolated result inspection or cleanup.".into(),
             Self::CheckingRepository => "Checking Git state before execution…".into(),
             Self::CleanupFailed(run) => format!(
                 "Repository blocked: process cleanup was not confirmed in convoy #{run}. Inspect processes before restarting CodeConvoy."
@@ -217,6 +234,10 @@ pub struct Job {
     pub worktree: Option<WorktreeMetadata>,
     #[serde(default)]
     pub worktree_result: Option<WorktreeResult>,
+    #[serde(default)]
+    pub result_availability: ResultAvailability,
+    #[serde(skip)]
+    pub result_checked: bool,
     #[serde(skip)]
     pub worktree_detail: String,
     pub status: JobStatus,
@@ -242,6 +263,8 @@ impl Job {
             execution_mode: ExecutionMode::Direct,
             worktree: None,
             worktree_result: None,
+            result_availability: ResultAvailability::Unchecked,
+            result_checked: false,
             worktree_detail: String::new(),
             status: JobStatus::Queued,
             started_at: None,
@@ -283,6 +306,16 @@ pub struct Run {
     pub jobs: Vec<Job>,
 }
 impl Run {
+    pub fn unresolved_results(&self) -> bool {
+        self.jobs.iter().any(|job| {
+            job.worktree.is_some()
+                && (job.result_availability != ResultAvailability::Cleaned || !job.result_checked)
+        })
+    }
+    pub fn history_protected(&self) -> bool {
+        self.active() || self.unresolved_results()
+    }
+
     pub fn status(&self) -> JobStatus {
         if self.jobs.iter().any(|j| j.status == JobStatus::Running) {
             JobStatus::Running
@@ -423,19 +456,20 @@ impl AppState {
     /// History cleanup only touches local run metadata, never execution or Git.
     pub fn remove_from_history(&mut self, id: u64) -> bool {
         let before = self.runs.len();
-        self.runs.retain(|run| run.id != id || run.active());
+        self.runs
+            .retain(|run| run.id != id || run.history_protected());
         self.runs.len() != before
     }
     pub fn clear_history(&mut self) -> usize {
         let before = self.runs.len();
-        self.runs.retain(Run::active);
+        self.runs.retain(Run::history_protected);
         before - self.runs.len()
     }
-    /// Never evict an active convoy, even when it is older than the history cap.
+    /// Never evict active convoys or unresolved isolated ownership records.
     pub fn trim_history(&mut self) {
         let mut completed = 0;
         self.runs.retain(|run| {
-            if run.active() {
+            if run.history_protected() {
                 true
             } else {
                 completed += 1;

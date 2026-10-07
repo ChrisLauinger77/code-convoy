@@ -1,5 +1,8 @@
 # v0.3 Part 3.1A-2 integration and validation
 
+This is the historical Part 3.1A record. Part 3.1B is now covered by the
+[recovery and cleanup validation record](worktree-recovery-validation.md).
+
 Validated on 2026-10-07 on macOS, on `codex/v0.3-worktree-core`.
 Part 3.1A-1 was audited and extended in place. No merge, PR, release, version bump,
 or Part 3.1B/3.2 implementation is included.

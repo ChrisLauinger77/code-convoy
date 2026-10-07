@@ -38,6 +38,7 @@ pub(super) struct Schedule {
     convoys: VecDeque<Convoy>,
     active: BTreeMap<Key, Lease>,
     quarantined: Vec<(u64, Lease)>,
+    maintenance: BTreeMap<u64, Lease>,
 }
 impl Schedule {
     pub fn new(limit: usize) -> Self {
@@ -46,6 +47,7 @@ impl Schedule {
             convoys: VecDeque::new(),
             active: BTreeMap::new(),
             quarantined: Vec::new(),
+            maintenance: BTreeMap::new(),
         }
     }
     pub fn insert(&mut self, id: u64, limit: usize, paths: impl Iterator<Item = Lease>) {
@@ -67,11 +69,42 @@ impl Schedule {
             })
             .map(|(run, _)| QueueReason::CleanupFailed(*run))
             .or_else(|| {
+                self.maintenance
+                    .values()
+                    .any(overlaps)
+                    .then_some(QueueReason::Maintenance)
+            })
+            .or_else(|| {
                 self.active
                     .iter()
                     .find(|(_, p)| overlaps(p))
                     .map(|((run, _), _)| QueueReason::Repository(*run))
             })
+    }
+    pub fn begin_maintenance(&mut self, id: u64, key: Key, lease: Lease, cleanup: bool) -> bool {
+        if self.maintenance.values().any(|p| lease.conflicts(p))
+            || self.quarantined.iter().any(|(_, p)| lease.conflicts(p))
+            || self
+                .active
+                .values()
+                .any(|p| lease.conflicts(p) && (cleanup || p.mode == ExecutionMode::Direct))
+            || (cleanup
+                && self
+                    .convoys
+                    .iter()
+                    .any(|c| c.id == key.0 && c.pending.iter().any(|(j, _)| *j == key.1)))
+        {
+            return false;
+        }
+        self.maintenance.insert(id, lease);
+        true
+    }
+    pub fn end_maintenance(&mut self, id: u64, safe: bool) {
+        if let Some(lease) = self.maintenance.remove(&id)
+            && !safe
+        {
+            self.quarantined.push((0, lease));
+        }
     }
     pub fn next(&mut self) -> Option<Key> {
         if self.active.len() + self.quarantined.len() >= self.limit {
@@ -169,6 +202,29 @@ mod tests {
                 mode: ExecutionMode::Direct,
             }),
         );
+    }
+    #[test]
+    fn maintenance_is_exclusive_per_repository_without_consuming_agent_slots() {
+        let mut s = Schedule::new(1);
+        let lease = Lease {
+            path: "/source".into(),
+            common_dir: Some("/source/.git".into()),
+            mode: ExecutionMode::Direct,
+        };
+        assert!(s.begin_maintenance(1, (100, 0), lease.clone(), true));
+        assert!(!s.begin_maintenance(2, (101, 0), lease.clone(), false));
+        s.insert(1, 1, [lease.clone()].into_iter());
+        add(&mut s, 2, 1, &["/independent"]);
+        assert!(s.waiting().contains(&((1, 0), QueueReason::Maintenance)));
+        assert_eq!(s.next(), Some((2, 0)));
+        s.finish((2, 0), true);
+        s.end_maintenance(1, true);
+        assert_eq!(s.next(), Some((1, 0)));
+        assert!(!s.begin_maintenance(3, (100, 0), lease.clone(), true));
+        s.finish((1, 0), true);
+        assert!(s.begin_maintenance(4, (100, 0), lease.clone(), true));
+        s.end_maintenance(4, false);
+        assert!(!s.begin_maintenance(5, (100, 0), lease, true));
     }
     #[test]
     fn isolated_leases_share_git_but_preserve_nested_and_exclusive_access() {

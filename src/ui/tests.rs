@@ -444,7 +444,9 @@ fn add_repository_and_wait(app: &mut App) {
     let message = app.runtime.as_ref().unwrap().block_on(async {
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
-                if let Ok(message) = app.rx.try_recv() {
+                if let Ok(message) = app.rx.try_recv()
+                    && matches!(message, Message::Registered(_))
+                {
                     break message;
                 }
                 tokio::time::sleep(Duration::from_millis(1)).await;
@@ -1791,4 +1793,60 @@ fn isolated_groups_templates_and_reuse_produce_only_fresh_explicit_jobs() {
             .contains("base_commit")
     );
     assert!(app.manager.is_idle());
+}
+
+#[test]
+fn recovered_result_messages_update_history_once_and_do_not_change_raw_output() {
+    use crate::{domain::ResultAvailability as A, worktrees::recovery::Report};
+    let (_temp, mut app) = app();
+    app.state.runs = vec![isolated_history(1, JobStatus::Failed, Some(true))];
+    let metadata = app.state.runs[0].jobs[0].worktree.clone().unwrap();
+    let report = Report::unavailable(
+        A::Missing,
+        "Isolated directory is missing; restore its location.",
+    );
+    app.state.runs[0].jobs[0]
+        .raw_log
+        .append("original backend output");
+    app.selected_run = Some(1);
+    app.diff_target = Some(metadata.path.clone());
+    app.diff = Some(Ok("old diff".into()));
+    for _ in 0..2 {
+        app.tx
+            .send(Message::Reconciled(
+                1,
+                0,
+                metadata.clone(),
+                report.clone(),
+                false,
+            ))
+            .unwrap();
+        app.poll();
+    }
+    let job = &app.state.runs[0].jobs[0];
+    assert_eq!(job.status, JobStatus::Failed);
+    assert_eq!(job.result_availability, A::Missing);
+    assert_eq!(job.raw_log.text, "original backend output");
+    assert_eq!(job.log.text.matches("Isolated result missing").count(), 1);
+    assert!(format::isolated_result(job).unwrap().contains("missing"));
+    assert!(matches!(app.diff, Some(Err(_))));
+    assert_eq!(
+        app.store.load().unwrap().runs[0].jobs[0].result_availability,
+        A::Missing
+    );
+}
+
+#[test]
+fn history_actions_preserve_unresolved_results_with_an_explanation() {
+    let (_temp, mut app) = app();
+    app.state.runs = vec![
+        isolated_history(1, JobStatus::Succeeded, Some(true)),
+        run(2, &[JobStatus::Succeeded]),
+    ];
+    app.remove_history(Some(1));
+    assert_eq!(app.state.runs.len(), 2);
+    assert!(app.notice.contains("unresolved isolated results"));
+    app.remove_history(None);
+    assert_eq!(app.state.runs.len(), 1);
+    assert_eq!(app.state.runs[0].id, 1);
 }

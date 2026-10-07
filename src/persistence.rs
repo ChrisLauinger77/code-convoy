@@ -40,7 +40,7 @@ impl Store {
         lock.try_lock_exclusive()
             .context("CodeConvoy is already running, or its data directory cannot be locked.")?;
         Ok(Self {
-            directory: directory.to_owned(),
+            directory: directory.canonicalize()?,
             _lock: lock,
         })
     }
@@ -69,6 +69,76 @@ impl Store {
         state.global_concurrency = state.global_concurrency.clamp(1, MAX_CONCURRENCY);
         state.draft.concurrency = state.draft.concurrency.clamp(1, 16);
         Ok(state)
+    }
+    /// Internal foundation for a future explicit Discard action. No UI calls this.
+    /// The caller owns application state and the Store lock for this transaction.
+    pub async fn cleanup_result(
+        &self,
+        state: &mut AppState,
+        manager: &crate::runner::RunManager,
+        run: u64,
+        index: usize,
+    ) -> Result<()> {
+        use crate::domain::{ExecutionMode, ResultAvailability as A};
+        let job = state
+            .runs
+            .iter_mut()
+            .find(|r| r.id == run)
+            .and_then(|r| r.jobs.get_mut(index))
+            .context("Historical result was not found.")?;
+        anyhow::ensure!(
+            job.status.is_terminal() && !manager.is_active(run),
+            "Active work cannot be cleaned up."
+        );
+        let metadata = job
+            .worktree
+            .clone()
+            .context("No isolated result was recorded.")?;
+        anyhow::ensure!(
+            metadata.run == run
+                && metadata.job == index
+                && metadata.repository == job.repository
+                && job.execution_mode == ExecutionMode::IsolatedWorktree,
+            "Result ownership does not match this job; cleanup is blocked."
+        );
+        let previous = job.result_availability;
+        anyhow::ensure!(
+            !state
+                .repositories
+                .iter()
+                .any(|r| r.path.starts_with(&metadata.path) || metadata.path.starts_with(&r.path)),
+            "A registered working tree cannot be cleaned up."
+        );
+        job.result_availability = A::CleanupPending;
+        if let Err(error) = self.save(state) {
+            if let Some(job) = state
+                .runs
+                .iter_mut()
+                .find(|r| r.id == run)
+                .and_then(|r| r.jobs.get_mut(index))
+            {
+                job.result_availability = previous;
+            }
+            return Err(error).context("Could not save cleanup intent; no cleanup was started.");
+        }
+        let outcome = manager.lifecycle().cleanup(&metadata).await;
+        let report = match &outcome {
+            Ok(report) => report.clone(),
+            Err(e) => crate::worktrees::recovery::Report::unavailable(
+                A::CleanupFailed,
+                format!("Could not clean isolated result. {e:#}"),
+            ),
+        };
+        if let Some(job) = state
+            .runs
+            .iter_mut()
+            .find(|r| r.id == run)
+            .and_then(|r| r.jobs.get_mut(index))
+        {
+            report.apply(job);
+        }
+        self.save(state).context("Cleanup outcome could not be saved. The durable intent and ownership record will be checked on restart.")?;
+        outcome.map(|_| ())
     }
     pub fn save(&self, state: &AppState) -> Result<()> {
         let mut file = tempfile::NamedTempFile::new_in(&self.directory)

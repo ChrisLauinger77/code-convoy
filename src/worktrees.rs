@@ -1,4 +1,5 @@
-//! Retained detached worktrees. No removal, pruning, applying or recovery here.
+//! Retained detached worktrees and owned result lifecycle.
+pub mod recovery;
 use crate::{
     domain::{ExecutionMode, Repository, WorktreeMetadata, WorktreeResult},
     git,
@@ -280,10 +281,14 @@ pub(crate) async fn inspect_owned(
     })
 }
 pub async fn diff(metadata: &WorktreeMetadata) -> Result<String> {
-    let inspection = git::Inspection {
-        cancellation: &Cancellation::default(),
-        safe: &AtomicBool::new(true),
-    };
+    diff_owned(metadata, &Cancellation::default(), &AtomicBool::new(true)).await
+}
+async fn diff_owned(
+    metadata: &WorktreeMetadata,
+    cancellation: &Cancellation,
+    safe: &AtomicBool,
+) -> Result<String> {
+    let inspection = git::Inspection { cancellation, safe };
     verify(metadata, &inspection).await?;
     let worktree_patch = patch(metadata, &inspection, false).await?;
     let index_patch = patch(metadata, &inspection, true).await?;

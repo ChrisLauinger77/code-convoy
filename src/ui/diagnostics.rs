@@ -20,7 +20,19 @@ impl CliError {
 }
 
 pub(super) fn summary(detail: &str) -> &str {
-    if detail.contains("Base commit is unavailable") {
+    if detail.starts_with("Convoys with unresolved isolated results") {
+        "Convoys with unresolved isolated results stay in history. Their files are preserved."
+    } else if detail.starts_with("Unreferenced worktree resources found") {
+        detail.split('\n').next().unwrap_or(detail)
+    } else if detail.starts_with("Could not clean isolated result")
+        || detail.starts_with("Cleanup did not finish")
+    {
+        "Cleanup did not complete. Result metadata is preserved; inspect Diagnostics before retrying."
+    } else if detail.starts_with("Isolated result unavailable")
+        && detail.contains("Base commit is unavailable")
+    {
+        "Isolated base commit is unavailable. Restore repository objects before inspecting or cleaning this result."
+    } else if detail.contains("Base commit is unavailable") {
         "Base commit is unavailable. Check the repository, then launch a fresh convoy."
     } else if detail.contains("worktree creation failed")
         || detail.contains("Could not prepare isolated worktree")
@@ -168,6 +180,22 @@ mod tests {
         assert_eq!(
             summary("Claude Code completion was not confirmed (exit status: 0)."),
             "Agent completion could not be verified. Inspect Activity, Raw output and diagnostics."
+        );
+    }
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    #[test]
+    fn history_and_orphan_notices_are_not_misreported_as_ownership_errors() {
+        assert!(super::summary("Convoys with unresolved isolated results stay in history. Their files and ownership metadata are preserved.").contains("stay in history"));
+        assert!(
+            super::summary("Unreferenced worktree resources found (1). Preserved.\n/some/path")
+                .contains("Unreferenced")
+        );
+        assert!(
+            super::summary("Could not clean isolated result. ownership error")
+                .contains("did not complete")
         );
     }
 }

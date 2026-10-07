@@ -192,7 +192,7 @@ impl App {
             ui.small(label);
         }
         if !job.worktree_detail.is_empty() {
-            ui.small("Result inspection unavailable. Retained files need inspection before use.");
+            ui.small(diagnostics::summary(&job.worktree_detail));
             diagnostics::details(
                 ui,
                 ("result_diagnostics", run.id, self.selected_job),
@@ -329,6 +329,8 @@ impl App {
                     .show(ui, |ui| snapshot::show(ui, run, job));
             }
         }
+        let run_id = run.id;
+        let job_index = self.selected_job;
         if let Some(job) = load_diff {
             let path = job
                 .worktree
@@ -336,7 +338,12 @@ impl App {
                 .map_or_else(|| job.repository.path.clone(), |w| w.path.clone());
             self.diff_target = Some(path.clone());
             self.diff = None;
+            let lifecycle = self.manager.lifecycle();
             self.dispatch(ctx.clone(), async move {
+                if let Some(metadata) = job.worktree.clone() {
+                    let report = lifecycle.inspect(run_id, job_index, &job, true).await;
+                    return Message::Reconciled(run_id, job_index, metadata, report, true);
+                }
                 let result = git::diff_job(&job).await.map_err(|e| format!("{e:#}"));
                 Message::Diff(path, result)
             });
@@ -427,12 +434,15 @@ impl App {
                 ui.menu_button("History cleanup", |ui| {
                     ui.label("Removes local history and session output only.");
                     ui.weak("Active convoys and repository files are untouched.");
+                    if self.state.runs.iter().any(Run::unresolved_results) {
+                        ui.weak("Unresolved isolated results stay in history until explicit cleanup is available.");
+                    }
                     if let Some(run)=self.state.runs.iter().find(|r|Some(r.id)==self.selected_run)
-                        && !run.active() && ui.button(format!("Remove convoy #{} from history",run.id)).clicked() {
+                        && !run.active() && ui.add_enabled(!run.unresolved_results(), egui::Button::new(format!("Remove convoy #{} from history",run.id))).on_hover_text("Unresolved isolated results must remain in history.").clicked() {
                         remove=Some(run.id); ui.close();
                     }
                     ui.separator();
-                    if ui.button(format!("Clear history ({history})")).clicked() {
+                    if ui.button(format!("Clear removable history ({})", self.state.runs.iter().filter(|r| !r.history_protected()).count())).clicked() {
                         clear = true;
                         ui.close();
                     }

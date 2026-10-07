@@ -1,5 +1,6 @@
 use super::{
     Administration, Event, PreparedRepository, PreparedRun, job_work,
+    lifecycle::{LifecycleClient, Permit},
     schedule::{Key, Lease, Schedule},
 };
 use crate::{
@@ -25,7 +26,7 @@ struct Control {
     cancellations: Vec<Cancellation>,
     done: Arc<AtomicBool>,
 }
-struct Convoy {
+pub(super) struct Convoy {
     task: Arc<TaskConfig>,
     backend: Arc<dyn AgentBackend>,
     repositories: Vec<Option<PreparedRepository>>,
@@ -33,7 +34,14 @@ struct Convoy {
     done: Arc<AtomicBool>,
     remaining: usize,
 }
-enum Command {
+pub(super) enum Command {
+    Acquire {
+        metadata: crate::domain::WorktreeMetadata,
+        cleanup: bool,
+        reply: tokio::sync::oneshot::Sender<Result<Permit>>,
+        commands: mpsc::UnboundedSender<Command>,
+    },
+    Release(u64, bool),
     Start(u64, Convoy),
     Limit(usize),
     Wake,
@@ -70,6 +78,14 @@ impl RunManager {
         events: mpsc::Sender<Event>,
         storage: Option<std::path::PathBuf>,
     ) -> Self {
+        let storage = storage.map(|path| {
+            // Store parents already exist; canonicalize platform aliases once,
+            // before persisted result paths are inspected. Never create on recovery.
+            path.parent()
+                .and_then(|p| p.canonicalize().ok())
+                .and_then(|p| path.file_name().map(|n| p.join(n)))
+                .unwrap_or(path)
+        });
         let (commands, rx) = mpsc::unbounded_channel();
         let stopping = Arc::new(AtomicBool::new(false));
         let join = tokio::spawn(manage(
@@ -85,6 +101,11 @@ impl RunManager {
             join,
             closing: false,
             stopping,
+        }
+    }
+    pub fn lifecycle(&self) -> LifecycleClient {
+        LifecycleClient {
+            commands: self.commands.clone(),
         }
     }
     pub fn start(
@@ -198,13 +219,72 @@ impl Drop for RunManager {
     }
 }
 
+#[derive(Default)]
+struct Operations {
+    next: u64,
+    active: BTreeMap<u64, Cancellation>,
+    administration: HashMap<std::path::PathBuf, Arc<Administration>>,
+    storage: Option<std::path::PathBuf>,
+}
 fn command(
     command: Command,
     runs: &mut BTreeMap<u64, Convoy>,
     schedule: &mut Schedule,
     closing: &mut bool,
+    operations: &mut Operations,
 ) {
     match command {
+        Command::Acquire {
+            metadata,
+            cleanup,
+            reply,
+            commands,
+        } => {
+            let result = (|| -> Result<Permit> {
+                anyhow::ensure!(
+                    !*closing,
+                    "The application is closing; result was preserved."
+                );
+                let root = operations
+                    .storage
+                    .clone()
+                    .context("Worktree storage is unavailable.")?;
+                let id = operations.next;
+                operations.next = id
+                    .checked_add(1)
+                    .context("Result operation IDs exhausted.")?;
+                let lease = Lease {
+                    path: metadata.repository.path.clone(),
+                    common_dir: Some(metadata.common_dir.clone()),
+                    mode: crate::domain::ExecutionMode::Direct,
+                };
+                anyhow::ensure!(
+                    schedule.begin_maintenance(id, (metadata.run, metadata.job), lease, cleanup),
+                    "Repository is in use by preparation, execution or another result operation. Wait for it to finish; result was preserved."
+                );
+                let cancellation = Cancellation::default();
+                operations.active.insert(id, cancellation.clone());
+                let admin = operations
+                    .administration
+                    .entry(metadata.common_dir)
+                    .or_default()
+                    .clone();
+                Ok(Permit {
+                    id,
+                    commands,
+                    admin,
+                    cancellation,
+                    safe: Arc::new(AtomicBool::new(true)),
+                    root,
+                })
+            })();
+            // If the caller disappeared, dropping its permit releases the lease.
+            let _ = reply.send(result);
+        }
+        Command::Release(id, safe) => {
+            operations.active.remove(&id);
+            schedule.end_maintenance(id, safe);
+        }
         Command::Start(id, convoy) => {
             schedule.insert(
                 id,
@@ -223,6 +303,9 @@ fn command(
         Command::Wake => {}
         Command::Shutdown => {
             *closing = true;
+            for token in operations.active.values() {
+                token.cancel();
+            }
             for convoy in runs.values() {
                 for token in &convoy.cancellations {
                     token.cancel();
@@ -267,12 +350,15 @@ async fn manage(
     let mut workers = JoinSet::new();
     let mut keys: HashMap<Id, (Key, Arc<AtomicBool>)> = HashMap::new();
     let mut reasons = HashMap::new();
-    let mut administration: HashMap<std::path::PathBuf, Arc<Administration>> = HashMap::new();
+    let mut operations = Operations {
+        storage: storage.clone(),
+        ..Operations::default()
+    };
     let mut closing = false;
     loop {
         // Batch arrivals before admission, preserving each convoy's round-robin turn.
         while let Ok(c) = commands.try_recv() {
-            command(c, &mut runs, &mut schedule, &mut closing);
+            command(c, &mut runs, &mut schedule, &mut closing, &mut operations);
         }
         let cancelled: Vec<_> = schedule
             .waiting()
@@ -334,7 +420,8 @@ async fn manage(
             let tx = events.clone();
             let worker_stopping = stopping.clone();
             let storage = storage.clone();
-            let admin = administration
+            let admin = operations
+                .administration
                 .entry(
                     repository
                         .state
@@ -374,14 +461,14 @@ async fn manage(
                     .await;
             }
         }
-        if closing && runs.is_empty() {
+        if closing && runs.is_empty() && operations.active.is_empty() {
             break;
         }
         tokio::select! {
             // Ready control messages take precedence over admitting replacement jobs.
             biased;
-            c = commands.recv(), if !closing => {
-                command(c.unwrap_or(Command::Shutdown), &mut runs, &mut schedule, &mut closing);
+            c = commands.recv(), if !commands.is_closed() => {
+                command(c.unwrap_or(Command::Shutdown), &mut runs, &mut schedule, &mut closing, &mut operations);
             }
             joined = workers.join_next_with_id(), if !workers.is_empty() => {
                 let (id, result) = match joined.expect("workers are nonempty") {

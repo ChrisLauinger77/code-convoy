@@ -13,7 +13,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use tokio::sync::mpsc;
+mod lifecycle;
 mod manager;
+pub use lifecycle::LifecycleClient;
 mod raw_output;
 mod schedule;
 pub use manager::RunManager;
