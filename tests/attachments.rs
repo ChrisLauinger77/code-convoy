@@ -13,6 +13,18 @@ fn file(directory: &Path, name: &str, bytes: &[u8]) -> Attachment {
 }
 
 #[test]
+fn attachment_hash_preserves_persisted_lowercase_hex_format() {
+    let temp = tempfile::tempdir().unwrap();
+    // Known SHA-256 vector includes zero-prefixed bytes to check padding.
+    let attachment = file(temp.path(), "hello.txt", b"hello world");
+    assert_eq!(
+        attachment.sha256,
+        "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+    );
+    assert_eq!(attachment.read_validated().unwrap(), b"hello world");
+}
+
+#[test]
 fn attachment_validation_checks_type_bytes_size_and_same_size_changes() {
     let temp = tempfile::tempdir().unwrap();
     for name in ["requirements.md", "a.txt", "a.json", "a.yaml", "a.yml"] {

@@ -100,7 +100,7 @@ impl Attachment {
             filename,
             kind,
             size: bytes.len() as u64,
-            sha256: format!("{:x}", Sha256::digest(&bytes)),
+            sha256: sha256_hex(&bytes),
         })
     }
 
@@ -113,13 +113,20 @@ impl Attachment {
         );
         let bytes = read_file(&self.path, self.kind)?;
         anyhow::ensure!(
-            bytes.len() as u64 == self.size
-                && format!("{:x}", Sha256::digest(&bytes)) == self.sha256,
+            bytes.len() as u64 == self.size && sha256_hex(&bytes) == self.sha256,
             "Attachment changed since it was added: {}. Remove it and add it again before launching.",
             self.path.display()
         );
         Ok(bytes)
     }
+}
+
+// Keep the persisted hash format stable across digest output type changes.
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn read_file(path: &Path, kind: AttachmentKind) -> Result<Vec<u8>> {

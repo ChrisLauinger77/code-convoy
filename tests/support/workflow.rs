@@ -31,7 +31,7 @@ pub fn run(
                 Some("image") => {
                     let bytes = base64::engine::general_purpose::STANDARD
                         .decode(block["source"]["data"].as_str().ok_or("missing image")?)?;
-                    images.push(format!("{:x}", Sha256::digest(&bytes)));
+                    images.push(sha256_hex(&bytes));
                 }
                 _ => return Err("unexpected input block".into()),
             }
@@ -49,7 +49,7 @@ pub fn run(
                 if !Path::new(path).is_absolute() {
                     return Err("relative image path".into());
                 }
-                images.push(format!("{:x}", Sha256::digest(std::fs::read(path)?)));
+                images.push(sha256_hex(&std::fs::read(path)?));
             }
         }
         input.to_owned()
@@ -116,4 +116,11 @@ pub fn run(
         );
     }
     Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
