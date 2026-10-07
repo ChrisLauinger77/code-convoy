@@ -6,26 +6,44 @@
 metadata, bundle versions and final filenames derive from it. For this release
 it is `0.2.0`, with tag `v0.2.0`, without a prerelease suffix.
 
-1. Review and commit the release changes. Confirm applicable normal CI checks
-   are green; Markdown-only changes skip CI.
+1. Review [release-notes.md](release-notes.md) and commit the release changes.
+   Confirm applicable normal CI checks are green; Markdown-only changes skip CI.
 2. Run **Native release packages → Run workflow** on the reviewed branch. This
    builds and verifies packages and uploads the complete `release-assets`
    workflow artifact, including checksums. It never publishes a release.
 3. Download those packages and complete the outstanding desktop checks in
    [release-validation.md](release-validation.md), particularly Linux and Windows.
-4. Review [release-notes.md](release-notes.md). Create and push `v0.2.0` on the
-   reviewed commit when satisfied. Tag creation is a maintainer action.
+4. When satisfied with the packages, copy the exact `git tag` and `git push`
+   commands from the candidate run's summary or **Print the exact commands to
+   publish this candidate** step. The annotated tag includes `Candidate-Run:`
+   and points to the exact tested commit. Tag creation is a maintainer action.
 
-The tag workflow checks exact tag/version equality before starting native jobs.
-It builds Linux x86-64 on `ubuntu-26.04`, Windows x86-64 on `windows-2025`, and
-both macOS architectures using Apple's SDK on `macos-26`. Rust 1.99.0,
+Only manual runs build packages. They build Linux x86-64 on `ubuntu-26.04`,
+Windows x86-64 on `windows-2025`, and both macOS architectures using Apple's SDK on `macos-26`. Rust 1.99.0,
 Python 3.14 and the committed lockfile are used. Each platform runs formatting,
 strict Clippy and all non-ignored tests; no authenticated agent tasks or provider
 credentials are used.
 
-Only the final publishing job has `contents: write`. All six packages must be
+A `v*` tag push runs only candidate verification, publication and package
+repository update requests; it never rebuilds packages. The publisher requires
+an annotated tag with exactly one `Candidate-Run: <run ID>` line and exact
+Cargo version/tag equality. That run must be a successful, completed manual
+run of `.github/workflows/release.yml` in this repository, with its source
+commit equal to the tagged commit. It downloads that run's complete
+`release-assets` artifact by its verified artifact ID. Missing, empty or expired
+artifacts fail publication; there is no rebuild fallback. The final artifact
+requests 30 days of retention, subject to repository limits.
+
+Start a fresh manual run for each candidate instead of using **Re-run jobs**.
+Reruns can replace artifacts under the same run ID, so candidates with
+`run_attempt` greater than one are rejected. A manual run selected on a tag
+can build a candidate but still cannot publish.
+
+Only the final publishing job has `contents: write`; it also has `actions: read`
+to inspect and download the selected candidate. All six packages must be
 nonempty and have exactly the expected final filenames before checksums are
-generated. A single publisher creates a **draft**, uploads all seven assets,
+generated. The publisher checks the downloaded candidate checksums before
+publication. A single publisher creates a **draft**, uploads all seven assets,
 resolves the draft's numeric release ID with `gh release view`, checks its
 names/sizes and GitHub-provided digests through the release-ID API, then publishes
 that same ID. The REST tag endpoint only returns published releases and cannot
@@ -82,8 +100,9 @@ and a locked release build run on each platform; Windows also runs the explicit
 software graphics initialization test. Markdown-only edits have no new CI run.
 
 [Release packaging](../.github/workflows/release.yml) has separate triggers:
-`v*` tag pushes and manual dispatch. It has no Markdown path filter and uses
-the explicit runners and Rust version listed above. The source-build minimum
+`v*` tag pushes publish a previously tested candidate; manual dispatch builds
+that candidate. It has no Markdown path filter and uses the explicit runners
+and Rust version listed above for candidate builds. The source-build minimum
 remains Rust 1.95 as declared in `Cargo.toml`; the release compiler pin does not
 change that requirement.
 
