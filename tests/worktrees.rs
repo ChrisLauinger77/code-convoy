@@ -302,9 +302,13 @@ async fn all_backends_preserve_invocations_attachments_and_failed_cancelled_resu
                 .map(|s| s.to_str().unwrap())
                 .collect::<Vec<_>>()
         );
+        // Windows can report the same working directory without its verbatim
+        // prefix. Verify filesystem identity, while keeping argv checks exact.
         assert_eq!(
-            fs::read_to_string(h.root.path().join("control/1-tree.cwd")).unwrap(),
-            metadata.path.to_str().unwrap()
+            Path::new(&fs::read_to_string(h.root.path().join("control/1-tree.cwd")).unwrap())
+                .canonicalize()
+                .unwrap(),
+            metadata.path
         );
         assert!(
             fs::read_to_string(h.root.path().join("control/1-tree.input"))

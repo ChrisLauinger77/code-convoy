@@ -794,10 +794,23 @@ async fn traversal_and_copied_manifest_cannot_expand_trusted_storage_boundary() 
     let mut f = Fixture::new().await;
     let m = f.metadata();
     let parent = m.path.parent().unwrap();
-    f.state.runs[0].jobs[0].worktree.as_mut().unwrap().path = parent
-        .join("../")
-        .join(parent.file_name().unwrap())
-        .join("tree");
+    // PathBuf::join normalizes `..` away on Windows verbatim paths. Build the
+    // untrusted persisted spelling without normalization so every OS exercises
+    // the actual traversal rejection, rather than submitting the original path.
+    let mut traversal = parent.as_os_str().to_owned();
+    traversal.push(std::path::MAIN_SEPARATOR_STR);
+    traversal.push("..");
+    traversal.push(std::path::MAIN_SEPARATOR_STR);
+    traversal.push(parent.file_name().unwrap());
+    traversal.push(std::path::MAIN_SEPARATOR_STR);
+    traversal.push("tree");
+    let traversal = PathBuf::from(traversal);
+    assert!(
+        traversal
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+    );
+    f.state.runs[0].jobs[0].worktree.as_mut().unwrap().path = traversal;
     assert_eq!(
         f.inspect(false).await.availability,
         ResultAvailability::Invalid
