@@ -11,6 +11,35 @@ use std::{fs, io::Write, path::Path, sync::atomic::AtomicBool, time::Duration};
 const LIMIT: usize = 2 * 1024 * 1024;
 const OWNER: &str = "codeconvoy.worktree.v1";
 
+/// Refuse symlinks and Windows junctions/reparse points, including dangling ones.
+fn ordinary(path: &Path, directory: bool) -> Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        anyhow::ensure!(
+            metadata.file_attributes() & 0x400 == 0,
+            "Reparse point is not an owned resource: {}",
+            path.display()
+        );
+    }
+    anyhow::ensure!(
+        !metadata.file_type().is_symlink(),
+        "Symlink is not an owned resource: {}",
+        path.display()
+    );
+    anyhow::ensure!(
+        if directory {
+            metadata.is_dir()
+        } else {
+            metadata.is_file()
+        },
+        "Unexpected resource type: {}",
+        path.display()
+    );
+    Ok(())
+}
+
 /// Atomically reserve a random attempt directory, retaining it even on failure.
 /// The manifest is a sibling of the checkout, never an agent-created file in it.
 pub fn reserve(
@@ -25,12 +54,21 @@ pub fn reserve(
         valid_commit(&base_commit),
         "Invalid isolated base commit; start a fresh convoy."
     );
+    // Inspect the root itself before canonicalization can follow a link. Dangling
+    // links must also fail without creating directories at their target.
+    match fs::symlink_metadata(root) {
+        Ok(_) => ordinary(root, true)
+            .context("Cannot use worktree storage; choose an ordinary directory.")?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e).context("Cannot inspect worktree storage."),
+    }
     fs::create_dir_all(root).with_context(|| {
         format!(
             "Cannot create worktree storage {}. Check permissions and free space.",
             root.display()
         )
     })?;
+    ordinary(root, true).context("Cannot use worktree storage; choose an ordinary directory.")?;
     let root = root
         .canonicalize()
         .context("Cannot resolve worktree storage.")?;
@@ -161,7 +199,7 @@ pub async fn create(
         .join("hooks");
     spec.args.push("-c".into());
     let mut config = std::ffi::OsString::from("core.hooksPath=");
-    config.push(hooks);
+    config.push(git::path_argument(&hooks));
     spec.args.push(config);
     spec.args.extend(
         [
@@ -175,7 +213,7 @@ pub async fn create(
         ]
         .map(Into::into),
     );
-    spec.args.push(metadata.path.as_os_str().to_owned());
+    spec.args.push(git::path_argument(&metadata.path));
     spec.args.push(metadata.base_commit.clone().into());
     let output = process::capture_owned(spec, LIMIT, cancellation, Duration::from_secs(300), safe).await
         .with_context(|| format!("Could not prepare isolated worktree at {}. Partial state and ownership metadata are retained; inspect Git, permissions and disk space.", metadata.path.display()))?;

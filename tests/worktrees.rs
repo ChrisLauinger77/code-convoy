@@ -36,6 +36,7 @@ async fn repository(root: &Path, name: &str) -> Repository {
     let path = root.join(name);
     fs::create_dir(&path).unwrap();
     command(&path, &["init", "--quiet"]);
+    command(&path, &["config", "core.autocrlf", "false"]);
     fs::write(path.join("tracked.txt"), "committed base\n").unwrap();
     command(&path, &["add", "tracked.txt"]);
     command(
@@ -516,6 +517,62 @@ async fn ownership_collision_cancellation_and_missing_repository_are_explicit() 
         )
         .is_err()
     );
+}
+
+#[tokio::test]
+async fn reservation_rejects_linked_storage_without_creating_an_attempt() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = repository(temp.path(), "repo").await;
+    let summary = git::status(&repo.path).await.unwrap().summary;
+    let root = temp.path().join("storage link");
+    let target = temp.path().join("target ü");
+    fs::create_dir(&target).unwrap();
+    for dangling in [false, true] {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&target, &root).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_dir(&target, &root).unwrap();
+        if dangling {
+            fs::remove_dir(&target).unwrap();
+        }
+        let error = worktrees::reserve(
+            &root,
+            1,
+            0,
+            repo.clone(),
+            summary.common_dir.clone().unwrap(),
+            summary.head.clone().unwrap(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("Cannot use worktree storage"));
+        assert!(
+            fs::symlink_metadata(&root)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        if dangling {
+            assert!(!target.exists());
+        } else {
+            assert_eq!(fs::read_dir(&target).unwrap().count(), 0);
+        }
+        #[cfg(unix)]
+        fs::remove_file(&root).unwrap();
+        #[cfg(windows)]
+        fs::remove_dir(&root).unwrap();
+    }
+    // Refusal must not poison later reservation at an ordinary storage root.
+    let m = worktrees::reserve(
+        &root,
+        1,
+        0,
+        repo,
+        summary.common_dir.unwrap(),
+        summary.head.unwrap(),
+    )
+    .unwrap();
+    assert!(m.path.parent().unwrap().join("owner.json").is_file());
+    assert!(!m.path.exists());
 }
 
 #[tokio::test]

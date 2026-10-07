@@ -1,6 +1,6 @@
 //! Restart validation and the internal, fail-closed removal primitive.
 //! Callers must hold a manager lifecycle lease and the repository admin mutex.
-use super::{OWNER, inspect_owned, valid_commit, verify_manifest};
+use super::{OWNER, inspect_owned, ordinary, valid_commit, verify_manifest};
 use crate::{
     domain::{Job, ResultAvailability as Availability, WorktreeMetadata, WorktreeResult},
     git,
@@ -54,34 +54,6 @@ impl Report {
     }
 }
 
-/// Refuse symlinks and Windows junctions/reparse points, including dangling ones.
-fn ordinary(path: &Path, directory: bool) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        anyhow::ensure!(
-            metadata.file_attributes() & 0x400 == 0,
-            "Reparse point is not an owned resource: {}",
-            path.display()
-        );
-    }
-    anyhow::ensure!(
-        !metadata.file_type().is_symlink(),
-        "Symlink is not an owned resource: {}",
-        path.display()
-    );
-    anyhow::ensure!(
-        if directory {
-            metadata.is_dir()
-        } else {
-            metadata.is_file()
-        },
-        "Unexpected resource type: {}",
-        path.display()
-    );
-    Ok(())
-}
 fn absent(path: &Path) -> Result<bool> {
     match fs::symlink_metadata(path) {
         Ok(_) => Ok(false),
@@ -522,7 +494,7 @@ pub(crate) async fn cleanup(
             &m.repository.path,
             &["worktree", "remove", "--force", "--force", "--"],
         );
-        spec.args.push(m.path.as_os_str().to_owned());
+        spec.args.push(git::path_argument(&m.path));
         let output = i.capture(spec, 8192).await?;
         anyhow::ensure!(
             output.status.success(),

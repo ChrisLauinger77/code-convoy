@@ -58,6 +58,7 @@ impl Fixture {
         let source = root.join("source 日本語 with spaces");
         fs::create_dir(&source).unwrap();
         git_args(&source, &["init", "--quiet"]);
+        git_args(&source, &["config", "core.autocrlf", "false"]);
         fs::write(source.join("tracked.txt"), "base\n").unwrap();
         git_args(&source, &["add", "tracked.txt"]);
         git_args(
@@ -287,7 +288,7 @@ async fn externally_removed_worktree_is_missing() {
             "remove".as_ref(),
             "--force".as_ref(),
             "--force".as_ref(),
-            m.path.as_os_str(),
+            &git::path_argument(&m.path),
         ],
     );
     assert_eq!(
@@ -313,7 +314,11 @@ async fn external_prune_of_missing_directory_is_detected_without_broad_app_pruni
     let m = f.metadata();
     git_cmd(
         &f.source(),
-        &["worktree".as_ref(), "unlock".as_ref(), m.path.as_os_str()],
+        &[
+            "worktree".as_ref(),
+            "unlock".as_ref(),
+            &git::path_argument(&m.path),
+        ],
     );
     fs::remove_dir_all(&m.path).unwrap();
     git_args(&f.source(), &["worktree", "prune", "--expire", "now"]);
@@ -382,7 +387,7 @@ async fn unrelated_worktree_cannot_be_cleanup_target() {
             "worktree".as_ref(),
             "add".as_ref(),
             "--detach".as_ref(),
-            other.as_os_str(),
+            &git::path_argument(&other),
         ],
     );
     f.state.runs[0].jobs[0].worktree.as_mut().unwrap().path = other.clone();
@@ -401,7 +406,7 @@ async fn verified_cleanup_removes_only_owned_checkout_and_registration() {
             "worktree".as_ref(),
             "add".as_ref(),
             "--detach".as_ref(),
-            other.as_os_str(),
+            &git::path_argument(&other),
         ],
     );
     f.cleanup().await.unwrap();

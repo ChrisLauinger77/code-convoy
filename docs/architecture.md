@@ -232,11 +232,17 @@ overrides and no shell. The lock prevents ordinary Git pruning of retained
 worktree administration; it is not an execution mutex. No permanent branch or
 private Git ref is needed. Preparation overrides `core.hooksPath` with the
 attempt's empty hooks directory so `post-checkout` cannot run source hook actions.
+On Windows, `git::path_argument` spells canonical drive/UNC paths without Rust's
+verbatim prefix for Git's worktree and hooks arguments; stored identities remain
+canonical and OS strings are preserved without lossy conversion.
 Agent CLI configuration, permissions and Git content filters retain their normal
 semantics; worktrees are filesystem separation, not a security sandbox. No
 submodule initialization, dependency copying or agent authentication is added.
 
 Storage is `<Store data directory>/worktrees/run-<id>-job-<index>-<random>/tree`.
+Reservation checks the storage root with `symlink_metadata` before creating an
+attempt or resolving its identity. Symlinks (including dangling links) and Windows
+reparse points are rejected using the same resource checks as recovery.
 The existing `tempfile` dependency atomically reserves collision-resistant
 attempt directories **inside persistent application data**, then relinquishes
 automatic deletion. Paths support spaces/Unicode. Storage inside the source tree

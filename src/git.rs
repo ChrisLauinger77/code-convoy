@@ -12,6 +12,37 @@ pub struct WorkingTree {
     pub entries: Vec<String>,
 }
 
+/// Spell a native path for Git's command-line parser without changing the
+/// canonical identity stored by CodeConvoy. Git for Windows rejects the verbatim
+/// prefix produced by Rust's canonicalize when creating a worktree. Preserve OS
+/// strings (including Unicode) and convert only drive and UNC prefixes.
+pub fn path_argument(path: &Path) -> std::ffi::OsString {
+    #[cfg(windows)]
+    {
+        use std::{
+            ffi::OsString,
+            path::{Component, Prefix},
+        };
+        let mut components = path.components();
+        if let Some(Component::Prefix(prefix)) = components.next() {
+            let mut argument = match prefix.kind() {
+                Prefix::VerbatimDisk(drive) => OsString::from(format!("{}:", char::from(drive))),
+                Prefix::VerbatimUNC(server, share) => {
+                    let mut unc = OsString::from(r"\\");
+                    unc.push(server);
+                    unc.push(r"\");
+                    unc.push(share);
+                    unc
+                }
+                _ => return path.as_os_str().to_owned(),
+            };
+            argument.push(components.as_path());
+            return argument;
+        }
+    }
+    path.as_os_str().to_owned()
+}
+
 pub(crate) fn command(path: &Path, args: &[&str]) -> CommandSpec {
     let mut spec = CommandSpec::new("git", path).args(&[
         "--no-pager",
@@ -279,5 +310,43 @@ pub async fn diff_job(job: &crate::domain::Job) -> Result<String> {
             )
             .await
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn git_paths_preserve_drive_unc_unicode_and_ordinary_paths() {
+        for (native, argument) in [
+            (r"\\?\C:\storage ü\日本語\tree", r"C:\storage ü\日本語\tree"),
+            (
+                r"\\?\UNC\server\share\storage ü\tree",
+                r"\\server\share\storage ü\tree",
+            ),
+            (r"C:\storage ü\tree", r"C:\storage ü\tree"),
+            (r"\\server\share\tree", r"\\server\share\tree"),
+            (r"relative\tree", r"relative\tree"),
+            (r"\\.\device", r"\\.\device"),
+        ] {
+            assert_eq!(path_argument(Path::new(native)), argument);
+        }
+        // Do not turn an unpaired Windows code unit into a replacement character.
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        let mut units: Vec<u16> = r"\\?\C:\storage\".encode_utf16().collect();
+        units.push(0xd800);
+        let native = std::ffi::OsString::from_wide(&units);
+        let argument = path_argument(Path::new(&native));
+        assert_eq!(argument.encode_wide().collect::<Vec<_>>(), units[4..]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn git_paths_preserve_native_unix_bytes() {
+        use std::os::unix::ffi::OsStrExt;
+        let native = std::ffi::OsStr::from_bytes(b"/storage \xff/tree");
+        assert_eq!(path_argument(Path::new(native)), native);
     }
 }
