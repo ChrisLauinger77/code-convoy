@@ -23,24 +23,21 @@ CodeConvoy is a native Rust/egui implementation with four independent coding-age
 | OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally      |
 | Claude Code        | Supported | Unverified; official documentation/source and deterministic fixtures tested, CLI unavailable locally |
 
-## Downloads and installation
+## Downloads and platform support
 
-The `v0.2.0` release workflow produces the following assets on the
-[GitHub Releases page](https://github.com/ChrisLauinger77/code-convoy/releases).
-Packages are available after the maintainer publishes the release tag.
+Published releases provide these native artifacts:
 
-| Platform                       | Package                                     | Installation                                                          |
-| ------------------------------ | ------------------------------------------- | --------------------------------------------------------------------- |
-| Linux x86-64, Debian/Ubuntu    | `code-convoy_0.2.0_amd64.deb`               | `sudo apt install ./code-convoy_0.2.0_amd64.deb`                      |
-| Linux x86-64, Fedora/RPM       | `code-convoy-0.2.0-1.x86_64.rpm`            | `sudo dnf install ./code-convoy-0.2.0-1.x86_64.rpm`                   |
-| Linux x86-64, portable         | `CodeConvoy-0.2.0-x86_64.AppImage`          | Make executable and run; no installation or sandbox                   |
-| Windows x86-64                 | `CodeConvoy-0.2.0-windows-x86_64-setup.exe` | Run the per-user installer; Start Menu and uninstall support included |
-| Windows x86-64, portable       | `CodeConvoy-0.2.0-windows-x86_64.zip`       | Extract and run `CodeConvoy.exe`                                      |
-| macOS, Apple Silicon and Intel | `CodeConvoy-0.2.0-macos-universal.dmg`      | Drag CodeConvoy.app onto Applications                                 |
+| Platform   | Architecture                 | Artifact                                                   | Status                                                                                |
+| ---------- | ---------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Windows 11 | x86_64                       | NSIS installer and portable/Scoop ZIP                      | Installer and portable package published                                              |
+| Linux      | x86_64                       | AppImage, Debian `amd64` package, and RPM `x86_64` package | AppImage and Debian package natively tested; RPM installation remains a release check |
+| macOS      | Universal (arm64 and x86_64) | Disk image (`.dmg`) containing the universal app           | Natively tested on Apple Silicon; native Intel execution remains a release check      |
 
-`SHA256SUMS` covers the six final downloads. On Linux use `sha256sum -c
-SHA256SUMS` with the downloaded files; on macOS use `shasum -a 256`; on Windows
-use `Get-FileHash -Algorithm SHA256` and compare the corresponding entry.
+ARM Linux/Windows packages are not currently published. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
+
+The Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app bundle is ad-hoc signed but has no Developer ID signature or notarization, and Gatekeeper may block its first launch. Verify every downloaded file against the accompanying SHA-256 checksum.
+
+## Installation
 
 ### Linux
 
