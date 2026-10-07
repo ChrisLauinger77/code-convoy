@@ -139,10 +139,10 @@ async fn maintenance_groups_and_image_context_reach_independent_jobs_for_every_b
             );
             assert_eq!(
                 receipt["image_sha256"],
-                serde_json::json!([format!(
-                    "{:x}",
-                    Sha256::digest(include_bytes!("../assets/screenshot.png"))
-                )])
+                serde_json::json!([Sha256::digest(include_bytes!("../assets/screenshot.png"))
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()])
             );
             let activity: String = events
                 .iter()
