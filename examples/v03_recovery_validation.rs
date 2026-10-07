@@ -53,7 +53,7 @@ fn main() -> Result<()> {
                 "worktree".as_ref(),
                 "add".as_ref(),
                 "--detach".as_ref(),
-                unrelated.as_os_str(),
+                &codeconvoy::git::path_argument(&unrelated),
             ],
         )?;
         let control = root.join("control");
