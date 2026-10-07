@@ -125,7 +125,11 @@ impl App {
         let selected_run = state.runs.first().map(|r| r.id);
         let manager = {
             let _entered = runtime.enter();
-            RunManager::new(state.global_concurrency, events_tx)
+            RunManager::with_worktree_directory(
+                state.global_concurrency,
+                events_tx,
+                store.directory().join("worktrees"),
+            )
         };
         let repaint = ctx.clone();
         let cli_checks = agents::availability::CliChecks::new(
@@ -612,6 +616,8 @@ impl App {
     fn apply_event(&mut self, event: Event) {
         let (id, job) = match &event {
             Event::Queued { run, job, .. }
+            | Event::Preparing { run, job, .. }
+            | Event::Result { run, job, .. }
             | Event::Started { run, job, .. }
             | Event::Output { run, job, .. }
             | Event::Finished { run, job, .. } => (*run, *job),
@@ -631,12 +637,25 @@ impl App {
                     job.queue_reason = Some(reason);
                 }
             }
+            Event::Preparing { worktree, .. } => {
+                job.status = JobStatus::Preparing;
+                job.queue_reason = None;
+                job.worktree = worktree;
+                self.dirty = true;
+            }
+            Event::Result { result, detail, .. } => {
+                job.worktree_result = result;
+                job.worktree_detail = detail;
+                self.dirty = true;
+            }
             Event::Started { before, .. } => {
                 job.status = JobStatus::Running;
                 job.queue_reason = None;
                 self.repository_states.remove(&job.repository.path);
                 job.started_at = Some(domain::now());
-                job.before = Some(before);
+                if job.execution_mode == domain::ExecutionMode::Direct {
+                    job.before = Some(before);
+                }
                 self.dirty = true;
             }
             Event::Output { text, raw, .. } => {

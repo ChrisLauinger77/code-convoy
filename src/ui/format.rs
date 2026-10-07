@@ -1,6 +1,6 @@
 use crate::{
     agents::{OptionKind, OptionSpec},
-    domain::{AgentId, Job, JobStatus, QueueReason, Run},
+    domain::{self, AgentId, Job, JobStatus, QueueReason, Run},
 };
 
 pub fn agent_name(agent: AgentId) -> &'static str {
@@ -28,6 +28,7 @@ pub fn duration(seconds: u64) -> String {
 pub fn status_label(status: JobStatus) -> &'static str {
     match status {
         JobStatus::Queued => "· Queued",
+        JobStatus::Preparing => "> Preparing",
         JobStatus::Running => "> Running",
         JobStatus::Succeeded => "Succeeded",
         JobStatus::Failed => "× Failed",
@@ -62,6 +63,7 @@ pub fn output_empty(job: &Job, this_session: bool) -> String {
             || "Queued; awaiting admission to run.".into(),
             QueueReason::label,
         ),
+        JobStatus::Preparing => "Preparing isolated worktree from committed HEAD…".into(),
         JobStatus::Running => "Agent running; no output received yet.".into(),
         _ if !this_session => {
             "No retained output. Logs are session-only and are not restored after restarting."
@@ -164,6 +166,32 @@ pub fn run_label(run: &Run) -> String {
         run.completed_jobs(),
         run.jobs.len()
     )
+}
+
+/// Last result observation is independent of agent completion and restart trust.
+pub(super) fn isolated_result(job: &domain::Job) -> Option<&'static str> {
+    if job.execution_mode != domain::ExecutionMode::IsolatedWorktree {
+        return None;
+    }
+    Some(match &job.worktree_result {
+        Some(result) if !result.observed_this_session => match (result.exists, result.changed) {
+            (true, Some(true)) => "Saved result: changes retained · not checked after restart",
+            (true, Some(false)) => "Saved result: no changes · not checked after restart",
+            _ => "Saved result metadata · not checked after restart",
+        },
+        Some(result) => match (result.exists, result.changed) {
+            (true, Some(true)) => "Isolated changes retained",
+            (true, Some(false)) => "No repository changes · isolated worktree retained",
+            (false, _) => "No isolated checkout found at last inspection",
+            _ => "Isolated result changes unknown · worktree retained",
+        },
+        None if job.status == JobStatus::Preparing => {
+            "Preparing isolated worktree from committed HEAD"
+        }
+        None if job.status == JobStatus::Running => "Agent running in isolated worktree",
+        None if job.worktree.is_some() => "Isolated result metadata present · result not validated",
+        None => "No isolated result recorded",
+    })
 }
 
 #[cfg(test)]

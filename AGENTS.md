@@ -123,8 +123,8 @@ Never silently:
 - delete branches
 - delete repositories
 
-CodeConvoy operates directly on repositories explicitly registered by the
-user.
+CodeConvoy operates on repositories explicitly registered by the user, either
+directly or in an explicitly selected CodeConvoy-owned isolated worktree.
 
 Preserve:
 
@@ -148,6 +148,7 @@ A convoy is an immutable snapshot of:
 - backend-specific settings
 - selected repositories
 - per-convoy concurrency
+- execution mode (Direct by default, or IsolatedWorktree)
 
 The `NEW CONVOY` UI is a draft. Editing it must never mutate an existing run.
 
@@ -164,6 +165,26 @@ round-robin admission.
 Blocked repository jobs must not consume execution slots.
 
 Cancelling one convoy must not affect unrelated convoys.
+
+## Isolated execution
+
+Isolated jobs use the exact committed HEAD captured at review. Never import local
+uncommitted changes or fall back to Direct after preparation failure. Preparation
+consumes both scheduler slots; serialize CodeConvoy Git administration by canonical
+common-directory identity, while allowing independent isolated checkouts to run
+concurrently. Direct access remains exclusive and real nested repositories conflict.
+
+Keep ownership records outside the checkout, written before creation. A path prefix
+alone is not ownership. Retain successful, failed, cancelled and partial worktrees;
+no automatic deletion or pruning. Isolated diffs always compare with the saved base
+commit. Reuse restores mode and creates a fresh path. Keep agent status distinct
+from result observations. Saved observations are not recovery validation. Determine
+changes with Git against the fixed base (working tree, index and nonignored untracked
+files), never from agent status. Retain unchanged worktrees too until safe cleanup
+exists. Cancellation must await Git/process cleanup before releasing leases; do not
+turn unconfirmed cleanup into a safe result through a later inspection. Prefix
+application Activity events with `[CodeConvoy]` and leave backend Raw output intact.
+Part 3.1A provides neither restart reconciliation nor cleanup or Apply/Discard.
 
 ## Task context
 

@@ -20,7 +20,20 @@ impl CliError {
 }
 
 pub(super) fn summary(detail: &str) -> &str {
-    if detail.starts_with("Some attachments were not added") {
+    if detail.contains("Base commit is unavailable") {
+        "Base commit is unavailable. Check the repository, then launch a fresh convoy."
+    } else if detail.contains("worktree creation failed")
+        || detail.contains("Could not prepare isolated worktree")
+    {
+        "Could not create isolated worktree. Check Git, storage permissions and free space in Diagnostics. Any partial state is retained."
+    } else if detail.contains("worktree storage") || detail.contains("worktree directory") {
+        "Worktree storage is unavailable. Check the data directory permissions and free space."
+    } else if detail.contains("ownership")
+        || detail.contains("Worktree path now resolves")
+        || detail.contains("Worktree belongs")
+    {
+        "Isolated result could not be verified. Inspect its location and Git state; no cleanup was performed."
+    } else if detail.starts_with("Some attachments were not added") {
         "Some files were not added. Check file access, supported types and size limits in Diagnostics, then add them again."
     } else if detail.starts_with("Reused convoy has missing")
         || detail.starts_with("Attachment needs attention")
@@ -86,6 +99,22 @@ mod tests {
     #[test]
     fn attachment_summaries_explain_recovery_without_showing_os_error_chains() {
         for (detail, action) in [
+            (
+                "Base commit is unavailable. Git: fatal: private diagnostic",
+                "fresh convoy",
+            ),
+            (
+                "Git worktree creation failed at /private/path: private diagnostic",
+                "free space",
+            ),
+            (
+                "Cannot create worktree storage: Permission denied (os error 13)",
+                "permissions",
+            ),
+            (
+                "Worktree ownership record does not match this job. private diagnostic",
+                "no cleanup",
+            ),
             (
                 "Cannot locate attachment /fixture/missing.md.: No such file (os error 2)",
                 "Restore",

@@ -2,7 +2,31 @@
 //! Its marker lives in a temporary repository's .git directory, never user state.
 use base64::Engine;
 use sha2::{Digest, Sha256};
-use std::{io::Write, path::Path};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
+
+pub fn git_directory(common: bool) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let output = std::process::Command::new("git")
+        .args([
+            "rev-parse",
+            if common {
+                "--git-common-dir"
+            } else {
+                "--absolute-git-dir"
+            },
+        ])
+        .output()?;
+    if !output.status.success() {
+        return Err("fixture is not in a Git repository".into());
+    }
+    Ok(std::env::current_dir()?.join(String::from_utf8(output.stdout)?.trim()))
+}
+pub fn marker() -> Option<PathBuf> {
+    let path = git_directory(true).ok()?.join("codeconvoy-workflow.json");
+    path.is_file().then_some(path)
+}
 
 pub fn run(
     input: &str,
@@ -13,7 +37,7 @@ pub fn run(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cwd = std::env::current_dir()?;
     let config: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(".git/codeconvoy-workflow.json")?)?;
+        serde_json::from_slice(&std::fs::read(marker().ok_or("missing workflow marker")?)?)?;
     let mut images = Vec::new();
     let text = if claude
         && args
@@ -60,7 +84,7 @@ pub fn run(
         .to_string_lossy();
     let receipt = serde_json::json!({"repository": name, "text": text, "image_sha256": images});
     std::fs::write(
-        ".git/codeconvoy-received.json",
+        git_directory(false)?.join("codeconvoy-received.json"),
         serde_json::to_vec_pretty(&receipt)?,
     )?;
     let progress = format!(

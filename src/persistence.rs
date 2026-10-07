@@ -8,15 +8,20 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub fn data_directory() -> Result<PathBuf> {
+    Ok(ProjectDirs::from("", "", "CodeConvoy")
+        .context("Cannot locate your application data directory.")?
+        .data_local_dir()
+        .to_owned())
+}
+
 pub struct Store {
     directory: PathBuf,
     _lock: File,
 }
 impl Store {
     pub fn open_default() -> Result<Self> {
-        let dirs = ProjectDirs::from("", "", "CodeConvoy")
-            .context("Cannot locate your application data directory.")?;
-        Self::open(dirs.data_local_dir())
+        Self::open(&data_directory()?)
     }
     pub fn open(directory: &Path) -> Result<Self> {
         fs::create_dir_all(directory)

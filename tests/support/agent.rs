@@ -7,6 +7,44 @@ use std::{
 mod workflow;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).is_some_and(|a| a == "passthrough") {
+        std::io::copy(&mut std::io::stdin(), &mut std::io::stdout())?;
+        return Ok(());
+    }
+    if args.get(1).is_some_and(|a| a == "smudge-gate") {
+        let mut input = Vec::new();
+        std::io::stdin().read_to_end(&mut input)?;
+        let status = Command::new(std::env::current_exe()?)
+            .args(["smudge-child", &args[2]])
+            .status()?;
+        if !status.success() {
+            return Err("filter child stopped".into());
+        }
+        std::io::stdout().write_all(&input)?;
+        return Ok(());
+    }
+    if args.get(1).is_some_and(|a| a == "smudge-child") {
+        let control = std::path::Path::new(&args[2]);
+        let lock = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(control.join("filter.lock"))?;
+        fs2::FileExt::lock_exclusive(&lock)?;
+        std::fs::write(control.join("filter.ready"), "ready")?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        while !control.join("filter.release").exists() {
+            if std::time::Instant::now() > deadline {
+                return Err("filter gate timeout".into());
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        std::fs::write(
+            control.join("filter.survived"),
+            "unexpected after cancellation",
+        )?;
+        return Ok(());
+    }
     let mut _probe_lock = None;
     if args.iter().any(|arg| arg == "--help" || arg == "--version") {
         let directory = std::env::current_dir()?;
@@ -57,10 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.iter().any(|a| a == "--help") {
         println!("Codex fixture: --no-daemon --ask-for-approval exec");
-        if std::env::current_dir()?
-            .join(".git/codeconvoy-workflow.json")
-            .is_file()
-        {
+        if workflow::marker().is_some() {
             println!("--image PATH (disposable workflow fixture only)");
         }
         print!("{}", include_str!("../fixtures/copilot-1.0.65-help.txt"));
@@ -91,10 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
-    if std::env::current_dir()?
-        .join(".git/codeconvoy-workflow.json")
-        .is_file()
-    {
+    if workflow::marker().is_some() {
         return workflow::run(&input, &args, copilot, opencode, claude);
     }
     if let Some(json) = input.strip_prefix("codeconvoy-fixture-gate\n") {
@@ -210,11 +242,25 @@ fn gate(
         .ok_or("missing repo name")?
         .to_string_lossy();
     let marker = format!("{ticket}-{name}");
+    std::fs::write(
+        root.join(format!("{marker}.cwd")),
+        cwd.to_string_lossy().as_bytes(),
+    )?;
+    let git_dir = Command::new("git")
+        .args(["rev-parse", "--absolute-git-dir"])
+        .output()?;
+    if !git_dir.status.success() {
+        return Err("fixture Git directory unavailable".into());
+    }
+    let git_dir = std::path::PathBuf::from(String::from_utf8(git_dir.stdout)?.trim());
+    if config["edit_before"].as_bool() == Some(true) {
+        std::fs::write("tracked.txt", ticket)?;
+    }
     let lock = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
-        .open(".git/codeconvoy-fixture.lock")?;
+        .open(git_dir.join("codeconvoy-fixture.lock"))?;
     lock.try_lock_exclusive()
         .map_err(|_| "same repository overlap")?;
     std::fs::write(root.join(format!("{marker}.input")), input)?;

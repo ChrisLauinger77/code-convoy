@@ -1,6 +1,6 @@
 use super::{
-    Event, PreparedRepository, PreparedRun, job_work,
-    schedule::{Key, Schedule},
+    Administration, Event, PreparedRepository, PreparedRun, job_work,
+    schedule::{Key, Lease, Schedule},
 };
 use crate::{
     agents::AgentBackend,
@@ -50,6 +50,26 @@ pub struct RunManager {
 }
 impl RunManager {
     pub fn new(global_limit: usize, events: mpsc::Sender<Event>) -> Self {
+        Self::with_storage(
+            global_limit,
+            events,
+            crate::persistence::data_directory()
+                .ok()
+                .map(|p| p.join("worktrees")),
+        )
+    }
+    pub fn with_worktree_directory(
+        global_limit: usize,
+        events: mpsc::Sender<Event>,
+        directory: std::path::PathBuf,
+    ) -> Self {
+        Self::with_storage(global_limit, events, Some(directory))
+    }
+    fn with_storage(
+        global_limit: usize,
+        events: mpsc::Sender<Event>,
+        storage: Option<std::path::PathBuf>,
+    ) -> Self {
         let (commands, rx) = mpsc::unbounded_channel();
         let stopping = Arc::new(AtomicBool::new(false));
         let join = tokio::spawn(manage(
@@ -57,6 +77,7 @@ impl RunManager {
             events,
             global_limit.clamp(1, MAX_CONCURRENCY),
             stopping.clone(),
+            storage,
         ));
         Self {
             commands,
@@ -188,10 +209,13 @@ fn command(
             schedule.insert(
                 id,
                 convoy.task.concurrency,
-                convoy
-                    .repositories
-                    .iter()
-                    .filter_map(|r| r.as_ref().map(|r| r.repository.path.clone())),
+                convoy.repositories.iter().filter_map(|r| {
+                    r.as_ref().map(|r| Lease {
+                        path: r.repository.path.clone(),
+                        common_dir: r.state.summary.common_dir.clone(),
+                        mode: convoy.task.execution_mode,
+                    })
+                }),
             );
             runs.insert(id, convoy);
         }
@@ -236,12 +260,14 @@ async fn manage(
     events: mpsc::Sender<Event>,
     limit: usize,
     stopping: Arc<AtomicBool>,
+    storage: Option<std::path::PathBuf>,
 ) {
     let mut schedule = Schedule::new(limit);
     let mut runs: BTreeMap<u64, Convoy> = BTreeMap::new();
     let mut workers = JoinSet::new();
     let mut keys: HashMap<Id, (Key, Arc<AtomicBool>)> = HashMap::new();
     let mut reasons = HashMap::new();
+    let mut administration: HashMap<std::path::PathBuf, Arc<Administration>> = HashMap::new();
     let mut closing = false;
     loop {
         // Batch arrivals before admission, preserving each convoy's round-robin turn.
@@ -307,6 +333,18 @@ async fn manage(
             }
             let tx = events.clone();
             let worker_stopping = stopping.clone();
+            let storage = storage.clone();
+            let admin = administration
+                .entry(
+                    repository
+                        .state
+                        .summary
+                        .common_dir
+                        .clone()
+                        .unwrap_or_else(|| repository.repository.path.clone()),
+                )
+                .or_default()
+                .clone();
             let handle = workers.spawn(async move {
                 job_work(
                     key.0,
@@ -318,6 +356,8 @@ async fn manage(
                     &worker_stopping,
                     &worker_safe,
                     &tx,
+                    storage,
+                    admin,
                 )
                 .await
             });

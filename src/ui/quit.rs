@@ -70,10 +70,12 @@ impl App {
         let mut cancel = false;
         let mut confirm = false;
         let mut running = 0;
+        let mut preparing = 0;
         let mut queued = 0;
         for job in self.state.runs.iter().flat_map(|run| &run.jobs) {
             match job.status {
                 JobStatus::Running => running += 1,
+                JobStatus::Preparing => preparing += 1,
                 JobStatus::Queued => queued += 1,
                 _ => {}
             }
@@ -81,7 +83,9 @@ impl App {
         let response = egui::Modal::new(egui::Id::new("confirm_quit")).show(ctx, |ui| {
             ui.set_max_width(420.0);
             ui.heading("Convoys are still running");
-            ui.label(format!("Running jobs: {running} · Queued jobs: {queued}"));
+            ui.label(format!(
+                "Preparing: {preparing} · Running: {running} · Queued: {queued}"
+            ));
             ui.label("Closing CodeConvoy will stop all active jobs.");
             ui.add_space(8.0);
             ui.horizontal(|ui| {

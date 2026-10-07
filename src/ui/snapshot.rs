@@ -25,6 +25,25 @@ pub(super) fn show(ui: &mut egui::Ui, run: &Run, job: &domain::Job) {
         }
         ui.separator();
     }
+    ui.label(run.task.execution_mode.label());
+    if let Some(worktree) = &job.worktree {
+        ui.label(format!(
+            "Base: {}",
+            worktree.base_commit.chars().take(12).collect::<String>()
+        ));
+        if let Some(label) = format::isolated_result(job) {
+            ui.label(label);
+        }
+        ui.small("Worktrees are retained, including unchanged results. Recovery and cleanup are not available yet.");
+        egui::CollapsingHeader::new("Worktree location").show(ui, |ui| {
+            ui.add(
+                egui::Label::new(worktree.path.display().to_string())
+                    .wrap()
+                    .selectable(true),
+            );
+        });
+    }
+
     ui.strong(run.task.agent.label());
     if let Ok(backend) = agents::backend(run.task.agent) {
         for spec in backend.options() {
@@ -97,8 +116,20 @@ pub(super) fn show(ui: &mut egui::Ui, run: &Run, job: &domain::Job) {
         ));
         ui.add(
             egui::Label::new(
-                egui::RichText::new(before.head.as_deref().unwrap_or("No initial commit"))
-                    .monospace(),
+                egui::RichText::new(
+                    before
+                        .head
+                        .as_deref()
+                        .map(|head| {
+                            if job.execution_mode == domain::ExecutionMode::IsolatedWorktree {
+                                head.chars().take(12).collect::<String>()
+                            } else {
+                                head.to_owned()
+                            }
+                        })
+                        .unwrap_or_else(|| "No initial commit".into()),
+                )
+                .monospace(),
             )
             .wrap()
             .selectable(true),

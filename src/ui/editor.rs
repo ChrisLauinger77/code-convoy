@@ -68,6 +68,21 @@ impl App {
     pub(super) fn execution_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.separator();
         ui.strong("Execution");
+        let previous = self.state.draft.execution_mode;
+        egui::ComboBox::from_id_salt("execution_mode")
+            .selected_text(previous.label())
+            .show_ui(ui, |ui| {
+                for mode in [
+                    domain::ExecutionMode::Direct,
+                    domain::ExecutionMode::IsolatedWorktree,
+                ] {
+                    ui.selectable_value(&mut self.state.draft.execution_mode, mode, mode.label());
+                }
+            });
+        self.dirty |= previous != self.state.draft.execution_mode;
+        if self.state.draft.execution_mode == domain::ExecutionMode::IsolatedWorktree {
+            ui.small("Starts from committed HEAD; excludes local changes. Results are retained.");
+        }
         ui.horizontal(|ui| {
             let label = ui.label("This convoy");
             self.dirty |= ui
@@ -140,6 +155,10 @@ impl App {
                         prepared.task.concurrency
                     ));
                     ui.label(prepared.task.agent.label());
+                    ui.label(prepared.task.execution_mode.label());
+                    if prepared.task.execution_mode == domain::ExecutionMode::IsolatedWorktree {
+                        ui.small("Each job starts from the committed HEAD shown below. Local uncommitted changes are excluded. Worktrees are retained; Apply/Discard is not available yet.");
+                    }
                     ui.label(&prepared.task.prompt);
                     for attachment in &prepared.task.attachments {
                         ui.small(format!(
@@ -165,6 +184,9 @@ impl App {
                             "{} · {} existing changes",
                             entry.state.summary.branch, entry.state.summary.changed
                         ));
+                        if prepared.task.execution_mode == domain::ExecutionMode::IsolatedWorktree {
+                            ui.small(format!("Base: {}", entry.state.summary.head.as_deref().map(|s| &s[..s.len().min(12)]).unwrap_or("No committed HEAD — job will fail preparation")));
+                        }
                         for line in &entry.state.entries {
                             ui.label(egui::RichText::new(line).monospace());
                         }
@@ -173,7 +195,9 @@ impl App {
                         ui.add_space(theme::GAP);
                         ui.colored_label(
                             theme::Palette::of(ui).warning,
-                            "Some repositories already have changes. Agent edits may overlap them.",
+                            if prepared.task.execution_mode == domain::ExecutionMode::Direct {
+                                "Some repositories already have changes. Agent edits may overlap them."
+                            } else { "Local changes are excluded from isolated execution; only committed HEAD is used." },
                         );
                         ui.checkbox(
                             &mut self.dirty_ack,

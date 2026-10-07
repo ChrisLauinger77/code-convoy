@@ -93,6 +93,9 @@ async fn concurrency_limit_is_respected_and_failure_does_not_abort_other_jobs() 
     let mut output = String::new();
     for event in events {
         match event {
+            Event::Preparing { .. } | Event::Result { .. } => {
+                panic!("direct job emitted isolated lifecycle")
+            }
             Event::Queued { .. } => {}
             Event::Started { .. } => {
                 active += 1;
@@ -239,6 +242,9 @@ async fn copilot_jobs_stream_before_completion_and_isolate_failures_with_a_concu
     let mut logs = String::new();
     for event in events {
         match event {
+            Event::Preparing { .. } | Event::Result { .. } => {
+                panic!("direct job emitted isolated lifecycle")
+            }
             Event::Queued { .. } => {}
             Event::Started { .. } => {
                 active += 1;

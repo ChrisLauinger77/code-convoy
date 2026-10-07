@@ -1,23 +1,43 @@
 //! Deterministic admission policy. No I/O or tasks: all slots and path leases are
 //! reserved together, so a repository waiter never consumes a concurrency slot.
-use crate::domain::QueueReason;
+use crate::domain::{ExecutionMode, QueueReason};
 use std::{
     collections::{BTreeMap, VecDeque},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 pub(super) type Key = (u64, usize);
+#[derive(Clone)]
+pub(super) struct Lease {
+    pub path: PathBuf,
+    pub common_dir: Option<PathBuf>,
+    pub mode: ExecutionMode,
+}
+impl Lease {
+    fn conflicts(&self, other: &Self) -> bool {
+        let same_git = self.common_dir.is_some() && self.common_dir == other.common_dir;
+        let overlap = self.path.starts_with(&other.path) || other.path.starts_with(&self.path);
+        if self.mode == ExecutionMode::Direct || other.mode == ExecutionMode::Direct {
+            same_git || overlap
+        } else {
+            // Separate isolated checkouts of one Git repository may execute together.
+            // Real nested repositories still conflict, even with different Git dirs.
+            overlap && !same_git
+        }
+    }
+}
+
 struct Convoy {
     id: u64,
     limit: usize,
     running: usize,
-    pending: VecDeque<(usize, PathBuf)>,
+    pending: VecDeque<(usize, Lease)>,
 }
 pub(super) struct Schedule {
     pub limit: usize,
     convoys: VecDeque<Convoy>,
-    active: BTreeMap<Key, PathBuf>,
-    quarantined: Vec<(u64, PathBuf)>,
+    active: BTreeMap<Key, Lease>,
+    quarantined: Vec<(u64, Lease)>,
 }
 impl Schedule {
     pub fn new(limit: usize) -> Self {
@@ -28,7 +48,7 @@ impl Schedule {
             quarantined: Vec::new(),
         }
     }
-    pub fn insert(&mut self, id: u64, limit: usize, paths: impl Iterator<Item = PathBuf>) {
+    pub fn insert(&mut self, id: u64, limit: usize, paths: impl Iterator<Item = Lease>) {
         self.convoys.push_back(Convoy {
             id,
             limit,
@@ -36,11 +56,15 @@ impl Schedule {
             pending: paths.enumerate().collect(),
         });
     }
-    fn repository_wait(&self, path: &Path) -> Option<QueueReason> {
-        let overlaps = |other: &Path| path.starts_with(other) || other.starts_with(path);
+    fn repository_wait(&self, path: &Lease) -> Option<QueueReason> {
+        let overlaps = |other: &Lease| path.conflicts(other);
         self.quarantined
             .iter()
-            .find(|(_, p)| overlaps(p))
+            .find(|(_, p)| {
+                let mut exclusive = p.clone();
+                exclusive.mode = ExecutionMode::Direct;
+                overlaps(&exclusive)
+            })
             .map(|(run, _)| QueueReason::CleanupFailed(*run))
             .or_else(|| {
                 self.active
@@ -136,8 +160,55 @@ impl Schedule {
 mod tests {
     use super::*;
     fn add(s: &mut Schedule, run: u64, limit: usize, paths: &[&str]) {
-        s.insert(run, limit, paths.iter().map(PathBuf::from));
+        s.insert(
+            run,
+            limit,
+            paths.iter().map(|p| Lease {
+                path: PathBuf::from(p),
+                common_dir: None,
+                mode: ExecutionMode::Direct,
+            }),
+        );
     }
+    #[test]
+    fn isolated_leases_share_git_but_preserve_nested_and_exclusive_access() {
+        let lease = |path: &str, common: &str, mode| Lease {
+            path: path.into(),
+            common_dir: Some(common.into()),
+            mode,
+        };
+        let a = lease("/source", "/source/.git", ExecutionMode::IsolatedWorktree);
+        let b = lease(
+            "/retained/tree",
+            "/source/.git",
+            ExecutionMode::IsolatedWorktree,
+        );
+        assert!(!a.conflicts(&b));
+        assert!(!a.conflicts(&a));
+        assert!(a.conflicts(&lease(
+            "/source/nested",
+            "/source/nested/.git",
+            ExecutionMode::IsolatedWorktree
+        )));
+        assert!(a.conflicts(&lease(
+            "/retained/tree",
+            "/source/.git",
+            ExecutionMode::Direct
+        )));
+        let mut s = Schedule::new(3);
+        s.insert(1, 1, [a.clone()].into_iter());
+        s.insert(2, 1, [b.clone()].into_iter());
+        assert_eq!(s.next(), Some((1, 0)));
+        assert_eq!(s.next(), Some((2, 0)));
+        s.finish((1, 0), false);
+        s.insert(3, 1, [b].into_iter());
+        assert!(
+            s.waiting()
+                .contains(&((3, 0), QueueReason::CleanupFailed(1)))
+        );
+        assert_eq!(s.next(), None);
+    }
+
     #[test]
     fn round_robin_enforces_both_limits_and_wakes_queued_jobs() {
         let mut s = Schedule::new(3);

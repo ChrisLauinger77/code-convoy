@@ -55,6 +55,49 @@ pub struct TaskTemplate {
     pub prompt: String,
 }
 
+/// Execution context is part of the immutable task snapshot, never a backend option.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionMode {
+    #[default]
+    Direct,
+    IsolatedWorktree,
+}
+impl ExecutionMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Direct => "Current working tree",
+            Self::IsolatedWorktree => "Isolated worktree",
+        }
+    }
+}
+
+/// Also written outside the checkout before Git is allowed to create it.
+/// A path prefix alone is never evidence of ownership.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorktreeMetadata {
+    pub owner: String,
+    pub run: u64,
+    pub job: usize,
+    pub repository: Repository,
+    pub common_dir: PathBuf,
+    pub path: PathBuf,
+    pub base_commit: String,
+    pub execution_mode: ExecutionMode,
+}
+
+/// Last observation, independent of the agent's success/failure status.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorktreeResult {
+    /// Saved observations are never evidence of recovery validation.
+    #[serde(skip)]
+    pub observed_this_session: bool,
+    pub exists: bool,
+    /// None means unavailable/partial; never present that as unchanged.
+    pub changed: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TaskConfig {
@@ -63,6 +106,7 @@ pub struct TaskConfig {
     pub agent: AgentId,
     pub options: AgentOptions,
     pub concurrency: usize,
+    pub execution_mode: ExecutionMode,
 }
 impl Default for TaskConfig {
     fn default() -> Self {
@@ -72,6 +116,7 @@ impl Default for TaskConfig {
             agent: AgentId::Codex,
             options: AgentOptions::new(),
             concurrency: 2,
+            execution_mode: ExecutionMode::Direct,
         }
     }
 }
@@ -117,6 +162,7 @@ impl TaskConfig {
 #[serde(rename_all = "snake_case")]
 pub enum JobStatus {
     Queued,
+    Preparing,
     Running,
     Succeeded,
     Failed,
@@ -124,11 +170,12 @@ pub enum JobStatus {
 }
 impl JobStatus {
     pub fn is_terminal(self) -> bool {
-        !matches!(self, Self::Queued | Self::Running)
+        !matches!(self, Self::Queued | Self::Preparing | Self::Running)
     }
     pub fn label(self) -> &'static str {
         match self {
             Self::Queued => "Queued",
+            Self::Preparing => "Preparing",
             Self::Running => "Running",
             Self::Succeeded => "Succeeded",
             Self::Failed => "Failed",
@@ -164,6 +211,14 @@ impl QueueReason {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Job {
     pub repository: Repository,
+    #[serde(default)]
+    pub execution_mode: ExecutionMode,
+    #[serde(default)]
+    pub worktree: Option<WorktreeMetadata>,
+    #[serde(default)]
+    pub worktree_result: Option<WorktreeResult>,
+    #[serde(skip)]
+    pub worktree_detail: String,
     pub status: JobStatus,
     pub started_at: Option<u64>,
     pub finished_at: Option<u64>,
@@ -184,6 +239,10 @@ impl Job {
     pub fn queued(repository: Repository) -> Self {
         Self {
             repository,
+            execution_mode: ExecutionMode::Direct,
+            worktree: None,
+            worktree_result: None,
+            worktree_detail: String::new(),
             status: JobStatus::Queued,
             started_at: None,
             finished_at: None,
@@ -209,6 +268,8 @@ impl Job {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GitSummary {
+    #[serde(default)]
+    pub common_dir: Option<PathBuf>,
     pub branch: String,
     pub head: Option<String>,
     pub changed: usize,
@@ -225,6 +286,8 @@ impl Run {
     pub fn status(&self) -> JobStatus {
         if self.jobs.iter().any(|j| j.status == JobStatus::Running) {
             JobStatus::Running
+        } else if self.jobs.iter().any(|j| j.status == JobStatus::Preparing) {
+            JobStatus::Preparing
         } else if self.jobs.iter().any(|j| j.status == JobStatus::Queued) {
             JobStatus::Queued
         } else if self.jobs.iter().any(|j| j.status == JobStatus::Failed) {
