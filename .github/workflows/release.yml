@@ -60,7 +60,7 @@ jobs:
         run: python packaging/release.py linux
       - name: Fresh AppImage startup on a virtual desktop
         run: xvfb-run -a python packaging/smoke.py dist/CodeConvoy-$(python packaging/release.py version)-x86_64.AppImage
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages-linux
           path: dist/*
@@ -88,7 +88,7 @@ jobs:
       - run: python packaging/release.py windows
       - name: Verify executable metadata, installer, portable archive and uninstall
         run: ./packaging/windows-smoke.ps1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages-windows
           path: dist/*
@@ -121,7 +121,7 @@ jobs:
         run: python packaging/release.py macos
       - name: Fresh packaged startup
         run: python packaging/smoke.py target/packaging/macos/packages/CodeConvoy.app/Contents/MacOS/codeconvoy
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages-macos
           path: dist/*
@@ -137,14 +137,14 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: packages-*
           merge-multiple: true
           path: dist
       - name: Require all six final assets and generate SHA256SUMS
         run: python packaging/release.py aggregate
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-assets
           path: dist/*
@@ -173,7 +173,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: python packaging/candidate.py resolve
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ steps.candidate.outputs.artifact_id }}
           run-id: ${{ steps.candidate.outputs.run_id }}
