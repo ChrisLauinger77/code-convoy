@@ -12,7 +12,7 @@ homepage = "https://github.com/ChrisLauinger77/code-convoy"
 [dependencies]
 anyhow = "1"
 # Claude's documented image input uses base64; SHA-256 detects attachment changes.
-base64 = "0.22.1"
+base64 = "0.23.0"
 directories = "6"
 # Native hyperlinks need this explicit feature because eframe defaults are disabled.
 eframe = { version = "0.36.0", default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "accesskit", "links"] }
