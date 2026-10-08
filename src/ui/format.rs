@@ -173,6 +173,20 @@ pub(super) fn isolated_result(job: &domain::Job) -> Option<&'static str> {
     if job.execution_mode != domain::ExecutionMode::IsolatedWorktree {
         return None;
     }
+    use domain::ResultResolution as R;
+    match job.resolution {
+        R::Applied => return Some("Applied · retained copy availability shown in Review"),
+        R::Discarded => return Some("Discarded · isolated Diff no longer available"),
+        R::ApplyPending => {
+            return Some(
+                "Apply outcome pending or uncertain · inspect destination before further action",
+            );
+        }
+        R::DiscardPending => {
+            return Some("Discard pending / cleanup failed · retained metadata preserved");
+        }
+        R::Unresolved => {}
+    }
     use domain::ResultAvailability as A;
     if job.result_checked {
         let label = match job.result_availability {

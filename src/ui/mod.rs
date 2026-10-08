@@ -15,6 +15,7 @@ mod repositories;
 #[cfg(target_os = "macos")]
 pub use quit_macos::init_native_application;
 mod results;
+mod review;
 mod snapshot;
 #[cfg(test)]
 mod tests;
@@ -53,10 +54,16 @@ enum Message {
         crate::worktrees::recovery::Report,
         bool,
     ),
+    ReviewStats(u64, usize, Result<crate::review::Statistics, String>),
+    Resolved(
+        Box<crate::persistence::results::Operation>,
+        crate::persistence::results::Completion,
+    ),
     Orphans(Result<Vec<PathBuf>, String>),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
+    Review,
     Activity,
     Raw,
     Diff,
@@ -101,6 +108,10 @@ pub struct App {
     selected_run: Option<u64>,
     selected_job: usize,
     tab: Tab,
+    review_pending: Option<(u64, usize)>,
+    result_operation: Option<(u64, usize)>,
+    discard_confirmation: Option<(u64, usize, crate::persistence::results::Action)>,
+    focus_discard_cancel: bool,
     diff_target: Option<PathBuf>,
     diff: Option<Result<String, String>>,
     dirty: bool,
@@ -184,7 +195,11 @@ impl App {
             dirty_ack: false,
             selected_run,
             selected_job: 0,
-            tab: Tab::Activity,
+            tab: Tab::Review,
+            review_pending: None,
+            result_operation: None,
+            discard_confirmation: None,
+            focus_discard_cancel: false,
             diff_target: None,
             diff: None,
             dirty: true,
@@ -202,18 +217,6 @@ impl App {
         app
     }
     fn reconcile_results(&self, ctx: egui::Context) {
-        let jobs: Vec<_> = self
-            .state
-            .runs
-            .iter()
-            .flat_map(|r| {
-                r.jobs
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, j)| j.worktree.is_some() && j.status.is_terminal())
-                    .map(move |(index, job)| (r.id, index, job.clone()))
-            })
-            .collect();
         let referenced: HashSet<_> = self
             .state
             .runs
@@ -222,19 +225,7 @@ impl App {
             .filter_map(|j| j.worktree.as_ref().map(|m| m.path.clone()))
             .collect();
         let root = self.store.directory().join("worktrees");
-        let lifecycle = self.manager.lifecycle();
-        let tx = self.tx.clone();
-        let repaint = ctx.clone();
         self.dispatch(ctx, async move {
-            // Sequential requests also avoid simultaneous inspections of one Git
-            // repository. Each result is delivered promptly, off the UI thread.
-            for (run, index, job) in jobs {
-                let report = lifecycle.inspect(run, index, &job, false).await;
-                if let Some(metadata) = job.worktree {
-                    let _ = tx.send(Message::Reconciled(run, index, metadata, report, false));
-                    repaint.request_repaint();
-                }
-            }
             let orphans = tokio::task::spawn_blocking(move || {
                 crate::worktrees::recovery::orphans(&root, &referenced)
             })
@@ -554,6 +545,38 @@ impl App {
                         Err(e) => self.notice = e,
                     }
                 }
+                Message::ReviewStats(run, index, result) => {
+                    self.review_pending = None;
+                    if let Some(job) = self
+                        .state
+                        .runs
+                        .iter_mut()
+                        .find(|r| r.id == run)
+                        .and_then(|r| r.jobs.get_mut(index))
+                    {
+                        job.review = Some(result);
+                    }
+                }
+                Message::Resolved(op, completion) => {
+                    self.result_operation = None;
+                    if let Err(e) =
+                        self.store
+                            .finish_result_operation(&mut self.state, &op, completion)
+                    {
+                        self.notice = format!("{e:#}");
+                    }
+                    self.diff = None;
+                    self.diff_target = None;
+                    self.dirty = true;
+                    self.repository_states.remove(&op.job.repository.path);
+                    for job in self.state.runs.iter_mut().flat_map(|r| &mut r.jobs) {
+                        if job.execution_mode == domain::ExecutionMode::Direct
+                            && job.repository.path == op.job.repository.path
+                        {
+                            job.review = None;
+                        }
+                    }
+                }
                 Message::FoundCli(request, result) => self.cli_search_completed(request, result),
                 Message::Orphans(result) => {
                     self.orphan_notice = match result {
@@ -572,12 +595,16 @@ impl App {
                     };
                 }
                 Message::Reconciled(run, index, metadata, report, with_diff) => {
+                    if self.review_pending == Some((run, index)) {
+                        self.review_pending = None;
+                    }
                     if let Some(job) = self
                         .state
                         .runs
                         .iter_mut()
                         .find(|r| r.id == run)
                         .and_then(|r| r.jobs.get_mut(index))
+                        && self.result_operation != Some((run, index))
                         && job.worktree.as_ref() == Some(&metadata)
                         && (job.status.is_terminal() || with_diff)
                     {
@@ -673,7 +700,7 @@ impl App {
             .iter()
             .any(|r| id.is_none_or(|id| r.id == id) && r.unresolved_results())
         {
-            self.notice = "Convoys with unresolved isolated results stay in history. Their files and ownership metadata are preserved; Apply/Discard is planned for Part 3.2.".into();
+            self.notice = "Convoys with unresolved isolated results stay in history. Clean up resolved copies explicitly before removing their history.".into();
         }
         let changed = match id {
             Some(id) => self.state.remove_from_history(id),
@@ -786,6 +813,7 @@ impl App {
                 ..
             } => {
                 job.finish(status, exit_code, detail);
+                job.review = None;
                 self.repository_states.remove(&job.repository.path);
                 self.dirty = true;
             }
@@ -804,6 +832,7 @@ impl eframe::App for App {
         // eframe also calls logic for hidden/minimized windows. A native quit
         // must never bypass confirmation just because no UI pass is rendered.
         self.poll();
+        self.pump_review(ctx);
         self.handle_close(ctx);
         ctx.request_repaint_after(Duration::from_millis(
             if !self.manager.is_idle()
@@ -845,6 +874,7 @@ impl eframe::App for App {
             self.library_window(ctx);
         }
         self.quit_window(ctx);
+        self.discard_window(ctx);
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
             self.save();
         }

@@ -34,6 +34,8 @@ fn populated_v01_fixture_retains_registrations_history_and_all_preferences() {
     expected["runs"][0]["jobs"][0]["worktree"] = serde_json::Value::Null;
     expected["runs"][0]["jobs"][0]["worktree_result"] = serde_json::Value::Null;
     expected["runs"][0]["jobs"][0]["result_availability"] = serde_json::json!("Unchecked");
+    expected["runs"][0]["jobs"][0]["resolution"] = serde_json::json!("Unresolved");
+    expected["runs"][0]["jobs"][0]["resolved_at"] = serde_json::Value::Null;
     expected["runs"][0]["jobs"][0]["before"]["common_dir"] = serde_json::Value::Null;
     assert_eq!(loaded, expected);
     store.save(&state).unwrap();

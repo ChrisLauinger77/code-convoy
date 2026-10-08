@@ -23,6 +23,7 @@ pub struct Report {
     pub result: Option<WorktreeResult>,
     pub detail: String,
     pub diff: Option<String>,
+    pub statistics: Option<Result<crate::review::Statistics, String>>,
 }
 impl Report {
     pub fn unavailable(availability: Availability, detail: impl Into<String>) -> Self {
@@ -31,16 +32,31 @@ impl Report {
             result: None,
             detail: detail.into(),
             diff: None,
+            statistics: None,
         }
     }
     pub fn apply(&self, job: &mut Job) {
         let transition = !job.result_checked || job.result_availability != self.availability;
         job.result_availability = self.availability;
         job.result_checked = true;
+        job.review = Some(
+            self.statistics
+                .clone()
+                .unwrap_or_else(|| Err(self.detail.clone())),
+        );
+        if self.availability == Availability::Cleaned
+            && job.resolution == crate::domain::ResultResolution::DiscardPending
+        {
+            job.resolution = crate::domain::ResultResolution::Discarded;
+            job.resolved_at = Some(crate::domain::now());
+        }
         if let Some(result) = &self.result {
             job.worktree_result = Some(result.clone());
         }
         job.worktree_detail = self.detail.clone();
+        if job.resolution == crate::domain::ResultResolution::ApplyPending {
+            job.worktree_detail.push_str(" Apply outcome is pending or uncertain. Inspect the registered destination manually; automatic retry is blocked and the isolated copy is retained.");
+        }
         if transition {
             let message = match self.availability {
                 Availability::Available => "Recovered isolated result",
@@ -70,7 +86,7 @@ fn bounded(path: &Path) -> Result<Vec<u8>> {
     anyhow::ensure!(bytes.len() <= 64 * 1024, "Ownership record is too large.");
     Ok(bytes)
 }
-fn native(bytes: &[u8]) -> Result<PathBuf> {
+pub(crate) fn native(bytes: &[u8]) -> Result<PathBuf> {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStringExt;
@@ -84,7 +100,7 @@ fn native(bytes: &[u8]) -> Result<PathBuf> {
         )
     }
 }
-fn line(bytes: &[u8]) -> &[u8] {
+pub(crate) fn line(bytes: &[u8]) -> &[u8] {
     let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
     #[cfg(windows)]
     let bytes = bytes.strip_suffix(b"\r").unwrap_or(bytes);
@@ -475,7 +491,26 @@ pub(crate) async fn reconcile(
             String::new()
         },
         diff,
+        statistics: Some(
+            crate::review::Snapshot::capture(&m.path, &m.base_commit, &inspection)
+                .await
+                .map(|s| s.statistics)
+                .map_err(|e| format!("{e:#}")),
+        ),
     }
+}
+
+pub(crate) async fn verify_available(
+    root: &Path,
+    m: &WorktreeMetadata,
+    i: &git::Inspection<'_>,
+) -> Result<()> {
+    let v = verify(root, m, i).await.map_err(|Failure(_, e)| e)?;
+    anyhow::ensure!(
+        v.exists && v.registered && journal(m)?.is_none(),
+        "Result is stale, missing or has pending cleanup; Apply is blocked."
+    );
+    Ok(())
 }
 
 pub(crate) async fn cleanup(

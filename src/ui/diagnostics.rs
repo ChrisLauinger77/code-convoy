@@ -20,7 +20,13 @@ impl CliError {
 }
 
 pub(super) fn summary(detail: &str) -> &str {
-    if detail.starts_with("Convoys with unresolved isolated results") {
+    if detail.starts_with("Apply blocked:")
+        || detail.starts_with("Apply preflight passed")
+        || detail.starts_with("Cleanup completed")
+        || detail.starts_with("Result discarded")
+    {
+        detail.lines().next().unwrap_or(detail)
+    } else if detail.starts_with("Convoys with unresolved isolated results") {
         "Convoys with unresolved isolated results stay in history. Their files are preserved."
     } else if detail.starts_with("Unreferenced worktree resources found") {
         detail.split('\n').next().unwrap_or(detail)
@@ -197,5 +203,19 @@ mod recovery_tests {
             super::summary("Could not clean isolated result. ownership error")
                 .contains("did not complete")
         );
+    }
+}
+
+#[cfg(test)]
+mod result_tests {
+    use super::*;
+    #[test]
+    fn apply_reason_and_successful_cleanup_are_not_reclassified() {
+        for detail in [
+            "Apply blocked: Registered working tree has local changes.",
+            "Cleanup completed; ownership record retained.",
+        ] {
+            assert_eq!(summary(detail), detail);
+        }
     }
 }

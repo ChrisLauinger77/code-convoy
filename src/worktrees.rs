@@ -1,4 +1,5 @@
 //! Retained detached worktrees and owned result lifecycle.
+pub mod apply;
 pub mod recovery;
 use crate::{
     domain::{ExecutionMode, Repository, WorktreeMetadata, WorktreeResult},
@@ -331,7 +332,7 @@ async fn diff_owned(
     let worktree_patch = patch(metadata, &inspection, false).await?;
     let index_patch = patch(metadata, &inspection, true).await?;
     let state = inspection.status(&metadata.path).await?;
-    Ok(format!(
+    let mut text = format!(
         "Isolated worktree: {}\nBase commit: {}\n\n--- CHANGES FROM SNAPSHOTTED BASE ---\n{}{}\n--- INDEX CHANGES FROM SNAPSHOTTED BASE ---\n{}{}\n--- STATUS (untracked contents are not in Git diff) ---\n{}",
         metadata.path.display(),
         metadata.base_commit,
@@ -360,5 +361,30 @@ async fn diff_owned(
         } else {
             state.entries.join("\n")
         }
-    ))
+    );
+    if state.entries.iter().any(|e| e.starts_with("?? ")) {
+        text.push_str("\n\n--- EFFECTIVE RESULT INCLUDING NEW FILE CONTENTS ---\n");
+        let full = async {
+            let snapshot = crate::review::Snapshot::capture(
+                &metadata.path,
+                &metadata.base_commit,
+                &inspection,
+            )
+            .await?;
+            snapshot
+                .patch(&metadata.path, &metadata.base_commit, &inspection)
+                .await
+        }
+        .await;
+        match full {
+            Ok(bytes) => {
+                text.push_str(&String::from_utf8_lossy(&bytes[..bytes.len().min(LIMIT)]));
+                if bytes.len() > LIMIT {
+                    text.push_str("\n[Effective result diff truncated at 2 MiB]");
+                }
+            }
+            Err(e) => text.push_str(&format!("New-file diff unavailable: {e:#}")),
+        }
+    }
+    Ok(text)
 }
