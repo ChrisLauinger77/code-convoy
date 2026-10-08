@@ -1388,12 +1388,35 @@ async fn apply_uncertain_outcome_and_intent_save_failure_preserve_recovery_evide
     f.reload();
     f.inspect(false).await;
     assert_eq!(f.resolution(), ResultResolution::ApplyPending);
-    assert!(
-        f.store
-            .begin_result_operation(&mut f.state, 1, 0, Action::Apply)
-            .is_err()
-    );
+    for action in [
+        Action::Apply,
+        Action::Discard,
+        Action::CleanupApplied,
+        Action::InternalCleanup,
+    ] {
+        let before = serde_json::to_value(&f.state).unwrap();
+        let error = f
+            .store
+            .begin_result_operation(&mut f.state, 1, 0, action)
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("pending or uncertain"));
+        assert_eq!(serde_json::to_value(&f.state).unwrap(), before);
+    }
+    assert!(f.cleanup().await.is_err());
     assert!(f.metadata().path.exists());
+    assert!(
+        !f.metadata()
+            .path
+            .parent()
+            .unwrap()
+            .join("cleanup.json")
+            .exists()
+    );
+    assert!(!f.state.remove_from_history(1));
+    // Even stale cleanup metadata cannot erase an uncertain destination warning.
+    f.state.runs[0].jobs[0].result_availability = ResultAvailability::Cleaned;
+    assert!(f.state.runs[0].unresolved_results());
     assert!(!f.state.remove_from_history(1));
 
     let mut f = Fixture::new().await;

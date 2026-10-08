@@ -475,6 +475,9 @@ selection and existing inspection tabs. The UI pump allows one review request at
 a time, caches errors too, and recomputes on completion, restart, explicit refresh
 and result operations. Rendering never spawns Git. Direct rows describe the current
 mutable working tree; their old runs have no immutable result or resolution action.
+An unrelated pending review does not disable the selected result's actions; only
+its own inspection or an active result operation gates those controls. Manager
+leases still reject real repository conflicts.
 
 `Snapshot` imports the live index's entries into a fresh temporary index, runs Git add/write-tree
 against working files (including tracked ignored additions and nonignored untracked
@@ -504,6 +507,10 @@ real index. Standard patch rejection is all-or-nothing; OS write failures or
 cancellation are not a filesystem transaction. Every error after the write attempt
 is marked uncertain, never reported as Applied or rolled back with reset/clean/stash.
 There is no automatic retry. The original isolated worktree always survives Apply.
+Pending/uncertain Apply also blocks Discard and all cleanup entry points, preserving
+the destination warning and comparison evidence across restart. History remains
+pinned even if cleanup observations say the copy is absent. There is no in-app
+uncertainty-acknowledgement flow in this implementation.
 
 Conservative exclusions: submodules/nested repositories, sparse/unmerged or
 assume-unchanged entries, divergent staged alternatives, content conversion

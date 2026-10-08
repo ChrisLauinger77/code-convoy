@@ -60,6 +60,10 @@ impl Store {
             .context("No isolated result was recorded.")?;
         anyhow::ensure!(j.status.is_terminal(), "Active work cannot be resolved.");
         anyhow::ensure!(
+            j.resolution != ResultResolution::ApplyPending,
+            "Apply outcome is pending or uncertain. Inspect the destination manually; the retained result and recovery evidence cannot be discarded or cleaned up."
+        );
+        anyhow::ensure!(
             m.run == run
                 && m.job == index
                 && m.repository == j.repository

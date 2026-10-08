@@ -32,7 +32,8 @@ Implemented against merged Part 3.1 (`94fbd3c`), on branch
 8. **Preflight:** `git apply --check`, then source-image, ownership and destination
    revalidation under the same lease. A preflight refusal leaves the destination alone.
 9. **Apply failure:** every error after a write attempt is uncertain; no success claim,
-   automatic retry or reset/clean/stash recovery. The isolated result survives.
+   automatic retry or reset/clean/stash recovery. Discard/internal cleanup are blocked
+   until a separate uncertainty-resolution flow exists; the evidence stays pinned.
 10. **Applied lifecycle:** separate persisted Applied resolution and timestamp. Stable
     isolated Diff remains until explicit confirmed retained-copy cleanup. Applied is not
     classified as unresolved solely because its copy exists.
@@ -49,6 +50,7 @@ Implemented against merged Part 3.1 (`94fbd3c`), on branch
     Apply remains uncertain and never replays. History removal remains metadata-only.
 15. **Activity/UI:** application lifecycle messages use `[CodeConvoy]`; Raw is untouched.
     Existing Activity/Diff/Raw/Task tabs, keyboard buttons, visible focus and themes remain.
+    Pending inspection of another result does not block the selected result's controls.
     Quit waits for an active result operation's final state merge.
 16. **Validation:** required formatting, all-target/all-feature clippy, all-feature tests,
     release build and packaging tests pass locally. See details below.
@@ -70,7 +72,7 @@ Implemented against merged Part 3.1 (`94fbd3c`), on branch
 
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo test --all-features`: 252 top-level tests pass; four existing optional
+- `cargo test --all-features`: 253 top-level tests pass; four existing optional
   installed/authenticated CLI probes remain ignored. Subprocess self-tests also pass.
 - `cargo build --release`
 - `python3 -m unittest discover -s packaging -p 'test_*.py'`: 16 pass.
@@ -83,7 +85,8 @@ ignored-file collision preflight with no partial write; actual Unix write refusa
 uncertain completion persistence; active/peer exclusion; index-hook suppression;
 same-size cached-stat result/destination edits; mode capability refusal;
 Discard retries, source/peer preservation and restart.
-UI tests add 24-job rendering without Git work, safe default Enter/Escape handling,
+UI tests add 24-job rendering without Git work, pending-inspection control availability,
+uncertain-result cleanup suppression, safe default Enter/Escape handling,
 result-operation quit handling and truthful diagnostic classification. Legacy
 version-1 fixture assertions explicitly cover additive resolution defaults.
 Existing scheduler tests verify exclusive maintenance, admission blocking,
@@ -123,3 +126,9 @@ indexes, expected retained/removal paths and the peer result. No commits, pushes
 ordinary repositories, attachment contents or provider credentials were touched by
 these native result actions. Linux/Windows native UI was not exercised locally;
 authenticated provider runs were not performed.
+
+After strengthening snapshot creation, native Diff/Apply and destination blocking
+were repeated with fresh fixtures at
+`/private/tmp/codeconvoy-part32-final-native-20261008`. The updated Diff rendered the
+fresh working-file snapshot; Apply and blocking both passed, with source bytes,
+unchanged HEAD/index and retained copies independently verified afterward.

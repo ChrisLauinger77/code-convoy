@@ -1923,3 +1923,55 @@ fn result_operation_keeps_quit_waiting_for_completion_merge() {
     app.cancel_quit();
     assert!(app.result_operation.is_some());
 }
+
+#[test]
+fn review_controls_ignore_unrelated_inspections_and_preserve_uncertain_results() {
+    use domain::{ResultAvailability as A, ResultResolution as R};
+    let (_temp, mut app) = app();
+    app.state.runs = vec![isolated_history(1, JobStatus::Succeeded, Some(true))];
+    app.selected_run = Some(1);
+    app.selected_job = 0;
+    let job = &mut app.state.runs[0].jobs[0];
+    job.result_checked = true;
+    job.result_availability = A::Available;
+    job.review = Some(Ok(crate::review::Statistics {
+        files: 1,
+        ..Default::default()
+    }));
+    for resolution in [R::Unresolved, R::Applied, R::ApplyPending] {
+        app.state.runs[0].jobs[0].resolution = resolution;
+        for pending in [None, Some((1, 0)), Some((1, 1)), Some((2, 0))] {
+            app.review_pending = pending;
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1000.0, 900.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| app.review_view(ui, &ctx, 900.0),
+            );
+            output.textures_delta.clear();
+            let tree = output.platform_output.accesskit_update.unwrap();
+            for label in ["Apply result", "Discard result", "Clean up retained copy"] {
+                let button = tree.nodes.iter().find(|(_, n)| n.label() == Some(label));
+                let present = match resolution {
+                    R::Unresolved => label != "Clean up retained copy",
+                    R::Applied => label == "Clean up retained copy",
+                    _ => false,
+                };
+                assert_eq!(button.is_some(), present, "{resolution:?}: {label}");
+                if let Some((_, node)) = button {
+                    assert_eq!(
+                        node.is_disabled(),
+                        pending == Some((1, 0)),
+                        "{pending:?}: {label}"
+                    );
+                }
+            }
+        }
+    }
+}

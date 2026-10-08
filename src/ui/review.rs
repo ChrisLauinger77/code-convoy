@@ -161,7 +161,7 @@ impl App {
             if job.worktree.is_some() && job.status.is_terminal() {
                 let enabled = !self.closing
                     && !self.quit_requested
-                    && self.review_pending.is_none()
+                    && self.review_pending != Some((id, self.selected_job))
                     && self.result_operation.is_none();
                 ui.horizontal_wrapped(|ui| {
                     if job.resolution == R::Unresolved {
@@ -193,6 +193,7 @@ impl App {
                         }
                     } else if job.resolution != R::Discarded
                         && job.resolution != R::Applied
+                        && job.resolution != R::ApplyPending
                         && job.result_availability != A::Cleaned
                         && ui
                             .add_enabled(enabled, egui::Button::new("Discard result"))
@@ -234,7 +235,11 @@ impl App {
         index: usize,
         action: Action,
     ) {
-        if self.result_operation.is_some() || self.closing {
+        if self.result_operation.is_some()
+            || self.closing
+            || self.quit_requested
+            || self.review_pending == Some((run, index))
+        {
             return;
         }
         let op = match self

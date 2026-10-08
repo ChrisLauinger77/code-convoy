@@ -199,7 +199,8 @@ source, clean destination at the fixed base, reviewed-result revalidation and an
 exclusive manager lifecycle lease. Use binary Git patch preflight; never silently
 flatten staged alternatives or unsupported changes. Preserve the real indexes,
 HEAD and retained worktree; never reset/clean/stash after failure. An uncertain
-write remains pending across restart and cannot automatically retry. Applied is
+write remains pending across restart and cannot retry, discard or clean up its
+retained evidence without a separate explicit uncertainty-resolution flow. Applied is
 resolved independently of physical availability; retain its stable Diff until
 explicit verified cleanup. Discard uses the same Store intent/outcome transaction
 and cleanup primitive, requires safe-default confirmation, and changes no source

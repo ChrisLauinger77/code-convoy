@@ -333,7 +333,9 @@ impl Run {
                     job.resolution,
                     ResultResolution::Applied | ResultResolution::Discarded
                 )
-                && (job.result_availability != ResultAvailability::Cleaned || !job.result_checked)
+                && (job.resolution == ResultResolution::ApplyPending
+                    || job.result_availability != ResultAvailability::Cleaned
+                    || !job.result_checked)
         })
     }
     pub fn history_protected(&self) -> bool {
