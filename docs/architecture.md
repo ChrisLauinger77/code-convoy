@@ -476,9 +476,12 @@ a time, caches errors too, and recomputes on completion, restart, explicit refre
 and result operations. Rendering never spawns Git. Direct rows describe the current
 mutable working tree; their old runs have no immutable result or resolution action.
 
-`Snapshot` copies the live index to a disposable temporary index, runs Git add/write-tree
+`Snapshot` imports the live index's entries into a fresh temporary index, runs Git add/write-tree
 against working files (including tracked ignored additions and nonignored untracked
 files), and derives numstat against the isolated original base or Direct current HEAD.
+It imports paths, modes and object IDs through `ls-files --stage -z` and
+`update-index -z --index-info`, without copying stat-cache data. Every working file
+is reread, including same-size edits whose timestamps match the live index.
 The real index is never edited. Git may create unreachable blobs/tree objects;
 there are no commits, refs, branches or persisted repository copies. Paths in stats
 use NUL records. Renames are deliberately represented as delete/add (two paths),
@@ -492,7 +495,7 @@ reviewed again before Apply. Full patches are not serialized.
 
 `worktrees/apply` uses the existing recovery verifier and lifecycle lease; it has
 no alternate ownership path. Destination registration, canonical root/common Git
-identity, original base, clean porcelain state, hidden index flags, supported
+identity, original base, clean porcelain state and freshly read contents, hidden index flags, supported
 attributes and modes are checked. It builds a full-index binary patch against the
 fixed base and invokes `git apply --check` before applying without `--index`,
 `--reject` or `--3way`. It repeats ownership/source-image/destination checks while

@@ -124,20 +124,12 @@ impl Snapshot {
                 .all(|r| r.len() == 3 && matches!(r[2], b"unspecified" | b"unset")),
             "Custom content filters are unsupported for Review statistics/Apply; inspect the result in Git."
         );
-        // Copy the index to retain tracked additions even when ignored. Git only
-        // writes this disposable index; new blobs are ordinary unreachable objects.
+        // Import entries without stat-cache data. Copying the real index can lose
+        // Git's racy-clean protection when the copy gets a newer modification time.
+        // Keep staged/ignored additions, but force every working file to be read.
+        let entries = i.checked(path, &["ls-files", "--stage", "-z"]).await?;
         let directory = tempfile::tempdir()?;
         let index = directory.path().join("index");
-        let bytes = i
-            .checked(path, &["rev-parse", "--git-path", "index"])
-            .await?;
-        let index_path =
-            crate::worktrees::recovery::native(crate::worktrees::recovery::line(&bytes))?;
-        let source = path.join(index_path);
-        if source.exists() {
-            let target = index.clone();
-            tokio::task::spawn_blocking(move || std::fs::copy(source, target)).await??;
-        }
         let index_argument = git::path_argument(&index)
             .into_string()
             .map_err(|_| anyhow::anyhow!("Temporary index path is not Unicode."))?;
@@ -145,15 +137,24 @@ impl Snapshot {
             let mut spec = git::command(path, args);
             let mut hooks = std::ffi::OsString::from("core.hooksPath=");
             hooks.push(git::path_argument(directory.path()));
-            spec.args
-                .splice(0..0, [std::ffi::OsString::from("-c"), hooks]);
+            spec.args.splice(
+                0..0,
+                [
+                    std::ffi::OsString::from("-c"),
+                    hooks,
+                    "-c".into(),
+                    "core.ignorestat=false".into(),
+                    "-c".into(),
+                    "core.splitIndex=false".into(),
+                ],
+            );
             spec.env
                 .push(("GIT_INDEX_FILE".into(), index_argument.clone()));
             spec
         };
-        if !index.exists() {
-            checked(i, make(&["read-tree", base])).await?;
-        }
+        let mut import = make(&["update-index", "-z", "--index-info"]);
+        import.input = Some(entries);
+        checked(i, import).await?;
         checked(i, make(&["add", "--all", "--", "."])).await?;
         let tree = String::from_utf8(checked(i, make(&["write-tree"])).await?)?
             .trim()

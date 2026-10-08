@@ -1472,3 +1472,53 @@ async fn review_and_apply_never_execute_temporary_index_hooks() {
     assert!(!f.source().join("hook-was-run").exists());
     assert!(!f.metadata().path.join("hook-was-run").exists());
 }
+
+#[tokio::test]
+async fn snapshots_read_same_size_edits_even_when_git_stat_cache_matches() {
+    for target in ["result", "destination"] {
+        let mut f = Fixture::new().await;
+        if target == "destination" {
+            f.edit();
+            f.inspect(false).await;
+        }
+        let path = if target == "result" {
+            f.metadata().path
+        } else {
+            f.source()
+        };
+        git_args(&path, &["config", "core.trustctime", "false"]);
+        git_args(&path, &["config", "core.checkstat", "minimal"]);
+        let tracked = path.join("tracked.txt");
+        let file = fs::OpenOptions::new().write(true).open(&tracked).unwrap();
+        let time = std::time::SystemTime::now() - Duration::from_secs(60);
+        let times = fs::FileTimes::new().set_modified(time);
+        file.set_times(times).unwrap();
+        git_args(&path, &["update-index", "--refresh"]);
+        fs::write(&tracked, "next\n").unwrap(); // Same size as the committed base.
+        file.set_times(times).unwrap();
+        drop(file);
+        assert_eq!(git_args(&path, &["status", "--porcelain"]), "");
+        if target == "result" {
+            let report = f.inspect(true).await;
+            assert_eq!(report.result.unwrap().changed, Some(true));
+            assert!(report.diff.unwrap().contains("+next"));
+            let s = report.statistics.unwrap().unwrap();
+            assert_eq!((s.files, s.additions, s.deletions), (1, 1, 1));
+            f.resolve(Action::Apply).await;
+            assert_eq!(f.resolution(), ResultResolution::Applied);
+        } else {
+            f.resolve(Action::Apply).await;
+            assert_eq!(f.resolution(), ResultResolution::Unresolved);
+            assert!(
+                f.state.runs[0].jobs[0]
+                    .worktree_detail
+                    .contains("local changes")
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(f.source().join("tracked.txt")).unwrap(),
+            "next\n"
+        );
+        assert!(f.metadata().path.exists());
+    }
+}

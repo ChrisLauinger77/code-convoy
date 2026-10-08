@@ -11,6 +11,7 @@ Implemented against merged Part 3.1 (`94fbd3c`), on branch
    base, with nonignored untracked files included using a disposable index. Binary
    files have no fabricated line counts; rename is two changed paths (delete/add).
    Divergent staged versions have a separate alternative count and block Apply.
+   Fresh index entries exclude cached timestamps so same-size edits cannot be missed.
 3. **Direct versus Isolated:** Direct is explicitly the current mutable working tree;
    only isolated results have Apply/Discard. Cached observations are refreshed off-thread.
 4. **Apply preconditions:** terminal result, current registration, matching canonical
@@ -69,18 +70,19 @@ Implemented against merged Part 3.1 (`94fbd3c`), on branch
 
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo test --all-features`: 251 top-level tests pass; four existing optional
+- `cargo test --all-features`: 252 top-level tests pass; four existing optional
   installed/authenticated CLI probes remain ignored. Subprocess self-tests also pass.
 - `cargo build --release`
 - `python3 -m unittest discover -s packaging -p 'test_*.py'`: 16 pass.
 
-The worktree/recovery suite now has 53 tests (38 Part 3.1 tests preserved plus
-15 Part 3.2 scenarios, several parameterized). Coverage includes Git counts and
+The worktree/recovery suite now has 54 tests (38 Part 3.1 tests preserved plus
+16 Part 3.2 scenarios, several parameterized). Coverage includes Git counts and
 fixed-base independence; all transfer categories; failed/cancelled/interrupted
 results; dirty/moved/missing/unregistered destinations; changed result/ownership;
 ignored-file collision preflight with no partial write; actual Unix write refusal;
 uncertain completion persistence; active/peer exclusion; index-hook suppression;
-mode capability refusal; Discard retries, source/peer preservation and restart.
+same-size cached-stat result/destination edits; mode capability refusal;
+Discard retries, source/peer preservation and restart.
 UI tests add 24-job rendering without Git work, safe default Enter/Escape handling,
 result-operation quit handling and truthful diagnostic classification. Legacy
 version-1 fixture assertions explicitly cover additive resolution defaults.

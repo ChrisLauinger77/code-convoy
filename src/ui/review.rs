@@ -166,9 +166,10 @@ impl App {
                 ui.horizontal_wrapped(|ui| {
                     if job.resolution == R::Unresolved {
                         let changed = job
-                            .worktree_result
+                            .review
                             .as_ref()
-                            .is_some_and(|r| r.changed == Some(true));
+                            .and_then(|r| r.as_ref().ok())
+                            .is_some_and(|s| s.files > 0);
                         if ui
                             .add_enabled(
                                 enabled

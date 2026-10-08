@@ -456,7 +456,7 @@ pub(crate) async fn reconcile(
             )
         };
     }
-    let result = match inspect_owned(m, cancellation, safe).await {
+    let mut result = match inspect_owned(m, cancellation, safe).await {
         Ok(r) => r,
         Err(e) => {
             return Report::unavailable(
@@ -478,6 +478,13 @@ pub(crate) async fn reconcile(
     } else {
         None
     };
+    let statistics = crate::review::Snapshot::capture(&m.path, &m.base_commit, &inspection)
+        .await
+        .map(|s| s.statistics)
+        .map_err(|e| format!("{e:#}"));
+    if let Ok(s) = &statistics {
+        result.changed = Some(s.files > 0 || s.index_alternatives > 0);
+    }
     Report {
         availability: if cleanup_unfinished {
             Availability::CleanupFailed
@@ -491,12 +498,7 @@ pub(crate) async fn reconcile(
             String::new()
         },
         diff,
-        statistics: Some(
-            crate::review::Snapshot::capture(&m.path, &m.base_commit, &inspection)
-                .await
-                .map(|s| s.statistics)
-                .map_err(|e| format!("{e:#}")),
-        ),
+        statistics: Some(statistics),
     }
 }
 

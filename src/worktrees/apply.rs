@@ -32,6 +32,13 @@ async fn destination(m: &WorktreeMetadata, i: &git::Inspection<'_>) -> Result<()
         state.entries.is_empty(),
         "Registered working tree has local changes."
     );
+    // Status alone may trust cached timestamps. Re-read destination contents so
+    // a same-size edit with matching stat data cannot pass the cleanliness gate.
+    let snapshot = Snapshot::capture(&m.repository.path, &m.base_commit, i).await?;
+    anyhow::ensure!(
+        snapshot.statistics.files == 0 && snapshot.statistics.index_alternatives == 0,
+        "Registered working tree has local changes."
+    );
     Ok(())
 }
 
