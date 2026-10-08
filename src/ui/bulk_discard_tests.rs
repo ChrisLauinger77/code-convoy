@@ -128,6 +128,9 @@ fn bulk_discard_ui_pump_merges_real_cleanup_and_enables_history_removal() {
     let (temp, mut app) = app();
     let source = temp.path().join("source");
     std::fs::create_dir(&source).unwrap();
+    // Exercise an aliased selection on every platform, not only macOS's /var
+    // alias or Windows paths whose canonical spelling has a verbatim prefix.
+    let source = source.join("..").join("source");
     let git = |args: &[&str]| {
         let output = std::process::Command::new("git")
             .arg("-C")
@@ -158,7 +161,7 @@ fn bulk_discard_ui_pump_merges_real_cleanup_and_enables_history_removal() {
     let repository = app.runtime().block_on(git::register(&source)).unwrap();
     let summary = app
         .runtime()
-        .block_on(git::status(&source))
+        .block_on(git::status(&repository.path))
         .unwrap()
         .summary;
     app.state.repositories = vec![repository.clone()];

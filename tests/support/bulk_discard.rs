@@ -138,7 +138,7 @@ async fn bulk_discard_all_preserves_active_convoys_resolved_results_and_unrelate
             "worktree".as_ref(),
             "add".as_ref(),
             "--detach".as_ref(),
-            foreign.as_os_str(),
+            &git::path_argument(&foreign),
         ],
     );
     fs::write(foreign.join("user-file"), "user work").unwrap();
