@@ -1,40 +1,69 @@
-# CodeConvoy 0.2.0
+# CodeConvoy 0.3.0
 
-CodeConvoy 0.2.0 makes repeated maintenance across local Git repositories easier
-with repository groups, task templates, file attachments and readable activity
-views. It continues to use your installed Codex CLI, GitHub Copilot CLI, OpenCode
-or Claude Code, with each backend's own settings and permissions.
+CodeConvoy 0.3.0 adds isolated execution, convoy-wide review and explicit result
+resolution, plus retries and follow-up convoys. Run one task across local Git
+repositories using your installed Codex CLI, GitHub Copilot CLI, OpenCode or
+Claude Code, then inspect each repository's result in the native desktop UI.
 
-## Changes since 0.1.0
+## Changes since 0.2.0
 
-- Save and edit named repository groups. Group selection updates the explicit
-  repository list, deduplicates overlapping members and keeps unavailable
-  memberships visible for repair.
-- Save, load, edit and delete task-text templates. Loading a template preserves
-  repository selection, attachments and backend settings, and never starts work.
-- Attach Markdown, text, JSON, YAML, PNG, JPEG and WebP files using the native
-  picker or attachment drop area. Each backend supplies text and images through
-  its own supported CLI interface; unsupported input fails explicitly.
-- Check attachments before launch and again when queued jobs start. History
-  retains file references and metadata rather than file contents. Reusing a
-  convoy keeps missing or changed files visible and blocks launch until they
-  are explicitly removed or restored and re-added.
-- Inspect backend events in **Activity** alongside **Diff**, **Raw output** and
-  **Task & settings**. Activity and raw logs remain bounded and session-only.
-- Check installed agent CLIs automatically in the background at startup and
-  after executable changes. Missing agents do not prevent editing tasks or
-  viewing repositories and history.
-- Improve keyboard navigation, accessible controls, compact-window layouts,
-  group-selection performance and the About dialog's project link.
-- Document Linux installation commands and Homebrew/Scoop installation and
-  updates. The release publisher now verifies drafts by numeric release ID and
-  requests package-repository updates after publication when configured.
+- Choose **Direct** (the default) or **Isolated worktree** for each convoy.
+  Isolated jobs start from the exact committed HEAD captured at launch review,
+  without importing uncommitted source edits. Each attempt has a fresh detached,
+  owned worktree; preparation failure never falls back to Direct.
+- Retain isolated results after success, failure, cancellation or interruption,
+  including unchanged and partially prepared worktrees. Startup validates saved
+  ownership and availability in the background without resuming agents or
+  recreating missing results. Unresolved ownership protects history from removal.
+- Review all jobs in a compact convoy grid with execution status, mode,
+  availability, resolution and Git-derived file/line statistics. Isolated Diff
+  uses the saved base commit; Direct statistics describe the current working tree.
+  Agent success and actual repository changes remain separate observations.
+- Explicitly **Apply** a reviewed isolated result to its still-registered source
+  only when the destination is clean at the saved base and ownership and changes
+  pass revalidation and binary Git patch preflight. Apply changes working files,
+  preserves HEAD and both real indexes, and retains the result copy for inspection.
+- Explicitly **Discard** an isolated result with safe-default confirmation.
+  Verified cleanup removes only that owned worktree through Git and leaves the
+  source files intact. Applied copies can also be explicitly cleaned up. No
+  automatic worktree deletion or pruning is performed.
+- **Retry** a failed, cancelled or interrupted job as a new one-repository convoy
+  with the original task, settings and attachment references. Normal launch review
+  checks current Git, registration, backend capabilities and context again; isolated retries use a
+  fresh worktree from newly reviewed HEAD. The earlier attempt stays independent.
+- Use **New convoy from selected** to populate the draft from selected Review
+  rows, copying registered repositories, backend settings, mode and per-convoy
+  concurrency. Task and attachments start empty, omissions are reported, and
+  nothing launches automatically. Retry/follow-up provenance links available
+  source history without creating scheduling dependencies.
+- Persist System/Dark/Light appearance. Existing v0.1/v0.2 state remains
+  compatible, including registrations, groups, templates, settings and history;
+  older jobs default to Direct mode.
 
-Existing state remains compatible. Convoys keep immutable task/settings/context
-snapshots, independent results, fair bounded scheduling, repository conflict
-protection, Git baseline review and process-tree cancellation. Agent CLIs and
-authentication remain under your control. No provider credentials, agent CLIs,
-updater, service or background agent are bundled.
+Both concurrency limits, fair admission, canonical/nested repository protection,
+process-tree cancellation and immutable launched snapshots remain in force.
+Isolated preparation consumes scheduler capacity; result actions take exclusive
+repository lifecycle leases while unrelated repositories can continue.
+No automatic commits, staging, pushes, pull requests or agent continuation are
+introduced. Agent installation and authentication remain under your control.
+
+## Result safety and limits
+
+Apply conservatively refuses unsupported transfers, including submodules/nested
+repositories, sparse or unmerged index state, divergent staged alternatives and
+Git conversion settings that cannot be preserved. Changes must be reviewed again
+if the retained result changes. Patches are capped at 32 MiB and rendered diffs
+at 2 MiB; unavailable statistics are reported explicitly.
+
+External tools can still change repositories outside CodeConvoy's leases. A
+failure after an Apply write attempt is recorded as uncertain, retains evidence
+across restart, and blocks retrying Apply, Discard and cleanup of that result.
+There is no in-app uncertainty-resolution flow; manual inspection is required.
+CodeConvoy never resets, cleans or stashes to recover a failed Apply.
+
+Removing history only removes eligible CodeConvoy metadata. It never deletes
+repository contents or grants permission to remove retained worktrees. Direct
+execution can leave partial edits when stopped. Review changes before committing.
 
 ## Downloads and platform notes
 
@@ -42,7 +71,7 @@ Downloads include Linux x86-64 DEB/RPM/AppImage, Windows x86-64 per-user setup a
 portable ZIP, and one macOS Universal DMG with Apple Silicon and Intel slices.
 `SHA256SUMS` covers the six packages. Linux packages are built on Ubuntu 26.04.
 Earlier DEB and AppImage packages have user-verified installation/startup
-coverage on Debian Forky; those checks have not been repeated for 0.2.0 packages.
+coverage on Debian Forky; those checks have not been repeated for 0.3.0 packages.
 The minimum glibc version and compatibility with older distributions still need
 verification after the runner update. A working desktop graphics environment is
 required; the native picker uses your desktop portal.
@@ -61,21 +90,23 @@ path where necessary; Git must also be available to the application.
 
 ## Validation and remaining limits
 
-The v0.2 workflows have deterministic coverage for all four backends, including
-text/image delivery to two disposable repositories and independent results.
-Native macOS fixture checks cover groups, templates, file selection, concurrent
-convoys, history reuse, themes, keyboard navigation and compact/enlarged windows.
-See the [Part 2.3 completion report](https://github.com/ChrisLauinger77/code-convoy/blob/v0.2.0/docs/v0.2-completion.md)
-for detailed evidence.
+Deterministic fixtures exercise all four backends, real Git worktrees, scheduling,
+cancellation, retained-result recovery, Apply/Discard, retries, follow-up drafts
+and old-state compatibility. Native macOS fixture checks cover isolation,
+cancellation, restart, a 24-row Review, successful and failed-result Apply,
+destination blocking, keyboard Discard, Retry and selected-result follow-up.
+These use disposable repositories and a local fixture agent rather than
+authenticated model execution. Detailed evidence is recorded in:
+
+- [Worktree execution validation](worktree-validation.md)
+- [Recovery and cleanup validation](worktree-recovery-validation.md)
+- [Review, Apply and Discard validation](review-apply-discard-validation.md)
+- [Retry, follow-up and v0.3 readiness](retry-followup-validation.md)
 
 Codex and Copilot have earlier user-verified authenticated E2E coverage on Linux
 and macOS. Authenticated attachment/model acceptance remains unverified for all
 four backends; OpenCode and Claude authenticated E2E remain unverified overall.
-Native Linux/Windows file-picker and OS drag-and-drop checks, Intel macOS runtime
-checks and fresh 0.2.0 package installation checks remain outstanding. Codex
-session continuation remains deferred. Consult the repository's validation
-documents for platform-specific evidence and limitations.
-
-CodeConvoy works directly in registered repositories. Stopping work does not
-undo partial edits. Review changes before committing them. Removing history
-only removes CodeConvoy metadata, never repository contents.
+Native Linux/Windows desktop checks, Intel macOS runtime checks and fresh 0.3.0
+package installation checks remain outstanding. Local source validation does not
+replace the manual native package candidate workflow and exact-artifact checks
+described in [the release procedure](releasing.md).
