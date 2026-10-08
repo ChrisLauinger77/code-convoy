@@ -145,7 +145,6 @@ async fn seed(root: &Path, fixture: &Path) -> Result<()> {
                     }
                     if id == 1 && ready.len() == 3 {
                         manager.cancel(id, 2);
-                        std::fs::write(control.join(format!("{ticket}-tree.release")), "ready")?;
                         ready.clear();
                     }
                     run.jobs[job].log.append(&text);
@@ -157,7 +156,14 @@ async fn seed(root: &Path, fixture: &Path) -> Result<()> {
                     exit_code,
                     detail,
                     ..
-                } => run.jobs[job].finish(status, exit_code, detail),
+                } => {
+                    if id == 1 && job == 2 && status == JobStatus::Cancelled {
+                        // Release peers only after cancellation is confirmed; the
+                        // shared gate must not let this job finish before Stop.
+                        std::fs::write(control.join(format!("{ticket}-tree.release")), "ready")?;
+                    }
+                    run.jobs[job].finish(status, exit_code, detail);
+                }
                 _ => {}
             }
         }
