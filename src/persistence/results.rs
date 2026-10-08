@@ -142,6 +142,7 @@ impl Store {
             j.worktree == op.job.worktree,
             "Result identity changed during operation; preserve ownership metadata."
         );
+        let pending = j.clone();
         match completion {
             Completion::Apply(Outcome::Applied(stats)) => {
                 j.resolution = ResultResolution::Applied;
@@ -177,6 +178,12 @@ impl Store {
                 .apply(j),
             },
         }
-        self.save(state).context("Result outcome could not be saved. Durable intent is retained; inspect the destination before retrying after restart.")
+        if let Err(e) = self.save(state) {
+            // Keep the in-memory history protection aligned with durable intent.
+            // A completed Git removal can be reconciled from its journal later.
+            *job(state, op.run, op.index)? = pending;
+            return Err(e).context("Result outcome could not be saved. Durable intent is retained; inspect the destination before retrying after restart.");
+        }
+        Ok(())
     }
 }

@@ -4,6 +4,8 @@ use super::*;
 use crate::domain::{AgentId, Job, TaskConfig};
 use crate::runner::PreparedRepository;
 
+#[path = "bulk_discard_tests.rs"]
+mod bulk_discard;
 #[path = "continuation_tests.rs"]
 mod continuation;
 #[path = "task_context_tests.rs"]

@@ -8,7 +8,11 @@ impl App {
     /// One bounded background request at a time; completed/cache/error values stop
     /// automatic refresh until job completion or the user explicitly requests it.
     pub(super) fn pump_review(&mut self, ctx: &egui::Context) {
-        if self.closing || self.review_pending.is_some() || self.result_operation.is_some() {
+        if self.closing
+            || self.review_pending.is_some()
+            || self.result_operation.is_some()
+            || self.bulk_discard.is_some()
+        {
             return;
         }
         let next = self
@@ -74,7 +78,9 @@ impl App {
         ui.small("Counts describe working files versus base; renames count as deletion + addition. Binary files have no line counts.");
         let refresh = ui
             .add_enabled(
-                self.review_pending.is_none() && self.result_operation.is_none(),
+                self.review_pending.is_none()
+                    && self.result_operation.is_none()
+                    && self.bulk_discard.is_none(),
                 theme::quiet("Refresh review"),
             )
             .clicked();
@@ -189,7 +195,8 @@ impl App {
                 let enabled = !self.closing
                     && !self.quit_requested
                     && self.review_pending != Some((id, self.selected_job))
-                    && self.result_operation.is_none();
+                    && self.result_operation.is_none()
+                    && self.bulk_discard.is_none();
                 ui.horizontal_wrapped(|ui| {
                     if job.resolution == R::Unresolved {
                         let changed = job
@@ -266,6 +273,7 @@ impl App {
         action: Action,
     ) {
         if self.result_operation.is_some()
+            || self.bulk_discard.is_some()
             || self.closing
             || self.quit_requested
             || self.review_pending == Some((run, index))
@@ -282,7 +290,14 @@ impl App {
                 return;
             }
         };
-        self.result_operation = Some((run, index));
+        self.dispatch_result_operation(ctx, op);
+    }
+    pub(super) fn dispatch_result_operation(
+        &mut self,
+        ctx: &egui::Context,
+        op: crate::persistence::results::Operation,
+    ) {
+        self.result_operation = Some((op.run, op.index));
         let lifecycle = self.manager.lifecycle();
         self.dispatch(ctx.clone(), async move {
             let completion = op.execute(&lifecycle).await;

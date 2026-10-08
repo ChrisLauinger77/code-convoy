@@ -13,6 +13,7 @@ impl App {
     fn results_content(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, bottom: f32) {
         theme::eyebrow(ui, "RUNS / RESULTS");
         self.run_navigation(ui);
+        self.bulk_discard_status(ui);
         self.continuation_controls(ui, ctx);
         if self.state.runs.is_empty() {
             ui.add_space(theme::SECTION_GAP);
@@ -309,7 +310,8 @@ impl App {
                         .add_enabled(
                             !loading
                                 && self.review_pending.is_none()
-                                && self.result_operation.is_none(),
+                                && self.result_operation.is_none()
+                                && self.bulk_discard.is_none(),
                             theme::quiet("Refresh diff"),
                         )
                         .clicked()
@@ -449,31 +451,64 @@ impl App {
         let mut reuse = None;
         let mut remove = None;
         let mut clear = false;
+        let mut discard = None;
+        let discard_enabled = !self.closing
+            && !self.quit_requested
+            && self.result_operation.is_none()
+            && self.bulk_discard.is_none();
         ui.horizontal_wrapped(|ui| {
             if let Some(run) = self.state.runs.iter().find(|r| Some(r.id) == self.selected_run)
                 && ui.add_enabled(!self.busy && self.prepared.is_none() && !self.closing,
                     theme::quiet("Reuse convoy").small())
                     .on_hover_text("Replace the draft with this convoy's task, agent settings, concurrency and still-registered repositories. Review before launching; this does not start jobs.")
                     .clicked() { reuse = Some(run.id); }
+            if let Some(run) = self.state.runs.iter().find(|r| Some(r.id) == self.selected_run)
+                && run.unresolved_results()
+                && ui.add_enabled(discard_enabled && !run.active(), theme::quiet("Discard convoy…").small())
+                    .on_hover_text(if run.active() { "Available after every job in this convoy finishes. This action does not stop active work." }
+                        else { "Discard unresolved retained isolated results after confirmation. Direct and already resolved results stay untouched." }).clicked() {
+                discard = Some(crate::persistence::bulk_discard::Scope::Convoy(run.id));
+            }
             if history > 0 {
                 ui.menu_button("History cleanup", |ui| {
-                    ui.label("Removes local history and session output only.");
-                    ui.weak("Active convoys and repository files are untouched.");
-                    if self.state.runs.iter().any(Run::unresolved_results) {
-                        ui.weak("Unresolved results and retained copies stay in history until explicit cleanup.");
+                    if ui.add_enabled(discard_enabled && self.state.runs.iter().any(|r| !r.active() && r.unresolved_results()),
+                        egui::Button::new("Discard all unresolved results…"))
+                        .on_hover_text("Discard unresolved isolated results in terminal convoys only, after confirmation. Active convoys are excluded.").clicked() {
+                        discard = Some(crate::persistence::bulk_discard::Scope::All);
+                        ui.close();
                     }
+                    ui.separator();
+                    ui.label("History removal deletes local metadata and session output only.");
+                    ui.weak("Retained copies stay protected until explicit cleanup.");
                     if let Some(run)=self.state.runs.iter().find(|r|Some(r.id)==self.selected_run)
-                        && !run.active() && ui.add_enabled(!run.history_protected(), egui::Button::new(format!("Remove convoy #{} from history",run.id))).on_hover_text("Unresolved isolated results must remain in history.").clicked() {
+                        && !run.active() && ui.add_enabled(!run.history_protected() && self.bulk_discard.is_none(), egui::Button::new(format!("Remove convoy #{} from history",run.id))).on_hover_text("Retained isolated results must remain in history. Use Discard convoy… for unresolved results; Applied copies require Clean up retained copy in Review.").clicked() {
                         remove=Some(run.id); ui.close();
                     }
                     ui.separator();
-                    if ui.button(format!("Clear removable history ({})", self.state.runs.iter().filter(|r| !r.history_protected()).count())).clicked() {
+                    if ui.add_enabled(self.bulk_discard.is_none(), egui::Button::new(format!("Clear removable history ({})", self.state.runs.iter().filter(|r| !r.history_protected()).count()))).clicked() {
                         clear = true;
                         ui.close();
                     }
                 });
             }
         });
+        if let Some(run) = self
+            .state
+            .runs
+            .iter()
+            .find(|r| Some(r.id) == self.selected_run)
+            && !run.active()
+            && run.history_protected()
+        {
+            ui.small(if run.unresolved_results() {
+                "History removal blocked: retained isolated results still exist. Use Discard convoy… or resolve results in Review."
+            } else {
+                "History removal blocked: retained copies need explicit cleanup in Review, or cleanup verification is pending."
+            });
+        }
+        if let Some(scope) = discard {
+            self.offer_bulk_discard(scope);
+        }
         if let Some(id) = reuse {
             self.reuse_convoy(id);
         }
