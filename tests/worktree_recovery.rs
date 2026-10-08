@@ -947,7 +947,14 @@ async fn review_statistics_include_failed_cancelled_unchanged_and_24_jobs() {
     let mut f = Fixture::new().await;
     assert_eq!(f.inspect(false).await.statistics.unwrap().unwrap().files, 0);
     f.edit();
-    fs::write(f.metadata().path.join("new\tfile.txt"), "one\ntwo\n").unwrap();
+    // Tab-containing paths exercise the NUL-delimited parser on Unix; Windows
+    // forbids control characters in filenames, so retain Unicode coverage there.
+    let name = if cfg!(windows) {
+        "new ü file.txt"
+    } else {
+        "new\tfile.txt"
+    };
+    fs::write(f.metadata().path.join(name), "one\ntwo\n").unwrap();
     for status in [
         JobStatus::Succeeded,
         JobStatus::Failed,
