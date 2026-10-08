@@ -297,6 +297,7 @@ fn version_one_state_roundtrips_opencode_drafts_preferences_and_history() {
         .into();
         let original = state.draft.clone();
         state.runs.push(codeconvoy::domain::Run {
+            provenance: None,
             id: 1,
             created_at: 0,
             task: original.clone(),

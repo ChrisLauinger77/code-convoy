@@ -157,7 +157,7 @@ pub fn timestamp(seconds: u64) -> String {
 }
 
 pub fn run_label(run: &Run) -> String {
-    format!(
+    let mut label = format!(
         "#{} · {} · {} repos · {} · {}/{}",
         run.id,
         agent_name(run.task.agent),
@@ -165,7 +165,11 @@ pub fn run_label(run: &Run) -> String {
         run_state(run),
         run.completed_jobs(),
         run.jobs.len()
-    )
+    );
+    if let Some(crate::continuation::Provenance::Retry { attempt, .. }) = run.provenance {
+        label.push_str(&format!(" · attempt {attempt}"));
+    }
+    label
 }
 
 /// Last result observation is independent of agent completion and restart trust.
@@ -304,6 +308,7 @@ mod tests {
             path: "/repo".into(),
         });
         let mut run = Run {
+            provenance: None,
             id: 12,
             created_at: 0,
             task: TaskConfig::default(),

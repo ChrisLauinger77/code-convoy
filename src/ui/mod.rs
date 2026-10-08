@@ -4,6 +4,7 @@ mod about_macos;
 mod agent_config;
 mod attachments_ui;
 mod cli_discovery;
+mod continuation;
 mod diagnostics;
 mod editor;
 mod format;
@@ -46,6 +47,8 @@ enum Message {
     Registered(Result<(Repository, WorkingTree), String>),
     Refreshed(Vec<(PathBuf, Result<WorkingTree, String>)>),
     Prepared(Result<PreparedRun, String>),
+    RetryPrepared(Result<(PreparedRun, crate::continuation::Provenance), String>),
+    FollowUp(Box<crate::continuation::FollowUp>),
     Diff(PathBuf, Result<String, String>),
     Reconciled(
         u64,
@@ -104,6 +107,9 @@ pub struct App {
     events_rx: async_mpsc::Receiver<Event>,
     manager: RunManager,
     prepared: Option<PreparedRun>,
+    prepared_provenance: Option<crate::continuation::Provenance>,
+    followup_pending: bool,
+    review_selected: HashSet<usize>,
     dirty_ack: bool,
     selected_run: Option<u64>,
     selected_job: usize,
@@ -140,6 +146,7 @@ impl App {
     }
     fn with_context(ctx: &egui::Context, store: Store, state: AppState, runtime: Runtime) -> Self {
         theme::install(ctx);
+        ctx.set_theme(theme::preference(state.appearance));
         let (tx, rx) = mpsc::channel();
         let (events_tx, events_rx) = async_mpsc::channel(256);
         let selected_run = state.runs.first().map(|r| r.id);
@@ -192,6 +199,9 @@ impl App {
             events_rx,
             manager,
             prepared: None,
+            prepared_provenance: None,
+            followup_pending: false,
+            review_selected: HashSet::new(),
             dirty_ack: false,
             selected_run,
             selected_job: 0,
@@ -300,6 +310,8 @@ impl App {
                             ] {
                                 if ui.selectable_value(&mut preference, value, name).changed() {
                                     ctx.set_theme(preference);
+                                    self.state.appearance = theme::appearance(preference);
+                                    self.dirty = true;
                                 }
                             }
                         });
@@ -409,7 +421,7 @@ impl App {
         });
     }
     fn preflight(&mut self, ctx: egui::Context) {
-        if self.closing || self.quit_requested {
+        if self.closing || self.quit_requested || self.busy || self.prepared.is_some() {
             return;
         }
         if self.attachment_work.pending {
@@ -426,6 +438,7 @@ impl App {
             return;
         }
         let task = self.state.draft.clone();
+        self.prepared_provenance = self.state.draft_provenance.clone();
         let repositories = self
             .state
             .repositories
@@ -450,6 +463,24 @@ impl App {
         let Some(prepared) = self.prepared.take() else {
             return;
         };
+        let provenance = self.prepared_provenance.take();
+        let retry = provenance
+            .as_ref()
+            .is_some_and(crate::continuation::Provenance::is_retry);
+        if provenance.is_some()
+            && prepared.repositories.iter().any(|p| {
+                !self
+                    .state
+                    .repositories
+                    .iter()
+                    .any(|r| r.path == p.repository.path)
+            })
+        {
+            self.notice =
+                "Launch blocked: a selected repository is no longer registered. Review it again."
+                    .into();
+            return;
+        }
         let backend = match agents::backend(prepared.task.agent) {
             Ok(backend) => backend,
             Err(e) => {
@@ -459,7 +490,15 @@ impl App {
         };
         let id = self.state.next_run;
         self.state.next_run = id.saturating_add(1);
-        self.state.runs.insert(0, prepared.snapshot(id));
+        let mut run = prepared.snapshot(id);
+        if let Some(origin) = &provenance {
+            for job in &mut run.jobs {
+                job.log
+                    .append(&format!("[CodeConvoy] {}\n", origin.label()));
+            }
+        }
+        run.provenance = provenance;
+        self.state.runs.insert(0, run);
         // Persist intent before an agent can touch a repository.
         if let Err(error) = self.store.save(&self.state) {
             self.state.runs.remove(0);
@@ -474,8 +513,9 @@ impl App {
                     format!("Could not queue convoy: {error:#}"),
                 );
             }
-        } else {
+        } else if !retry {
             self.state.draft.prompt.clear();
+            self.state.draft_provenance = None;
             self.state.draft.attachments.clear();
             self.attachment_work.invalidate();
             self.selected.clear();
@@ -542,8 +582,27 @@ impl App {
                             self.prepared = Some(prepared);
                             self.dirty_ack = false;
                         }
+                        Err(e) => {
+                            self.notice = e;
+                            self.prepared_provenance = None;
+                        }
+                    }
+                }
+                Message::RetryPrepared(result) => {
+                    self.busy = false;
+                    match result {
+                        Ok((prepared, origin)) => {
+                            self.prepared = Some(prepared);
+                            self.prepared_provenance = Some(origin);
+                            self.dirty_ack = false;
+                        }
                         Err(e) => self.notice = e,
                     }
+                }
+                Message::FollowUp(draft) => {
+                    self.busy = false;
+                    self.followup_pending = false;
+                    self.apply_followup(*draft);
                 }
                 Message::ReviewStats(run, index, result) => {
                     self.review_pending = None;
@@ -670,6 +729,7 @@ impl App {
         if self.selected_run != id {
             self.selected_run = id;
             self.selected_job = 0;
+            self.review_selected.clear();
             self.diff = None;
             self.diff_target = None;
             self.output_view = text_view::TextView::default();
@@ -733,6 +793,7 @@ impl App {
         let missing = run.jobs.len().saturating_sub(self.selected.len());
         let task = run.task.clone();
         self.state.reuse_task(task);
+        self.state.draft_provenance = None;
         self.validate_reused_attachments();
         self.draft_message =
             format!("Copied convoy #{id} into the draft. Review it before launching.");

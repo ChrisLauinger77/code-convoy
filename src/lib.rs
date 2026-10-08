@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod attachments;
+pub mod continuation;
 pub mod domain;
 pub mod git;
 pub mod persistence;

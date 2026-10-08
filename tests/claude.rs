@@ -400,6 +400,7 @@ fn version_one_state_preserves_old_backends_and_claude_draft_history_and_restart
         job.status = JobStatus::Running;
         job.log.append("session output");
         state.runs.push(Run {
+            provenance: None,
             id: 1,
             created_at: 0,
             task: original.clone(),

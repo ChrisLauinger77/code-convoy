@@ -1,6 +1,10 @@
 use super::*;
 
 pub(super) fn show(ui: &mut egui::Ui, run: &Run, job: &domain::Job) {
+    if let Some(origin) = &run.provenance {
+        ui.small(origin.label());
+        ui.separator();
+    }
     ui.strong("Task");
     ui.add(egui::Label::new(&run.task.prompt).wrap().selectable(true));
     if ui.add(theme::quiet("Copy task").small()).clicked() {
@@ -34,7 +38,7 @@ pub(super) fn show(ui: &mut egui::Ui, run: &Run, job: &domain::Job) {
         if let Some(label) = format::isolated_result(job) {
             ui.label(label);
         }
-        ui.small("Results are retained working directories, checked after restart. External edits remain visible. Apply/Discard is planned for Part 3.2.");
+        ui.small("Results are retained working directories, checked after restart. External edits remain visible. Review provides explicit Apply/Discard actions.");
         egui::CollapsingHeader::new("Worktree location").show(ui, |ui| {
             ui.add(
                 egui::Label::new(worktree.path.display().to_string())

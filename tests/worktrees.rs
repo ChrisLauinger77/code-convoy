@@ -603,6 +603,7 @@ async fn retained_metadata_roundtrips_and_preparing_recovers_as_interrupted_with
     job.worktree = Some(w.clone());
     let state = AppState {
         runs: vec![Run {
+            provenance: None,
             id: 1,
             created_at: 0,
             task: TaskConfig {
@@ -1515,4 +1516,135 @@ async fn bounded_result_inspection_preserves_unknown_state_and_confirms_process_
         "1"
     );
     h.close().await;
+}
+
+#[tokio::test]
+async fn retry_isolated_uses_current_head_and_fresh_identity_without_copying_old_result() {
+    use codeconvoy::continuation::Retry;
+    let mut h = Harness::new(1);
+    let repo = repository(h.root.path(), "retry source").await;
+    let mut original = h
+        .start(1, h.task(1, AgentId::Codex, true, true), vec![repo.clone()])
+        .await;
+    h.until(|e| Harness::ready(e, 1)).await;
+    let old = h.metadata(1);
+    h.release(1, "tree");
+    h.until(|e| Harness::finished(e, 1, JobStatus::Failed))
+        .await;
+    original.jobs[0].worktree = Some(old.clone());
+    original.jobs[0].worktree_result = Some(worktrees::inspect(&old).await.unwrap());
+    original.jobs[0].finish(JobStatus::Failed, Some(7), "first failure".into());
+    let original_files = fs::read(old.path.join("tracked.txt")).unwrap();
+    fs::write(repo.path.join("later.txt"), "new committed base\n").unwrap();
+    command(&repo.path, &["add", "later.txt"]);
+    command(
+        &repo.path,
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=f@invalid",
+            "commit",
+            "-qm",
+            "advance base",
+        ],
+    );
+    fs::write(repo.path.join("dirty.txt"), "excluded local context\n").unwrap();
+    let state = AppState {
+        repositories: vec![repo.clone()],
+        runs: vec![original],
+        ..Default::default()
+    };
+    let evidence = serde_json::to_value(&state).unwrap();
+    // The exact same original task is retained, including fixture ticket/failure.
+    let (prepared, origin) = Retry::from_state(&state, 1, 0)
+        .unwrap()
+        .prepare()
+        .await
+        .unwrap();
+    let mut attempt = prepared.snapshot(2);
+    attempt.provenance = Some(origin);
+    fs::remove_file(h.root.path().join("control/1-tree.release")).unwrap();
+    h.start_prepared(2, prepared);
+    h.until(|e| Harness::ready(e, 2)).await;
+    let fresh = h.metadata(2);
+    assert_ne!(fresh.path, old.path);
+    assert_eq!((fresh.run, fresh.job), (2, 0));
+    assert_ne!(fresh.base_commit, old.base_commit);
+    assert_eq!(
+        fresh.base_commit,
+        command(&repo.path, &["rev-parse", "HEAD"])
+    );
+    assert!(fresh.path.join("later.txt").exists());
+    assert!(!fresh.path.join("dirty.txt").exists());
+    assert_eq!(
+        fs::read(old.path.join("tracked.txt")).unwrap(),
+        original_files
+    );
+    h.manager.cancel(2, 0);
+    h.until(|e| Harness::finished(e, 2, JobStatus::Cancelled))
+        .await;
+    assert_eq!(serde_json::to_value(&state).unwrap(), evidence);
+    assert!(old.path.exists() && fresh.path.exists());
+    assert_eq!(attempt.jobs[0].resolution, ResultResolution::Unresolved);
+    h.close().await;
+}
+
+#[tokio::test]
+async fn direct_retry_waits_for_normal_locks_and_limits_and_checks_reviewed_baseline() {
+    use codeconvoy::continuation::Retry;
+    for limit in [1, 2] {
+        let mut h = Harness::new(limit);
+        let repo = repository(h.root.path(), "source").await;
+        let mut task = h.task(1, AgentId::Codex, false, false);
+        task.execution_mode = ExecutionMode::Direct;
+        let mut original = runner::prepare(task, vec![repo.clone()])
+            .await
+            .unwrap()
+            .snapshot(40);
+        original.jobs[0].finish(JobStatus::Cancelled, None, "historical".into());
+        let state = AppState {
+            repositories: vec![repo.clone()],
+            runs: vec![original],
+            ..Default::default()
+        };
+        let evidence = serde_json::to_value(&state.runs).unwrap();
+        let mut owner = h.task(2, AgentId::Codex, false, false);
+        owner.execution_mode = ExecutionMode::Direct;
+        let owner_repo = if limit == 1 {
+            repository(h.root.path(), "independent").await
+        } else {
+            repo.clone()
+        };
+        h.start(2, owner, vec![owner_repo.clone()]).await;
+        h.until(|e| Harness::ready(e, 2)).await;
+        let (prepared, _) = Retry::from_state(&state, 40, 0)
+            .unwrap()
+            .prepare()
+            .await
+            .unwrap();
+        h.start_prepared(3, prepared);
+        h.until(|e| e.iter().any(|e| matches!(e, Event::Queued { run:3, reason, .. } if *reason == if limit == 1 {QueueReason::GlobalLimit} else {QueueReason::Repository(2)}))).await;
+        assert!(
+            !h.events
+                .iter()
+                .any(|e| matches!(e, Event::Started { run: 3, .. }))
+        );
+        // Editing after Retry's review must fail admission after the owner releases.
+        fs::write(
+            repo.path.join("tracked.txt"),
+            "user edit after retry review\n",
+        )
+        .unwrap();
+        h.release(2, &owner_repo.name);
+        h.until(|e| Harness::finished(e, 3, JobStatus::Failed))
+            .await;
+        assert!(h.events.iter().any(|e| matches!(e, Event::Finished {run:3,detail,..} if detail.contains("Repository state changed after preflight"))));
+        assert_eq!(serde_json::to_value(&state.runs).unwrap(), evidence);
+        assert_eq!(
+            fs::read_to_string(repo.path.join("tracked.txt")).unwrap(),
+            "user edit after retry review\n"
+        );
+        h.close().await;
+    }
 }
