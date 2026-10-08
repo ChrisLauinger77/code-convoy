@@ -124,5 +124,9 @@ repository locks, then rejecting a changed baseline. `tests/worktree_recovery.rs
 runs a successful retry and proves the old failed result can still Apply or Discard
 without changing the retry. UI tests cover draft preservation, no auto-launch,
 registration/quit guards, accessibility, diagnostics and appearance persistence.
+PR review identified that final registration validation must also cover ordinary
+launches without provenance. The check now runs for every prepared launch, with
+regression coverage for ordinary, Retry and FollowUp snapshots; a removed
+registration blocks admission before creating a run or consuming its ID.
 All existing recovery, Apply/Discard, groups/templates/attachments, backend,
 scheduler, cancellation and quit regressions remain in the full suite.

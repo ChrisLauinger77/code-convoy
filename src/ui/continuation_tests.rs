@@ -81,23 +81,38 @@ fn followup_draft_is_editable_independent_and_never_starts_work() {
 }
 
 #[test]
-fn retry_start_rechecks_registration_and_quit_guards_continuation() {
-    let (_temp, mut app) = app();
-    prepare(&mut app, AgentId::Codex);
-    app.prepared_provenance = Some(Provenance::Retry {
-        run: 41,
-        job: 0,
-        attempt: 2,
-    });
-    app.state.repositories.clear();
-    app.start();
-    assert!(app.manager.is_idle() && app.state.runs.is_empty());
-    assert!(app.notice.contains("no longer registered"));
-    app.closing = true;
-    let ctx = egui::Context::default();
-    app.retry(&ctx, 41, 0);
-    app.followup(&ctx, 41);
-    assert!(!app.busy && !app.followup_pending);
+fn every_launch_rechecks_registration_independently_of_provenance() {
+    for provenance in [
+        None,
+        Some(Provenance::Retry {
+            run: 41,
+            job: 0,
+            attempt: 2,
+        }),
+        Some(Provenance::FollowUp {
+            run: 41,
+            jobs: vec![0],
+        }),
+    ] {
+        let (_temp, mut app) = app();
+        prepare(&mut app, AgentId::Codex);
+        app.prepared_provenance = provenance;
+        // The reviewed snapshot can outlive an unregistration during preparation.
+        app.state.repositories.clear();
+        let draft = serde_json::to_value(&app.state.draft).unwrap();
+        let selection = app.selected.clone();
+        app.start();
+        assert!(app.manager.is_idle() && app.state.runs.is_empty());
+        assert!(app.notice.contains("no longer registered"));
+        assert_eq!(app.state.next_run, 1);
+        assert_eq!(serde_json::to_value(&app.state.draft).unwrap(), draft);
+        assert_eq!(app.selected, selection);
+        app.closing = true;
+        let ctx = egui::Context::default();
+        app.retry(&ctx, 41, 0);
+        app.followup(&ctx, 41);
+        assert!(!app.busy && !app.followup_pending);
+    }
 }
 
 #[test]

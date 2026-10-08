@@ -467,15 +467,13 @@ impl App {
         let retry = provenance
             .as_ref()
             .is_some_and(crate::continuation::Provenance::is_retry);
-        if provenance.is_some()
-            && prepared.repositories.iter().any(|p| {
-                !self
-                    .state
-                    .repositories
-                    .iter()
-                    .any(|r| r.path == p.repository.path)
-            })
-        {
+        if prepared.repositories.iter().any(|p| {
+            !self
+                .state
+                .repositories
+                .iter()
+                .any(|r| r.path == p.repository.path)
+        }) {
             self.notice =
                 "Launch blocked: a selected repository is no longer registered. Review it again."
                     .into();
