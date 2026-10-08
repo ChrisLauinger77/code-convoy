@@ -1,5 +1,8 @@
 use super::*;
 
+pub(super) const APPLICATION_NAME: &str = "CodeConvoy";
+pub(super) const REPOSITORY_URL: &str = env!("CARGO_PKG_REPOSITORY");
+
 pub(super) fn valid_revision(revision: Option<&str>) -> Option<&str> {
     revision.filter(|r| (7..=40).contains(&r.len()) && r.bytes().all(|b| b.is_ascii_hexdigit()))
 }
@@ -18,7 +21,7 @@ impl App {
         }
         let response = egui::Modal::new(egui::Id::new("about_codeconvoy")).show(ctx, |ui| {
             ui.set_width(360.0_f32.min(ctx.content_rect().width() - 64.0));
-            ui.heading("CodeConvoy");
+            ui.heading(APPLICATION_NAME);
             ui.label("One task. Multiple repositories. Your agent.");
             ui.label(version_text(
                 env!("CARGO_PKG_VERSION"),
@@ -28,10 +31,7 @@ impl App {
             ui.separator();
             ui.label("A local desktop task runner for coding-agent CLIs.");
             ui.label(concat!("License: ", env!("CARGO_PKG_LICENSE")));
-            ui.hyperlink_to(
-                "Project on GitHub",
-                "https://github.com/ChrisLauinger77/code-convoy",
-            );
+            ui.hyperlink_to("Project on GitHub", REPOSITORY_URL);
             ui.weak("About is available offline. Opening the project link uses your browser.");
             ui.add_space(theme::GAP);
             if ui.button("Close About").clicked() {
