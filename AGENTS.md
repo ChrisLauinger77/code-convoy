@@ -194,7 +194,19 @@ canonical Git identity, detached ownership lock and Git backlink, then remove on
 the exact owned worktree through Git. Reject symlinks/reparse points and uncertain
 ownership. Coordinate cleanup exclusively against active work in that repository;
 never use broad prune or recursive deletion as a fallback. Preserve failure state
-and crash evidence. Apply and user-facing Discard remain Part 3.2.
+and crash evidence. Apply is explicit and requires a terminal owned result, a still-registered canonical
+source, clean destination at the fixed base, reviewed-result revalidation and an
+exclusive manager lifecycle lease. Use binary Git patch preflight; never silently
+flatten staged alternatives or unsupported changes. Preserve the real indexes,
+HEAD and retained worktree; never reset/clean/stash after failure. An uncertain
+write remains pending across restart and cannot retry, discard or clean up its
+retained evidence without a separate explicit uncertainty-resolution flow. Applied is
+resolved independently of physical availability; retain its stable Diff until
+explicit verified cleanup. Discard uses the same Store intent/outcome transaction
+and cleanup primitive, requires safe-default confirmation, and changes no source
+files. Pin ownership metadata until physical cleanup is verified, even for Applied
+results. Review caches Git statistics off the UI thread, never agent prose; Direct
+statistics are current observations, with no destructive Apply/Discard actions.
 
 ## Task context
 

@@ -4,6 +4,7 @@ pub mod domain;
 pub mod git;
 pub mod persistence;
 pub mod process;
+pub mod review;
 pub mod runner;
 pub mod ui;
 pub mod worktrees;

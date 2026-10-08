@@ -3,7 +3,9 @@ use super::*;
 
 impl App {
     fn has_active_work(&self) -> bool {
-        !self.manager.is_idle() || self.state.runs.iter().any(Run::active)
+        self.result_operation.is_some()
+            || !self.manager.is_idle()
+            || self.state.runs.iter().any(Run::active)
     }
 
     /// Returns true only when the close request may proceed without a dialog.
@@ -50,7 +52,11 @@ impl App {
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             ctx.request_repaint();
         }
-        if self.closing && !self.exit_ready && self.manager.join.is_finished() {
+        if self.closing
+            && !self.exit_ready
+            && self.manager.join.is_finished()
+            && self.result_operation.is_none()
+        {
             // poll() is bounded. Drain the last lifecycle events before saving,
             // even when the manager finished between frames or its worker failed.
             while let Ok(event) = self.events_rx.try_recv() {

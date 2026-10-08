@@ -1850,3 +1850,128 @@ fn history_actions_preserve_unresolved_results_with_an_explanation() {
     assert_eq!(app.state.runs.len(), 1);
     assert_eq!(app.state.runs[0].id, 1);
 }
+
+#[test]
+fn discard_confirmation_focuses_cancel_and_escape_preserves_everything() {
+    let (_temp, mut app) = app();
+    app.state.runs.push(run(1, &[JobStatus::Succeeded]));
+    app.discard_confirmation = Some((1, 0, crate::persistence::results::Action::Discard));
+    app.focus_discard_cancel = true;
+    let before = serde_json::to_value(&app.state).unwrap();
+    let ctx = egui::Context::default();
+    ctx.run_ui(egui::RawInput::default(), |ui| app.discard_window(ui.ctx()))
+        .textures_delta
+        .clear();
+    assert!(ctx.memory(|m| m.focused().is_some()));
+    // Enter activates the safe initial button, not the destructive action.
+    let key = |key| egui::RawInput {
+        events: vec![egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::default(),
+        }],
+        ..Default::default()
+    };
+    ctx.run_ui(key(egui::Key::Enter), |ui| app.discard_window(ui.ctx()))
+        .textures_delta
+        .clear();
+    assert!(app.discard_confirmation.is_none());
+    app.discard_confirmation = Some((1, 0, crate::persistence::results::Action::Discard));
+    ctx.run_ui(key(egui::Key::Escape), |ui| app.discard_window(ui.ctx()))
+        .textures_delta
+        .clear();
+    assert!(app.discard_confirmation.is_none());
+    assert!(app.result_operation.is_none());
+    assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
+}
+
+#[test]
+fn review_renders_24_jobs_and_result_resolution_does_not_change_agent_status() {
+    let (_temp, mut app) = app();
+    app.state.runs.push(run(1, &[JobStatus::Failed; 24]));
+    app.selected_run = Some(1);
+    app.tab = Tab::Review;
+    let ctx = egui::Context::default();
+    for _ in 0..3 {
+        ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(680.0, 760.0),
+                )),
+                ..Default::default()
+            },
+            |ui| app.results(ui, &ctx),
+        )
+        .textures_delta
+        .clear();
+    }
+    assert_eq!(crate::review::totals(&app.state.runs[0]).failed, 24);
+    assert!(app.review_pending.is_none()); // Rendering itself does not dispatch Git.
+    app.state.runs[0].jobs[0].resolution = domain::ResultResolution::Applied;
+    assert_eq!(app.state.runs[0].jobs[0].status, JobStatus::Failed);
+}
+
+#[test]
+fn result_operation_keeps_quit_waiting_for_completion_merge() {
+    let (_temp, mut app) = app();
+    app.result_operation = Some((1, 0));
+    assert!(!app.request_quit());
+    assert!(app.quit_requested && !app.exit_ready);
+    app.cancel_quit();
+    assert!(app.result_operation.is_some());
+}
+
+#[test]
+fn review_controls_ignore_unrelated_inspections_and_preserve_uncertain_results() {
+    use domain::{ResultAvailability as A, ResultResolution as R};
+    let (_temp, mut app) = app();
+    app.state.runs = vec![isolated_history(1, JobStatus::Succeeded, Some(true))];
+    app.selected_run = Some(1);
+    app.selected_job = 0;
+    let job = &mut app.state.runs[0].jobs[0];
+    job.result_checked = true;
+    job.result_availability = A::Available;
+    job.review = Some(Ok(crate::review::Statistics {
+        files: 1,
+        ..Default::default()
+    }));
+    for resolution in [R::Unresolved, R::Applied, R::ApplyPending] {
+        app.state.runs[0].jobs[0].resolution = resolution;
+        for pending in [None, Some((1, 0)), Some((1, 1)), Some((2, 0))] {
+            app.review_pending = pending;
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1000.0, 900.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| app.review_view(ui, &ctx, 900.0),
+            );
+            output.textures_delta.clear();
+            let tree = output.platform_output.accesskit_update.unwrap();
+            for label in ["Apply result", "Discard result", "Clean up retained copy"] {
+                let button = tree.nodes.iter().find(|(_, n)| n.label() == Some(label));
+                let present = match resolution {
+                    R::Unresolved => label != "Clean up retained copy",
+                    R::Applied => label == "Clean up retained copy",
+                    _ => false,
+                };
+                assert_eq!(button.is_some(), present, "{resolution:?}: {label}");
+                if let Some((_, node)) = button {
+                    assert_eq!(
+                        node.is_disabled(),
+                        pending == Some((1, 0)),
+                        "{pending:?}: {label}"
+                    );
+                }
+            }
+        }
+    }
+}

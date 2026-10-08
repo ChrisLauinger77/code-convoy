@@ -923,3 +923,625 @@ async fn symlinked_manifest_is_rejected_without_touching_its_target() {
     assert!(f.cleanup().await.is_err());
     assert!(outside.is_file());
 }
+
+// Part 3.2 uses the same fixtures, ownership checks, and Store cleanup transaction.
+use codeconvoy::persistence::results::{Action, Completion};
+impl Fixture {
+    async fn resolve(&mut self, action: Action) {
+        let op = self
+            .store
+            .begin_result_operation(&mut self.state, 1, 0, action)
+            .unwrap();
+        let result = op.execute(&self.manager.lifecycle()).await;
+        self.store
+            .finish_result_operation(&mut self.state, &op, result)
+            .unwrap();
+    }
+    fn resolution(&self) -> ResultResolution {
+        self.state.runs[0].jobs[0].resolution
+    }
+}
+
+#[tokio::test]
+async fn review_statistics_include_failed_cancelled_unchanged_and_24_jobs() {
+    let mut f = Fixture::new().await;
+    assert_eq!(f.inspect(false).await.statistics.unwrap().unwrap().files, 0);
+    f.edit();
+    // Tab-containing paths exercise the NUL-delimited parser on Unix; Windows
+    // forbids control characters in filenames, so retain Unicode coverage there.
+    let name = if cfg!(windows) {
+        "new ü file.txt"
+    } else {
+        "new\tfile.txt"
+    };
+    fs::write(f.metadata().path.join(name), "one\ntwo\n").unwrap();
+    for status in [
+        JobStatus::Succeeded,
+        JobStatus::Failed,
+        JobStatus::Cancelled,
+    ] {
+        f.state.runs[0].jobs[0].status = status;
+        let s = f.inspect(false).await.statistics.unwrap().unwrap();
+        assert_eq!((s.files, s.additions, s.deletions), (2, 3, 1));
+    }
+    let original = f.state.runs[0].jobs[0].review.clone();
+    fs::write(
+        f.source().join("tracked.txt"),
+        "later unrelated source edits\n",
+    )
+    .unwrap();
+    git_args(&f.source(), &["add", "."]);
+    git_args(
+        &f.source(),
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=f@invalid",
+            "commit",
+            "-qm",
+            "later",
+        ],
+    );
+    f.inspect(false).await;
+    assert_eq!(f.state.runs[0].jobs[0].review, original);
+    let j = f.state.runs[0].jobs[0].clone();
+    f.state.runs[0].jobs = vec![j; 24];
+    let t = codeconvoy::review::totals(&f.state.runs[0]);
+    assert_eq!(
+        (t.repositories, t.measured, t.cancelled, t.statistics.files),
+        (24, 24, 24, 48)
+    );
+}
+
+#[tokio::test]
+async fn direct_statistics_are_current_and_have_no_resolution_actions() {
+    let mut f = Fixture::new().await;
+    let s = codeconvoy::review::direct(&f.source()).await.unwrap();
+    assert_eq!(s.files, 0);
+    fs::write(f.source().join("tracked.txt"), "changed\n").unwrap();
+    assert_eq!(
+        codeconvoy::review::direct(&f.source()).await.unwrap().files,
+        1
+    );
+    f.state.runs[0].jobs[0] = Job::queued(f.state.repositories[0].clone());
+    f.state.runs[0].jobs[0].finish(JobStatus::Succeeded, Some(0), String::new());
+    for action in [Action::Apply, Action::Discard] {
+        assert!(
+            f.store
+                .begin_result_operation(&mut f.state, 1, 0, action)
+                .is_err()
+        );
+    }
+}
+
+#[tokio::test]
+async fn apply_supports_tracked_added_deleted_renamed_binary_and_untracked_without_staging_or_commit()
+ {
+    for category in [
+        "modified",
+        "added",
+        "deleted",
+        "renamed",
+        "binary",
+        "untracked",
+    ] {
+        let mut f = Fixture::new().await;
+        let m = f.metadata();
+        let p = &m.path;
+        match category {
+            "modified" => f.edit(),
+            "added" => {
+                fs::write(p.join("added.txt"), "added\n").unwrap();
+                git_args(p, &["add", "added.txt"]);
+            }
+            "deleted" => {
+                fs::remove_file(p.join("tracked.txt")).unwrap();
+            }
+            "renamed" => {
+                fs::rename(p.join("tracked.txt"), p.join("renamed ü.txt")).unwrap();
+            }
+            "binary" => {
+                fs::write(p.join("tracked.txt"), [0, 255, 42, 0, 128]).unwrap();
+            }
+            "untracked" => {
+                fs::write(p.join("new ü.txt"), "new\n").unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let source_before = git_args(&f.source(), &["rev-parse", "HEAD"]);
+        let source_index = git_args(&f.source(), &["write-tree"]);
+        f.inspect(false).await;
+        f.resolve(Action::Apply).await;
+        assert_eq!(
+            f.resolution(),
+            ResultResolution::Applied,
+            "{category}: {}",
+            f.state.runs[0].jobs[0].worktree_detail
+        );
+        assert_eq!(git_args(&f.source(), &["rev-parse", "HEAD"]), source_before);
+        assert_eq!(git_args(&f.source(), &["write-tree"]), source_index);
+        assert!(git_args(&f.source(), &["remote"]).is_empty());
+        for name in ["tracked.txt", "added.txt", "renamed ü.txt", "new ü.txt"] {
+            assert_eq!(
+                fs::read(f.source().join(name)).ok(),
+                fs::read(p.join(name)).ok(),
+                "{category} {name}"
+            );
+        }
+        assert!(p.exists());
+        assert!(!f.state.runs[0].unresolved_results());
+        assert!(!f.state.remove_from_history(1)); // retain ownership until copy cleanup
+        f.reload();
+        f.inspect(true).await;
+        assert_eq!(f.resolution(), ResultResolution::Applied);
+        f.resolve(Action::CleanupApplied).await;
+        assert_eq!(f.resolution(), ResultResolution::Applied);
+        assert!(!p.exists());
+        assert!(f.state.remove_from_history(1));
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn apply_supports_executable_modes_and_symlinks_without_following_targets() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+    let mut f = Fixture::new().await;
+    let p = f.metadata().path;
+    fs::set_permissions(p.join("tracked.txt"), fs::Permissions::from_mode(0o755)).unwrap();
+    symlink("tracked.txt", p.join("link")).unwrap();
+    f.inspect(false).await;
+    f.resolve(Action::Apply).await;
+    assert_eq!(
+        f.resolution(),
+        ResultResolution::Applied,
+        "{}",
+        f.state.runs[0].jobs[0].worktree_detail
+    );
+    assert_eq!(
+        fs::read_link(f.source().join("link")).unwrap(),
+        PathBuf::from("tracked.txt")
+    );
+    assert_ne!(
+        fs::metadata(f.source().join("tracked.txt"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o111,
+        0
+    );
+}
+
+#[tokio::test]
+async fn useful_failed_cancelled_interrupted_results_can_apply() {
+    for status in [JobStatus::Failed, JobStatus::Cancelled, JobStatus::Running] {
+        let mut f = Fixture::new().await;
+        f.edit();
+        f.state.runs[0].jobs[0].status = status;
+        f.reload();
+        f.inspect(false).await;
+        f.resolve(Action::Apply).await;
+        assert_eq!(f.resolution(), ResultResolution::Applied);
+        assert_eq!(
+            f.state.runs[0].jobs[0].status,
+            if status == JobStatus::Running {
+                JobStatus::Cancelled
+            } else {
+                status
+            }
+        );
+        assert_eq!(
+            f.state.runs[0].jobs[0].interrupted,
+            status == JobStatus::Running
+        );
+    }
+}
+
+#[tokio::test]
+async fn apply_blocks_dirty_head_mismatch_missing_stale_ownership_and_unregistered_destinations() {
+    for case in [
+        "dirty",
+        "head",
+        "missing",
+        "stale",
+        "owner",
+        "unregistered",
+        "changed_result",
+    ] {
+        let mut f = Fixture::new().await;
+        f.edit();
+        f.inspect(false).await;
+        let m = f.metadata();
+        match case {
+            "dirty" => {
+                fs::write(f.source().join("tracked.txt"), "user changes\n").unwrap();
+            }
+            "head" => {
+                git_args(
+                    &f.source(),
+                    &[
+                        "-c",
+                        "user.name=Fixture",
+                        "-c",
+                        "user.email=f@invalid",
+                        "commit",
+                        "--allow-empty",
+                        "-qm",
+                        "advanced",
+                    ],
+                );
+            }
+            "missing" => {
+                fs::rename(f.source(), f.root.join("moved-source")).unwrap();
+            }
+            "stale" => {
+                fs::rename(&m.path, m.path.with_extension("offline")).unwrap();
+            }
+            "owner" => {
+                fs::write(f.admin().join("locked"), "different owner\n").unwrap();
+            }
+            "unregistered" => {
+                f.state.repositories.clear();
+            }
+            "changed_result" => {
+                fs::write(m.path.join("new-after-review"), "later\n").unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let before = fs::read(m.repository.path.join("tracked.txt")).ok();
+        if case == "unregistered" {
+            assert!(
+                f.store
+                    .begin_result_operation(&mut f.state, 1, 0, Action::Apply)
+                    .is_err()
+            );
+        } else {
+            f.resolve(Action::Apply).await;
+            assert_eq!(f.resolution(), ResultResolution::Unresolved, "{case}");
+            assert!(
+                f.state.runs[0].jobs[0]
+                    .worktree_detail
+                    .starts_with("Apply blocked:"),
+                "{case}"
+            );
+        }
+        assert_eq!(
+            fs::read(m.repository.path.join("tracked.txt")).ok(),
+            before,
+            "{case}"
+        );
+        assert!(m.path.exists() || m.path.with_extension("offline").exists());
+    }
+}
+
+#[tokio::test]
+async fn preflight_ignored_obstruction_never_partially_applies_other_files() {
+    let mut f = Fixture::new().await;
+    f.edit();
+    fs::write(f.metadata().path.join("collision"), "agent\n").unwrap();
+    git_args(&f.metadata().path, &["add", "collision"]);
+    fs::write(f.source().join(".git/info/exclude"), "collision\n").unwrap();
+    fs::write(f.source().join("collision"), "valuable ignored file\n").unwrap();
+    f.inspect(false).await;
+    f.resolve(Action::Apply).await;
+    assert_eq!(f.resolution(), ResultResolution::Unresolved);
+    assert!(
+        f.state.runs[0].jobs[0]
+            .worktree_detail
+            .contains("preflight")
+    );
+    assert_eq!(
+        fs::read_to_string(f.source().join("tracked.txt")).unwrap(),
+        "base\n"
+    );
+    assert_eq!(
+        fs::read_to_string(f.source().join("collision")).unwrap(),
+        "valuable ignored file\n"
+    );
+    assert!(f.metadata().path.exists());
+}
+
+#[tokio::test]
+async fn staged_alternatives_sparse_flags_filters_and_nested_repositories_are_explicitly_blocked() {
+    for case in ["index", "sparse", "filter", "submodule"] {
+        let mut f = Fixture::new().await;
+        f.edit();
+        let p = f.metadata().path;
+        match case {
+            "index" => {
+                git_args(&p, &["add", "."]);
+                fs::write(p.join("tracked.txt"), "base\n").unwrap();
+            }
+            "sparse" => {
+                git_args(
+                    &f.source(),
+                    &["update-index", "--assume-unchanged", "tracked.txt"],
+                );
+            }
+            "filter" => {
+                fs::write(p.join(".gitattributes"), "*.txt text\n").unwrap();
+            }
+            "submodule" => {
+                fs::create_dir(p.join("nested")).unwrap();
+                git_args(&p.join("nested"), &["init", "--quiet"]);
+                git_args(
+                    &p.join("nested"),
+                    &[
+                        "-c",
+                        "user.name=Fixture",
+                        "-c",
+                        "user.email=f@invalid",
+                        "commit",
+                        "--allow-empty",
+                        "-qm",
+                        "nested",
+                    ],
+                );
+            }
+            _ => unreachable!(),
+        }
+        f.inspect(false).await;
+        f.resolve(Action::Apply).await;
+        assert_eq!(f.resolution(), ResultResolution::Unresolved, "{case}");
+        assert_eq!(
+            fs::read_to_string(f.source().join("tracked.txt")).unwrap(),
+            "base\n"
+        );
+        assert!(p.exists());
+    }
+}
+
+#[tokio::test]
+async fn discard_changed_result_preserves_source_peer_history_and_restart_state() {
+    let mut f = Fixture::new().await;
+    f.edit();
+    let m = f.metadata();
+    let peer = worktrees::reserve(
+        &f.store.directory().join("worktrees"),
+        2,
+        0,
+        m.repository.clone(),
+        m.common_dir.clone(),
+        m.base_commit.clone(),
+    )
+    .unwrap();
+    worktrees::create(&peer, &Cancellation::default(), &AtomicBool::new(true))
+        .await
+        .unwrap();
+    f.resolve(Action::Discard).await;
+    assert_eq!(f.resolution(), ResultResolution::Discarded);
+    assert_eq!(f.state.runs.len(), 1);
+    assert!(!m.path.exists());
+    assert!(peer.path.join("tracked.txt").exists());
+    assert_eq!(git_args(&f.source(), &["status", "--porcelain"]), "");
+    f.reload();
+    let report = f.inspect(true).await;
+    assert!(report.diff.is_none());
+    assert_eq!(f.resolution(), ResultResolution::Discarded);
+    assert!(f.state.remove_from_history(1));
+}
+
+#[tokio::test]
+async fn discard_failure_remains_retryable_and_never_marks_discarded() {
+    let mut f = Fixture::new().await;
+    f.edit();
+    let lock = f.admin().join("locked");
+    fs::write(&lock, "foreign ownership\n").unwrap();
+    f.resolve(Action::Discard).await;
+    assert_eq!(f.resolution(), ResultResolution::DiscardPending);
+    assert_eq!(
+        f.state.runs[0].jobs[0].result_availability,
+        ResultAvailability::CleanupFailed
+    );
+    assert!(f.metadata().path.exists());
+    assert!(!f.state.remove_from_history(1));
+    f.reload();
+    fs::write(lock, "CodeConvoy retained result\n").unwrap();
+    f.resolve(Action::Discard).await;
+    assert_eq!(f.resolution(), ResultResolution::Discarded);
+}
+
+#[tokio::test]
+async fn apply_and_discard_block_active_jobs_and_conflicting_isolated_execution() {
+    let mut f = Fixture::new().await;
+    f.edit();
+    f.inspect(false).await;
+    f.peer().await;
+    f.resolve(Action::Apply).await;
+    assert_eq!(f.resolution(), ResultResolution::Unresolved);
+    assert!(f.state.runs[0].jobs[0].worktree_detail.contains("in use"));
+    f.resolve(Action::Discard).await;
+    assert_ne!(f.resolution(), ResultResolution::Discarded);
+    assert!(f.metadata().path.exists());
+    f.stop_peer().await;
+    for status in [JobStatus::Queued, JobStatus::Preparing, JobStatus::Running] {
+        f.state.runs[0].jobs[0].status = status;
+        for action in [Action::Apply, Action::Discard] {
+            assert!(
+                f.store
+                    .begin_result_operation(&mut f.state, 1, 0, action)
+                    .is_err()
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn apply_uncertain_outcome_and_intent_save_failure_preserve_recovery_evidence() {
+    let mut f = Fixture::new().await;
+    f.edit();
+    f.inspect(false).await;
+    let op = f
+        .store
+        .begin_result_operation(&mut f.state, 1, 0, Action::Apply)
+        .unwrap();
+    // Deterministic completion injection at the durable transaction boundary.
+    f.store
+        .finish_result_operation(
+            &mut f.state,
+            &op,
+            Completion::Apply(worktrees::apply::Outcome::Uncertain(
+                "injected write failure; inspect destination".into(),
+            )),
+        )
+        .unwrap();
+    f.reload();
+    f.inspect(false).await;
+    assert_eq!(f.resolution(), ResultResolution::ApplyPending);
+    for action in [
+        Action::Apply,
+        Action::Discard,
+        Action::CleanupApplied,
+        Action::InternalCleanup,
+    ] {
+        let before = serde_json::to_value(&f.state).unwrap();
+        let error = f
+            .store
+            .begin_result_operation(&mut f.state, 1, 0, action)
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("pending or uncertain"));
+        assert_eq!(serde_json::to_value(&f.state).unwrap(), before);
+    }
+    assert!(f.cleanup().await.is_err());
+    assert!(f.metadata().path.exists());
+    assert!(
+        !f.metadata()
+            .path
+            .parent()
+            .unwrap()
+            .join("cleanup.json")
+            .exists()
+    );
+    assert!(!f.state.remove_from_history(1));
+    // Even stale cleanup metadata cannot erase an uncertain destination warning.
+    f.state.runs[0].jobs[0].result_availability = ResultAvailability::Cleaned;
+    assert!(f.state.runs[0].unresolved_results());
+    assert!(!f.state.remove_from_history(1));
+
+    let mut f = Fixture::new().await;
+    f.edit();
+    f.inspect(false).await;
+    fs::create_dir(f.store.directory().join("state.json")).unwrap();
+    assert!(
+        f.store
+            .begin_result_operation(&mut f.state, 1, 0, Action::Apply)
+            .is_err()
+    );
+    assert_eq!(f.resolution(), ResultResolution::Unresolved);
+    assert_eq!(git_args(&f.source(), &["status", "--porcelain"]), "");
+}
+
+#[tokio::test]
+async fn executable_change_is_blocked_if_destination_cannot_represent_modes() {
+    let mut f = Fixture::new().await;
+    git_args(
+        &f.metadata().path,
+        &["update-index", "--chmod=+x", "tracked.txt"],
+    );
+    git_args(&f.source(), &["config", "core.filemode", "false"]);
+    f.inspect(false).await;
+    f.resolve(Action::Apply).await;
+    assert_eq!(f.resolution(), ResultResolution::Unresolved);
+    assert!(
+        f.state.runs[0].jobs[0]
+            .worktree_detail
+            .contains("core.filemode=false")
+    );
+    assert_eq!(git_args(&f.source(), &["status", "--porcelain"]), "");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn actual_apply_write_failure_preserves_result_and_reports_uncertainty() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut f = Fixture::new().await;
+    f.edit();
+    f.inspect(false).await;
+    let source = f.source();
+    fs::set_permissions(&source, fs::Permissions::from_mode(0o555)).unwrap();
+    if fs::write(source.join("permission-probe"), "probe").is_ok() {
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o755)).unwrap();
+        return; // root bypasses permission refusal
+    }
+    f.resolve(Action::Apply).await;
+    fs::set_permissions(&source, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        f.resolution(),
+        ResultResolution::ApplyPending,
+        "{}",
+        f.state.runs[0].jobs[0].worktree_detail
+    );
+    assert!(f.metadata().path.join("tracked.txt").exists());
+    assert!(
+        f.state.runs[0].jobs[0]
+            .worktree_detail
+            .contains("Destination may contain changes")
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn review_and_apply_never_execute_temporary_index_hooks() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut f = Fixture::new().await;
+    f.edit();
+    let hook = f.source().join(".git/hooks/post-index-change");
+    fs::write(&hook, "#!/bin/sh\nprintf invoked > hook-was-run\n").unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    f.inspect(false).await;
+    f.resolve(Action::Apply).await;
+    assert_eq!(f.resolution(), ResultResolution::Applied);
+    assert!(!f.source().join("hook-was-run").exists());
+    assert!(!f.metadata().path.join("hook-was-run").exists());
+}
+
+#[tokio::test]
+async fn snapshots_read_same_size_edits_even_when_git_stat_cache_matches() {
+    for target in ["result", "destination"] {
+        let mut f = Fixture::new().await;
+        if target == "destination" {
+            f.edit();
+            f.inspect(false).await;
+        }
+        let path = if target == "result" {
+            f.metadata().path
+        } else {
+            f.source()
+        };
+        git_args(&path, &["config", "core.trustctime", "false"]);
+        git_args(&path, &["config", "core.checkstat", "minimal"]);
+        let tracked = path.join("tracked.txt");
+        let file = fs::OpenOptions::new().write(true).open(&tracked).unwrap();
+        let time = std::time::SystemTime::now() - Duration::from_secs(60);
+        let times = fs::FileTimes::new().set_modified(time);
+        file.set_times(times).unwrap();
+        git_args(&path, &["update-index", "--refresh"]);
+        fs::write(&tracked, "next\n").unwrap(); // Same size as the committed base.
+        file.set_times(times).unwrap();
+        drop(file);
+        assert_eq!(git_args(&path, &["status", "--porcelain"]), "");
+        if target == "result" {
+            let report = f.inspect(true).await;
+            assert_eq!(report.result.unwrap().changed, Some(true));
+            assert!(report.diff.unwrap().contains("+next"));
+            let s = report.statistics.unwrap().unwrap();
+            assert_eq!((s.files, s.additions, s.deletions), (1, 1, 1));
+            f.resolve(Action::Apply).await;
+            assert_eq!(f.resolution(), ResultResolution::Applied);
+        } else {
+            f.resolve(Action::Apply).await;
+            assert_eq!(f.resolution(), ResultResolution::Unresolved);
+            assert!(
+                f.state.runs[0].jobs[0]
+                    .worktree_detail
+                    .contains("local changes")
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(f.source().join("tracked.txt")).unwrap(),
+            "next\n"
+        );
+        assert!(f.metadata().path.exists());
+    }
+}

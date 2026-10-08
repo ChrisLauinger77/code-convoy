@@ -125,6 +125,50 @@ impl LifecycleClient {
             )
         })
     }
+    pub(crate) async fn apply_result(
+        &self,
+        run: u64,
+        index: usize,
+        job: &Job,
+    ) -> crate::worktrees::apply::Outcome {
+        use crate::worktrees::apply::Outcome;
+        let attempt = async {
+            let m = job
+                .worktree
+                .as_ref()
+                .context("No isolated result was recorded.")?;
+            anyhow::ensure!(
+                job.status.is_terminal()
+                    && m.run == run
+                    && m.job == index
+                    && m.repository == job.repository
+                    && job.execution_mode == m.execution_mode,
+                "Result is active or its ownership does not match this job."
+            );
+            anyhow::ensure!(
+                job.resolution == crate::domain::ResultResolution::Unresolved,
+                "Result is already resolved or an earlier Apply needs manual inspection."
+            );
+            let expected = job
+                .review
+                .as_ref()
+                .and_then(|r| r.as_ref().ok())
+                .and_then(|s| s.tree.as_deref())
+                .context("Refresh Review before applying; result statistics are unavailable.")?;
+            let permit = self.permit(m, true).await?;
+            let _guard = permit.admin.mutex.lock().await;
+            let _health = AdministrationHealth::protect(&permit.admin, &permit.safe)?;
+            let i = crate::git::Inspection {
+                cancellation: &permit.cancellation,
+                safe: &permit.safe,
+            };
+            Ok::<_, anyhow::Error>(
+                crate::worktrees::apply::apply(&permit.root, m, expected, &i).await,
+            )
+        }
+        .await;
+        attempt.unwrap_or_else(|e| Outcome::Blocked(format!("Apply blocked: {e:#}")))
+    }
     pub(crate) async fn cleanup(&self, m: &WorktreeMetadata) -> Result<Report> {
         let permit = self.permit(m, true).await?;
         let _guard = permit.admin.mutex.lock().await;

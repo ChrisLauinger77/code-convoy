@@ -64,6 +64,17 @@ impl App {
             }
         });
         ui.add_space(theme::GAP);
+        ui.horizontal_wrapped(|ui| {
+            ui.selectable_value(&mut self.tab, Tab::Review, "Review");
+            ui.selectable_value(&mut self.tab, Tab::Activity, "Activity");
+            ui.selectable_value(&mut self.tab, Tab::Diff, "Diff");
+            ui.selectable_value(&mut self.tab, Tab::Raw, "Raw output");
+            ui.selectable_value(&mut self.tab, Tab::Task, "Task & settings");
+        });
+        if self.tab == Tab::Review {
+            self.review_view(ui, ctx, bottom);
+            return;
+        }
         let p = theme::Palette::of(ui);
         let job_height = ((bottom - ui.cursor().top()) * 0.3).clamp(72.0, 180.0);
         egui::ScrollArea::vertical()
@@ -217,15 +228,10 @@ impl App {
                     });
             }
         }
-        ui.horizontal_wrapped(|ui| {
-            ui.selectable_value(&mut self.tab, Tab::Activity, "Activity");
-            ui.selectable_value(&mut self.tab, Tab::Diff, "Diff");
-            ui.selectable_value(&mut self.tab, Tab::Raw, "Raw output");
-            ui.selectable_value(&mut self.tab, Tab::Task, "Task & settings");
-        });
         ui.add_space(theme::GAP);
         let mut load_diff = None;
         match self.tab {
+            Tab::Review => unreachable!("Review is rendered above"),
             Tab::Activity | Tab::Raw => {
                 let raw = self.tab == Tab::Raw;
                 let log = if raw { &job.raw_log } else { &job.log };
@@ -283,13 +289,28 @@ impl App {
                 }
             }
             Tab::Diff => {
+                if job.resolution == domain::ResultResolution::Discarded
+                    || job.result_availability == domain::ResultAvailability::Cleaned
+                {
+                    ui.label(if job.resolution == domain::ResultResolution::Discarded {
+                        "Result discarded · retained Diff is no longer available."
+                    } else {
+                        "Retained copy cleaned up · Diff is no longer available."
+                    });
+                    return;
+                }
                 ui.small(if job.execution_mode == domain::ExecutionMode::Direct {
                     "Current working tree · staged and unstaged changes, including pre-existing edits."
                 } else { "Retained isolated worktree · changes relative to its snapshotted base commit." });
                 let loading = self.diff_target.is_some() && self.diff.is_none();
                 ui.horizontal(|ui| {
                     if ui
-                        .add_enabled(!loading, theme::quiet("Refresh diff"))
+                        .add_enabled(
+                            !loading
+                                && self.review_pending.is_none()
+                                && self.result_operation.is_none(),
+                            theme::quiet("Refresh diff"),
+                        )
                         .clicked()
                     {
                         load_diff = Some(job.clone());
@@ -336,6 +357,9 @@ impl App {
                 .worktree
                 .as_ref()
                 .map_or_else(|| job.repository.path.clone(), |w| w.path.clone());
+            if job.worktree.is_some() {
+                self.review_pending = Some((run_id, job_index));
+            }
             self.diff_target = Some(path.clone());
             self.diff = None;
             let lifecycle = self.manager.lifecycle();
@@ -435,10 +459,10 @@ impl App {
                     ui.label("Removes local history and session output only.");
                     ui.weak("Active convoys and repository files are untouched.");
                     if self.state.runs.iter().any(Run::unresolved_results) {
-                        ui.weak("Unresolved isolated results stay in history until explicit cleanup is available.");
+                        ui.weak("Unresolved results and retained copies stay in history until explicit cleanup.");
                     }
                     if let Some(run)=self.state.runs.iter().find(|r|Some(r.id)==self.selected_run)
-                        && !run.active() && ui.add_enabled(!run.unresolved_results(), egui::Button::new(format!("Remove convoy #{} from history",run.id))).on_hover_text("Unresolved isolated results must remain in history.").clicked() {
+                        && !run.active() && ui.add_enabled(!run.history_protected(), egui::Button::new(format!("Remove convoy #{} from history",run.id))).on_hover_text("Unresolved isolated results must remain in history.").clicked() {
                         remove=Some(run.id); ui.close();
                     }
                     ui.separator();

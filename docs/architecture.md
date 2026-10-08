@@ -465,3 +465,92 @@ state replacement remain the persistence boundary. Abrupt exits still cannot pro
 termination of Unix descendants that escaped their managed process group; persisted
 PIDs are not used to kill potentially unrelated processes. No agent continuation,
 storage manager, Apply, user-facing Discard or convoy-wide Review is implemented.
+
+
+## v0.3 Part 3.2: Review, Apply and Discard
+
+`review` builds Git-derived summaries on background workers. `ui/review` renders
+one compact convoy grid containing every explicit launched job, aggregate counts,
+selection and existing inspection tabs. The UI pump allows one review request at
+a time, caches errors too, and recomputes on completion, restart, explicit refresh
+and result operations. Rendering never spawns Git. Direct rows describe the current
+mutable working tree; their old runs have no immutable result or resolution action.
+An unrelated pending review does not disable the selected result's actions; only
+its own inspection or an active result operation gates those controls. Manager
+leases still reject real repository conflicts.
+
+`Snapshot` imports the live index's entries into a fresh temporary index, runs Git add/write-tree
+against working files (including tracked ignored additions and nonignored untracked
+files), and derives numstat against the isolated original base or Direct current HEAD.
+It imports paths, modes and object IDs through `ls-files --stage -z` and
+`update-index -z --index-info`, without copying stat-cache data. Every working file
+is reread, including same-size edits whose timestamps match the live index.
+The real index is never edited. Git may create unreachable blobs/tree objects;
+there are no commits, refs, branches or persisted repository copies. Paths in stats
+use NUL records. Renames are deliberately represented as delete/add (two paths),
+binary files have no numeric line counts, and modes can change with zero lines.
+Staged contents differing from both base and working image are counted as separate
+alternatives rather than double-counted into the working-file line totals. Their
+original index diff remains inspectable; Apply rejects them. Submodule/sparse or
+otherwise unrepresentable summaries report unavailability rather than no changes.
+The session cache includes a tree identity so an externally changed result must be
+reviewed again before Apply. Full patches are not serialized.
+
+`worktrees/apply` uses the existing recovery verifier and lifecycle lease; it has
+no alternate ownership path. Destination registration, canonical root/common Git
+identity, original base, clean porcelain state and freshly read contents, hidden index flags, supported
+attributes and modes are checked. It builds a full-index binary patch against the
+fixed base and invokes `git apply --check` before applying without `--index`,
+`--reject` or `--3way`. It repeats ownership/source-image/destination checks while
+holding the lease, then verifies the destination image, unchanged HEAD and clean
+real index. Standard patch rejection is all-or-nothing; OS write failures or
+cancellation are not a filesystem transaction. Every error after the write attempt
+is marked uncertain, never reported as Applied or rolled back with reset/clean/stash.
+There is no automatic retry. The original isolated worktree always survives Apply.
+Pending/uncertain Apply also blocks Discard and all cleanup entry points, preserving
+the destination warning and comparison evidence across restart. History remains
+pinned even if cleanup observations say the copy is absent. There is no in-app
+uncertainty-acknowledgement flow in this implementation.
+
+Conservative exclusions: submodules/nested repositories, sparse/unmerged or
+assume-unchanged entries, divergent staged alternatives, content conversion
+attributes (filter, encoding, text, eol, ident), autocrlf conversion, unsupported
+executable/symlink representation and output/patch limits (32 MiB patch, existing
+bounded Git inspection limits). Windows Git path conversion is reused. Unix
+symlink/executable tests run only where supported; inability to create a symlink or
+an unexpected OS write error is conservatively uncertain. External programs can
+still race between checks; CodeConvoy leases only coordinate CodeConvoy operations.
+
+Both Apply and Discard acquire exclusive maintenance access against all Direct and
+isolated preparation/execution in the same common repository or a nested source,
+and against other result operations, then hold the existing administration mutex.
+They fail promptly when busy and consume no agent execution slot. Unrelated
+repositories continue; pending jobs wait and undergo their normal baseline checks.
+Discard removes only its selected checkout, preserving peer isolated worktrees.
+Cancellation awaits owned process cleanup; uncertain process cleanup quarantines
+the lease through the existing manager mechanism. Quit waits for the result
+completion message to merge and save before exiting.
+
+`persistence/results` splits the Store transaction into durable intent, background
+operation, and completion merged into the current job (never a stale whole-state
+snapshot). Internal cleanup now shares that transaction. The additive persisted
+`ResultResolution` distinguishes Unresolved, ApplyPending, Applied, DiscardPending
+and Discarded independently of `ResultAvailability` and agent status. Missing
+fields default to Unresolved for Part 3.1 state. Only resolution and its timestamp
+are newly persisted; no source text, patch, Activity or Raw logs are saved.
+
+Applied stays Applied through reconciliation even if the copy becomes missing.
+Applied copies retain Diff and ownership/history protection until the user confirms
+**Clean up retained copy**. They are resolved, not unresolved results. Discard uses
+Part 3.1's exact Git cleanup and journal, with safe-default confirmation. Failed
+cleanup remains DiscardPending/CleanupFailed and can be retried. Completed cleanup
+plus saved Discard intent recovers as Discarded after a crash. An ApplyPending
+record after a crash remains uncertain (even if the transfer actually finished);
+it never replays the patch or claims success from a later read. Retained metadata
+cannot vanish through the history cap, Remove or Clear while cleanup is pending.
+After verified cleanup, history removal again only removes application metadata.
+
+Lifecycle Activity uses `[CodeConvoy]` prefixes; Raw remains unchanged. Native
+keyboard/window scenarios and checks are recorded in
+[Part 3.2 validation](review-apply-discard-validation.md). Retry, New Convoy from
+selected, follow-up provenance and other Part 3.3 work are not implemented.

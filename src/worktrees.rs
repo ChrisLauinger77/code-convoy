@@ -1,4 +1,5 @@
 //! Retained detached worktrees and owned result lifecycle.
+pub mod apply;
 pub mod recovery;
 use crate::{
     domain::{ExecutionMode, Repository, WorktreeMetadata, WorktreeResult},
@@ -237,6 +238,7 @@ async fn patch(
     metadata: &WorktreeMetadata,
     inspection: &git::Inspection<'_>,
     cached: bool,
+    tree: Option<&str>,
 ) -> Result<process::Captured> {
     let mut spec = git::command(
         &metadata.path,
@@ -251,8 +253,11 @@ async fn patch(
     if cached {
         spec.args.push("--cached".into());
     }
-    spec.args
-        .extend([metadata.base_commit.as_str(), "--"].map(Into::into));
+    spec.args.push(metadata.base_commit.as_str().into());
+    if let Some(tree) = tree {
+        spec.args.push(tree.into());
+    }
+    spec.args.push("--".into());
     let output = inspection.capture(spec, LIMIT).await?;
     anyhow::ensure!(
         output.status.success(),
@@ -328,13 +333,27 @@ async fn diff_owned(
 ) -> Result<String> {
     let inspection = git::Inspection { cancellation, safe };
     verify(metadata, &inspection).await?;
-    let worktree_patch = patch(metadata, &inspection, false).await?;
-    let index_patch = patch(metadata, &inspection, true).await?;
+    let snapshot =
+        crate::review::Snapshot::capture(&metadata.path, &metadata.base_commit, &inspection).await;
+    let worktree_patch = patch(
+        metadata,
+        &inspection,
+        false,
+        snapshot.as_ref().ok().map(|s| s.tree.as_str()),
+    )
+    .await?;
+    let index_patch = patch(metadata, &inspection, true, None).await?;
     let state = inspection.status(&metadata.path).await?;
-    Ok(format!(
-        "Isolated worktree: {}\nBase commit: {}\n\n--- CHANGES FROM SNAPSHOTTED BASE ---\n{}{}\n--- INDEX CHANGES FROM SNAPSHOTTED BASE ---\n{}{}\n--- STATUS (untracked contents are not in Git diff) ---\n{}",
+    let text = format!(
+        "Isolated worktree: {}\nBase commit: {}\n\n{}\n--- CHANGES FROM SNAPSHOTTED BASE ---\n{}{}\n--- INDEX CHANGES FROM SNAPSHOTTED BASE ---\n{}{}\n--- GIT STATUS (may use cached file timestamps) ---\n{}",
         metadata.path.display(),
         metadata.base_commit,
+        match &snapshot {
+            Ok(_) => "Fresh working-file contents, including nonignored new files.".to_owned(),
+            Err(e) => format!(
+                "Effective result snapshot unavailable: {e:#}. Showing tracked Git diff and index; new-file contents are unavailable."
+            ),
+        },
         if worktree_patch.stdout.is_empty() {
             "(none)".into()
         } else {
@@ -356,9 +375,10 @@ async fn diff_owned(
             ""
         },
         if state.entries.is_empty() {
-            "Clean working tree".into()
+            "No changes reported by Git status".into()
         } else {
             state.entries.join("\n")
         }
-    ))
+    );
+    Ok(text)
 }

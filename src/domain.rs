@@ -101,6 +101,17 @@ pub enum ResultAvailability {
     Cleaned,
 }
 
+/// Human resolution stays independent of physical availability and agent status.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResultResolution {
+    #[default]
+    Unresolved,
+    ApplyPending,
+    Applied,
+    DiscardPending,
+    Discarded,
+}
+
 /// Last observation, independent of the agent's success/failure status.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -238,6 +249,12 @@ pub struct Job {
     pub result_availability: ResultAvailability,
     #[serde(skip)]
     pub result_checked: bool,
+    #[serde(default)]
+    pub resolution: ResultResolution,
+    #[serde(default)]
+    pub resolved_at: Option<u64>,
+    #[serde(skip)]
+    pub review: Option<Result<crate::review::Statistics, String>>,
     #[serde(skip)]
     pub worktree_detail: String,
     pub status: JobStatus,
@@ -265,6 +282,9 @@ impl Job {
             worktree_result: None,
             result_availability: ResultAvailability::Unchecked,
             result_checked: false,
+            resolution: ResultResolution::Unresolved,
+            resolved_at: None,
+            review: None,
             worktree_detail: String::new(),
             status: JobStatus::Queued,
             started_at: None,
@@ -309,11 +329,22 @@ impl Run {
     pub fn unresolved_results(&self) -> bool {
         self.jobs.iter().any(|job| {
             job.worktree.is_some()
-                && (job.result_availability != ResultAvailability::Cleaned || !job.result_checked)
+                && !matches!(
+                    job.resolution,
+                    ResultResolution::Applied | ResultResolution::Discarded
+                )
+                && (job.resolution == ResultResolution::ApplyPending
+                    || job.result_availability != ResultAvailability::Cleaned
+                    || !job.result_checked)
         })
     }
     pub fn history_protected(&self) -> bool {
-        self.active() || self.unresolved_results()
+        self.active()
+            || self.unresolved_results()
+            || self.jobs.iter().any(|j| {
+                j.worktree.is_some()
+                    && (j.result_availability != ResultAvailability::Cleaned || !j.result_checked)
+            })
     }
 
     pub fn status(&self) -> JobStatus {
