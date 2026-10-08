@@ -143,6 +143,31 @@ impl Keyboard {
 }
 
 #[test]
+fn bulk_discard_history_menu_and_confirmation_are_keyboard_accessible() {
+    let (_temp, mut app) = app();
+    app.state.runs = vec![isolated_history(1, JobStatus::Succeeded, Some(true))];
+    app.selected_run = Some(1);
+    let mut keyboard = Keyboard::new(|app, ui, ctx| {
+        app.results(ui, ctx);
+        app.bulk_discard_window(ctx);
+    });
+    keyboard.frame(&mut app, vec![]);
+    keyboard.activate(&mut app, "History cleanup");
+    assert!(keyboard.nodes.values().any(|node|
+        node.label() == Some("Remove convoy #1 from history") && node.is_disabled()));
+    keyboard.activate(&mut app, "Discard all unresolved results…");
+    assert_eq!(app.bulk_confirmation.as_ref().unwrap().len(), 1);
+    keyboard.key(&mut app, egui::Key::Escape);
+    assert!(app.bulk_confirmation.is_none() && app.bulk_discard.is_none());
+    app.state.runs[0].jobs[0].resolution = domain::ResultResolution::Discarded;
+    app.state.runs[0].jobs[0].result_availability = domain::ResultAvailability::Cleaned;
+    app.state.runs[0].jobs[0].result_checked = true;
+    keyboard.activate(&mut app, "History cleanup");
+    keyboard.activate(&mut app, "Remove convoy #1 from history");
+    assert!(app.state.runs.is_empty());
+}
+
+#[test]
 fn templates_and_groups_are_operable_with_tab_and_enter() {
     let (_temp, mut app) = app();
     app.state.repositories = vec![repository("alpha"), repository("beta")];

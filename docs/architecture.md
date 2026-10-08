@@ -607,3 +607,30 @@ or newly persisted. Appearance now saves System/Dark/Light; pre-existing version
 stored overrides only in memory, so no unsaved override can be recovered after an
 upgrade. Missing appearance uses System. No dependencies or backend protocols change.
 See [Part 3.3 validation and v0.3 readiness](retry-followup-validation.md).
+
+## Post-v0.3: convoy and global Discard
+
+`persistence/bulk_discard` snapshots the terminal convoys' unresolved isolated
+result identities for confirmation. Applied/Discarded results and whole active
+convoys are excluded. Uncertain Apply and unverifiable ownership remain visible
+failures, never deletion permission. Before each target, the coordinator rechecks
+terminal convoy state and exact identity, then calls the existing
+`begin_result_operation(Discard)`, background `Operation::execute` and
+`finish_result_operation`. There is no second Git deletion or locking path.
+An outcome-save failure restores in-memory pending intent so history stays pinned.
+
+`ui/bulk_discard` drives one target at a time through the ordinary result message
+channel. It suspends new review requests during the batch and waits for an existing
+review to finish. Completion merges into current state before advancing; unrelated
+agent work continues under existing manager leases. A per-result failure does not
+undo successful discards or stop other targets. A session summary shows counts and
+diagnostics, with one Activity start/completion entry per affected convoy; Raw is
+unchanged. Confirmed quit stops remaining targets and waits for the in-flight
+operation's cleanup and state merge. A batch is never replayed after restart.
+
+Confirmation freezes targets rather than expanding a global operation when another
+convoy finishes. Cancel has default focus and Escape dismisses it. Discard does not
+remove history; existing history protection stays authoritative, including Applied
+copies still awaiting their separate explicit cleanup. No persistence schema,
+backend contract, dependency or scheduler policy changes. See
+[bulk discard validation](bulk-discard-validation.md).

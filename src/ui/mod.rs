@@ -3,6 +3,7 @@ mod about;
 mod about_macos;
 mod agent_config;
 mod attachments_ui;
+mod bulk_discard;
 mod cli_discovery;
 mod continuation;
 mod diagnostics;
@@ -118,6 +119,13 @@ pub struct App {
     result_operation: Option<(u64, usize)>,
     discard_confirmation: Option<(u64, usize, crate::persistence::results::Action)>,
     focus_discard_cancel: bool,
+    bulk_confirmation: Option<crate::persistence::bulk_discard::Plan>,
+    bulk_discard: Option<crate::persistence::bulk_discard::Batch>,
+    bulk_report: Option<(
+        crate::persistence::bulk_discard::Scope,
+        crate::persistence::bulk_discard::Summary,
+    )>,
+    focus_bulk_cancel: bool,
     diff_target: Option<PathBuf>,
     diff: Option<Result<String, String>>,
     dirty: bool,
@@ -210,6 +218,10 @@ impl App {
             result_operation: None,
             discard_confirmation: None,
             focus_discard_cancel: false,
+            bulk_confirmation: None,
+            bulk_discard: None,
+            bulk_report: None,
+            focus_bulk_cancel: false,
             diff_target: None,
             diff: None,
             dirty: true,
@@ -616,7 +628,9 @@ impl App {
                 }
                 Message::Resolved(op, completion) => {
                     self.result_operation = None;
-                    if let Err(e) =
+                    if let Some(batch) = &mut self.bulk_discard {
+                        batch.finish(&self.store, &mut self.state, &op, completion);
+                    } else if let Err(e) =
                         self.store
                             .finish_result_operation(&mut self.state, &op, completion)
                     {
@@ -752,13 +766,16 @@ impl App {
         }
     }
     fn remove_history(&mut self, id: Option<u64>) {
+        if self.bulk_discard.is_some() {
+            return;
+        }
         if self
             .state
             .runs
             .iter()
             .any(|r| id.is_none_or(|id| r.id == id) && r.unresolved_results())
         {
-            self.notice = "Convoys with unresolved isolated results stay in history. Clean up resolved copies explicitly before removing their history.".into();
+            self.notice = "Convoys with unresolved isolated results stay in history. Use Discard convoy… to resolve them. Applied retained copies need explicit Clean up retained copy before history removal.".into();
         }
         let changed = match id {
             Some(id) => self.state.remove_from_history(id),
@@ -891,6 +908,7 @@ impl eframe::App for App {
         // eframe also calls logic for hidden/minimized windows. A native quit
         // must never bypass confirmation just because no UI pass is rendered.
         self.poll();
+        self.pump_bulk_discard(ctx);
         self.pump_review(ctx);
         self.handle_close(ctx);
         ctx.request_repaint_after(Duration::from_millis(
@@ -934,6 +952,7 @@ impl eframe::App for App {
         }
         self.quit_window(ctx);
         self.discard_window(ctx);
+        self.bulk_discard_window(ctx);
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
             self.save();
         }

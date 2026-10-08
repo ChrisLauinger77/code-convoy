@@ -19,6 +19,9 @@ use std::{
 };
 use tokio::sync::mpsc;
 
+#[path = "support/bulk_discard.rs"]
+mod bulk_discard;
+
 fn git_cmd(path: &Path, args: &[&std::ffi::OsStr]) -> String {
     let out = Command::new("git")
         .arg("-C")

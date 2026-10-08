@@ -274,6 +274,16 @@ pub struct Job {
     pub queue_reason: Option<QueueReason>,
 }
 impl Job {
+    pub fn unresolved_retained_result(&self) -> bool {
+        self.worktree.is_some()
+            && !matches!(
+                self.resolution,
+                ResultResolution::Applied | ResultResolution::Discarded
+            )
+            && (self.resolution == ResultResolution::ApplyPending
+                || self.result_availability != ResultAvailability::Cleaned
+                || !self.result_checked)
+    }
     pub fn retryable(&self) -> bool {
         self.status.is_terminal()
             && (self.interrupted || matches!(self.status, JobStatus::Failed | JobStatus::Cancelled))
@@ -334,16 +344,7 @@ pub struct Run {
 }
 impl Run {
     pub fn unresolved_results(&self) -> bool {
-        self.jobs.iter().any(|job| {
-            job.worktree.is_some()
-                && !matches!(
-                    job.resolution,
-                    ResultResolution::Applied | ResultResolution::Discarded
-                )
-                && (job.resolution == ResultResolution::ApplyPending
-                    || job.result_availability != ResultAvailability::Cleaned
-                    || !job.result_checked)
-        })
+        self.jobs.iter().any(Job::unresolved_retained_result)
     }
     pub fn history_protected(&self) -> bool {
         self.active()

@@ -4,6 +4,7 @@ use super::*;
 impl App {
     fn has_active_work(&self) -> bool {
         self.result_operation.is_some()
+            || self.bulk_discard.is_some()
             || !self.manager.is_idle()
             || self.state.runs.iter().any(Run::active)
     }
@@ -56,6 +57,7 @@ impl App {
             && !self.exit_ready
             && self.manager.join.is_finished()
             && self.result_operation.is_none()
+            && self.bulk_discard.is_none()
         {
             // poll() is bounded. Drain the last lifecycle events before saving,
             // even when the manager finished between frames or its worker failed.
@@ -88,11 +90,14 @@ impl App {
         }
         let response = egui::Modal::new(egui::Id::new("confirm_quit")).show(ctx, |ui| {
             ui.set_max_width(420.0);
-            ui.heading("Convoys are still running");
+            ui.heading("Work is still in progress");
             ui.label(format!(
                 "Preparing: {preparing} · Running: {running} · Queued: {queued}"
             ));
             ui.label("Closing CodeConvoy will stop all active jobs.");
+            if self.bulk_discard.is_some() || self.result_operation.is_some() {
+                ui.label("Closing waits for result-operation cleanup; remaining bulk discards will not be attempted.");
+            }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 let button = ui.button("Cancel");
