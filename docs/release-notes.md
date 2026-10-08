@@ -1,44 +1,28 @@
-# CodeConvoy 0.3.0
+# CodeConvoy 0.3.1
 
-CodeConvoy 0.3.0 adds isolated execution, convoy-wide review and explicit result
-resolution, plus retries and follow-up convoys. Run one task across local Git
-repositories using your installed Codex CLI, GitHub Copilot CLI, OpenCode or
+CodeConvoy 0.3.1 adds convoy-wide and global discard of unresolved isolated
+results, and improves macOS branding and About links. Run one task across local
+Git repositories using your installed Codex CLI, GitHub Copilot CLI, OpenCode or
 Claude Code, then inspect each repository's result in the native desktop UI.
 
-## Changes since 0.2.0
+## Changes since 0.3.0
 
-- Choose **Direct** (the default) or **Isolated worktree** for each convoy.
-  Isolated jobs start from the exact committed HEAD captured at launch review,
-  without importing uncommitted source edits. Each attempt has a fresh detached,
-  owned worktree; preparation failure never falls back to Direct.
-- Retain isolated results after success, failure, cancellation or interruption,
-  including unchanged and partially prepared worktrees. Startup validates saved
-  ownership and availability in the background without resuming agents or
-  recreating missing results. Unresolved ownership protects history from removal.
-- Review all jobs in a compact convoy grid with execution status, mode,
-  availability, resolution and Git-derived file/line statistics. Isolated Diff
-  uses the saved base commit; Direct statistics describe the current working tree.
-  Agent success and actual repository changes remain separate observations.
-- Explicitly **Apply** a reviewed isolated result to its still-registered source
-  only when the destination is clean at the saved base and ownership and changes
-  pass revalidation and binary Git patch preflight. Apply changes working files,
-  preserves HEAD and both real indexes, and retains the result copy for inspection.
-- Explicitly **Discard** an isolated result with safe-default confirmation.
-  Verified cleanup removes only that owned worktree through Git and leaves the
-  source files intact. Applied copies can also be explicitly cleaned up. No
-  automatic worktree deletion or pruning is performed.
-- **Retry** a failed, cancelled or interrupted job as a new one-repository convoy
-  with the original task, settings and attachment references. Normal launch review
-  checks current Git, registration, backend capabilities and context again; isolated retries use a
-  fresh worktree from newly reviewed HEAD. The earlier attempt stays independent.
-- Use **New convoy from selected** to populate the draft from selected Review
-  rows, copying registered repositories, backend settings, mode and per-convoy
-  concurrency. Task and attachments start empty, omissions are reported, and
-  nothing launches automatically. Retry/follow-up provenance links available
-  source history without creating scheduling dependencies.
-- Persist System/Dark/Light appearance. Existing v0.1/v0.2 state remains
-  compatible, including registrations, groups, templates, settings and history;
-  older jobs default to Direct mode.
+- Use **Discard convoy…** to discard unresolved retained isolated results from
+  one terminal convoy, or **History cleanup → Discard all unresolved results…**
+  to select them across terminal history. Confirmation shows the scope and count,
+  defaults to Cancel, and freezes the selection so later results are not added.
+- Each confirmed result uses the existing ownership checks, exclusive repository
+  lifecycle lease and durable cleanup transaction. Active convoys and already
+  Applied/Discarded results are excluded. Source files and unrelated worktrees
+  remain untouched; unverifiable ownership and uncertain Apply remain blocked.
+- Bulk discard reports successful and failed results independently, with
+  expandable diagnostics. A failed target does not stop unrelated targets, and
+  protected results keep their history pinned. Quit waits for the current cleanup;
+  restart reconciles per-result state without replaying the batch.
+- macOS application menus consistently use **CodeConvoy** for the application,
+  About, Hide and Quit labels. The native About panel includes a clickable GitHub
+  repository link; the in-app About link uses the same Cargo repository metadata.
+- Refresh the README screenshot.
 
 Both concurrency limits, fair admission, canonical/nested repository protection,
 process-tree cancellation and immutable launched snapshots remain in force.
@@ -71,7 +55,7 @@ Downloads include Linux x86-64 DEB/RPM/AppImage, Windows x86-64 per-user setup a
 portable ZIP, and one macOS Universal DMG with Apple Silicon and Intel slices.
 `SHA256SUMS` covers the six packages. Linux packages are built on Ubuntu 26.04.
 Earlier DEB and AppImage packages have user-verified installation/startup
-coverage on Debian Forky; those checks have not been repeated for 0.3.0 packages.
+coverage on Debian Forky; those checks have not been repeated for 0.3.1 packages.
 The minimum glibc version and compatibility with older distributions still need
 verification after the runner update. A working desktop graphics environment is
 required; the native picker uses your desktop portal.
@@ -90,10 +74,18 @@ path where necessary; Git must also be available to the application.
 
 ## Validation and remaining limits
 
+Release preparation on Linux x86-64 with Rust 1.95.0 and Python 3.14.8 passed
+formatting, strict Clippy, all-feature Rust tests (281 passed, four optional CLI
+probes ignored), the release build, all 16 packaging unit tests and the
+`v0.3.1` tag/version check. No dependency versions changed.
+
 Deterministic fixtures exercise all four backends, real Git worktrees, scheduling,
 cancellation, retained-result recovery, Apply/Discard, retries, follow-up drafts
-and old-state compatibility. Native macOS fixture checks cover isolation,
-cancellation, restart, a 24-row Review, successful and failed-result Apply,
+and old-state compatibility. Bulk discard fixtures additionally cover frozen
+confirmation, keyboard cancellation/confirmation, mixed outcomes, active-convoy
+exclusion, ownership refusal, restart reconciliation and history protection.
+Earlier native macOS fixture checks cover isolation, cancellation, restart,
+a 24-row Review, successful and failed-result Apply,
 destination blocking, keyboard Discard, Retry and selected-result follow-up.
 These use disposable repositories and a local fixture agent rather than
 authenticated model execution. Detailed evidence is recorded in:
@@ -102,11 +94,17 @@ authenticated model execution. Detailed evidence is recorded in:
 - [Recovery and cleanup validation](worktree-recovery-validation.md)
 - [Review, Apply and Discard validation](review-apply-discard-validation.md)
 - [Retry, follow-up and v0.3 readiness](retry-followup-validation.md)
+- [Bulk discard validation](bulk-discard-validation.md)
+
+The bulk discard Linux window and Cancel focus were inspected natively. Native
+confirmation, partial/global completion and history removal were not validated
+through desktop input; those paths have deterministic real-Git and egui coverage.
+The macOS branding changes still require native macOS verification.
 
 Codex and Copilot have earlier user-verified authenticated E2E coverage on Linux
 and macOS. Authenticated attachment/model acceptance remains unverified for all
 four backends; OpenCode and Claude authenticated E2E remain unverified overall.
-Native Linux/Windows desktop checks, Intel macOS runtime checks and fresh 0.3.0
-package installation checks remain outstanding. Local source validation does not
-replace the manual native package candidate workflow and exact-artifact checks
+Broader native Linux/Windows desktop checks, Intel macOS runtime checks and fresh
+0.3.1 package installation checks remain outstanding. Local source validation
+does not replace the manual native package candidate workflow and exact-artifact checks
 described in [the release procedure](releasing.md).

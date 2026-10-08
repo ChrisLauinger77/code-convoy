@@ -4,7 +4,7 @@
 
 `Cargo.toml` is the version authority. About, Windows resources, package
 metadata, bundle versions and final filenames derive from it. For this release
-it is `0.3.0`, with tag `v0.3.0`, without a prerelease suffix.
+it is `0.3.1`, with tag `v0.3.1`, without a prerelease suffix.
 
 1. Review [release-notes.md](release-notes.md) and commit the release changes.
    Confirm applicable normal CI checks are green; Markdown-only changes skip CI.
@@ -210,7 +210,7 @@ packages: `rpm desktop-file-utils file patchelf squashfs-tools xvfb xauth`.
 python3 packaging/build.py
 python3 packaging/build.py --probe
 python3 packaging/release.py linux
-xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.3.0-x86_64.AppImage
+xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.3.1-x86_64.AppImage
 ```
 
 On Windows, from a development shell with Python, Rust MSVC and Windows SDK:
