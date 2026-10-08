@@ -208,6 +208,20 @@ files. Pin ownership metadata until physical cleanup is verified, even for Appli
 results. Review caches Git statistics off the UI thread, never agent prose; Direct
 statistics are current observations, with no destructive Apply/Discard actions.
 
+## Retry and follow-up
+
+Retry creates a new one-repository convoy using the original immutable task and
+settings. Revalidate registration, current Git, backend capabilities and attachment
+references through normal review/admission. Isolated retries use a fresh worktree
+from the newly reviewed HEAD; never mutate or resolve the previous attempt/result.
+Use the ordinary scheduler, leases, cancellation and quit lifecycle.
+
+New convoy from selected only replaces the draft's explicit registered repository
+selection and settings. Clear task and attachments, preserve the global preference
+and libraries, report missing/unregistered omissions, and never auto-launch.
+Provenance is optional informational metadata, never a scheduling dependency or a
+reason to pin source history beyond the existing ownership protections.
+
 ## Task context
 
 Repository groups are selection helpers, never scheduling or execution units.

@@ -7,6 +7,21 @@ pub const PANEL_MARGIN: i8 = 16;
 pub const ROW_HEIGHT: f32 = 30.0;
 pub const CORNER: u8 = 4;
 
+pub fn preference(appearance: crate::domain::Appearance) -> egui::ThemePreference {
+    match appearance {
+        crate::domain::Appearance::System => egui::ThemePreference::System,
+        crate::domain::Appearance::Dark => egui::ThemePreference::Dark,
+        crate::domain::Appearance::Light => egui::ThemePreference::Light,
+    }
+}
+pub fn appearance(preference: egui::ThemePreference) -> crate::domain::Appearance {
+    match preference {
+        egui::ThemePreference::System => crate::domain::Appearance::System,
+        egui::ThemePreference::Dark => crate::domain::Appearance::Dark,
+        egui::ThemePreference::Light => crate::domain::Appearance::Light,
+    }
+}
+
 /// Paint the mark so it is legible even when bundled fonts lack check glyphs.
 pub fn success_label(ui: &mut egui::Ui, text: &str) -> egui::Response {
     let color = Palette::of(ui).success;

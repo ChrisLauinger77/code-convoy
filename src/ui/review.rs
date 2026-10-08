@@ -54,6 +54,12 @@ impl App {
             return;
         };
         let id = run.id;
+        let mut followup = false;
+        ui.horizontal_wrapped(|ui| {
+            ui.small(format!("{} selected for follow-up", self.review_selected.len()));
+            followup = ui.add_enabled(!self.review_selected.is_empty() && !self.busy && self.prepared.is_none() && !self.closing && !self.quit_requested,
+                theme::quiet("New convoy from selected")).on_hover_text("Restore repository selection and settings into a draft with a new task and no attachments. Nothing starts automatically.").clicked();
+        });
         let total = crate::review::totals(run);
         ui.small(format!(
             "{} repositories · {} succeeded · {} failed · {} cancelled",
@@ -84,12 +90,33 @@ impl App {
                     .striped(true)
                     .spacing([14.0, 5.0])
                     .show(ui, |ui| {
+                        ui.strong("Follow-up");
                         ui.strong("Repository");
                         ui.strong("Agent result");
                         ui.strong("Mode / result");
                         ui.strong("Changes");
                         ui.end_row();
                         for (index, job) in run.jobs.iter().enumerate() {
+                            let mut included = self.review_selected.contains(&index);
+                            let checkbox = ui.checkbox(&mut included, "");
+                            checkbox.widget_info(|| {
+                                egui::WidgetInfo::selected(
+                                    egui::WidgetType::Checkbox,
+                                    checkbox.enabled(),
+                                    included,
+                                    format!("Select {} for follow-up", job.repository.name),
+                                )
+                            });
+                            if checkbox.has_focus() {
+                                checkbox.scroll_to_me(None);
+                            }
+                            if checkbox.changed() {
+                                if included {
+                                    self.review_selected.insert(index);
+                                } else {
+                                    self.review_selected.remove(&index);
+                                }
+                            }
                             let name = ui
                                 .selectable_label(self.selected_job == index, &job.repository.name)
                                 .on_hover_text(job.repository.path.display().to_string());
@@ -226,6 +253,9 @@ impl App {
                 self.discard_confirmation = Some((id, self.selected_job, action));
                 self.focus_discard_cancel = true;
             }
+        }
+        if followup {
+            self.followup(ctx, id);
         }
     }
     fn start_result_operation(

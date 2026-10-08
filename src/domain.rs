@@ -274,6 +274,11 @@ pub struct Job {
     pub queue_reason: Option<QueueReason>,
 }
 impl Job {
+    pub fn retryable(&self) -> bool {
+        self.status.is_terminal()
+            && (self.interrupted || matches!(self.status, JobStatus::Failed | JobStatus::Cancelled))
+    }
+
     pub fn queued(repository: Repository) -> Self {
         Self {
             repository,
@@ -321,6 +326,8 @@ pub struct GitSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Run {
     pub id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<crate::continuation::Provenance>,
     pub created_at: u64,
     pub task: TaskConfig,
     pub jobs: Vec<Job>,
@@ -383,6 +390,20 @@ impl Run {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Appearance {
+    #[default]
+    System,
+    Dark,
+    Light,
+}
+impl Appearance {
+    fn is_system(&self) -> bool {
+        *self == Self::System
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppState {
@@ -392,9 +413,13 @@ pub struct AppState {
     pub groups: Vec<RepositoryGroup>,
     pub templates: Vec<TaskTemplate>,
     pub draft: TaskConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft_provenance: Option<crate::continuation::Provenance>,
     pub agent_options: BTreeMap<AgentId, AgentOptions>,
     pub runs: Vec<Run>,
     pub global_concurrency: usize,
+    #[serde(skip_serializing_if = "Appearance::is_system")]
+    pub appearance: Appearance,
 }
 impl Default for AppState {
     fn default() -> Self {
@@ -405,9 +430,11 @@ impl Default for AppState {
             groups: Vec::new(),
             templates: Vec::new(),
             draft: TaskConfig::default(),
+            draft_provenance: None,
             agent_options: BTreeMap::new(),
             runs: Vec::new(),
             global_concurrency: DEFAULT_GLOBAL_CONCURRENCY,
+            appearance: Appearance::default(),
         }
     }
 }

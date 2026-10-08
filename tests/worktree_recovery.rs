@@ -97,6 +97,7 @@ impl Fixture {
             repositories: vec![repository],
             next_run: 2,
             runs: vec![Run {
+                provenance: None,
                 id: 1,
                 created_at: 0,
                 task: TaskConfig {
@@ -555,6 +556,7 @@ async fn history_cap_pins_results_and_preserves_direct_history_policy() {
         f.state.runs.insert(
             0,
             Run {
+                provenance: None,
                 id,
                 created_at: 0,
                 task: TaskConfig::default(),
@@ -1543,5 +1545,83 @@ async fn snapshots_read_same_size_edits_even_when_git_stat_cache_matches() {
             "next\n"
         );
         assert!(f.metadata().path.exists());
+    }
+}
+
+#[tokio::test]
+async fn retry_and_followup_leave_original_result_independently_applicable_or_discardable() {
+    use codeconvoy::continuation::{FollowUp, Retry};
+    for action in [Action::Apply, Action::Discard] {
+        let mut f = Fixture::new().await;
+        f.edit();
+        f.state.runs[0].jobs[0].status = JobStatus::Failed;
+        f.state.runs[0].task.prompt = "retry fixture".into();
+        f.state.runs[0].task.options.insert(
+            "executable".into(),
+            env!("CARGO_BIN_EXE_codeconvoy-test-agent").into(),
+        );
+        f.inspect(false).await;
+        let old = serde_json::to_value(&f.state.runs[0]).unwrap();
+        let (prepared, origin) = Retry::from_state(&f.state, 1, 0)
+            .unwrap()
+            .prepare()
+            .await
+            .unwrap();
+        let mut retry = prepared.snapshot(2);
+        retry.provenance = Some(origin);
+        f.manager
+            .start(2, prepared, agents::backend(AgentId::Codex).unwrap())
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(20), async {
+            while retry.active() {
+                match f.rx.recv().await.unwrap() {
+                    Event::Preparing {
+                        run: 2, worktree, ..
+                    } => {
+                        retry.jobs[0].worktree = worktree;
+                        retry.jobs[0].status = JobStatus::Preparing;
+                    }
+                    Event::Result { run: 2, result, .. } => retry.jobs[0].worktree_result = result,
+                    Event::Finished {
+                        run: 2,
+                        status,
+                        exit_code,
+                        detail,
+                        ..
+                    } => retry.jobs[0].finish(status, exit_code, detail),
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(retry.jobs[0].status, JobStatus::Succeeded);
+        assert_ne!(
+            retry.jobs[0].worktree.as_ref().unwrap().path,
+            f.metadata().path
+        );
+        let retry_path = retry.jobs[0].worktree.as_ref().unwrap().path.clone();
+        f.state.runs.push(retry);
+        FollowUp::from_state(&f.state, 1, &[0].into())
+            .unwrap()
+            .check()
+            .await
+            .populate(&mut f.state);
+        assert_eq!(serde_json::to_value(&f.state.runs[0]).unwrap(), old);
+        assert!(!f.state.remove_from_history(1));
+        let peer = serde_json::to_value(&f.state.runs[1]).unwrap();
+        f.resolve(action).await;
+        assert_eq!(
+            f.resolution(),
+            if matches!(action, Action::Apply) {
+                ResultResolution::Applied
+            } else {
+                ResultResolution::Discarded
+            }
+        );
+        assert_eq!(serde_json::to_value(&f.state.runs[1]).unwrap(), peer);
+        assert!(retry_path.exists());
+        f.manager.shutdown();
+        (&mut f.manager.join).await.unwrap();
     }
 }

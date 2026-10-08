@@ -35,7 +35,7 @@ The compact run selector groups active and terminal runs in a height-bounded scr
 
 Reuse copies a run's task/options and selects its still-registered canonical repository paths. It reports skipped registrations, leaves the global limit alone, and requires the normal preflight for any subsequent launch. Reuse is unavailable during preflight/review/shutdown. No historical configuration is mutated or automatically executed.
 
-`ui/text_view` caches a line index for the selected output/diff and uses egui's visible-row layout. Copy actions preserve the original retained text. Diff coloring is presentation-only: no agent protocol parsing, Git behavior, or stored output format is changed. Main panes and long details scroll independently; execution controls remain visible at the bottom of the editor. Appearance follows the system by default; overrides are session-local, without a state-schema change. The editor is rendered before execution controls to match visual and Tab order. CLI probes have independent per-backend state, so their completion cannot clear repository/preflight work. An in-memory set of retained runs launched this session distinguishes empty live output from unrestored history logs.
+`ui/text_view` caches a line index for the selected output/diff and uses egui's visible-row layout. Copy actions preserve the original retained text. Diff coloring is presentation-only: no agent protocol parsing, Git behavior, or stored output format is changed. Main panes and long details scroll independently; execution controls remain visible at the bottom of the editor. Appearance follows the system by default; overrides are saved as an optional appearance preference (Part 3.3); older state defaults to System. The editor is rendered before execution controls to match visual and Tab order. CLI probes have independent per-backend state, so their completion cannot clear repository/preflight work. An in-memory set of retained runs launched this session distinguishes empty live output from unrestored history logs.
 
 App construction schedules checks for all four configured/default executables on Tokio without awaiting them. `agents/availability` resolves exact launcher names with the existing filesystem-only discovery locations on blocking workers, then runs each backend's normal help/version check. Explicit absolute paths never fall back to another installation. Matching results adopt resolved paths into the existing per-agent settings so GUI launches and subsequent jobs use the same executable. The UI reports Checking… while a probe or its latest replacement is pending; success/error details are backend-local. Availability and probe state are never serialized.
 
@@ -463,8 +463,7 @@ The orphan scan follows no directory links and reports up to 100 suspicious entr
 are excluded. Ambiguous resources are never purged. A data-directory lock and atomic
 state replacement remain the persistence boundary. Abrupt exits still cannot promise
 termination of Unix descendants that escaped their managed process group; persisted
-PIDs are not used to kill potentially unrelated processes. No agent continuation,
-storage manager, Apply, user-facing Discard or convoy-wide Review is implemented.
+PIDs are not used to kill potentially unrelated processes. Part 3.1B did not implement agent continuation, storage management, Apply, user-facing Discard or convoy-wide Review; Part 3.2 adds the explicit result actions below.
 
 
 ## v0.3 Part 3.2: Review, Apply and Discard
@@ -552,5 +551,59 @@ After verified cleanup, history removal again only removes application metadata.
 
 Lifecycle Activity uses `[CodeConvoy]` prefixes; Raw remains unchanged. Native
 keyboard/window scenarios and checks are recorded in
-[Part 3.2 validation](review-apply-discard-validation.md). Retry, New Convoy from
-selected, follow-up provenance and other Part 3.3 work are not implemented.
+[Part 3.2 validation](review-apply-discard-validation.md). The continuation features added afterward are described below.
+
+
+## v0.3 Part 3.3: Independent retries and follow-up drafts
+
+`continuation` builds requests from immutable snapshots, copying only task/settings
+and canonical registered source identities. It never copies jobs, logs or worktree
+resources. `Job::retryable` includes terminal failed, cancelled and recovered
+interrupted jobs; ordinary successes have no Retry action.
+
+The existing scheduler identifies jobs by `(run_id, job_index)` and runs have fixed
+repository snapshots. A retry is therefore a fresh one-repository convoy, with a
+new run ID and job index 0. Optional `Provenance::Retry` records source run/index and
+an ordinal (2 for the first retry, incremented when retrying a retry). Repeated
+retries of the same original are sibling attempts with distinct run IDs, both
+labelled attempt 2. There is no ancestry traversal, mutable attempt tree, hidden
+session continuation or dependency scheduling. The source convoy's other jobs are
+never duplicated. Provenance cannot change scheduling or result ownership.
+
+Retry copies the original task and attachment references. Background preparation
+checks current registration/Git, revalidates file identity/hash/readability and
+backend support, then probes the original executable and builds the ordinary
+`PreparedRun`. Normal review remains explicit, including dirty-tree acknowledgment.
+Launch checks that registrations still exist, saves a new snapshot, adds a
+`[CodeConvoy]` provenance Activity entry, and admits it through `RunManager::start`.
+The current draft is preserved. Direct admission rechecks the newly reviewed
+working tree; isolated preparation uses the newly captured committed HEAD and a
+fresh owned path. Execution-time context revalidation, leases, fair admission,
+limits, cancellation and shutdown remain shared. The prior result is never resolved
+by Retry, even when the new attempt succeeds.
+
+Review's follow-up checkbox set is separate from the inspected row and resets when
+switching convoys. Every result can be selected, regardless of execution outcome,
+resolution or missing retained worktree. `FollowUp` sorts/deduplicates source paths,
+matches current registrations, checks availability in background and rechecks
+registration when completing. Unavailable/unregistered paths produce visible
+omissions. The editor is disabled during this short draft replacement operation.
+Completion copies backend/options, mode and per-convoy concurrency, selects the
+registered sources and focuses a blank task with no attachments. Groups, templates
+and the global limit are untouched. Nothing is launched or registered implicitly.
+
+Optional `Provenance::FollowUp` stores the source convoy and selected job indices on
+the draft, then freezes them into the new run at launch. Both provenance forms are
+small informational metadata; source history removal is permitted by the existing
+ownership policy and cannot invalidate descendants. History, Task & settings and
+the draft show plain origin text; the source-navigation button appears only while
+the source still exists. Review selection itself is session-local, like ordinary
+repository selection. Reuse convoy clears draft provenance and retains its existing
+explicit full-task reuse behavior. Templates only edit text.
+
+All fields are additive serde defaults. Old runs stay Direct without isolated
+resources or artificial attempts. Output remains session-only and is never copied
+or newly persisted. Appearance now saves System/Dark/Light; pre-existing versions
+stored overrides only in memory, so no unsaved override can be recovered after an
+upgrade. Missing appearance uses System. No dependencies or backend protocols change.
+See [Part 3.3 validation and v0.3 readiness](retry-followup-validation.md).

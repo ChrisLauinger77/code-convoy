@@ -15,17 +15,19 @@ impl App {
                 .max_height(editor_rect.height())
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    ui.add_enabled_ui(self.prepared.is_none() && !self.closing, |ui| {
-                        self.editor(ui, ctx)
-                    });
+                    ui.add_enabled_ui(
+                        self.prepared.is_none() && !self.closing && !self.followup_pending,
+                        |ui| self.editor(ui, ctx),
+                    );
                 });
         });
         let execution_rect =
             egui::Rect::from_min_max(egui::pos2(rect.left(), execution_top), rect.max);
         let response = ui.scope_builder(egui::UiBuilder::new().max_rect(execution_rect), |ui| {
-            ui.add_enabled_ui(self.prepared.is_none() && !self.closing, |ui| {
-                self.execution_section(ui, ctx)
-            });
+            ui.add_enabled_ui(
+                self.prepared.is_none() && !self.closing && !self.followup_pending,
+                |ui| self.execution_section(ui, ctx),
+            );
         });
         let height = response.response.rect.height();
         if (self.execution_height - height).abs() > 0.5 {
@@ -39,6 +41,9 @@ impl App {
             ui.scroll_to_cursor(Some(egui::Align::Min));
         }
         theme::eyebrow(ui, "NEW CONVOY");
+        if let Some(origin) = &self.state.draft_provenance {
+            ui.small(origin.label());
+        }
         self.task_section(ui);
         self.attachments_section(ui, ctx);
         self.agent_section(ui, ctx);
@@ -146,6 +151,7 @@ impl App {
         let response = egui::Modal::new(egui::Id::new("review_convoy")).show(ctx, |ui| {
             ui.set_width(540.0_f32.min((ctx.content_rect().width() - 64.0).max(240.0)));
             ui.heading("Review convoy");
+            if let Some(origin) = &self.prepared_provenance { ui.small(origin.label()); }
             egui::ScrollArea::vertical()
                 .max_height((ctx.content_rect().height() - 230.0).max(160.0))
                 .show(ui, |ui| {
@@ -157,7 +163,7 @@ impl App {
                     ui.label(prepared.task.agent.label());
                     ui.label(prepared.task.execution_mode.label());
                     if prepared.task.execution_mode == domain::ExecutionMode::IsolatedWorktree {
-                        ui.small("Each job starts from the committed HEAD shown below. Local uncommitted changes are excluded. Worktrees are retained; Apply/Discard is not available yet.");
+                        ui.small("Each job starts from the committed HEAD shown below. Local uncommitted changes are excluded. Retained results can be reviewed, Applied or Discarded explicitly.");
                     }
                     ui.label(&prepared.task.prompt);
                     for attachment in &prepared.task.attachments {
@@ -215,6 +221,7 @@ impl App {
             self.start();
         } else if cancel {
             self.prepared = None;
+            self.prepared_provenance = None;
         }
     }
 }

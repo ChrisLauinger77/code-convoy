@@ -137,6 +137,7 @@ fn persistence_is_atomic_excludes_output_and_recovers_interruption() {
     job.log.append("sensitive CLI output");
     job.detail = "sensitive diagnostic".into();
     state.runs.push(Run {
+        provenance: None,
         id: 1,
         created_at: now(),
         task: TaskConfig::default(),
@@ -275,12 +276,14 @@ fn session_log_budget_evicts_oldest_logs() {
     });
     job.log.append(&"x".repeat(LOG_LIMIT));
     state.runs.push(Run {
+        provenance: None,
         id: 2,
         created_at: now(),
         task: TaskConfig::default(),
         jobs: vec![job.clone()],
     });
     state.runs.push(Run {
+        provenance: None,
         id: 1,
         created_at: now(),
         task: TaskConfig::default(),

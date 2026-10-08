@@ -478,3 +478,40 @@ fn individual_repository_selection_and_launch_review_are_keyboard_accessible() {
     assert!(app.prepared.is_none());
     assert!(app.manager.is_idle());
 }
+
+#[test]
+fn keyboard_can_select_followup_rows_create_a_draft_and_reach_retry() {
+    let (_temp, mut app) = app();
+    app.state.runs = vec![run(41, &[JobStatus::Succeeded, JobStatus::Cancelled])];
+    app.state.repositories = app.state.runs[0]
+        .jobs
+        .iter()
+        .map(|j| j.repository.clone())
+        .collect();
+    app.selected_run = Some(41);
+    let mut keyboard = Keyboard::new(|app, ui, ctx| {
+        app.continuation_controls(ui, ctx);
+        app.review_view(ui, ctx, 1500.0);
+    });
+    keyboard.frame(&mut app, vec![]);
+    keyboard.focus(&mut app, "Select repo0 for follow-up");
+    keyboard.key(&mut app, egui::Key::Space);
+    keyboard.focus(&mut app, "Select repo1 for follow-up");
+    keyboard.key(&mut app, egui::Key::Space);
+    assert_eq!(app.review_selected, [0, 1].into());
+    assert_eq!(app.selected_job, 0);
+    keyboard.activate(&mut app, "New convoy from selected");
+    assert!(app.followup_pending && app.manager.is_idle());
+    // Deliver the worker completion without touching real repositories.
+    let draft =
+        crate::continuation::FollowUp::from_state(&app.state, 41, &app.review_selected).unwrap();
+    app.tx.send(Message::FollowUp(Box::new(draft))).unwrap();
+    app.poll();
+    assert_eq!(app.selected.len(), 2);
+    assert!(app.state.draft.prompt.is_empty());
+    keyboard.activate(&mut app, "repo1");
+    assert_eq!(app.selected_job, 1);
+    keyboard.activate(&mut app, "Retry");
+    assert!(app.busy && app.prepared.is_none());
+    assert!(app.manager.is_idle());
+}

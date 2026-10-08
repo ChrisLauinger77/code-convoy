@@ -34,6 +34,7 @@ impl PreparedRun {
     pub fn snapshot(&self, id: u64) -> Run {
         Run {
             id,
+            provenance: None,
             created_at: domain::now(),
             task: self.task.clone(),
             jobs: self

@@ -86,6 +86,7 @@ fn library_crud_retains_missing_members_and_cannot_change_run_snapshots() {
         )
         .unwrap();
     state.runs.push(Run {
+        provenance: None,
         id: 8,
         created_at: now(),
         task: TaskConfig {
@@ -165,6 +166,7 @@ fn state_saves_library_and_attachment_metadata_but_never_contents_or_output() {
     job.log.append("private activity");
     job.raw_log.append("private raw output");
     state.runs.push(Run {
+        provenance: None,
         id: 1,
         created_at: now(),
         task: state.draft.clone(),
@@ -209,6 +211,7 @@ fn session_memory_budget_includes_both_activity_and_raw_output() {
         })
         .collect();
     state.runs.push(Run {
+        provenance: None,
         id: 1,
         created_at: now(),
         task: TaskConfig::default(),

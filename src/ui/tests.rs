@@ -4,6 +4,8 @@ use super::*;
 use crate::domain::{AgentId, Job, TaskConfig};
 use crate::runner::PreparedRepository;
 
+#[path = "continuation_tests.rs"]
+mod continuation;
 #[path = "task_context_tests.rs"]
 mod task_context;
 
@@ -1187,6 +1189,7 @@ fn repository(name: &str) -> Repository {
 
 fn run(id: u64, statuses: &[JobStatus]) -> Run {
     Run {
+        provenance: None,
         id,
         created_at: domain::now(),
         task: TaskConfig {

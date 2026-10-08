@@ -13,6 +13,7 @@ impl App {
     fn results_content(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, bottom: f32) {
         theme::eyebrow(ui, "RUNS / RESULTS");
         self.run_navigation(ui);
+        self.continuation_controls(ui, ctx);
         if self.state.runs.is_empty() {
             ui.add_space(theme::SECTION_GAP);
             ui.strong("No convoys yet");

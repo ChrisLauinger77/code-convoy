@@ -20,7 +20,25 @@ impl CliError {
 }
 
 pub(super) fn summary(detail: &str) -> &str {
-    if detail.starts_with("Apply blocked:")
+    if detail.starts_with("Retry blocked") {
+        if detail.contains("Cannot locate attachment")
+            || detail.contains("Attachment is missing or unavailable")
+        {
+            "Retry blocked: an original attachment is missing. Restore it before retrying; context cannot be omitted."
+        } else if detail.contains("Cannot read attachment") {
+            "Retry blocked: an original attachment cannot be read. Restore file access before retrying."
+        } else if detail.contains("Attachment changed since") {
+            "Retry blocked: an original attachment changed. Restore the original file, or use Reuse convoy to review an edited task."
+        } else if detail.contains("cannot supply the requested image attachments") {
+            "Retry blocked: this CLI cannot accept the original images. Restore a compatible CLI before retrying."
+        } else if detail.contains("repository is unavailable") {
+            "Retry blocked: repository is unavailable. Restore its registered location and Git state."
+        } else if detail.contains("no longer registered") {
+            "Retry blocked: repository is no longer registered. Register it again before retrying."
+        } else {
+            "Retry blocked. Check the original backend settings, executable and context in Diagnostics, then try again."
+        }
+    } else if detail.starts_with("Apply blocked:")
         || detail.starts_with("Apply preflight passed")
         || detail.starts_with("Cleanup completed")
         || detail.starts_with("Result discarded")

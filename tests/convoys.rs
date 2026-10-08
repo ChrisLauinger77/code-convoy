@@ -777,6 +777,7 @@ fn persistence_recovers_multiple_runs_retains_snapshots_and_defaults_old_prefere
         job.status = status;
         job.log.append("session only");
         state.runs.push(Run {
+            provenance: None,
             id,
             created_at: now(),
             task: TaskConfig {
@@ -823,6 +824,7 @@ fn history_never_evicts_active_convoys_and_mixed_results_are_truthful() {
             job.finish(JobStatus::Succeeded, Some(0), String::new());
         }
         state.runs.push(Run {
+            provenance: None,
             id,
             created_at: now(),
             task: TaskConfig::default(),
