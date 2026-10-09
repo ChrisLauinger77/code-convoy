@@ -462,11 +462,25 @@ impl App {
         }
     }
     fn repository_in_use(&self, path: &std::path::Path) -> bool {
-        self.state.runs.iter().flat_map(|r| &r.jobs).any(|j| {
-            !j.status.is_terminal()
-                && (path.starts_with(&j.repository.path) || j.repository.path.starts_with(path))
-        }) || self.result_operation.is_some()
-            || self.bulk_discard.is_some()
+        let overlaps = |job: &domain::Job| {
+            path.starts_with(&job.repository.path) || job.repository.path.starts_with(path)
+        };
+        self.state
+            .runs
+            .iter()
+            .flat_map(|r| &r.jobs)
+            .any(|job| !job.status.is_terminal() && overlaps(job))
+            // Bulk discard also dispatches one result_operation at a time.
+            || self.result_operation
+                .and_then(|(run, index)| {
+                    self.state.runs.iter().find(|r| r.id == run)?.jobs.get(index)
+                })
+                .is_some_and(overlaps)
+    }
+    fn invalidate_repository_health(&mut self, source: &std::path::Path) {
+        let overlaps = |path: &PathBuf| path.starts_with(source) || source.starts_with(path);
+        self.repository_states.retain(|path, _| !overlaps(path));
+        self.repository_pending.retain(|path, _| !overlaps(path));
     }
     fn repository_refreshed(
         &mut self,
@@ -716,8 +730,7 @@ impl App {
                     self.diff = None;
                     self.diff_target = None;
                     self.dirty = true;
-                    self.repository_states.remove(&op.job.repository.path);
-                    self.repository_pending.remove(&op.job.repository.path);
+                    self.invalidate_repository_health(&op.job.repository.path);
                     for job in self.state.runs.iter_mut().flat_map(|r| &mut r.jobs) {
                         if job.execution_mode == domain::ExecutionMode::Direct
                             && job.repository.path == op.job.repository.path

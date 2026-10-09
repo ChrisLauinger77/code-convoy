@@ -75,6 +75,10 @@ and result navigation remain usable. Newer refreshes cancel older checks and rej
 late replies, as do unregistering and overlapping execution events.
 
 Known active or nested repository work shows Unknown; refresh after it finishes.
+Apply and Discard suppress only their source repository and overlapping paths.
+Bulk discard uses the currently executing result's source; unrelated checks and
+their pending replies remain available. Starting or finishing a result operation
+invalidates overlapping cached state and late replies.
 Read-only Git commands use the existing helpers with optional locks and fsmonitor
 disabled. They acquire no scheduler capacity or repository execution locks. Missing
 paths, invalid repositories, access failures and Git errors display Unknown with
@@ -91,10 +95,10 @@ success and failure. UI tests cover stale results, selection and all three theme
 at 780 × 560, 1180 × 820 and 1600 × 1000.
 
 On 2026-10-09, macOS Apple Silicon source validation passed formatting, strict
-all-target/all-feature Clippy, **318 Rust tests** (four optional installed-CLI probes
+all-target/all-feature Clippy, **319 Rust tests** (four optional installed-CLI probes
 ignored), the optimized release build, **16 packaging tests**, and the `v0.5.0`
-version/tag consistency check. The Rust harness additionally launches one existing
-subprocess test; that duplicate invocation is excluded from the total above.
+version/tag consistency check. The Rust harness additionally launches two existing
+subprocess tests; those duplicate invocations are excluded from the total above.
 
 A disposable native macOS fixture at 1180 × 820 verified rendered outcome/change
 indicators, no-match search with selection preserved, Clear filters, Failed

@@ -34,6 +34,125 @@ fn health_refresh_is_independent_and_superseded_removed_and_active_replies_are_r
     app.repository_refreshed(second, path, Err("unregistered".into()));
     assert!(app.repository_states.is_empty());
 }
+
+#[test]
+fn health_refresh_during_result_operations_only_suppresses_overlapping_repositories() {
+    use crate::persistence::bulk_discard::{Batch, Plan, Scope};
+    for bulk in [false, true] {
+        let (_temp, mut app) = app();
+        app.state.runs = vec![
+            run(1, &[JobStatus::Succeeded]),
+            isolated_history(42, JobStatus::Succeeded, Some(true)),
+        ];
+        let source = app.state.runs[1].jobs[0].repository.path.clone();
+        let paths = [
+            source.clone(),
+            source.join("nested"),
+            source.parent().unwrap().to_path_buf(),
+            PathBuf::from("/unrelated/repo"),
+        ];
+        app.state.repositories = paths
+            .iter()
+            .map(|path| Repository {
+                name: "fixture".into(),
+                path: path.clone(),
+            })
+            .collect();
+        let ctx = egui::Context::default();
+        app.refresh(ctx.clone());
+        let request = app.repository_refresh;
+        if bulk {
+            let plan = Plan::new(&app.state, Scope::All);
+            assert_eq!(plan.len(), 1);
+            app.bulk_discard = Some(Batch::new(plan, &mut app.state));
+        }
+        app.result_operation = Some((42, 0));
+        for path in &paths[..3] {
+            assert!(app.repository_in_use(path));
+            app.repository_refreshed(request, path.clone(), Err("overlapping work".into()));
+            assert!(!app.repository_states.contains_key(path));
+        }
+        assert!(!app.repository_in_use(&paths[3]));
+        app.repository_refreshed(request, paths[3].clone(), Err("independent result".into()));
+        assert_eq!(
+            app.repository_states[&paths[3]].as_ref().unwrap_err(),
+            "independent result"
+        );
+        app.refresh(ctx.clone());
+        assert_eq!(app.repository_pending.len(), 1);
+        assert!(app.repository_pending.contains_key(&paths[3]));
+        app.result_operation = None;
+        // A bulk batch between operations has no Git work in flight.
+        app.refresh(ctx);
+        assert_eq!(app.repository_pending.len(), paths.len());
+    }
+}
+
+#[test]
+fn result_operation_start_and_finish_invalidate_only_overlapping_health() {
+    use crate::persistence::results::{Action, Completion, Operation};
+    for action in [Action::Apply, Action::Discard] {
+        let (_temp, mut app) = app();
+        app.state.runs = vec![isolated_history(42, JobStatus::Succeeded, Some(true))];
+        let job = app.state.runs[0].jobs[0].clone();
+        let source = &job.repository.path;
+        let paths = [
+            source.clone(),
+            source.join("nested"),
+            source.parent().unwrap().to_path_buf(),
+            PathBuf::from("/unrelated/repo"),
+        ];
+        app.state.repositories = paths
+            .iter()
+            .map(|path| Repository {
+                name: "fixture".into(),
+                path: path.clone(),
+            })
+            .collect();
+        for path in &paths {
+            app.repository_states
+                .insert(path.clone(), Err("before operation".into()));
+            app.repository_pending.insert(path.clone(), 1);
+        }
+        let operation = || Operation {
+            run: 42,
+            index: 0,
+            action,
+            job: job.clone(),
+        };
+        app.dispatch_result_operation(&egui::Context::default(), operation());
+        assert_eq!(app.repository_states.len(), 1);
+        assert_eq!(app.repository_pending.len(), 1);
+        assert!(app.repository_states.contains_key(&paths[3]));
+        assert!(app.repository_pending.contains_key(&paths[3]));
+        // A check that overlaps a write must not be accepted after completion.
+        for path in &paths[..3] {
+            app.repository_pending.insert(path.clone(), 2);
+        }
+        let completion = match action {
+            Action::Apply => {
+                Completion::Apply(crate::worktrees::apply::Outcome::Blocked("fixture".into()))
+            }
+            _ => Completion::Cleanup(Err("fixture".into())),
+        };
+        app.tx
+            .send(Message::Resolved(Box::new(operation()), completion))
+            .unwrap();
+        app.poll();
+        assert!(app.result_operation.is_none());
+        for path in &paths[..3] {
+            app.repository_refreshed(2, path.clone(), Err("late overlapping result".into()));
+            assert!(!app.repository_states.contains_key(path));
+            assert!(!app.repository_pending.contains_key(path));
+        }
+        app.repository_refreshed(1, paths[3].clone(), Err("independent result".into()));
+        assert_eq!(
+            app.repository_states[&paths[3]].as_ref().unwrap_err(),
+            "independent result"
+        );
+    }
+}
+
 #[test]
 fn comparison_filters_preserve_detail_selection_and_snapshots_survive_live_review() {
     let (_temp, mut app) = app();

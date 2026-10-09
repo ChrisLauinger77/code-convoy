@@ -714,9 +714,12 @@ fsmonitor disabled, up to four asynchronous checks per refresh and no polling.
 Opening the main repository interface at startup and explicit Refresh initiate
 checks. Health has independent cancellation and request generations, so it cannot
 block editing or clear preflight's busy state. Superseded, removed-registration and
-active-work replies are rejected; execution events invalidate overlapping cached
-paths. Read-only health acquires no execution lease and is skipped for known active
-or nested sources. Git errors leave Unknown and an expandable diagnostic.
+active-work replies are rejected; execution events and result-operation boundaries
+invalidate overlapping cached paths and pending replies. Apply/Discard suppression
+uses the operation's source, including the current operation within a bulk batch;
+unrelated repositories continue refreshing. Read-only health acquires no execution
+lease and is skipped for known active or nested sources. Git errors leave Unknown
+and an expandable diagnostic.
 Notifications copy `completion_changes` into their minimal completion snapshot
 and classify it before mutable Review/worktree observations. A recorded Unknown
 remains unknown; committed Direct changes still require review after the tree

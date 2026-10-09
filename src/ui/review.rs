@@ -320,6 +320,7 @@ impl App {
         op: crate::persistence::results::Operation,
     ) {
         self.result_operation = Some((op.run, op.index));
+        self.invalidate_repository_health(&op.job.repository.path);
         let lifecycle = self.manager.lifecycle();
         self.dispatch(ctx.clone(), async move {
             let completion = op.execute(&lifecycle).await;
