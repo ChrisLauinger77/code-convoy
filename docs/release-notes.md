@@ -22,6 +22,9 @@ part of the implementation.
 - Notification clicks use stable convoy IDs and the existing Review view. Removed
   history produces a notice; unavailable results keep their normal diagnostics.
   Restore is requested before focus, subject to desktop restrictions.
+- macOS notifications expire after one hour without interaction so ignored alerts
+  or Notification Center's Clear All cannot leave response listeners waiting for
+  the rest of the application session. Expiration does not activate the window.
 - History restoration, interruption recovery, refresh and Apply/Discard never
   replay completion alerts. Disabled, suppressed and failed alerts are not retried.
   Notification diagnostics stay separate from agent outcomes.

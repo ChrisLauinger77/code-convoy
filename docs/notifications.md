@@ -60,6 +60,10 @@ finish after history removal without retaining/pinning that history.
   these notifications. The first eligible delivery requests OS permission;
   denial remains under System Settings → Notifications. The library's delegate
   works with eframe's main run loop and does not replace the application delegate.
+  Notifications expire after one hour without interaction. The native library
+  removes the notification and completes its response listener, including when
+  Notification Center's Clear All never sends a dismissal callback. Expiration
+  does not activate a convoy or report a delivery failure; results remain in history.
 - **Windows 10/11:** `tauri-winrt-notification` 0.8.1 supplies standalone native
   WinRT toasts and in-process activation callbacks. It is a native API wrapper;
   it adds no Tauri framework, WebView or web frontend. Both installer and portable
@@ -122,7 +126,8 @@ Before publishing 0.4.0, use disposable repositories and fixture agents to check
   activation if Wayland prevents raising the window; absent D-Bus service/actions.
 - macOS packaged `.app` on Apple Silicon and Intel: permission grant/deny, Focus
   mode, notification body and Open convoy button, two simultaneous completions,
-  minimized restore, clear-all/dismiss, About and Quit still working. Bare binary
+  minimized restore, clear-all/dismiss, one-hour expiration without activation or
+  error, and About and Quit still working. Bare binary
   failure should remain a notification diagnostic without affecting execution.
 - Windows 10 and 11 installed and portable: CodeConvoy sender identity, permission
   settings/Do Not Disturb, body click while another convoy is selected, banner and

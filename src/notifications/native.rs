@@ -60,6 +60,9 @@ async fn deliver(completion: Completion, events: Events) -> Result<(), String> {
         .title(&completion.title)
         .message(&completion.body)
         .action(Action::button("open", "Open convoy"))
+        // Clear All may never produce a delegate response. Expiration closes the
+        // notification and completes the listener without routing an activation.
+        .timeout(std::time::Duration::from_secs(60 * 60))
         .send()
         .await
         .map_err(|e| e.to_string())?;
