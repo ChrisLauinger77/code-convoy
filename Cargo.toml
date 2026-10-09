@@ -40,7 +40,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 [target.'cfg(windows)'.dependencies]
 # Standalone native WinRT wrapper (no Tauri framework or web runtime).
 tauri-winrt-notification = "0.8.1"
-windows-registry = "0.6"
+windows-registry = "0.100"
 windows = { version = "0.62", features = ["Win32_System_Threading"] }
 # DX12 exposes Windows' WARP software adapter as well as hardware GPUs, avoiding
 # a modern OpenGL requirement in VMs. Other platforms keep their existing renderer.
