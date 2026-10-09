@@ -1,4 +1,4 @@
-# Desktop notifications (0.4.0)
+# Desktop notifications (introduced in 0.4.0)
 
 Open **Settings** in the header. Appearance choices remain there, followed by
 **Desktop notifications**. All preferences use the existing local `state.json`
@@ -24,13 +24,20 @@ filter and explicitly say they could not be checked. A failure or cancellation
 alert includes execution counts and any already known review information without
 waiting for further inspection.
 
-Review uses Git observations, never agent prose. Isolated results use the runner's
-session observation against the saved base commit. Direct results use cached Review
-statistics when available, otherwise a background, read-only Git status. Direct
-observations describe the current mutable repository, including pre-existing
-changes; they cannot attribute changes to an agent. Inspection errors are not
-reported as unchanged. Notifications do not validate ownership or authorize any
-result action. Apply/Discard and recovery keep their existing safety checks.
+Review uses Git observations, never agent prose. Since 0.5.0, notification
+assessment copies and prefers the saved completion observation. Direct changes
+committed by the agent still trigger review when the current tree is clean. A
+recorded Unknown requires review and is never replaced with a later clean status.
+Saved observations need no further Git inspection for notification assessment.
+
+For jobs without a completion observation, the previous fallback remains: isolated
+results use the runner's session observation against the saved base; Direct results
+use cached Review statistics or background read-only Git status. Those fallback
+observations describe the current mutable repository, including pre-existing edits.
+Inspection errors are not reported as unchanged. Notifications do not validate
+ownership or authorize any result action. Apply/Discard and recovery keep their
+existing safety checks. Saved completion data does not replay historical alerts;
+only runs launched in this application session enter the completion tracker.
 
 While the root window is focused, success, cancellation and review alerts are
 suppressed by default. Enabled failure alerts still notify. A minimized window is

@@ -207,3 +207,47 @@ fn backend_errors_are_separate_from_execution_and_do_not_persist() {
     );
     assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
 }
+
+#[test]
+fn saved_changes_deliver_review_notification_with_success_filter_disabled() {
+    let (_temp, mut app) = app();
+    let calls = record(&mut app);
+    app.state.notifications.success = false;
+    app.state.notifications.review = true;
+    app.notification_focused = false;
+    app.state.runs = vec![run(29, &[JobStatus::Running])];
+    app.notification_tracker.launched(29);
+    app.apply_event(Event::Changes {
+        run: 29,
+        job: 0,
+        changes: crate::visibility::Changes {
+            changed: Some(true),
+            files: Some(1),
+        },
+    });
+    complete(&mut app, 29, 0, JobStatus::Succeeded);
+    // Live Review now sees no changes, as after a successful agent commit.
+    app.tx
+        .send(Message::ReviewStats(
+            29,
+            0,
+            Ok(crate::review::Statistics::default()),
+        ))
+        .unwrap();
+    app.poll();
+    app.pump_notifications();
+    receive_assessment(&mut app);
+    wait_for_calls(&app, &calls, 1);
+    assert_eq!(
+        calls.lock().unwrap()[0].outcome,
+        crate::notifications::Outcome::Review
+    );
+    assert!(
+        calls.lock().unwrap()[0]
+            .body
+            .contains("changes need review")
+    );
+    assert!(crate::visibility::needs_review(&app.state.runs[0].jobs[0]));
+    app.pump_notifications();
+    assert_eq!(calls.lock().unwrap().len(), 1);
+}

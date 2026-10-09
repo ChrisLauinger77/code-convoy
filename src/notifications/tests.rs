@@ -172,7 +172,15 @@ fn exactly_once_only_after_all_jobs_finish_and_never_from_restoration() {
     r.jobs[1].status = JobStatus::Succeeded;
     r.jobs[0].log.append("private output");
     r.task.prompt = "private prompt".into();
+    r.jobs[0].completion_changes = Some(crate::visibility::Changes {
+        changed: Some(true),
+        files: Some(1),
+    });
     let snapshot = tracker.completed(&r).unwrap();
+    assert_eq!(
+        snapshot.jobs[0].completion_changes,
+        r.jobs[0].completion_changes
+    );
     assert!(snapshot.task.prompt.is_empty());
     assert!(snapshot.jobs[0].log.text.is_empty());
     assert!(tracker.completed(&r).is_none());
@@ -433,4 +441,153 @@ async fn native_backend_panics_are_contained() {
         panic!("Expected diagnostic");
     };
     assert!(error.contains("Notification worker failed"));
+}
+
+#[test]
+fn saved_completion_classification_precedes_live_review_and_keeps_outcome_priority() {
+    for mode in [ExecutionMode::Direct, ExecutionMode::IsolatedWorktree] {
+        for (changed, expected) in [
+            (Some(true), Outcome::Review),
+            (Some(false), Outcome::Success),
+            (None, Outcome::Review),
+        ] {
+            let mut r = run(&[JobStatus::Succeeded]);
+            r.jobs[0].execution_mode = mode;
+            r.jobs[0].completion_changes = Some(crate::visibility::Changes {
+                changed,
+                files: None,
+            });
+            // Later mutable observations deliberately disagree with completion.
+            r.jobs[0].review = Some(Ok(crate::review::Statistics {
+                files: usize::from(changed == Some(false)),
+                ..Default::default()
+            }));
+            r.jobs[0].worktree_result = Some(WorktreeResult {
+                exists: true,
+                changed: Some(changed == Some(false)),
+                observed_this_session: true,
+            });
+            let result = Completion::classify(&r).unwrap();
+            assert_eq!(result.outcome, expected, "{mode:?} {changed:?}");
+            if changed.is_none() {
+                assert!(result.body.contains("could not be checked"));
+            }
+            r.jobs[0].status = JobStatus::Failed;
+            assert_eq!(Completion::classify(&r).unwrap().outcome, Outcome::Failure);
+            r.jobs[0].status = JobStatus::Cancelled;
+            assert_eq!(
+                Completion::classify(&r).unwrap().outcome,
+                Outcome::Cancellation
+            );
+            r.jobs[0].status = JobStatus::Succeeded;
+            for resolution in [ResultResolution::Applied, ResultResolution::Discarded] {
+                r.jobs[0].resolution = resolution;
+                assert_eq!(Completion::classify(&r).unwrap().outcome, Outcome::Success);
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn saved_completion_assessment_preserves_committed_changes_and_unknown_observations() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().canonicalize().unwrap();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=f@invalid",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .current_dir(&path)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    std::fs::write(path.join("tracked"), "base").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "base"]);
+    let base = git(&["rev-parse", "HEAD"]);
+    std::fs::write(path.join("tracked"), "agent change").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "agent commit"]);
+    assert_eq!(crate::git::status(&path).await.unwrap().summary.changed, 0);
+    let token = crate::process::Cancellation::default();
+    let safe = std::sync::atomic::AtomicBool::new(true);
+    let observed = crate::git::Inspection {
+        cancellation: &token,
+        safe: &safe,
+    }
+    .completion_changes(&path, Some(&base))
+    .await
+    .unwrap();
+    assert_eq!(observed.changed, Some(true));
+    let index = std::fs::read(path.join(".git/index")).unwrap();
+    let head = git(&["rev-parse", "HEAD"]);
+    let (tx, rx) = mpsc::channel();
+    let mut service = Service::new(
+        Arc::new(MockBackend {
+            calls: Default::default(),
+            fail: false,
+        }),
+        Events::new(move |e| {
+            tx.send(e).unwrap();
+        }),
+    );
+    let mut tracker = CompletionTracker::default();
+    for (id, changes, repository, expected) in [
+        (1, observed, path.clone(), Outcome::Review),
+        // Recorded Unknown must not be reinterpreted using today's clean tree.
+        (
+            2,
+            crate::visibility::Changes::default(),
+            path.clone(),
+            Outcome::Review,
+        ),
+        // Known unchanged needs no new Git access, even if files are unavailable.
+        (
+            3,
+            crate::visibility::Changes {
+                changed: Some(false),
+                files: Some(0),
+            },
+            path.join("missing"),
+            Outcome::Success,
+        ),
+    ] {
+        let mut r = run(&[JobStatus::Succeeded]);
+        r.id = id;
+        r.jobs[0].repository.path = repository;
+        r.jobs[0].review = None;
+        r.jobs[0].completion_changes = Some(changes);
+        tracker.launched(id);
+        service.assess(&Handle::current(), tracker.completed(&r).unwrap());
+        let Event::Ready(result) = receive(&rx).await else {
+            panic!("Expected assessment");
+        };
+        assert_eq!(result.outcome, expected, "run {id}");
+        if id == 1 {
+            assert!(
+                result
+                    .body
+                    .contains("changes need review in 1 repositories")
+            );
+        }
+        if id == 2 {
+            assert!(result.body.contains("could not be checked"));
+        }
+        assert!(tracker.completed(&r).is_none());
+    }
+    assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+    assert_eq!(git(&["rev-parse", "HEAD"]), head);
 }

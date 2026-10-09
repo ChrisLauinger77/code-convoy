@@ -61,6 +61,11 @@ completion observations. Current health can be Clean while a saved result remain
 Changed. Stable isolated Diff and all existing ownership/uncertainty protections
 continue to apply. No dependency or backend contract is added.
 
+Completion notifications use this saved observation too, including committed
+Direct changes and recorded Unknown results. Later clean or unavailable working
+trees cannot replace it. Only jobs without an observation use the older live
+fallback; saved history never triggers a new notification on restart.
+
 ## Current repository health
 
 Repositories in New Convoy show path, branch (including detached HEAD), Clean/Dirty,
@@ -86,7 +91,7 @@ success and failure. UI tests cover stale results, selection and all three theme
 at 780 × 560, 1180 × 820 and 1600 × 1000.
 
 On 2026-10-09, macOS Apple Silicon source validation passed formatting, strict
-all-target/all-feature Clippy, **315 Rust tests** (four optional installed-CLI probes
+all-target/all-feature Clippy, **318 Rust tests** (four optional installed-CLI probes
 ignored), the optimized release build, **16 packaging tests**, and the `v0.5.0`
 version/tag consistency check. The Rust harness additionally launches one existing
 subprocess test; that duplicate invocation is excluded from the total above.

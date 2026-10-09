@@ -59,7 +59,8 @@ pub struct Completion {
     pub body: String,
 }
 impl Completion {
-    /// Wait for terminal execution and, for success, the existing Git observations.
+    /// Prefer completion-time observations; wait for legacy live observations only
+    /// when no completion observation was recorded.
     /// Unknown results require attention, never imply an unchanged working tree.
     pub fn classify(run: &Run) -> Option<Self> {
         if run.active() || run.jobs.is_empty() {
@@ -82,6 +83,14 @@ impl Completion {
                 job.resolution,
                 ResultResolution::Applied | ResultResolution::Discarded
             ) {
+                continue;
+            }
+            if let Some(observation) = job.completion_changes {
+                match observation.changed {
+                    Some(true) => changed += 1,
+                    Some(false) => {}
+                    None => unknown += 1,
+                }
                 continue;
             }
             if job.execution_mode == ExecutionMode::IsolatedWorktree
@@ -163,6 +172,7 @@ impl CompletionTracker {
                     snapshot.status = job.status;
                     snapshot.execution_mode = job.execution_mode;
                     snapshot.resolution = job.resolution;
+                    snapshot.completion_changes = job.completion_changes;
                     snapshot.worktree_result = job.worktree_result.clone();
                     snapshot.review = job.review.clone();
                     snapshot
@@ -221,12 +231,12 @@ impl Service {
         let events = self.events.clone();
         self.workers.spawn_on(
             async move {
-                // Failures/cancellation and already observed isolated results are ready
-                // immediately. Direct results need only a read-only Git status, not a
-                // second full numstat/diff calculation. These are current observations.
+                // Saved completion observations (including Unknown) are final for
+                // notification assessment. Only jobs without one use the existing
+                // live fallback. Failure/cancellation still classify immediately.
                 if Completion::classify(&run).is_none() {
                     for job in &mut run.jobs {
-                        if job.review.is_none() {
+                        if job.completion_changes.is_none() && job.review.is_none() {
                             job.review = Some(if job.execution_mode == ExecutionMode::Direct {
                                 crate::git::status(&job.repository.path)
                                     .await

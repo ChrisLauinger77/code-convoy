@@ -717,4 +717,9 @@ block editing or clear preflight's busy state. Superseded, removed-registration 
 active-work replies are rejected; execution events invalidate overlapping cached
 paths. Read-only health acquires no execution lease and is skipped for known active
 or nested sources. Git errors leave Unknown and an expandable diagnostic.
-Notifications retain their v0.4 policy, exactly-once tracking and delivery path.
+Notifications copy `completion_changes` into their minimal completion snapshot
+and classify it before mutable Review/worktree observations. A recorded Unknown
+remains unknown; committed Direct changes still require review after the tree
+becomes clean. Only absent completion observations use the v0.4 live fallback.
+Event priority, filters, exactly-once tracking, restart silence and delivery are
+unchanged.

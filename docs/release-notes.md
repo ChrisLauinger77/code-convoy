@@ -18,6 +18,9 @@ part of this implementation.
 - Responsive repository health with branch, Clean/Dirty and availability,
   bounded background refresh, cancellation and stale-reply rejection. Active
   repository work shows Unknown until an explicit refresh after completion.
+- Review-needed notifications prefer saved completion observations, including
+  committed Direct changes and Unknown results. Delivery filters, outcome priority
+  and exactly-once tracking remain unchanged.
 - Text-backed change and review indicators support System/Dark/Light themes.
   Narrow comparison rows wrap instead of requiring a wide table.
 
@@ -30,7 +33,7 @@ available. See [behavior and compatibility](visibility.md).
 
 ## Validation and remaining release work
 
-macOS Apple Silicon validation passed formatting, strict Clippy, 315 Rust tests
+macOS Apple Silicon validation passed formatting, strict Clippy, 318 Rust tests
 (four optional CLI probes ignored), the release build, 16 packaging tests and
 version/tag consistency. A disposable native macOS smoke pass verified search,
 filtering, comparison selection and Diff navigation; headless layout checks cover
