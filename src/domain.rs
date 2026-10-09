@@ -421,6 +421,7 @@ pub struct AppState {
     pub global_concurrency: usize,
     #[serde(skip_serializing_if = "Appearance::is_system")]
     pub appearance: Appearance,
+    pub notifications: crate::notifications::Preferences,
 }
 impl Default for AppState {
     fn default() -> Self {
@@ -436,6 +437,7 @@ impl Default for AppState {
             runs: Vec::new(),
             global_concurrency: DEFAULT_GLOBAL_CONCURRENCY,
             appearance: Appearance::default(),
+            notifications: crate::notifications::Preferences::default(),
         }
     }
 }

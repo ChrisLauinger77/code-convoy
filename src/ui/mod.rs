@@ -10,6 +10,7 @@ mod diagnostics;
 mod editor;
 mod format;
 mod library;
+mod notifications;
 mod quit;
 #[cfg(target_os = "macos")]
 mod quit_macos;
@@ -41,6 +42,7 @@ use std::{
 use tokio::{runtime::Runtime, sync::mpsc as async_mpsc};
 
 enum Message {
+    Notification(crate::notifications::Event),
     FoundCli(u64, Result<Vec<PathBuf>, String>),
     RepositoryFolder(Option<PathBuf>),
     Attachments(u64, Vec<crate::attachments::Attachment>, Vec<String>),
@@ -99,6 +101,12 @@ pub struct App {
     native_about: Option<about_macos::NativeAbout>,
     execution_height: f32,
     session_runs: HashSet<u64>,
+    notification_tracker: crate::notifications::CompletionTracker,
+    notification_service: crate::notifications::Service,
+    notification_focused: bool,
+    notification_activation: bool,
+    notification_focus_pending: bool,
+    notification_error: String,
     notice: String,
     orphan_notice: String,
     output_view: text_view::TextView,
@@ -156,6 +164,14 @@ impl App {
         theme::install(ctx);
         ctx.set_theme(theme::preference(state.appearance));
         let (tx, rx) = mpsc::channel();
+        let notification_tx = tx.clone();
+        let notification_ctx = ctx.clone();
+        let notification_service = crate::notifications::Service::native(
+            crate::notifications::Events::new(move |event| {
+                let _ = notification_tx.send(Message::Notification(event));
+                notification_ctx.request_repaint();
+            }),
+        );
         let (events_tx, events_rx) = async_mpsc::channel(256);
         let selected_run = state.runs.first().map(|r| r.id);
         let manager = {
@@ -198,6 +214,12 @@ impl App {
             native_about: None,
             execution_height: 184.0,
             session_runs: HashSet::new(),
+            notification_tracker: crate::notifications::CompletionTracker::default(),
+            notification_service,
+            notification_focused: false,
+            notification_activation: false,
+            notification_focus_pending: false,
+            notification_error: String::new(),
             notice: String::new(),
             orphan_notice: String::new(),
             output_view: text_view::TextView::default(),
@@ -313,7 +335,8 @@ impl App {
                         ui.weak("One task. Multiple repositories. Your agent.");
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.menu_button("Appearance", |ui| {
+                        ui.menu_button(if self.notification_error.is_empty() { "Settings" } else { "Settings (!)" }, |ui| {
+                            ui.strong("Appearance");
                             let mut preference = ctx.options(|o| o.theme_preference);
                             for (value, name) in [
                                 (egui::ThemePreference::System, "System"),
@@ -326,6 +349,8 @@ impl App {
                                     self.dirty = true;
                                 }
                             }
+                            ui.separator();
+                            self.notification_settings(ui);
                         });
                         if !self.manager.is_idle() {
                             ui.menu_button("All convoys", |ui| {
@@ -533,6 +558,7 @@ impl App {
             self.focus_draft = true;
         }
         self.session_runs.insert(id);
+        self.notification_tracker.launched(id);
         self.state.trim_history();
         self.dirty = true;
         self.select_run(Some(id));
@@ -549,6 +575,7 @@ impl App {
         let mut recovered = false;
         while let Ok(message) = self.rx.try_recv() {
             match message {
+                Message::Notification(event) => self.notification_event(event),
                 Message::RepositoryFolder(path) => self.repository_folder_selected(path),
                 Message::Attachments(request, files, errors) => {
                     self.attachments_added(request, files, errors)
@@ -709,6 +736,7 @@ impl App {
         }
         self.state.trim_logs();
         self.manager.reap();
+        self.pump_notifications();
         self.state.trim_history();
         self.session_runs
             .retain(|id| self.state.runs.iter().any(|run| run.id == *id));
@@ -907,7 +935,9 @@ impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         // eframe also calls logic for hidden/minimized windows. A native quit
         // must never bypass confirmation just because no UI pass is rendered.
+        self.update_notification_focus(ctx);
         self.poll();
+        self.activate_notification_window(ctx);
         self.pump_bulk_discard(ctx);
         self.pump_review(ctx);
         self.handle_close(ctx);
@@ -958,6 +988,7 @@ impl eframe::App for App {
         }
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
+        self.notification_service.stop();
         self.cli_checks.stop();
         self.manager.shutdown();
         // Continue draining lifecycle/output events while process trees stop.
@@ -988,6 +1019,7 @@ impl eframe::App for App {
 
 impl Drop for App {
     fn drop(&mut self) {
+        self.notification_service.stop();
         self.cli_checks.stop();
         if let Some(runtime) = self.runtime.take() {
             // A stuck filesystem discovery worker must not hold application

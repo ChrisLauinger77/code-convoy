@@ -634,3 +634,47 @@ remove history; existing history protection stays authoritative, including Appli
 copies still awaiting their separate explicit cleanup. No persistence schema,
 backend contract, dependency or scheduler policy changes. See
 [bulk discard validation](bulk-discard-validation.md).
+
+## v0.4 attention and completion
+
+`notifications` owns serializable defaulted preferences, pure completion
+classification, session-only exactly-once tracking and asynchronous delivery.
+`notifications/native` isolates XDG, UserNotifications and WinRT APIs behind a
+small mockable backend. `ui/notifications` contains only settings widgets, delivery
+policy application and navigation/window commands. The scheduler, backend CLI
+contracts and Git/result safety mechanisms do not change.
+
+A saved launch attempt registers its stable run ID with the tracker. After event
+application makes all jobs terminal, the UI consumes that ID before filtering or
+transport work. It takes a minimal result snapshot before history trimming;
+prompts, attachments, logs and ownership records are excluded. Failure and
+cancellation classify immediately. Successful isolated results use the runner's
+fixed-base observation, and Direct results use Review statistics if already
+available or read-only background Git status otherwise. Unknown observations
+require review rather than implying no changes. A background Ready message returns
+the completion to the UI, which applies current preferences and viewport focus
+before submitting. No per-job alert, Git-per-frame call or new focus polling loop
+exists. Removal during assessment does not pin history or invalidate the callback.
+
+The priority is failure, cancellation, review, success. Review is orthogonal to
+execution status. Focus suppresses every enabled event except failure by default.
+Suppression, disabled filters and failed submissions are final for that lifecycle;
+there is no fallback filter or retry. Only this process's saved launch attempts
+enter tracking: restoration, recovery, Apply/Discard and refresh cannot notify.
+This avoids a fragile persisted “notified” flag or replay after a crash.
+
+Native callbacks post stable IDs to the normal application message channel and
+request repaint. The UI selects the existing Review tab or explains that history
+was removed. Restore commands precede a focus request on the next event-loop pass.
+Native permission/D-Bus failures stay in a separate, dismissible settings diagnostic;
+agent status is unchanged. Action listeners are asynchronous, Windows' short
+synchronous submission uses a blocking worker, and native backend panics are
+contained by a task boundary. Quit/drop cancels notification tasks; they never
+hold scheduler slots or repository leases. OS callbacks may be restricted, and
+Wayland focus requests are advisory/unsupported by the current egui path.
+
+Preferences are one additive `notifications` field on version-1 `AppState` with
+per-field serde defaults. Runtime tracking, callbacks and diagnostics are never
+serialized. The Settings menu retains appearance controls. Dependencies, platform
+identity/authorization, OS limits and outstanding native smoke tests are documented
+in [Desktop notifications](notifications.md).

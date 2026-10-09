@@ -1,35 +1,39 @@
-# CodeConvoy 0.3.1
+# CodeConvoy 0.4.0 — Attention & Completion
 
-CodeConvoy 0.3.1 adds convoy-wide and global discard of unresolved isolated
-results, and improves macOS branding and About links. Run one task across local
-Git repositories using your installed Codex CLI, GitHub Copilot CLI, OpenCode or
-Claude Code, then inspect each repository's result in the native desktop UI.
+CodeConvoy 0.4.0 adds native desktop notifications and convoy completion awareness.
+Run one task across local Git repositories using installed Codex CLI, GitHub Copilot
+CLI, OpenCode or Claude Code, and receive one configurable alert when the whole
+convoy finishes. This is unreleased source preparation; no tag or publication is
+part of the implementation.
 
-## Changes since 0.3.0
+## Changes since 0.3.1
 
-- Use **Discard convoy…** to discard unresolved retained isolated results from
-  one terminal convoy, or **History cleanup → Discard all unresolved results…**
-  to select them across terminal history. Confirmation shows the scope and count,
-  defaults to Cancel, and freezes the selection so later results are not added.
-- Each confirmed result uses the existing ownership checks, exclusive repository
-  lifecycle lease and durable cleanup transaction. Active convoys and already
-  Applied/Discarded results are excluded. Source files and unrelated worktrees
-  remain untouched; unverifiable ownership and uncertain Apply remain blocked.
-- Bulk discard reports successful and failed results independently, with
-  expandable diagnostics. A failed target does not stop unrelated targets, and
-  protected results keep their history pinned. Quit waits for the current cleanup;
-  restart reconciles per-result state without replaying the batch.
-- macOS application menus consistently use **CodeConvoy** for the application,
-  About, Hide and Quit labels. The native About panel includes a clickable GitHub
-  repository link; the in-app About link uses the same Cargo repository metadata.
-- Refresh the README screenshot.
+- Native XDG notifications on Linux, modern UserNotifications on macOS and WinRT
+  toasts on Windows. Delivery and activation run outside the UI and scheduler.
+- **Settings → Desktop notifications** provides a master switch and success,
+  failure, cancellation and review-needed filters. All default to enabled except
+  cancellation. Preferences persist with backward-compatible defaults.
+- Foreground suppression defaults to enabled for success, cancellation and review.
+  Failure alerts can still notify while focused; minimized windows count as
+  unfocused. OS permissions and Focus/Do Not Disturb remain authoritative.
+- One deterministic event wins: failure, cancellation, review needed, then success.
+  Git changes and unavailable results can require review even after successful
+  agent execution. No agent prose is treated as evidence of repository changes.
+- Notification clicks use stable convoy IDs and the existing Review view. Removed
+  history produces a notice; unavailable results keep their normal diagnostics.
+  Restore is requested before focus, subject to desktop restrictions.
+- History restoration, interruption recovery, refresh and Apply/Discard never
+  replay completion alerts. Disabled, suppressed and failed alerts are not retried.
+  Notification diagnostics stay separate from agent outcomes.
 
-Both concurrency limits, fair admission, canonical/nested repository protection,
-process-tree cancellation and immutable launched snapshots remain in force.
-Isolated preparation consumes scheduler capacity; result actions take exclusive
-repository lifecycle leases while unrelated repositories can continue.
-No automatic commits, staging, pushes, pull requests or agent continuation are
-introduced. Agent installation and authentication remain under your control.
+The native adapter uses notify-rust on Linux and its underlying modern macOS and
+Windows transports directly for asynchronous/callback interaction. No web runtime,
+tray, service, new agent backend or workflow feature is added. Existing dependency
+versions remain unchanged; Cargo.lock adds only the new native notification trees.
+
+Scheduler admission, concurrency limits, canonical/nested repository protection,
+process-tree cancellation, immutable snapshots and result safety are unchanged.
+See [notification preferences, dependencies and platform limitations](notifications.md).
 
 ## Result safety and limits
 
@@ -55,7 +59,7 @@ Downloads include Linux x86-64 DEB/RPM/AppImage, Windows x86-64 per-user setup a
 portable ZIP, and one macOS Universal DMG with Apple Silicon and Intel slices.
 `SHA256SUMS` covers the six packages. Linux packages are built on Ubuntu 26.04.
 Earlier DEB and AppImage packages have user-verified installation/startup
-coverage on Debian Forky; those checks have not been repeated for 0.3.1 packages.
+coverage on Debian Forky; those checks have not been repeated for 0.4.0 packages.
 The minimum glibc version and compatibility with older distributions still need
 verification after the runner update. A working desktop graphics environment is
 required; the native picker uses your desktop portal.
@@ -74,37 +78,34 @@ path where necessary; Git must also be available to the application.
 
 ## Validation and remaining limits
 
-Release preparation on Linux x86-64 with Rust 1.95.0 and Python 3.14.8 passed
-formatting, strict Clippy, all-feature Rust tests (281 passed, four optional CLI
-probes ignored), the release build, all 16 packaging unit tests and the
-`v0.3.1` tag/version check. No dependency versions changed.
+Linux x86-64 source validation on 2026-10-09 with Rust 1.95.0 passed:
+`cargo fmt --check`, strict all-target/all-feature Clippy, all-feature Rust tests
+(**297 passed, four optional CLI probes ignored**), `cargo build --release`, all
+**16 packaging unit tests**, and the `v0.4.0` version/tag consistency check.
+The latter validates consistency only; no tag was created.
+Notification coverage includes mock transport errors/panics, event/focus policy,
+exactly-once lifecycle tracking, restart silence, stable click routing and
+headless egui restore/navigation tests. Real temporary Git repositories verify
+Direct result classification while preserving HEAD and the real index.
 
-Deterministic fixtures exercise all four backends, real Git worktrees, scheduling,
-cancellation, retained-result recovery, Apply/Discard, retries, follow-up drafts
-and old-state compatibility. Bulk discard fixtures additionally cover frozen
-confirmation, keyboard cancellation/confirmation, mixed outcomes, active-convoy
-exclusion, ownership refusal, restart reconciliation and history protection.
-Earlier native macOS fixture checks cover isolation, cancellation, restart,
-a 24-row Review, successful and failed-result Apply,
-destination blocking, keyboard Discard, Retry and selected-result follow-up.
-These use disposable repositories and a local fixture agent rather than
-authenticated model execution. Detailed evidence is recorded in:
+Native notification smoke tests have **not** been performed on Linux, macOS or
+Windows. macOS/Windows builds and current package installation also remain
+unverified on this Linux host. The [native smoke checklist](notifications.md#validation-and-native-smoke-checklist)
+is required before publishing:
 
-- [Worktree execution validation](worktree-validation.md)
-- [Recovery and cleanup validation](worktree-recovery-validation.md)
-- [Review, Apply and Discard validation](review-apply-discard-validation.md)
-- [Retry, follow-up and v0.3 readiness](retry-followup-validation.md)
-- [Bulk discard validation](bulk-discard-validation.md)
+- GNOME/Wayland and X11 delivery, focus suppression, multi-convoy clicks and missing
+  notification service/action support. Wayland may require manual app activation.
+- Packaged macOS `.app` authorization, Focus mode and body/button callbacks on both
+  architectures. Bare source executables have no notification bundle identity.
+- Installed and portable Windows 10/11 sender identity, permissions, banner and
+  Notification Center callbacks, minimized restore and foreground restrictions.
+- All platforms: removed history, unavailable retained results, shutdown while
+  alerts exist, and no replay after restart. Cold-start click routing is unsupported.
 
-The bulk discard Linux window and Cancel focus were inspected natively. Native
-confirmation, partial/global completion and history removal were not validated
-through desktop input; those paths have deterministic real-Git and egui coverage.
-The macOS branding changes still require native macOS verification.
-
-Codex and Copilot have earlier user-verified authenticated E2E coverage on Linux
-and macOS. Authenticated attachment/model acceptance remains unverified for all
-four backends; OpenCode and Claude authenticated E2E remain unverified overall.
-Broader native Linux/Windows desktop checks, Intel macOS runtime checks and fresh
-0.3.1 package installation checks remain outstanding. Local source validation
-does not replace the manual native package candidate workflow and exact-artifact checks
-described in [the release procedure](releasing.md).
+A single submission is not a guarantee that the OS displayed a banner. Notification
+failure does not affect execution, and a crash/exit can prevent pending delivery.
+Windows callbacks after banner expiry require native verification. Apply uncertainty
+resolution and older Linux/glibc compatibility retain their existing limitations.
+Earlier authenticated agent and Git safety validation is documented separately;
+this implementation does not claim new authenticated agent or native package tests.
+Follow [the release procedure](releasing.md) before creating a release candidate.

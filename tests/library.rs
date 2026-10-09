@@ -26,6 +26,8 @@ fn populated_v01_fixture_retains_registrations_history_and_all_preferences() {
     let mut expected = original.clone();
     expected["groups"] = serde_json::json!([]);
     expected["templates"] = serde_json::json!([]);
+    expected["notifications"] =
+        serde_json::to_value(codeconvoy::notifications::Preferences::default()).unwrap();
     expected["draft"]["attachments"] = serde_json::json!([]);
     expected["runs"][0]["task"]["attachments"] = serde_json::json!([]);
     expected["draft"]["execution_mode"] = serde_json::json!("direct");
