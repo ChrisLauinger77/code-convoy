@@ -32,11 +32,13 @@ Failure alone is shown by the Failed outcome/filter. Unknown information never
 means no changes.
 
 New Direct jobs capture distinct changed paths against the HEAD reviewed for that
-job, including working files, index-only alternatives and nonignored untracked
-files. This includes pre-existing edits and committed changes since that HEAD; it
-is not attribution of every edit to the agent. Renames count as deletion plus
-addition. An unborn reviewed HEAD has an empty tracked baseline. New isolated
-jobs retain the runner's fixed-base changed/unchanged observation; a reliable
+job, including the current committed HEAD, working files, index-only alternatives
+and nonignored untracked files. Committing changes and then staging the reviewed
+contents again still reports Changed. This includes pre-existing edits and committed
+changes since that HEAD; it is not attribution of every edit to the agent. Renames count as deletion plus
+addition. An unborn reviewed HEAD has an empty tracked baseline; a new first
+commit remains visible even if every committed path is then staged for deletion.
+New isolated jobs retain the runner's fixed-base changed/unchanged observation; a reliable
 completion file count is not captured for them and is omitted.
 
 Counts are observed after agent/process cleanup and before releasing the execution
@@ -84,7 +86,7 @@ success and failure. UI tests cover stale results, selection and all three theme
 at 780 × 560, 1180 × 820 and 1600 × 1000.
 
 On 2026-10-09, macOS Apple Silicon source validation passed formatting, strict
-all-target/all-feature Clippy, **313 Rust tests** (four optional installed-CLI probes
+all-target/all-feature Clippy, **315 Rust tests** (four optional installed-CLI probes
 ignored), the optimized release build, **16 packaging tests**, and the `v0.5.0`
 version/tag consistency check. The Rust harness additionally launches one existing
 subprocess test; that duplicate invocation is excluded from the total above.

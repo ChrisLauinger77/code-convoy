@@ -30,7 +30,7 @@ available. See [behavior and compatibility](visibility.md).
 
 ## Validation and remaining release work
 
-macOS Apple Silicon validation passed formatting, strict Clippy, 313 Rust tests
+macOS Apple Silicon validation passed formatting, strict Clippy, 315 Rust tests
 (four optional CLI probes ignored), the release build, 16 packaging tests and
 version/tag consistency. A disposable native macOS smoke pass verified search,
 filtering, comparison selection and Diff navigation; headless layout checks cover

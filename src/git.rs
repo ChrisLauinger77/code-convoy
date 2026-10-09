@@ -72,8 +72,8 @@ pub(crate) struct Inspection<'a> {
     pub safe: &'a std::sync::atomic::AtomicBool,
 }
 impl Inspection<'_> {
-    /// Count distinct paths against the reviewed HEAD, including index-only
-    /// alternatives and nonignored untracked files. No index/object writes.
+    /// Count distinct paths in HEAD, index and working files against the reviewed
+    /// HEAD, plus nonignored untracked files. No index/object writes.
     pub(crate) async fn completion_changes(
         &self,
         path: &Path,
@@ -94,7 +94,13 @@ impl Inspection<'_> {
             );
         };
         if let Some(base) = base {
-            for cached in [false, true] {
+            // HEAD can differ even when the agent stages the reviewed image
+            // again. Neither single-commit diff form includes that change.
+            for target in [
+                vec![base, "--"],
+                vec!["--cached", base, "--"],
+                vec![base, "HEAD", "--"],
+            ] {
                 let mut args = vec![
                     "diff",
                     "--name-only",
@@ -104,10 +110,7 @@ impl Inspection<'_> {
                     "--no-textconv",
                     "--ignore-submodules=none",
                 ];
-                if cached {
-                    args.push("--cached");
-                }
-                args.extend([base, "--"]);
+                args.extend(target);
                 add(self.checked(path, &args).await?);
             }
             add(self
@@ -115,6 +118,29 @@ impl Inspection<'_> {
                 .await?);
         } else {
             // An unborn reviewed HEAD has an empty tracked baseline.
+            // Include a newly committed tree even if its paths are now deleted
+            // from the working tree and index. No hard-coded empty-tree hash.
+            let head = self
+                .capture(
+                    command(path, &["rev-parse", "--verify", "--quiet", "HEAD"]),
+                    8192,
+                )
+                .await?;
+            match head.status.code() {
+                Some(0) => {
+                    anyhow::ensure!(!head.truncated, "Git HEAD inspection was truncated.");
+                    let head =
+                        String::from_utf8(head.stdout).context("Git returned an invalid HEAD.")?;
+                    add(self
+                        .checked(path, &["ls-tree", "-r", "--name-only", "-z", head.trim()])
+                        .await?);
+                }
+                Some(1) => {} // Still unborn: no committed paths to include.
+                _ => anyhow::bail!(
+                    "Cannot inspect completion HEAD: {}",
+                    String::from_utf8_lossy(&head.stderr).trim()
+                ),
+            }
             add(self
                 .checked(
                     path,
@@ -524,5 +550,92 @@ mod completion_tests {
                 .await
                 .is_err()
         );
+    }
+    fn commit(path: &Path, message: &str) {
+        git(
+            path,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=f@invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-qm",
+                message,
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn completion_keeps_committed_changes_when_original_contents_are_staged_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().canonicalize().unwrap();
+        git(&path, &["init", "--quiet"]);
+        std::fs::write(path.join("tracked"), "reviewed contents").unwrap();
+        git(&path, &["add", "."]);
+        commit(&path, "base");
+        let base = git(&path, &["rev-parse", "HEAD"]);
+        std::fs::write(path.join("tracked"), "committed agent changes").unwrap();
+        git(&path, &["add", "."]);
+        commit(&path, "agent change");
+        std::fs::write(path.join("tracked"), "reviewed contents").unwrap();
+        git(&path, &["add", "."]);
+        assert!(git(&path, &["diff", "--name-only", &base, "--"]).is_empty());
+        assert!(git(&path, &["diff", "--cached", "--name-only", &base, "--"]).is_empty());
+        assert_committed_observation(&path, Some(&base)).await;
+        assert_eq!(
+            std::fs::read_to_string(path.join("tracked")).unwrap(),
+            "reviewed contents"
+        );
+    }
+
+    #[tokio::test]
+    async fn completion_keeps_first_commit_when_all_committed_paths_are_staged_for_deletion() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().canonicalize().unwrap();
+        git(&path, &["init", "--quiet"]);
+        // The reviewed repository has no HEAD. The agent creates its first commit,
+        // then restores the empty reviewed image in both the index and worktree.
+        std::fs::write(path.join("tracked"), "committed agent changes").unwrap();
+        git(&path, &["add", "."]);
+        commit(&path, "first agent commit");
+        git(&path, &["rm", "tracked"]);
+        assert!(
+            git(
+                &path,
+                &["ls-files", "--cached", "--others", "--exclude-standard"]
+            )
+            .is_empty()
+        );
+        assert_committed_observation(&path, None).await;
+        assert!(!path.join("tracked").exists());
+    }
+
+    async fn assert_committed_observation(path: &Path, base: Option<&str>) {
+        let head = git(path, &["rev-parse", "HEAD"]);
+        let index = std::fs::read(path.join(".git/index")).unwrap();
+        let cancellation = crate::process::Cancellation::default();
+        let safe = std::sync::atomic::AtomicBool::new(true);
+        let changes = Inspection {
+            cancellation: &cancellation,
+            safe: &safe,
+        }
+        .completion_changes(path, base)
+        .await
+        .unwrap();
+        assert_eq!(changes.changed, Some(true));
+        assert_eq!(changes.files, Some(1));
+        let mut job = crate::domain::Job::queued(Repository {
+            path: path.into(),
+            name: "fixture".into(),
+        });
+        job.status = crate::domain::JobStatus::Succeeded;
+        job.completion_changes = Some(changes);
+        assert!(crate::visibility::needs_review(&job));
+        assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
+        assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+        assert!(!path.join(".git/index.lock").exists());
     }
 }

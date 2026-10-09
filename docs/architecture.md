@@ -691,9 +691,11 @@ No template-name provenance is inferred from today's template library.
 
 `Job::completion_changes` is an additive optional version-1 field containing only
 an optional change flag and optional file count. Direct workers observe distinct
-paths in working-tree/index diffs against the reviewed HEAD plus nonignored
-untracked files; an unborn baseline uses tracked/untracked paths. Pre-existing
-edits are included. The existing execution lease remains held through this bounded
+paths in HEAD, working-tree and index diffs against the reviewed HEAD plus
+nonignored untracked files; an unborn baseline includes any new committed tree
+as well as tracked/untracked paths. Staging the reviewed image again cannot hide
+a committed change. Pre-existing edits are included. The existing execution lease
+remains held through this bounded
 five-second observation and confirmed subprocess cleanup. Failure or timeout leaves
 Unknown, never a fabricated no-change result. Isolated completion events copy the
 runner's existing fixed-base change observation, without another inspection pass.
