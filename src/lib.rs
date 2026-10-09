@@ -3,6 +3,7 @@ pub mod attachments;
 pub mod continuation;
 pub mod domain;
 pub mod git;
+pub mod notifications;
 pub mod persistence;
 pub mod process;
 pub mod review;

@@ -41,6 +41,7 @@ impl App {
         self.quit_requested = false;
         self.focus_quit_cancel = false;
         self.cli_checks.stop();
+        self.notification_service.stop();
         // Shutdown closes admission synchronously, then uses Stop All's tokens.
         self.manager.shutdown();
     }

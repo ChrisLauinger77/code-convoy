@@ -1,7 +1,7 @@
 [package]
 name = "codeconvoy"
 default-run = "codeconvoy"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.95"
 description = "A local desktop task runner for coding-agent CLIs across Git repositories"
@@ -25,12 +25,22 @@ sha2 = "0.11.0"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "sync", "time", "macros"] }
 
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+# Keep zbus on the async-io executor already used by desktop accessibility.
+# These futures can still be awaited by the application's Tokio runtime.
+notify-rust = "4.18.2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
+# The same modern backend offered by notify-rust, with cancellable async responses.
+mac-usernotifications = { version = "0.3.1", default-features = false }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSMenu", "NSMenuItem", "NSAttributedString", "NSFont", "NSParagraphStyle", "NSText"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSString", "NSDictionary", "NSArray", "NSAttributedString"] }
 
 [target.'cfg(windows)'.dependencies]
+# Standalone native WinRT wrapper (no Tauri framework or web runtime).
+tauri-winrt-notification = "0.8.1"
+windows-registry = "0.6"
 windows = { version = "0.62", features = ["Win32_System_Threading"] }
 # DX12 exposes Windows' WARP software adapter as well as hardware GPUs, avoiding
 # a modern OpenGL requirement in VMs. Other platforms keep their existing renderer.

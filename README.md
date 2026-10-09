@@ -126,7 +126,7 @@ A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
-`./CodeConvoy-0.3.1-x86_64.AppImage --appimage-extract-and-run`.
+`./CodeConvoy-0.4.0-x86_64.AppImage --appimage-extract-and-run`.
 
 X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
 `libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,
@@ -282,6 +282,15 @@ The binary-capable patch supports added/modified/deleted files, renames as delet
 After Apply, history says **Applied** and the isolated copy keeps its stable Diff. **Clean up retained copy** later removes that copy through verified cleanup, with confirmation. Applied results are resolved, but their ownership metadata remains protected until cleanup completes. **Discard result** requires confirmation (Cancel is initially focused; Escape cancels), removes only the verified CodeConvoy-owned worktree, and preserves execution history as **Discarded**. Its Diff then says the result was discarded. Cleanup failure preserves metadata and permits retry. Direct mode has no Apply, Discard or destructive undo. See [Part 3.2 validation and limitations](docs/review-apply-discard-validation.md).
 
 **Discard convoy…** resolves unresolved retained isolated results in a terminal convoy. **History cleanup → Discard all unresolved results…** does this across terminal history. Both show result counts and require confirmation with Cancel initially focused. Active convoys, Direct changes and already Applied/Discarded results are excluded. Each result uses verified cleanup; partial failures remain protected with diagnostics while successful discards stay discarded. Remove from history remains a separate metadata-only action and becomes available after all retained copies are safely resolved/cleaned. Applied copies still require **Clean up retained copy** in Review; uncertain Apply outcomes remain blocked. See [bulk discard validation](docs/bulk-discard-validation.md).
+
+Open **Settings → Desktop notifications** to choose convoy completion alerts.
+Notifications default to enabled for success, failure and review-needed results;
+cancellation alerts default to off. Foreground suppression defaults to on,
+with failures allowed even while focused. One outcome wins per convoy: failure,
+cancellation, review needed, then success. Clicking an alert opens the existing
+Review view while CodeConvoy is running, where the desktop supports callbacks.
+History restoration never replays alerts. OS permissions and Do Not Disturb still
+apply. See [notification settings and platform limits](docs/notifications.md).
 
 **NEW CONVOY is a draft.** Run Convoy captures its prompt, execution mode, selected backend/options, and repositories for review. Start convoy saves an independent run snapshot and queues its jobs. After an accepted launch, the prompt and repository checkboxes clear for your next task. Backend settings, both concurrency limits, and registered repositories stay in place. A failed launch leaves the draft intact. Later edits never alter existing runs. Each backend retains its own draft preferences.
 
