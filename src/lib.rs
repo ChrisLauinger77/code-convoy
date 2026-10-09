@@ -9,4 +9,5 @@ pub mod process;
 pub mod review;
 pub mod runner;
 pub mod ui;
+pub mod visibility;
 pub mod worktrees;

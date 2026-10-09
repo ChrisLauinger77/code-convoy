@@ -96,7 +96,7 @@ async fn concurrency_limit_is_respected_and_failure_does_not_abort_other_jobs() 
             Event::Preparing { .. } | Event::Result { .. } => {
                 panic!("direct job emitted isolated lifecycle")
             }
-            Event::Queued { .. } => {}
+            Event::Queued { .. } | Event::Changes { .. } => {}
             Event::Started { .. } => {
                 active += 1;
                 maximum = maximum.max(active);
@@ -245,7 +245,7 @@ async fn copilot_jobs_stream_before_completion_and_isolate_failures_with_a_concu
             Event::Preparing { .. } | Event::Result { .. } => {
                 panic!("direct job emitted isolated lifecycle")
             }
-            Event::Queued { .. } => {}
+            Event::Queued { .. } | Event::Changes { .. } => {}
             Event::Started { .. } => {
                 active += 1;
                 maximum = maximum.max(active);
@@ -578,4 +578,25 @@ async fn claude_cancellation_kills_descendants_and_leaves_other_jobs_running() {
     )));
     tokio::time::sleep(Duration::from_millis(1400)).await;
     assert!(!dir.path().join("tree/orphan-survived").exists());
+}
+
+#[tokio::test]
+async fn direct_completion_observation_arrives_before_finish_for_success_and_failure() {
+    let directory = tempfile::tempdir().unwrap();
+    let prepared = prepare(directory.path(), &["success", "fail"], 2).await;
+    let (tx, mut rx) = mpsc::channel(256);
+    let mut manager = runner::RunManager::new(2, tx);
+    manager.start(90, prepared, Arc::new(Fixture)).unwrap();
+    let events = finish(&mut rx, 2).await;
+    for job in 0..2 {
+        let observed = events.iter().position(|e| matches!(e, Event::Changes {job:j,changes,..} if *j == job && changes.changed == Some(true) && changes.files.is_some_and(|n| n > 0))).unwrap();
+        let finished = events
+            .iter()
+            .position(|e| matches!(e, Event::Finished {job:j,..} if *j == job))
+            .unwrap();
+        assert!(observed < finished);
+    }
+    while !manager.is_idle() {
+        tokio::task::yield_now().await;
+    }
 }

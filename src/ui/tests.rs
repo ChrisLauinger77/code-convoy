@@ -12,6 +12,8 @@ mod continuation;
 mod notifications;
 #[path = "task_context_tests.rs"]
 mod task_context;
+#[path = "visibility_tests.rs"]
+mod visibility;
 
 fn app() -> (tempfile::TempDir, App) {
     app_with_state(AppState::default())
@@ -899,7 +901,8 @@ fn startup_checks_leave_task_input_and_loaded_history_usable() {
     }
     assert!(app.state.draft.prompt.contains("typing during validation"));
     assert!(app.current_cli_check());
-    assert!(app.busy && app.manager.is_idle()); // Independent repository refresh.
+    assert!(!app.busy && app.manager.is_idle());
+    assert!(!app.repository_pending.is_empty()); // Independent repository refresh.
     assert_eq!(serde_json::to_value(&app.state.runs).unwrap(), history);
     assert_eq!(app.state.repositories, repositories);
     assert_eq!(app.selected_run, Some(9));

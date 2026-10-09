@@ -126,7 +126,7 @@ A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
-`./CodeConvoy-0.4.0-x86_64.AppImage --appimage-extract-and-run`.
+`./CodeConvoy-0.5.0-x86_64.AppImage --appimage-extract-and-run`.
 
 X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
 `libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,
@@ -174,6 +174,30 @@ checked again after restart. See the
 See [release procedure and packaging design](docs/releasing.md) and the
 [release validation record](docs/release-validation.md) for tested behavior and
 remaining platform checks.
+
+## Visibility and review (0.5.0)
+
+Search **History** by convoy ID, task text, repository name/path or backend. Matching
+is case-insensitive; **All**, **Completed**, **Failed**, **Cancelled** and **Needs
+Review** filters leave Active convoys and the current selection intact. **Clear
+filters** restores the full history list in its original order.
+
+**Review** compares repository outcomes, saved completion changes, review attention
+and duration. Filter by **All repositories**, **Changed**, **Failed** or **Needs
+Review**, then select a repository to inspect its existing Activity, Diff, Raw
+output and Task & settings. Execution success and Git changes are separate.
+
+Registered repositories show their current branch, Clean/Dirty state and availability.
+**Refresh state** runs read-only Git checks in the background. Active work displays
+Unknown; refresh after completion. These observations never replace historical
+completion data.
+
+New results save a small completion observation, not a historical patch. Older
+history without that observation shows **Unknown**, even if today's working tree
+is available. Direct counts include pre-existing edits relative to the reviewed
+HEAD; isolated results retain a changed/unchanged flag against their fixed base.
+Template names were not saved in run history and are not searchable. See
+[visibility behavior, compatibility and validation](docs/visibility.md).
 
 ## Repeated maintenance tasks
 

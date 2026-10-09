@@ -215,6 +215,23 @@ pub fn quiet(label: &str) -> egui::Button<'_> {
     egui::Button::new(label).frame_when_inactive(false)
 }
 
+pub fn change_status(ui: &mut egui::Ui, changes: crate::visibility::Changes) {
+    let palette = Palette::of(ui);
+    let color = match changes.changed {
+        Some(true) => palette.warning,
+        Some(false) => palette.muted,
+        None => palette.muted,
+    };
+    ui.colored_label(color, egui::RichText::new(changes.label()).small());
+}
+
+pub fn review_status(ui: &mut egui::Ui, job: &crate::domain::Job) {
+    if crate::visibility::needs_review(job) {
+        ui.colored_label(Palette::of(ui).warning, egui::RichText::new("Review needed").small())
+            .on_hover_text("Changed or unknown completion observation, or an unresolved retained result. This is independent of the execution outcome.");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
