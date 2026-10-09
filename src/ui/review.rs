@@ -64,47 +64,61 @@ impl App {
             followup = ui.add_enabled(!self.review_selected.is_empty() && !self.busy && self.prepared.is_none() && !self.closing && !self.quit_requested,
                 theme::quiet("New convoy from selected")).on_hover_text("Restore repository selection and settings into a draft with a new task and no attachments. Nothing starts automatically.").clicked();
         });
-        let total = crate::review::totals(run);
+        let total = crate::visibility::summary(run);
         ui.small(format!(
             "{} repositories · {} succeeded · {} failed · {} cancelled",
-            total.repositories, total.succeeded, total.failed, total.cancelled
+            total.total, total.succeeded, total.failed, total.cancelled
         ));
         ui.small(format!(
-            "Measured {}/{} · {}",
-            total.measured,
-            total.repositories,
-            total.statistics.label()
+            "{} changed · {} unchanged · {} unknown · {} need review",
+            total.changed, total.unchanged, total.unknown, total.review
         ));
-        ui.small("Counts describe working files versus base; renames count as deletion + addition. Binary files have no line counts.");
-        let refresh = ui
-            .add_enabled(
-                self.review_pending.is_none()
-                    && self.result_operation.is_none()
-                    && self.bulk_discard.is_none(),
-                theme::quiet("Refresh review"),
-            )
-            .clicked();
+        ui.small("Completion observations · Unknown means no reliable saved measurement.")
+            .on_hover_text("Changes are independent of agent success. Direct observations compare with the reviewed HEAD and include pre-existing edits. Isolated observations compare with the fixed base. Review and Diff below inspect current files.");
+        let mut refresh = false;
+        ui.horizontal_wrapped(|ui| {
+            egui::ComboBox::from_id_salt("comparison_filter")
+                .selected_text(self.comparison_filter.label())
+                .show_ui(ui, |ui| {
+                    for filter in crate::visibility::RepositoryFilter::ALL {
+                        ui.selectable_value(&mut self.comparison_filter, filter, filter.label());
+                    }
+                });
+            refresh = ui
+                .add_enabled(
+                    self.review_pending.is_none()
+                        && self.result_operation.is_none()
+                        && self.bulk_discard.is_none(),
+                    theme::quiet("Refresh review"),
+                )
+                .on_hover_text(
+                    "Refresh live Review statistics; completion observations stay unchanged.",
+                )
+                .clicked();
+        });
         if self.review_pending.is_some() {
-            ui.small("Inspecting Git results…");
+            ui.small("Inspecting live Git results…");
         }
         let mut inspect = None;
-        egui::ScrollArea::both()
+        let mut visible = 0;
+        egui::ScrollArea::vertical()
             .id_salt(("convoy_review", id))
-            .max_height((bottom - ui.cursor().top() - 210.0).max(100.0))
+            .max_height((bottom - ui.cursor().top() - 210.0).max(130.0))
             .show(ui, |ui| {
-                egui::Grid::new(("review_grid", id))
-                    .striped(true)
-                    .spacing([14.0, 5.0])
-                    .show(ui, |ui| {
-                        ui.strong("Follow-up");
-                        ui.strong("Repository");
-                        ui.strong("Agent result");
-                        ui.strong("Mode / result");
-                        ui.strong("Changes");
-                        ui.end_row();
-                        for (index, job) in run.jobs.iter().enumerate() {
+                for (index, job) in run
+                    .jobs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, j)| self.comparison_filter.matches(j))
+                {
+                    visible += 1;
+                    ui.push_id(index, |ui| {
+                        ui.separator();
+                        ui.horizontal(|ui| {
                             let mut included = self.review_selected.contains(&index);
-                            let checkbox = ui.checkbox(&mut included, "");
+                            let checkbox = ui
+                                .checkbox(&mut included, "")
+                                .on_hover_text("Select for follow-up");
                             checkbox.widget_info(|| {
                                 egui::WidgetInfo::selected(
                                     egui::WidgetType::Checkbox,
@@ -124,47 +138,55 @@ impl App {
                                 }
                             }
                             let name = ui
-                                .selectable_label(self.selected_job == index, &job.repository.name)
+                                .add(
+                                    egui::Button::selectable(
+                                        self.selected_job == index,
+                                        egui::RichText::new(&job.repository.name).strong(),
+                                    )
+                                    .truncate(),
+                                )
                                 .on_hover_text(job.repository.path.display().to_string());
                             if name.has_focus() {
                                 name.scroll_to_me(None);
                             }
                             if name.clicked() {
                                 self.selected_job = index;
+                                self.diff = None;
+                                self.diff_target = None;
                             }
+                        });
+                        ui.horizontal_wrapped(|ui| {
                             theme::job_status(ui, job);
-                            ui.label(result_label(job));
-                            match &job.review {
-                                Some(Ok(s)) => {
-                                    ui.label(s.label());
-                                }
-                                Some(Err(e)) => {
-                                    ui.label(if job.result_availability == A::Cleaned {
-                                        "—"
-                                    } else {
-                                        "Unavailable"
-                                    })
-                                    .on_hover_text(e);
-                                }
-                                None => {
-                                    ui.weak(if job.status.is_terminal() {
-                                        "Checking…"
-                                    } else {
-                                        "Awaiting completion"
-                                    });
-                                }
+                            theme::change_status(ui, crate::visibility::changes(job));
+                            theme::review_status(ui, job);
+                            if let Some(start) = job.started_at {
+                                ui.small(format::duration(
+                                    job.finished_at
+                                        .unwrap_or_else(domain::now)
+                                        .saturating_sub(start),
+                                ));
                             }
-                            ui.end_row();
-                        }
+                        });
                     });
+                }
+                if visible == 0 {
+                    ui.weak("No repositories match this filter.");
+                }
             });
         ui.separator();
         let mut action = None;
         if let Some(job) = run.jobs.get(self.selected_job) {
             ui.strong(&job.repository.name);
             ui.label(result_label(job));
+            if !self.comparison_filter.matches(job) {
+                ui.small("Selected repository is outside the comparison filter.");
+            }
+            if let Some(Ok(statistics)) = &job.review {
+                ui.small(format!("Live Review: {}", statistics.label()))
+                    .on_hover_text("Current Git statistics, separate from the saved completion observation. Renames count as deletion plus addition.");
+            }
             if job.execution_mode == domain::ExecutionMode::Direct {
-                ui.small("Current mutable working tree, including pre-existing edits. Historical Direct jobs do not retain a snapshot.");
+                ui.small("Live working tree, including pre-existing edits. Direct Diff is not a historical patch.");
             }
             if !job.worktree_detail.is_empty() {
                 ui.label(diagnostics::summary(&job.worktree_detail));

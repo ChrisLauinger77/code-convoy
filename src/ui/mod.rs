@@ -48,7 +48,7 @@ enum Message {
     Attachments(u64, Vec<crate::attachments::Attachment>, Vec<String>),
     ReusedAttachments(u64, Vec<crate::attachments::Attachment>, Vec<String>),
     Registered(Result<(Repository, WorkingTree), String>),
-    Refreshed(Vec<(PathBuf, Result<WorkingTree, String>)>),
+    Refreshed(u64, PathBuf, Result<WorkingTree, String>),
     Prepared(Result<PreparedRun, String>),
     RetryPrepared(Result<(PreparedRun, crate::continuation::Provenance), String>),
     FollowUp(Box<crate::continuation::FollowUp>),
@@ -92,6 +92,9 @@ pub struct App {
     browsing_repository: bool,
     focus_repository_input: bool,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
+    repository_refresh: u64,
+    repository_pending: HashMap<PathBuf, u64>,
+    repository_health_cancel: crate::process::Cancellation,
     busy: bool,
     cli_checks: agents::availability::CliChecks,
     cli_search: Option<cli_discovery::CliSearch>,
@@ -121,6 +124,8 @@ pub struct App {
     review_selected: HashSet<usize>,
     dirty_ack: bool,
     selected_run: Option<u64>,
+    history_search: crate::visibility::HistorySearch,
+    comparison_filter: crate::visibility::RepositoryFilter,
     selected_job: usize,
     tab: Tab,
     review_pending: Option<(u64, usize)>,
@@ -205,6 +210,9 @@ impl App {
             browsing_repository: false,
             focus_repository_input: false,
             repository_states: HashMap::new(),
+            repository_refresh: 0,
+            repository_pending: HashMap::new(),
+            repository_health_cancel: crate::process::Cancellation::default(),
             busy: false,
             cli_checks,
             cli_search: None,
@@ -234,6 +242,8 @@ impl App {
             review_selected: HashSet::new(),
             dirty_ack: false,
             selected_run,
+            history_search: crate::visibility::HistorySearch::default(),
+            comparison_filter: crate::visibility::RepositoryFilter::default(),
             selected_job: 0,
             tab: Tab::Review,
             review_pending: None,
@@ -419,18 +429,59 @@ impl App {
         });
     }
     fn refresh(&mut self, ctx: egui::Context) {
-        self.busy = true;
-        let repositories = self.state.repositories.clone();
-        self.dispatch(ctx, async move {
-            let mut states = Vec::new();
-            for repository in repositories {
-                let result = git::status(&repository.path)
-                    .await
-                    .map_err(|e| format!("{e:#}"));
-                states.push((repository.path, result));
+        self.repository_health_cancel.cancel();
+        self.repository_health_cancel = crate::process::Cancellation::default();
+        self.repository_refresh += 1;
+        let request = self.repository_refresh;
+        self.repository_pending.clear();
+        self.repository_states.clear();
+        let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
+        for repository in self.state.repositories.clone() {
+            if self.repository_in_use(&repository.path) {
+                continue;
             }
-            Message::Refreshed(states)
-        });
+            self.repository_pending
+                .insert(repository.path.clone(), request);
+            let slots = slots.clone();
+            let cancellation = self.repository_health_cancel.clone();
+            self.dispatch(ctx.clone(), async move {
+                let result = async {
+                    let _permit = slots.acquire().await.map_err(|e| e.to_string())?;
+                    let safe = std::sync::atomic::AtomicBool::new(true);
+                    git::Inspection {
+                        cancellation: &cancellation,
+                        safe: &safe,
+                    }
+                    .status(&repository.path)
+                    .await
+                    .map_err(|e| format!("{e:#}"))
+                }
+                .await;
+                Message::Refreshed(request, repository.path, result)
+            });
+        }
+    }
+    fn repository_in_use(&self, path: &std::path::Path) -> bool {
+        self.state.runs.iter().flat_map(|r| &r.jobs).any(|j| {
+            !j.status.is_terminal()
+                && (path.starts_with(&j.repository.path) || j.repository.path.starts_with(path))
+        }) || self.result_operation.is_some()
+            || self.bulk_discard.is_some()
+    }
+    fn repository_refreshed(
+        &mut self,
+        request: u64,
+        path: PathBuf,
+        state: Result<WorkingTree, String>,
+    ) {
+        if self.repository_pending.get(&path) != Some(&request) {
+            return;
+        }
+        self.repository_pending.remove(&path);
+        if self.state.repositories.iter().any(|r| r.path == path) && !self.repository_in_use(&path)
+        {
+            self.repository_states.insert(path, state);
+        }
     }
     fn register(&mut self, ctx: egui::Context) {
         if self.state.repositories.len() >= MAX_REPOSITORIES {
@@ -608,9 +659,8 @@ impl App {
                         Err(e) => self.notice = e,
                     }
                 }
-                Message::Refreshed(states) => {
-                    self.busy = false;
-                    self.repository_states.extend(states);
+                Message::Refreshed(request, path, state) => {
+                    self.repository_refreshed(request, path, state);
                 }
                 Message::Prepared(result) => {
                     self.busy = false;
@@ -667,6 +717,7 @@ impl App {
                     self.diff_target = None;
                     self.dirty = true;
                     self.repository_states.remove(&op.job.repository.path);
+                    self.repository_pending.remove(&op.job.repository.path);
                     for job in self.state.runs.iter_mut().flat_map(|r| &mut r.jobs) {
                         if job.execution_mode == domain::ExecutionMode::Direct
                             && job.repository.path == op.job.repository.path
@@ -769,6 +820,7 @@ impl App {
         if self.selected_run != id {
             self.selected_run = id;
             self.selected_job = 0;
+            self.comparison_filter = crate::visibility::RepositoryFilter::All;
             self.review_selected.clear();
             self.diff = None;
             self.diff_target = None;
@@ -858,6 +910,7 @@ impl App {
             Event::Queued { run, job, .. }
             | Event::Preparing { run, job, .. }
             | Event::Result { run, job, .. }
+            | Event::Changes { run, job, .. }
             | Event::Started { run, job, .. }
             | Event::Output { run, job, .. }
             | Event::Finished { run, job, .. } => (*run, *job),
@@ -872,6 +925,10 @@ impl App {
             return;
         };
         match event {
+            Event::Changes { changes, .. } => {
+                job.completion_changes = Some(changes);
+                self.dirty = true;
+            }
             Event::Queued { reason, .. } => {
                 if job.status == JobStatus::Queued {
                     job.queue_reason = Some(reason);
@@ -884,6 +941,10 @@ impl App {
                 self.dirty = true;
             }
             Event::Result { result, detail, .. } => {
+                job.completion_changes = Some(crate::visibility::Changes {
+                    changed: result.as_ref().and_then(|r| r.changed),
+                    files: None,
+                });
                 job.result_availability = match result.as_ref() {
                     Some(r) if r.exists && r.changed.is_some() => {
                         domain::ResultAvailability::Available
@@ -899,7 +960,11 @@ impl App {
             Event::Started { before, .. } => {
                 job.status = JobStatus::Running;
                 job.queue_reason = None;
-                self.repository_states.remove(&job.repository.path);
+                let overlaps = |path: &PathBuf| {
+                    path.starts_with(&job.repository.path) || job.repository.path.starts_with(path)
+                };
+                self.repository_states.retain(|path, _| !overlaps(path));
+                self.repository_pending.retain(|path, _| !overlaps(path));
                 job.started_at = Some(domain::now());
                 if job.execution_mode == domain::ExecutionMode::Direct {
                     job.before = Some(before);
@@ -918,7 +983,11 @@ impl App {
             } => {
                 job.finish(status, exit_code, detail);
                 job.review = None;
-                self.repository_states.remove(&job.repository.path);
+                let overlaps = |path: &PathBuf| {
+                    path.starts_with(&job.repository.path) || job.repository.path.starts_with(path)
+                };
+                self.repository_states.retain(|path, _| !overlaps(path));
+                self.repository_pending.retain(|path, _| !overlaps(path));
                 self.dirty = true;
             }
         }
@@ -988,6 +1057,7 @@ impl eframe::App for App {
         }
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
+        self.repository_health_cancel.cancel();
         self.notification_service.stop();
         self.cli_checks.stop();
         self.manager.shutdown();
@@ -1019,6 +1089,7 @@ impl eframe::App for App {
 
 impl Drop for App {
     fn drop(&mut self) {
+        self.repository_health_cancel.cancel();
         self.notification_service.stop();
         self.cli_checks.stop();
         if let Some(runtime) = self.runtime.take() {

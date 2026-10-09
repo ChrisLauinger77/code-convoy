@@ -91,6 +91,13 @@ impl App {
         if self.browsing_repository {
             ui.weak("Choosing a folder…");
         }
+        ui.small("Current Git state · refreshed on opening and on request");
+        if !self.repository_pending.is_empty() {
+            ui.small(format!(
+                "Checking {} repositories…",
+                self.repository_pending.len()
+            ));
+        }
         if self.state.repositories.is_empty() {
             ui.weak("Add an existing Git working tree to get started.");
         }
@@ -128,6 +135,7 @@ impl App {
         let mut remove = None;
         let p = theme::Palette::of(ui);
         for (index, repository) in self.state.repositories.iter().enumerate() {
+            let in_use = self.repository_in_use(&repository.path);
             ui.push_id(&repository.path, |ui| {
                 ui.separator();
                 ui.horizontal(|ui| {
@@ -168,9 +176,27 @@ impl App {
                         remove = Some(index);
                     }
                 });
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(repository.path.display().to_string())
+                            .small()
+                            .color(p.muted),
+                    )
+                    .truncate(),
+                )
+                .on_hover_text(repository.path.display().to_string());
+                if in_use {
+                    ui.weak("Unknown · active work; refresh after completion");
+                    return;
+                }
+                if self.repository_pending.contains_key(&repository.path) {
+                    ui.weak("Unknown · checking Git…");
+                    return;
+                }
                 match self.repository_states.get(&repository.path) {
                     Some(Ok(state)) => {
                         ui.horizontal_wrapped(|ui| {
+                            ui.small("Available");
                             ui.label(
                                 egui::RichText::new(&state.summary.branch)
                                     .small()
@@ -213,11 +239,12 @@ impl App {
                         }
                     }
                     Some(Err(error)) => {
-                        ui.colored_label(p.error, "Repository unavailable");
+                        ui.colored_label(p.error, "Unavailable · Git state unknown")
+                            .on_hover_text(diagnostics::summary(error));
                         diagnostics::details(ui, "repository_error", error);
                     }
                     None => {
-                        ui.weak("State needs refresh · checked before running");
+                        ui.weak("Unknown · refresh state; checked before running");
                     }
                 }
             });
@@ -226,6 +253,7 @@ impl App {
             let repo = self.state.repositories.remove(index);
             self.selected.remove(&repo.path);
             self.repository_states.remove(&repo.path);
+            self.repository_pending.remove(&repo.path);
             self.dirty = true;
         }
     }

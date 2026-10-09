@@ -72,6 +72,67 @@ pub(crate) struct Inspection<'a> {
     pub safe: &'a std::sync::atomic::AtomicBool,
 }
 impl Inspection<'_> {
+    /// Count distinct paths against the reviewed HEAD, including index-only
+    /// alternatives and nonignored untracked files. No index/object writes.
+    pub(crate) async fn completion_changes(
+        &self,
+        path: &Path,
+        base: Option<&str>,
+    ) -> Result<crate::visibility::Changes> {
+        let repo = self.register(path).await?;
+        anyhow::ensure!(
+            repo.path == path,
+            "Repository identity changed during execution."
+        );
+        let mut names = std::collections::HashSet::new();
+        let mut add = |bytes: Vec<u8>| {
+            names.extend(
+                bytes
+                    .split(|b| *b == 0)
+                    .filter(|p| !p.is_empty())
+                    .map(Vec::from),
+            );
+        };
+        if let Some(base) = base {
+            for cached in [false, true] {
+                let mut args = vec![
+                    "diff",
+                    "--name-only",
+                    "-z",
+                    "--no-renames",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                    "--ignore-submodules=none",
+                ];
+                if cached {
+                    args.push("--cached");
+                }
+                args.extend([base, "--"]);
+                add(self.checked(path, &args).await?);
+            }
+            add(self
+                .checked(path, &["ls-files", "--others", "--exclude-standard", "-z"])
+                .await?);
+        } else {
+            // An unborn reviewed HEAD has an empty tracked baseline.
+            add(self
+                .checked(
+                    path,
+                    &[
+                        "ls-files",
+                        "--cached",
+                        "--others",
+                        "--exclude-standard",
+                        "-z",
+                    ],
+                )
+                .await?);
+        }
+        Ok(crate::visibility::Changes {
+            changed: Some(!names.is_empty()),
+            files: Some(names.len()),
+        })
+    }
     pub(crate) async fn capture(
         &self,
         spec: CommandSpec,
@@ -157,8 +218,13 @@ impl Inspection<'_> {
             .await?;
         let branch = if branch.status.success() {
             String::from_utf8_lossy(&branch.stdout).trim().to_owned()
-        } else {
+        } else if branch.status.code() == Some(1) {
             "(detached HEAD)".into()
+        } else {
+            anyhow::bail!(
+                "Cannot inspect branch: {}",
+                String::from_utf8_lossy(&branch.stderr).trim()
+            );
         };
         let head = self
             .capture(command(path, &["rev-parse", "--verify", "HEAD"]), 8192)
@@ -348,5 +414,115 @@ mod tests {
         use std::os::unix::ffi::OsStrExt;
         let native = std::ffi::OsStr::from_bytes(b"/storage \xff/tree");
         assert_eq!(path_argument(Path::new(native)), native);
+    }
+}
+
+#[cfg(test)]
+mod completion_tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+    fn git(path: &Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap().trim().into()
+    }
+    #[tokio::test]
+    async fn completion_counts_fixed_base_index_alternatives_and_untracked_without_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().canonicalize().unwrap();
+        git(&path, &["init", "--quiet"]);
+        let cancellation = crate::process::Cancellation::default();
+        let safe = std::sync::atomic::AtomicBool::new(true);
+        let inspection = Inspection {
+            cancellation: &cancellation,
+            safe: &safe,
+        };
+        assert_eq!(
+            inspection
+                .completion_changes(&path, None)
+                .await
+                .unwrap()
+                .files,
+            Some(0)
+        );
+        std::fs::write(path.join("tracked"), "base").unwrap();
+        git(&path, &["add", "."]);
+        git(
+            &path,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=f@invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-qm",
+                "base",
+            ],
+        );
+        let base = git(&path, &["rev-parse", "HEAD"]);
+        assert_eq!(
+            inspection
+                .completion_changes(&path, Some(&base))
+                .await
+                .unwrap()
+                .changed,
+            Some(false)
+        );
+        std::fs::write(path.join("tracked"), "staged alternative").unwrap();
+        git(&path, &["add", "tracked"]);
+        std::fs::write(path.join("tracked"), "base").unwrap();
+        std::fs::write(path.join("new"), "untracked").unwrap();
+        let index = std::fs::read(path.join(".git/index")).unwrap();
+        let observation = inspection
+            .completion_changes(&path, Some(&base))
+            .await
+            .unwrap();
+        assert_eq!(observation.files, Some(2));
+        assert_eq!(observation.changed, Some(true));
+        assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+        assert_eq!(git(&path, &["rev-parse", "HEAD"]), base);
+        assert!(!path.join(".git/index.lock").exists());
+        git(
+            &path,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=f@invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-qm",
+                "agent commit",
+            ],
+        );
+        // A later commit cannot hide the changes relative to the reviewed HEAD.
+        std::fs::write(path.join("tracked"), "staged alternative").unwrap();
+        assert_eq!(
+            inspection
+                .completion_changes(&path, Some(&base))
+                .await
+                .unwrap()
+                .files,
+            Some(2)
+        );
+        safe.store(false, std::sync::atomic::Ordering::Release);
+        assert!(
+            inspection
+                .completion_changes(&path, Some(&base))
+                .await
+                .is_err()
+        );
     }
 }

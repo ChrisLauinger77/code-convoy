@@ -383,7 +383,47 @@ impl App {
         }
         let active = self.state.runs.iter().filter(|r| r.active()).count();
         let history = self.state.runs.len() - active;
-        ui.small(format!("Active {active} · History {history}"));
+        ui.add(
+            egui::TextEdit::singleline(&mut self.history_search.query)
+                .hint_text("Search history: ID, task, repository, backend")
+                .desired_width(f32::INFINITY),
+        );
+        ui.horizontal_wrapped(|ui| {
+            egui::ComboBox::from_id_salt("history_filter")
+                .selected_text(self.history_search.filter.label())
+                .show_ui(ui, |ui| {
+                    for filter in crate::visibility::HistoryFilter::ALL {
+                        ui.selectable_value(
+                            &mut self.history_search.filter,
+                            filter,
+                            filter.label(),
+                        );
+                    }
+                });
+            if ui
+                .add_enabled(
+                    !self.history_search.query.is_empty()
+                        || self.history_search.filter != crate::visibility::HistoryFilter::All,
+                    theme::quiet("Clear filters").small(),
+                )
+                .clicked()
+            {
+                self.history_search.clear();
+            }
+        });
+        let matching = self.history_search.matching(&self.state.runs);
+        ui.small(format!(
+            "Active {active} · History {} / {history}",
+            matching.len()
+        ));
+        if history > 0 && matching.is_empty() {
+            ui.weak("No history matches. Clear filters to see all convoys.");
+        }
+        if self.selected_run.is_some_and(|id| {
+            self.state.runs.iter().any(|r| r.id == id && !r.active()) && !matching.contains(&id)
+        }) {
+            ui.small("Selected convoy is outside the history filters.");
+        }
         let label = self
             .state
             .runs
@@ -407,17 +447,21 @@ impl App {
             .selected_text(label)
             .show_ui(ui, |ui| {
                 for (is_active, title, count) in
-                    [(true, "ACTIVE", active), (false, "HISTORY", history)]
+                    [(true, "ACTIVE", active), (false, "HISTORY", matching.len())]
                 {
                     theme::eyebrow(ui, &format!("{title} ({count})"));
                     if count == 0 {
                         ui.weak(if is_active {
                             "No active convoys"
-                        } else {
+                        } else if history == 0 {
                             "No history"
+                        } else {
+                            "No history matches"
                         });
                     }
-                    for run in self.state.runs.iter().filter(|r| r.active() == is_active) {
+                    for run in self.state.runs.iter().filter(|r| {
+                        r.active() == is_active && (is_active || matching.contains(&r.id))
+                    }) {
                         let summary: String = run
                             .task
                             .prompt
@@ -441,6 +485,13 @@ impl App {
                             run.task.prompt,
                             format::timestamp(run.created_at)
                         ));
+                        if !is_active {
+                            let s = crate::visibility::summary(run);
+                            ui.small(format!(
+                                "{} changed · {} unchanged · {} unknown · {} need review",
+                                s.changed, s.unchanged, s.unknown, s.review
+                            ));
+                        }
                     }
                     if is_active {
                         ui.separator();

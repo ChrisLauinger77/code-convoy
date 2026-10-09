@@ -84,6 +84,11 @@ pub async fn prepare(mut task: TaskConfig, repositories: Vec<Repository>) -> Res
 }
 #[derive(Debug)]
 pub enum Event {
+    Changes {
+        run: u64,
+        job: usize,
+        changes: crate::visibility::Changes,
+    },
     Queued {
         run: u64,
         job: usize,
@@ -148,7 +153,7 @@ async fn job_work(
 ) -> Result<(JobStatus, Option<i32>, String)> {
     let mut launched = false;
     if task.execution_mode == ExecutionMode::Direct {
-        return run_agent(
+        let outcome = run_agent(
             run,
             job,
             prepared,
@@ -161,6 +166,31 @@ async fn job_work(
             &mut launched,
         )
         .await;
+        if launched && repository_safe.load(Ordering::Acquire) {
+            // Keep the execution lease until bounded inspection/cleanup finishes.
+            // Stop has already cancelled the agent token, so use a fresh token.
+            let token = Cancellation::default();
+            let inspection = git::Inspection {
+                cancellation: &token,
+                safe: repository_safe,
+            };
+            let observation = inspection.completion_changes(
+                &prepared.repository.path,
+                prepared.state.summary.head.as_deref(),
+            );
+            tokio::pin!(observation);
+            let changes = tokio::select! {
+                result = &mut observation => result.ok(),
+                _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                    token.cancel();
+                    let _ = observation.await;
+                    None
+                }
+            }
+            .unwrap_or_default();
+            let _ = tx.send(Event::Changes { run, job, changes }).await;
+        }
+        return outcome;
     }
     let mut retained = None;
     let mut ready = false;

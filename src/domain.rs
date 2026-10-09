@@ -239,6 +239,9 @@ impl QueueReason {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Job {
     pub repository: Repository,
+    /// Completion-time Git observation. Never updated by Review or recovery.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_changes: Option<crate::visibility::Changes>,
     #[serde(default)]
     pub execution_mode: ExecutionMode,
     #[serde(default)]
@@ -292,6 +295,7 @@ impl Job {
     pub fn queued(repository: Repository) -> Self {
         Self {
             repository,
+            completion_changes: None,
             execution_mode: ExecutionMode::Direct,
             worktree: None,
             worktree_result: None,

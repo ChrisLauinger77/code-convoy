@@ -678,3 +678,41 @@ per-field serde defaults. Runtime tracking, callbacks and diagnostics are never
 serialized. The Settings menu retains appearance controls. Dependencies, platform
 identity/authorization, OS limits and outstanding native smoke tests are documented
 in [Desktop notifications](notifications.md).
+
+## v0.5 visibility and historical observations
+
+`visibility` contains pure search/filter, completion-change, attention and summary
+helpers. History search normalizes immutable run metadata once per retained ID in
+session memory; it prunes removed IDs. Matching is cached until the query or
+status-filtered candidate IDs change. Filtering scans that bounded metadata without
+an external index, modifies no history, and preserves execution order and selection.
+Review totals are small O(jobs) integer reductions, independent of Git and log text.
+No template-name provenance is inferred from today's template library.
+
+`Job::completion_changes` is an additive optional version-1 field containing only
+an optional change flag and optional file count. Direct workers observe distinct
+paths in working-tree/index diffs against the reviewed HEAD plus nonignored
+untracked files; an unborn baseline uses tracked/untracked paths. Pre-existing
+edits are included. The existing execution lease remains held through this bounded
+five-second observation and confirmed subprocess cleanup. Failure or timeout leaves
+Unknown, never a fabricated no-change result. Isolated completion events copy the
+runner's existing fixed-base change observation, without another inspection pass.
+Neither Review, recovery, Apply/Discard nor repository refresh rewrites this field.
+Old mutable `worktree_result` and session-only `review` values cannot reconstruct it.
+No source contents, patches or untrusted diagnostics are newly persisted.
+
+`ui/review` uses completion data for comparison and labels current statistics as
+Live Review in the selected detail. Existing Apply/Discard validation still uses
+its original live data and lifecycle leases. Review-needed means a terminal,
+unresolved retained result or changed/unknown completion data; resolved Applied
+and Discarded results do not require review. Failure is independently filterable.
+
+Repository health uses the existing `git::Inspection`, with optional Git locks and
+fsmonitor disabled, up to four asynchronous checks per refresh and no polling.
+Opening the main repository interface at startup and explicit Refresh initiate
+checks. Health has independent cancellation and request generations, so it cannot
+block editing or clear preflight's busy state. Superseded, removed-registration and
+active-work replies are rejected; execution events invalidate overlapping cached
+paths. Read-only health acquires no execution lease and is skipped for known active
+or nested sources. Git errors leave Unknown and an expandable diagnostic.
+Notifications retain their v0.4 policy, exactly-once tracking and delivery path.
