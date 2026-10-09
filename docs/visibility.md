@@ -70,9 +70,12 @@ fallback; saved history never triggers a new notification on restart.
 
 Repositories in New Convoy show path, branch (including detached HEAD), Clean/Dirty,
 and Available/Unavailable. They refresh when this main interface opens at startup
-or with **Refresh state**. Up to four asynchronous checks run at once. The draft
+or with **Refresh state**. Up to four asynchronous checks run at once across all
+refresh requests, including checks still cleaning up after cancellation. The draft
 and result navigation remain usable. Newer refreshes cancel older checks and reject
-late replies, as do unregistering and overlapping execution events.
+late replies, as do unregistering and overlapping execution events. Superseded
+queued checks cancel without waiting for capacity; new checks wait for running
+checks to finish cleanup before reusing their slots.
 
 Known active or nested repository work shows Unknown; refresh after it finishes.
 Apply and Discard suppress only their source repository and overlapping paths.
@@ -95,7 +98,7 @@ success and failure. UI tests cover stale results, selection and all three theme
 at 780 × 560, 1180 × 820 and 1600 × 1000.
 
 On 2026-10-09, macOS Apple Silicon source validation passed formatting, strict
-all-target/all-feature Clippy, **319 Rust tests** (four optional installed-CLI probes
+all-target/all-feature Clippy, **320 Rust tests** (four optional installed-CLI probes
 ignored), the optimized release build, **16 packaging tests**, and the `v0.5.0`
 version/tag consistency check. The Rust harness additionally launches two existing
 subprocess tests; those duplicate invocations are excluded from the total above.

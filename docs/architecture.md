@@ -710,7 +710,9 @@ unresolved retained result or changed/unknown completion data; resolved Applied
 and Discarded results do not require review. Failure is independently filterable.
 
 Repository health uses the existing `git::Inspection`, with optional Git locks and
-fsmonitor disabled, up to four asynchronous checks per refresh and no polling.
+fsmonitor disabled, one shared four-permit limiter across refreshes and no polling.
+An inspection keeps its permit until subprocess cleanup completes. Superseded
+checks waiting for capacity cancel without acquiring a permit.
 Opening the main repository interface at startup and explicit Refresh initiate
 checks. Health has independent cancellation and request generations, so it cannot
 block editing or clear preflight's busy state. Superseded, removed-registration and

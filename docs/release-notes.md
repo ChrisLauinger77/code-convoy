@@ -16,7 +16,7 @@ part of this implementation.
   and include pre-existing edits. Isolated results retain their fixed-base change
   flag. Older entries show Unknown without reconstructing history from live Git.
 - Responsive repository health with branch, Clean/Dirty and availability,
-  bounded background refresh, cancellation and stale-reply rejection. Active
+  a shared four-check limit across refreshes, cancellation and stale-reply rejection. Active
   repository work shows Unknown until an explicit refresh after completion;
   unrelated repositories remain available during Apply and single/bulk Discard.
 - Review-needed notifications prefer saved completion observations, including
@@ -34,7 +34,7 @@ available. See [behavior and compatibility](visibility.md).
 
 ## Validation and remaining release work
 
-macOS Apple Silicon validation passed formatting, strict Clippy, 319 Rust tests
+macOS Apple Silicon validation passed formatting, strict Clippy, 320 Rust tests
 (four optional CLI probes ignored), the release build, 16 packaging tests and
 version/tag consistency. A disposable native macOS smoke pass verified search,
 filtering, comparison selection and Diff navigation; headless layout checks cover

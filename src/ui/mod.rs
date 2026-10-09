@@ -95,6 +95,7 @@ pub struct App {
     repository_refresh: u64,
     repository_pending: HashMap<PathBuf, u64>,
     repository_health_cancel: crate::process::Cancellation,
+    repository_health_slots: std::sync::Arc<tokio::sync::Semaphore>,
     busy: bool,
     cli_checks: agents::availability::CliChecks,
     cli_search: Option<cli_discovery::CliSearch>,
@@ -213,6 +214,7 @@ impl App {
             repository_refresh: 0,
             repository_pending: HashMap::new(),
             repository_health_cancel: crate::process::Cancellation::default(),
+            repository_health_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
             busy: false,
             cli_checks,
             cli_search: None,
@@ -435,18 +437,22 @@ impl App {
         let request = self.repository_refresh;
         self.repository_pending.clear();
         self.repository_states.clear();
-        let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
         for repository in self.state.repositories.clone() {
             if self.repository_in_use(&repository.path) {
                 continue;
             }
             self.repository_pending
                 .insert(repository.path.clone(), request);
-            let slots = slots.clone();
+            let slots = self.repository_health_slots.clone();
             let cancellation = self.repository_health_cancel.clone();
             self.dispatch(ctx.clone(), async move {
                 let result = async {
-                    let _permit = slots.acquire().await.map_err(|e| e.to_string())?;
+                    let _permit = tokio::select! {
+                        biased;
+                        _ = cancellation.cancelled() => return Err("Repository health check cancelled.".into()),
+                        permit = slots.acquire() => permit.map_err(|e| e.to_string())?,
+                    };
+                    // Keep shared capacity through inspection's awaited process cleanup.
                     let safe = std::sync::atomic::AtomicBool::new(true);
                     git::Inspection {
                         cancellation: &cancellation,

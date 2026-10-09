@@ -1,6 +1,87 @@
 use super::*;
 
 #[test]
+fn repeated_health_refreshes_wait_for_prior_cleanup_and_cancel_queued_checks() {
+    let (temp, mut app) = app();
+    app.state.repositories = (0..6)
+        .map(|index| Repository {
+            name: format!("missing-{index}"),
+            path: temp.path().join(format!("missing-{index}")),
+        })
+        .collect();
+    // Model four old inspections still holding their slots during cleanup.
+    let cleaning_up = app
+        .repository_health_slots
+        .clone()
+        .try_acquire_many_owned(4)
+        .unwrap();
+    let ctx = egui::Context::default();
+    for _ in 0..3 {
+        app.refresh(ctx.clone());
+    }
+    let latest = app.repository_refresh;
+    app.runtime().block_on(async {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    });
+    let messages: Vec<_> = app.rx.try_iter().collect();
+    assert!(
+        !messages.iter().any(
+            |message| matches!(message, Message::Refreshed(request, _, _) if *request == latest)
+        ),
+        "a new refresh bypassed inspections still cleaning up"
+    );
+    let mut cancelled = 0;
+    for message in messages {
+        if let Message::Refreshed(_, _, result) = &message {
+            assert!(result.as_ref().unwrap_err().contains("cancelled"));
+            cancelled += 1;
+        }
+        app.tx.send(message).unwrap();
+    }
+    assert_eq!(
+        cancelled, 12,
+        "superseded queued checks should cancel without waiting for capacity"
+    );
+    app.poll();
+    assert!(app.repository_states.is_empty());
+    assert_eq!(app.repository_pending.len(), 6);
+    drop(cleaning_up);
+    let messages = app.runtime().block_on(async {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut messages = Vec::new();
+            let mut completed = 0;
+            while completed < 6 {
+                if let Ok(message) = app.rx.try_recv() {
+                    if let Message::Refreshed(request, _, _) = &message
+                        && *request == latest
+                    {
+                        completed += 1;
+                    }
+                    messages.push(message);
+                } else {
+                    tokio::task::yield_now().await;
+                }
+            }
+            messages
+        })
+        .await
+        .unwrap()
+    });
+    for message in messages {
+        app.tx.send(message).unwrap();
+    }
+    app.poll();
+    assert!(app.repository_pending.is_empty());
+    assert_eq!(app.repository_states.len(), 6);
+    assert!(
+        app.repository_states
+            .values()
+            .all(|state| state.as_ref().unwrap_err().contains("does not exist"))
+    );
+    assert_eq!(app.repository_health_slots.available_permits(), 4);
+}
+
+#[test]
 fn health_refresh_is_independent_and_superseded_removed_and_active_replies_are_rejected() {
     let (_temp, mut app) = app();
     app.state.repositories = vec![repository("alpha")];
