@@ -383,6 +383,41 @@ fn named_user_home_paths_are_omitted_only_at_token_boundaries() {
 }
 
 #[test]
+fn stripped_controls_cannot_expose_paths_in_copied_metadata() {
+    let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
+    validated(&mut run.jobs[0], Status::Passed);
+    // Cover every non-whitespace C0/C1 control, including NUL, ESC and DEL.
+    for control in (0u8..=0x9f)
+        .map(char::from)
+        .filter(|ch| ch.is_control() && !ch.is_whitespace())
+    {
+        for value in [
+            format!("{control}/home/alice/private"),
+            format!("Inspect{control}/home/alice/private"),
+            format!("--config={control}~alice/private"),
+            format!("{control}\\private"),
+            format!("~{control}alice/private"),
+            format!("~ali{control}ce/private"),
+        ] {
+            run.task.prompt = value.clone();
+            run.jobs[0].repository.name = value.clone();
+            let command = &mut run.jobs[0].validation.as_mut().unwrap().command;
+            command.arguments = vec![value.clone()];
+            // NUL alone is rejected in current arguments; the other controls are valid.
+            assert_eq!(command.validate().is_ok(), control != '\0');
+            assert_eq!(field(&value, 160), "[local path omitted]", "{value:?}");
+            for text in [convoy(&run), repository(&run, &run.jobs[0])] {
+                assert!(!text.contains("private"), "{value:?}: {text}");
+                assert!(text.contains("[local path omitted]"));
+            }
+        }
+        // Control removal alone must not hide ordinary metadata or relative paths.
+        let relative = format!("relative{control}dir/file");
+        assert_eq!(field(&relative, 160), "relativedir/file");
+    }
+}
+
+#[test]
 fn all_backends_and_validation_states_use_their_recorded_labels() {
     let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
     for agent in AgentId::ALL {

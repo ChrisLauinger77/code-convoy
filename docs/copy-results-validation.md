@@ -6,7 +6,7 @@ scheduling changes, release tag or package publication.
 
 ## Automated coverage
 
-Twelve pure formatting tests in `src/ui/result_markdown_tests.rs` cover successful,
+Thirteen pure formatting tests in `src/ui/result_markdown_tests.rs` cover successful,
 mixed, failed, cancelled and interrupted results; known/unknown change counts;
 review/resolution states; independent validation outcomes; empty/partial history;
 missing or reversed timestamps; all backends; persisted round-trip equivalence;
@@ -27,6 +27,13 @@ the fix and now covers slash/backslash forms, quoted and list-delimited tokens,
 Unicode and qualified usernames, and literal embedded tildes that must stay
 visible. Recognition uses text alone, without expanding homes or looking up users.
 
+The control-character regression failed for `"\0/home/alice/private"` before the
+fix. It exercises every non-whitespace C0/C1 control across task summaries,
+repository names and validation arguments, including controls within named-user
+home prefixes. Stripped controls establish path boundaries and cannot break an
+existing home prefix; ordinary relative metadata remains visible. The test also
+confirms that current validation arguments allow these controls except NUL.
+
 Three egui tests in `src/ui/copy_results_tests.rs` exercise the real result views
 through Tab/Enter and check emitted native clipboard commands and unchanged
 persisted state. Coverage includes both actions, every existing detail tab,
@@ -39,7 +46,7 @@ platform output commands for assertions.
 
 - `cargo fmt --check`: passed.
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed.
-- `cargo test --all-features`: passed, including all 15 new tests. Existing
+- `cargo test --all-features`: passed, including all 16 new tests. Existing
   optional authenticated/installed CLI probes remain ignored.
 - `cargo build --release`: passed.
 - `git diff --check`: passed.

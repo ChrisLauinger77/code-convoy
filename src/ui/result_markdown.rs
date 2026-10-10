@@ -228,8 +228,10 @@ fn local_path(value: &str) -> bool {
         }
         // A token beginning with ~ may contain a named user before its separator.
         // Do not resolve accounts or restrict names to the current host's syntax.
-        home_prefix = (ch == '~' && at_boundary)
-            || (home_prefix && !path_boundary(Some(ch)) && !ch.is_control());
+        // Keep that prefix across controls removed by Markdown, but not whitespace.
+        if !ch.is_control() || ch.is_whitespace() {
+            home_prefix = (ch == '~' && at_boundary) || (home_prefix && !path_boundary(Some(ch)));
+        }
         previous = Some(ch);
     }
     false
@@ -238,6 +240,7 @@ fn local_path(value: &str) -> bool {
 fn path_boundary(previous: Option<char>) -> bool {
     previous.is_none_or(|p| {
         p.is_whitespace()
+            || p.is_control()
             || matches!(
                 p,
                 '\'' | '"' | '`' | '=' | ':' | '(' | '[' | '{' | '>' | ',' | ';' | '|' | '&'
