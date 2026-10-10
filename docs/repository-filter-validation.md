@@ -10,8 +10,10 @@ membership and existing availability rules, including hidden members.
 `src/ui/repository_filter_tests.rs` extends the existing in-process egui keyboard
 and accessibility harness, with no added testing dependency. Coverage includes:
 
-- Case-insensitive name/path substrings, Unicode case conversion, surrounding
+- Case-insensitive name/path substrings, full Unicode case folding, surrounding
   whitespace, empty/whitespace-only queries and no matches.
+- Expanding folds (`Straße`/`STRASSE`, `ẞ`/`ss`, `ﬃ`/`ffi`) and Greek sigma
+  variants, in names and paths, matching in both directions.
 - Ungrouped classification from complete membership, overlap, hidden nonmatching
   groups, established ordering, and reclassification after registry/group edits.
 - Immediate text input, keyboard selection and Clear, focus return, unchanged
@@ -45,9 +47,9 @@ repository. No authenticated agent execution is needed for this UI change.
 
 - `cargo fmt --check`: passed.
 - `cargo clippy --locked --all-targets --all-features -- -D warnings`: passed.
-- `cargo test --locked --all-features`: 387 tests passed, four optional
+- `cargo test --locked --all-features`: 388 tests passed, four optional
   installed-CLI probes ignored (excluding duplicate subprocess-test reporting).
-  This includes eight new filter tests and all ten existing group tests.
+  This includes nine new filter tests and all ten existing group tests.
 - `cargo build --locked --release`: passed.
 - `git diff --check`: passed.
 
@@ -57,6 +59,12 @@ pass. Worktree fixtures initially failed because this environment's `/tmp` has a
 `.git` marker, which the existing storage safety guard correctly rejects. The
 successful full run used a fresh `TMPDIR` under `/var/tmp`, outside the sandbox.
 No worktree safety code was changed.
+
+PR review exposed a `Straße`/`STRASSE` mismatch with lowercasing. The Unicode
+regression test failed before the fix and passes with full case folding on both
+sides. It also covers Greek sigma variants and three-character ligature folds,
+using `unicase` 2.10 (the cached 2.9 version mishandled the latter). All required
+checks were rerun after the fix. Existing dependency versions are unchanged.
 
 A native X11 debug build started at 1180 × 820 with disposable application state,
 three temporary repositories, overlapping groups and disabled/missing agent CLIs.

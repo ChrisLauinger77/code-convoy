@@ -24,6 +24,8 @@ serde_json = "1"
 sha2 = "0.11.0"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "sync", "time", "macros"] }
+# Full Unicode case folding for repository filtering, without a search engine.
+unicase = "2.10"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 # zbus 5.19 selects Tokio inside our runtime and async-io for desktop consumers

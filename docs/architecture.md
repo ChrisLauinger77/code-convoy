@@ -53,6 +53,14 @@ returns to normal collapsible rendering. Full membership lists, header counts,
 group selection actions and the shared path selection set remain independent of
 visibility. No persistent model or launch/scheduling contract changes.
 
+Repository matching uses `unicase` for full, locale-independent Unicode case
+folding on both query and candidate text, including expansions such as `ß` to
+`ss` and the shared fold of Greek sigma forms. This small text utility has no
+dependencies and avoids maintaining Unicode tables in the application; it adds
+no search/indexing engine. Rust 1.95's stable standard library does not provide
+full case folding. Original names and paths remain unchanged for display and
+identity. See [UniCase's folding API](https://docs.rs/unicase/2.10.0/unicase/struct.UniCase.html#method.to_folded_case).
+
 `ui/library` owns group/template editing and explicit selection actions. `ui/attachments_ui` owns native file selection, optional drops, background inspection/reuse and stale-result rejection. `ui/editor` coordinates the task, scrolling editor, fixed execution controls, and modal preflight review. `ui/agent_config` renders only the selected backend's option specifications; `ui/repositories` handles registration, Git-state presentation and bulk selection. `ui/results` presents run navigation, cleanup, jobs and result tabs; `ui/snapshot` displays declared option labels, repository paths and UTC timestamps. `ui/diagnostics` keeps concise messages separate from expandable, copyable raw details. `ui/about` shows offline application metadata. `ui/theme` centralizes palettes, typography, spacing, focus/selection, primary actions and a painted success mark (the bundled fonts lack check glyphs). `ui/format` formats duration, dates, options and status text; overall status and progress remain domain-derived.
 
 The compact run selector groups active and terminal runs in a height-bounded scrolling popup. Active means any queued/preparing/running job, including a partially failed convoy that still has work. History cleanup methods in `AppState` guard against removing active runs; the UI offers individual removal only for terminal runs and bulk removal through History cleanup. Removal immediately saves metadata and reconciles selection (prefer an active convoy, then the newest history, then empty), clearing stale job/diff/output views. It never calls Git, the scheduler, cancellation, or agent configuration APIs.

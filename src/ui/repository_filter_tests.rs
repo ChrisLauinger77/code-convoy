@@ -57,6 +57,40 @@ fn name_path_case_whitespace_and_empty_queries_match_in_memory() {
 }
 
 #[test]
+fn full_unicode_case_folding_matches_names_and_paths_in_both_directions() {
+    // Exercise expansions as well as characters with distinct lowercase forms.
+    for (text, query) in [
+        ("Straße", "STRASSE"),
+        ("STRAẞE", "strasse"),
+        ("ΟΣ", "οσ"),
+        ("ος", "οσ"),
+        ("oﬃce", "OFFICE"),
+    ] {
+        for (text, query) in [(text, query), (query, text)] {
+            let repositories = vec![
+                Repository {
+                    name: format!("prefix-{text}-suffix"),
+                    path: PathBuf::from("/work/plain"),
+                },
+                Repository {
+                    name: "plain".into(),
+                    path: PathBuf::from(format!("/work/{text}/project")),
+                },
+                repository("unrelated"),
+            ];
+            let mut cache = RepositorySections::default();
+            cache.query = format!("  {query}\t");
+            cache.sync(&repositories, &[]);
+            assert_eq!(
+                visible(&cache),
+                [("Ungrouped", vec![0, 1])],
+                "{text:?} / {query:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn matching_sections_keep_order_overlap_and_original_ungrouped_classification() {
     let (_temp, mut app) = grouped_app();
     app.state.groups.push(domain::RepositoryGroup {

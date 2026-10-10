@@ -1,6 +1,7 @@
 //! Session-only identities and cached membership for the repository picker.
 use super::*;
 use domain::RepositoryGroup;
+use unicase::UniCase;
 
 #[derive(Default)]
 pub(super) struct RepositorySections {
@@ -120,17 +121,17 @@ impl RepositorySections {
     // Only query/registry/group edits recompute matches. This is display-text
     // matching over the registry, with no filesystem or Git inspection.
     fn filter(&mut self) {
-        let needle = self.query.trim().to_lowercase();
+        let needle = UniCase::new(self.query.trim()).to_folded_case();
         self.matches = self
             .repositories
             .iter()
             .map(|repository| {
                 needle.is_empty()
-                    || repository.name.to_lowercase().contains(&needle)
-                    || repository
-                        .path
-                        .to_string_lossy()
-                        .to_lowercase()
+                    || UniCase::new(&repository.name)
+                        .to_folded_case()
+                        .contains(&needle)
+                    || UniCase::new(repository.path.to_string_lossy())
+                        .to_folded_case()
                         .contains(&needle)
             })
             .collect();

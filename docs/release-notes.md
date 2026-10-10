@@ -3,7 +3,8 @@
 ## PR 1: Quick Repository Filter
 
 - Find registered repositories immediately by name or path with case-insensitive
-  substring matching; surrounding query whitespace is ignored.
+  substring matching using full Unicode case folding (for example,
+  `Straße`/`STRASSE`); surrounding query whitespace is ignored.
 - Matching groups open temporarily, retain their order and shared selection,
   and show only matching repositories. Ungrouped stays first when it has matches.
 - Clear restores manual expansion. Hidden selections remain selected; global
@@ -12,6 +13,8 @@
   egui styling. The overall selected count remains visible.
 - Session-only cached matching; no search dependency, filesystem/Git work, new
   persistent settings, backend changes or scheduling changes.
+- The small `unicase` text utility supplies Unicode folding without transitive
+  dependencies or application-maintained character tables.
 
 See [filter validation](repository-filter-validation.md) for automated coverage
 and native smoke results. This is an unreleased feature entry; package version
