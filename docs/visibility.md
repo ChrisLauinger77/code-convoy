@@ -106,8 +106,11 @@ metadata is flattened and Markdown/HTML special characters are escaped.
 
 Free-text fields containing recognizable absolute Unix, Windows or home-relative
 paths are conservatively replaced with `[local path omitted]`; an absolute
-validation executable is reduced to its basename. A path-containing argument is
-omitted in full, including paths with spaces. This can omit useful text too.
+validation executable is reduced to its basename. Attached single-letter option
+values such as `-I/path`, `-L/path` and `-o/path` are recognized too; relative
+values such as `-Iinclude/project` remain visible. A recognized path-containing
+argument is omitted in full, including paths with spaces. This can omit useful
+text too.
 **Review before sharing**: task summaries, names and command arguments can still
 contain sensitive information. The copied Markdown is not guaranteed secret-free.
 

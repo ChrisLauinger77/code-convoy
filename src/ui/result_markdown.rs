@@ -221,8 +221,11 @@ fn local_path(value: &str) -> bool {
     }
     let mut previous = None;
     let mut home_prefix = false;
+    let mut short_option_start = false;
+    let mut short_option_value = false;
     for ch in value.chars() {
-        let at_boundary = path_boundary(previous);
+        let token_boundary = path_boundary(previous);
+        let at_boundary = token_boundary || short_option_value;
         if matches!(ch, '/' | '\\') && (at_boundary || home_prefix) {
             return true;
         }
@@ -231,6 +234,10 @@ fn local_path(value: &str) -> bool {
         // Keep that prefix across controls removed by Markdown, but not whitespace.
         if !ch.is_control() || ch.is_whitespace() {
             home_prefix = (ch == '~' && at_boundary) || (home_prefix && !path_boundary(Some(ch)));
+            // Recognize -<letter><value> without interpreting any CLI's flag semantics.
+            // Only the first value character is a boundary: -Irelative/path stays relative.
+            short_option_value = short_option_start && ch.is_ascii_alphabetic();
+            short_option_start = ch == '-' && token_boundary;
         }
         previous = Some(ch);
     }

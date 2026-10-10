@@ -418,6 +418,60 @@ fn stripped_controls_cannot_expose_paths_in_copied_metadata() {
 }
 
 #[test]
+fn attached_short_option_paths_are_omitted_without_hiding_relative_values() {
+    let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
+    validated(&mut run.jobs[0], Status::Passed);
+    for option in ['I', 'L', 'o', 'C', 'Z'] {
+        for path in [
+            "/home/alice/private",
+            "\\private",
+            "~/private",
+            "~alice/private",
+        ] {
+            for prefix in ["", "Use ", "'", "\"", "--args=", "src,"] {
+                let value = format!("{prefix}-{option}{path}");
+                run.task.prompt = value.clone();
+                run.jobs[0].repository.name = value.clone();
+                run.jobs[0].validation.as_mut().unwrap().command.arguments = vec![value.clone()];
+                assert_eq!(field(&value, 160), "[local path omitted]", "{value:?}");
+                for text in [convoy(&run), repository(&run, &run.jobs[0])] {
+                    assert!(!text.contains("private"), "{value:?}: {text}");
+                    assert!(text.contains("[local path omitted]"));
+                }
+                assert!(
+                    repository(&run, &run.jobs[0])
+                        .contains("Command: \"cargo\" \"\\[local path omitted\\]\"")
+                );
+            }
+        }
+    }
+    // Rendering must not introduce an option/value form that bypasses detection.
+    for value in ["-\0I/home/alice/private", "-I\u{7f}~alice/private"] {
+        assert_eq!(field(value, 160), "[local path omitted]");
+    }
+    for value in [
+        "-Iinclude/project",
+        "-L../lib",
+        "-ooutput/file",
+        "repository-I/docs",
+        "--include=relative/path",
+        "-I",
+        "-1/2",
+    ] {
+        assert_eq!(field(value, 160), markdown(value), "{value}");
+        let command = Command {
+            executable: "cargo".into(),
+            arguments: vec![value.into()],
+        };
+        assert_eq!(
+            super::command(&command),
+            markdown(&command.label()),
+            "{value}"
+        );
+    }
+}
+
+#[test]
 fn all_backends_and_validation_states_use_their_recorded_labels() {
     let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
     for agent in AgentId::ALL {
