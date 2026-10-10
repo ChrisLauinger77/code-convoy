@@ -126,7 +126,7 @@ A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
-`./CodeConvoy-0.5.0-x86_64.AppImage --appimage-extract-and-run`.
+`./CodeConvoy-0.6.0-x86_64.AppImage --appimage-extract-and-run`.
 
 X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
 `libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,
@@ -174,6 +174,25 @@ checked again after restart. See the
 See [release procedure and packaging design](docs/releasing.md) and the
 [release validation record](docs/release-validation.md) for tested behavior and
 remaining platform checks.
+
+## Desktop workflow (0.6.0)
+
+Optional system tray support is disabled by default. Enable it under
+**Settings → Desktop workflow** for **Show CodeConvoy**, a running-convoy count,
+**Show Active Convoys**, and **Quit CodeConvoy**. Show preserves your view; Show
+Active opens the existing ACTIVE run-selector group.
+
+Window close defaults to **Quit application**. With a working tray you can select
+**Minimize to tray, when supported** immediately. This minimizes the existing
+window and keeps jobs running, with Dock/taskbar access retained as a recovery
+route. Explicit Quit always uses the existing active-work confirmation and waits
+for cancellation/process cleanup; Cancel leaves jobs untouched.
+
+Linux needs a StatusNotifierItem-compatible host. Stock GNOME may have none; no
+GNOME extension is required. Unsupported hosts leave CodeConvoy fully usable and
+window close uses Quit. Notifications keep their existing filters and restore the
+same window when activation is supported. Wayland and OS focus policies may still
+require manual desktop activation. See [desktop settings and platform behavior](docs/desktop-workflow.md).
 
 ## Visibility and review (0.5.0)
 
@@ -324,7 +343,7 @@ In direct mode, CodeConvoy serializes jobs targeting the same canonical reposito
 
 Use the bounded, scrollable run selector's **ACTIVE** and **HISTORY** groups to switch convoys without affecting execution. It shows convoy number, agent, state, finished/total progress, duration, and a task summary; selected-run details include elapsed time and its original settings. Any failed job makes the completed convoy **Failed**; otherwise any cancelled job makes it **Cancelled** (or **Interrupted** when recovered after application exit). All jobs must succeed for **Succeeded**. While work remains, state is Running (a job is running), Preparing isolated worktree, or Queued, and the convoy stays in ACTIVE.
 
-**Stop Convoy** cancels only the selected convoy's running and queued jobs. **Stop job** cancels one job. **All convoys → Stop All Convoys** is the distinct emergency stop. Closing CodeConvoy stops all convoys; restarting marks unfinished jobs cancelled/interrupted and never resumes agent processes. Partial repository edits remain.
+**Stop Convoy** cancels only the selected convoy's running and queued jobs. **Stop job** cancels one job. **All convoys → Stop All Convoys** is the distinct emergency stop. Explicit Quit confirms active work and then stops all convoys; optional close-to-tray keeps them running. Restarting after application exit marks unfinished jobs cancelled/interrupted and never resumes agent processes. Partial repository edits remain.
 
 History retains all active convoys, all unresolved isolated results and resolved copies awaiting cleanup, plus the latest 30 other completed convoys, including snapshots, repository paths, initial Git state, timestamps, exit codes, and statuses. Logs remain session-only. Existing version-1 state loads with the default global limit. **History cleanup → Remove convoy #… from history** removes the selected eligible terminal convoy; **History cleanup → Clear removable history** removes eligible terminal convoys, including failed, cancelled, and interrupted direct runs. Convoys with unresolved isolated results are protected, with an explanation in the menu; missing or uncertain results also remain represented. These actions save immediately and only remove CodeConvoy metadata and session output. Repository files, Git changes, registered repositories, and active convoys are untouched.
 

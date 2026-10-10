@@ -8,6 +8,8 @@ use crate::runner::PreparedRepository;
 mod bulk_discard;
 #[path = "continuation_tests.rs"]
 mod continuation;
+#[path = "desktop_tests.rs"]
+mod desktop;
 #[path = "notification_tests.rs"]
 mod notifications;
 #[path = "task_context_tests.rs"]

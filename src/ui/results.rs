@@ -379,6 +379,10 @@ impl App {
 
     fn run_navigation(&mut self, ui: &mut egui::Ui) {
         if self.state.runs.is_empty() {
+            if self.show_active_navigation {
+                self.show_active_navigation = false;
+                self.notice = "No active convoys.".into();
+            }
             return;
         }
         let active = self.state.runs.iter().filter(|r| r.active()).count();
@@ -440,7 +444,7 @@ impl App {
                 },
             );
         let mut selected = self.selected_run;
-        egui::ComboBox::from_id_salt("run_history")
+        let navigation = egui::ComboBox::from_id_salt("run_history")
             .width(ui.available_width())
             .height(280.0)
             .truncate()
@@ -498,6 +502,11 @@ impl App {
                     }
                 }
             });
+        if self.show_active_navigation {
+            self.show_active_navigation = false;
+            egui::Popup::open_id(ui.ctx(), navigation.response.id.with("popup"));
+            navigation.response.scroll_to_me(Some(egui::Align::Min));
+        }
         self.select_run(selected);
         let mut reuse = None;
         let mut remove = None;

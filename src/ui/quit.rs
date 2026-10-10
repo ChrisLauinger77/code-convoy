@@ -42,17 +42,34 @@ impl App {
         self.focus_quit_cancel = false;
         self.cli_checks.stop();
         self.notification_service.stop();
+        self.desktop.stop();
         // Shutdown closes admission synchronously, then uses Stop All's tokens.
         self.manager.shutdown();
     }
 
     pub(super) fn handle_close(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) && !self.request_quit() {
-            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-            ctx.request_repaint();
+        let close = ctx.input(|i| i.viewport().close_requested());
+        let explicit = std::mem::take(&mut self.explicit_quit);
+        if (close || explicit) && !self.exit_ready {
+            if close
+                && !explicit
+                && !self.closing
+                && !self.quit_requested
+                && self.desktop.can_minimize(self.state.desktop)
+            {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.window.minimize(ctx);
+                self.notification_focused = false;
+                self.save();
+            } else if self.request_quit() {
+                if explicit {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            } else {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.window.request_restore();
+                ctx.request_repaint();
+            }
         }
         if self.closing
             && !self.exit_ready
@@ -70,6 +87,7 @@ impl App {
             self.exit_ready = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
+        self.window.restore(ctx);
     }
 
     pub(super) fn quit_window(&mut self, ctx: &egui::Context) {

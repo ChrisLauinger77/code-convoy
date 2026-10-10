@@ -6,6 +6,7 @@ mod attachments_ui;
 mod bulk_discard;
 mod cli_discovery;
 mod continuation;
+mod desktop;
 mod diagnostics;
 mod editor;
 mod format;
@@ -42,6 +43,9 @@ use std::{
 use tokio::{runtime::Runtime, sync::mpsc as async_mpsc};
 
 enum Message {
+    Desktop(u64, crate::desktop::Event),
+    #[cfg(target_os = "macos")]
+    DesktopAction(crate::desktop::Action),
     Notification(crate::notifications::Event),
     FoundCli(u64, Result<Vec<PathBuf>, String>),
     RepositoryFolder(Option<PathBuf>),
@@ -108,8 +112,12 @@ pub struct App {
     notification_tracker: crate::notifications::CompletionTracker,
     notification_service: crate::notifications::Service,
     notification_focused: bool,
-    notification_activation: bool,
-    notification_focus_pending: bool,
+    desktop: crate::desktop::Service,
+    desktop_native: bool,
+    window: crate::desktop::Window,
+    explicit_quit: bool,
+    show_active_navigation: bool,
+    activated_notifications: HashSet<u64>,
     notification_error: String,
     notice: String,
     orphan_notice: String,
@@ -157,12 +165,13 @@ impl App {
         runtime: Runtime,
     ) -> Self {
         let mut app = Self::with_context(&cc.egui_ctx, store, state, runtime);
+        app.desktop_native = true;
         // eframe owns this root window for the lifetime of the app.
         app.repository_dialog = app.repository_dialog.clone().set_parent(cc);
         #[cfg(target_os = "macos")]
         {
             app.native_about = about_macos::NativeAbout::install();
-            quit_macos::connect(&cc.egui_ctx);
+            quit_macos::connect(&cc.egui_ctx, app.tx.clone());
         }
         app
     }
@@ -170,6 +179,13 @@ impl App {
         theme::install(ctx);
         ctx.set_theme(theme::preference(state.appearance));
         let (tx, rx) = mpsc::channel();
+        let desktop_tx = tx.clone();
+        let desktop_ctx = ctx.clone();
+        let desktop =
+            crate::desktop::Service::new(crate::desktop::Events::new(move |generation, event| {
+                let _ = desktop_tx.send(Message::Desktop(generation, event));
+                desktop_ctx.request_repaint();
+            }));
         let notification_tx = tx.clone();
         let notification_ctx = ctx.clone();
         let notification_service = crate::notifications::Service::native(
@@ -227,8 +243,12 @@ impl App {
             notification_tracker: crate::notifications::CompletionTracker::default(),
             notification_service,
             notification_focused: false,
-            notification_activation: false,
-            notification_focus_pending: false,
+            desktop,
+            desktop_native: false,
+            window: crate::desktop::Window::default(),
+            explicit_quit: false,
+            show_active_navigation: false,
+            activated_notifications: HashSet::new(),
             notification_error: String::new(),
             notice: String::new(),
             orphan_notice: String::new(),
@@ -363,6 +383,8 @@ impl App {
                             }
                             ui.separator();
                             self.notification_settings(ui);
+                            ui.separator();
+                            self.desktop_settings(ui);
                         });
                         if !self.manager.is_idle() {
                             ui.menu_button("All convoys", |ui| {
@@ -646,6 +668,13 @@ impl App {
         let mut recovered = false;
         while let Ok(message) = self.rx.try_recv() {
             match message {
+                Message::Desktop(generation, event) => {
+                    if let Some(action) = self.desktop.event(generation, event) {
+                        self.desktop_action(action);
+                    }
+                }
+                #[cfg(target_os = "macos")]
+                Message::DesktopAction(action) => self.desktop_action(action),
                 Message::Notification(event) => self.notification_event(event),
                 Message::RepositoryFolder(path) => self.repository_folder_selected(path),
                 Message::Attachments(request, files, errors) => {
@@ -1025,10 +1054,13 @@ impl eframe::App for App {
         // must never bypass confirmation just because no UI pass is rendered.
         self.update_notification_focus(ctx);
         self.poll();
-        self.activate_notification_window(ctx);
+        self.sync_desktop();
         self.pump_bulk_discard(ctx);
         self.pump_review(ctx);
         self.handle_close(ctx);
+        if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
+            self.save();
+        }
         ctx.request_repaint_after(Duration::from_millis(
             if !self.manager.is_idle()
                 || self.closing
@@ -1071,13 +1103,11 @@ impl eframe::App for App {
         self.quit_window(ctx);
         self.discard_window(ctx);
         self.bulk_discard_window(ctx);
-        if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
-            self.save();
-        }
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
         self.repository_health_cancel.cancel();
         self.notification_service.stop();
+        self.desktop.stop();
         self.cli_checks.stop();
         self.manager.shutdown();
         // Continue draining lifecycle/output events while process trees stop.
@@ -1110,6 +1140,7 @@ impl Drop for App {
     fn drop(&mut self) {
         self.repository_health_cancel.cancel();
         self.notification_service.stop();
+        self.desktop.stop();
         self.cli_checks.stop();
         if let Some(runtime) = self.runtime.take() {
             // A stuck filesystem discovery worker must not hold application

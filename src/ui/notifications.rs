@@ -3,9 +3,14 @@ use crate::notifications;
 
 impl App {
     pub(super) fn update_notification_focus(&mut self, ctx: &egui::Context) {
-        self.notification_focused = ctx.input(|i| {
-            i.viewport().focused.unwrap_or(i.focused) && i.viewport().minimized != Some(true)
-        });
+        // A close-to-tray frame can still carry focus from before minimization.
+        if ctx.input(|i| i.viewport().minimized == Some(false)) {
+            self.window.tray_minimized = false;
+        }
+        self.notification_focused = !self.window.tray_minimized
+            && ctx.input(|i| {
+                i.viewport().focused.unwrap_or(i.focused) && i.viewport().minimized != Some(true)
+            });
     }
     pub(super) fn notification_settings(&mut self, ui: &mut egui::Ui) {
         ui.strong("Desktop notifications");
@@ -67,10 +72,15 @@ impl App {
                 }
             }
             notifications::Event::Activated(id) => {
-                if self.closing {
+                if self.closing || !self.activated_notifications.insert(id) {
                     return;
                 }
-                self.notification_activation = true;
+                if self.activated_notifications.len() > 1024 {
+                    self.activated_notifications.retain(|run_id| {
+                        self.state.runs.iter().any(|run| run.id == *run_id) || *run_id == id
+                    });
+                }
+                self.window.request_restore();
                 if self.state.runs.iter().any(|run| run.id == id) {
                     self.select_run(Some(id));
                     self.tab = Tab::Review;
@@ -82,21 +92,6 @@ impl App {
                 self.notification_error =
                     format!("Convoy #{id}: desktop notification unavailable. {error}");
             }
-        }
-    }
-
-    pub(super) fn activate_notification_window(&mut self, ctx: &egui::Context) {
-        if self.notification_activation {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-            // Focus cannot take effect while minimized. Defer it to a subsequent
-            // event-loop pass after the restore commands have been processed.
-            self.notification_activation = false;
-            self.notification_focus_pending = true;
-            ctx.request_repaint();
-        } else if self.notification_focus_pending {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-            self.notification_focus_pending = false;
         }
     }
 }

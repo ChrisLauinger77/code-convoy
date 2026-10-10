@@ -143,25 +143,21 @@ fn activation_selects_stable_ids_review_and_handles_removed_or_unavailable_resul
     assert_eq!(app.selected_run, Some(9));
     assert!(matches!(app.tab, Tab::Review));
     assert_eq!(app.selected_job, 0);
-    assert!(app.diff.is_none() && app.notification_activation);
+    assert!(app.diff.is_none());
     app.state.runs[0].jobs[0].result_availability = domain::ResultAvailability::Missing;
     app.notification_event(NotificationEvent::Activated(700));
     assert_eq!(app.selected_run, Some(700));
     app.state.runs.remove(1);
-    app.notification_event(NotificationEvent::Activated(9));
+    app.notification_event(NotificationEvent::Activated(999));
     assert_eq!(app.selected_run, Some(700));
-    assert!(app.notice.contains("#9 is no longer"));
+    assert!(app.notice.contains("#999 is no longer"));
     let ctx = egui::Context::default();
-    let mut output = ctx.run_ui(egui::RawInput::default(), |ctx| {
-        app.activate_notification_window(ctx)
-    });
+    let mut output = ctx.run_ui(egui::RawInput::default(), |ctx| app.window.restore(ctx));
     output.textures_delta.clear();
     let commands = &output.viewport_output[&egui::ViewportId::ROOT].commands;
     assert!(commands.contains(&egui::ViewportCommand::Minimized(false)));
     assert!(!commands.contains(&egui::ViewportCommand::Focus));
-    let mut output = ctx.run_ui(egui::RawInput::default(), |ctx| {
-        app.activate_notification_window(ctx)
-    });
+    let mut output = ctx.run_ui(egui::RawInput::default(), |ctx| app.window.restore(ctx));
     output.textures_delta.clear();
     assert!(
         output.viewport_output[&egui::ViewportId::ROOT]
@@ -170,7 +166,7 @@ fn activation_selects_stable_ids_review_and_handles_removed_or_unavailable_resul
     );
     app.closing = true;
     app.notification_event(NotificationEvent::Activated(9));
-    assert!(!app.notification_activation);
+    assert!(app.activated_notifications.contains(&9));
 }
 
 #[test]

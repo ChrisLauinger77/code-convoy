@@ -24,6 +24,8 @@ fn populated_v01_fixture_retains_registrations_history_and_all_preferences() {
     assert!(state.groups.is_empty() && state.templates.is_empty());
     assert!(state.draft.attachments.is_empty());
     let mut expected = original.clone();
+    expected["desktop"] =
+        serde_json::to_value(codeconvoy::desktop::Preferences::default()).unwrap();
     expected["groups"] = serde_json::json!([]);
     expected["templates"] = serde_json::json!([]);
     expected["notifications"] =

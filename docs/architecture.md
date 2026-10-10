@@ -119,9 +119,9 @@ Direct-mode leases exclude identical/nested canonical roots and shared common Gi
 
 Stop Convoy signals only its cancellation tokens, including queued jobs. Individual Stop uses `(run ID, job index)`. Stop All and **confirmed** application close signal every convoy. Watch tokens prevent lost cancellation; queued cancellation never needs a scheduling slot. Completion events precede replacement starts, and a failed job cannot terminate unrelated workers. Shutdown drains lifecycle events and waits for process cleanup; interrupted metadata is recovered on restart, never resumed.
 
-Window close asks for confirmation when either the manager owns unfinished work or saved job metadata remains nonterminal. `ui/quit` owns a single modal decision with live running/queued counts. Cancel (also Escape and the initially focused button) only dismisses that decision. Confirm closes UI and manager admission, sets a shared shutdown flag before signalling the existing cancellation tokens, and waits for the manager to finish while polling events. Admission checks the flag both before scheduling and after backpressured event delivery; workers check it again immediately before agent spawn. Final lifecycle events are drained and state is saved before eframe receives permission to exit. The handler runs in `App::logic`, including hidden/minimized frames. Repeated requests cannot bypass confirmation or repeat shutdown. CLI availability checks are cancelled separately and never count as active convoys or delay the quit decision. App drop shuts down Tokio in the background so a stuck discovery filesystem worker cannot hold exit open; dropped async probes retain the existing process-tree kill guard.
+By default, window close asks for confirmation when either the manager owns unfinished work or saved job metadata remains nonterminal. Optional close-to-tray instead minimizes only when the desktop adapter is operational; explicit Quit always uses confirmation. `ui/quit` owns a single modal decision with live running/queued counts. Cancel (also Escape and the initially focused button) only dismisses that decision. Confirm closes UI and manager admission, sets a shared shutdown flag before signalling the existing cancellation tokens, and waits for the manager to finish while polling events. Admission checks the flag both before scheduling and after backpressured event delivery; workers check it again immediately before agent spawn. Final lifecycle events are drained and state is saved before eframe receives permission to exit. The handler runs in `App::logic`, including hidden/minimized frames. Repeated requests cannot bypass confirmation or repeat shutdown. CLI availability checks are cancelled separately and never count as active convoys or delay the quit decision. App drop shuts down Tokio in the background so a stuck discovery filesystem worker cannot hold exit open; dropped async probes retain the existing process-tree kill guard.
 
-On macOS, `ui/quit_macos` creates an `NSApplication` subclass before eframe initializes AppKit. Its `terminate:` action routes native Quit (including Cmd+Q) into the same root viewport close request; winit retains its delegate and event loop. This is necessary because native termination otherwise reaches winit's exit notification after cancellation can no longer be vetoed. The standard menus, About panel and icon remain intact. Linux and Windows use the shared cancellable viewport close path. No new dependency is needed. See [quit confirmation validation](quit-confirmation-validation.md).
+On macOS, `ui/quit_macos` creates an `NSApplication` subclass before eframe initializes AppKit. Its `terminate:` action sends a distinct explicit Quit event (including Cmd+Q) to the same confirmation policy; winit retains its delegate and event loop. This is necessary because native termination otherwise reaches winit's exit notification after cancellation can no longer be vetoed. The standard menus, About panel and icon remain intact. Linux and Windows use the shared cancellable viewport close path; tray and Settings Quit send explicit application actions. Close-to-tray never handles an explicit Quit. See [quit confirmation validation](quit-confirmation-validation.md).
 
 Overall status is Running while any job is running, otherwise Preparing while any isolated job is preparing, otherwise Queued while work remains. Once terminal, any failure wins, then cancellation, then success only if every job succeeded. Progress counts terminal jobs, not just successes; job rows preserve the individual outcomes.
 
@@ -728,3 +728,47 @@ remains unknown; committed Direct changes still require review after the tree
 becomes clean. Only absent completion observations use the v0.4 live fallback.
 Event priority, filters, exactly-once tracking, restart silence and delivery are
 unchanged.
+
+
+## v0.6 desktop workflow
+
+`desktop` owns persisted preferences, a generation-scoped tray service, minimal menu
+state and a shared restore-before-focus helper. `desktop/native` owns tray-icon and
+muda objects on the existing eframe UI thread. `desktop/linux` uses ksni on the
+existing Tokio runtime. No scheduler/backend/Git changes, daemon, new event loop,
+application thread or startup service are introduced. The library's D-Bus work is
+asynchronous; native callbacks only send messages and request egui repaint.
+
+`App::logic` continues draining execution and notification events while minimized.
+It reconciles tray settings and count changes, handles close/explicit Quit, and
+persists dirty state even without a rendered UI frame. Menus update only on changed
+count/preferences, not through a polling loop. Counts include convoys with any
+queued/preparing/running job. Stop controls remain independent.
+
+One initialization attempt is made per enable transition. Starting/failed trays
+cannot enable minimize-to-tray. Callback generations reject stale actions and late
+success after a failure. Linux watcher loss shuts down that service and restores a
+tray-minimized window; users re-enable explicitly to retry. Windows verifies native
+registration before accepting initialization and again at close-to-tray, and
+tray-icon handles Explorer's TaskbarCreated re-registration. All platforms retain
+Dock/taskbar restoration even if an OS hides the icon without reporting loss.
+
+muda's process-global event handler is write-once. A single installed handler reads
+a replaceable routing table, so toggling tray support cannot leave callbacks bound
+to an obsolete menu or UI channel. Menus, icons and routing are released on disable,
+confirmed shutdown and App drop. Linux service handles request shutdown on drop;
+initialization and updates have bounded timeouts and never block egui.
+
+`ui/desktop` routes Show (preserve selection), Show Active (select an active convoy
+and open the existing ACTIVE selector group), and Quit. macOS terminate: is no
+longer represented as a configurable close event. `ui/quit` remains the sole
+confirmation/cancellation/admission/cleanup authority. Pending or confirmed Quit
+always takes precedence over minimization, including repeated requests.
+
+Notification activation uses the same `desktop::Window` restoration as tray and
+quit. Events in a batch coalesce; duplicate activations for retained run IDs are
+ignored. Window restoration sets Visible and clears Minimized first, then requests
+Focus on a later event-loop pass. Existing notification policy/backend selection
+and stable convoy navigation are unchanged. No second notification transport is
+introduced. See [desktop workflow](desktop-workflow.md) for platform limitations,
+library rationale, settings compatibility and validation.

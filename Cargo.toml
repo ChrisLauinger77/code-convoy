@@ -1,7 +1,7 @@
 [package]
 name = "codeconvoy"
 default-run = "codeconvoy"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.95"
 description = "A local desktop task runner for coding-agent CLIs across Git repositories"
@@ -26,9 +26,19 @@ tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "sync", "time", "macros"] }
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
-# Keep zbus on the async-io executor already used by desktop accessibility.
-# These futures can still be awaited by the application's Tokio runtime.
+# zbus 5.19 selects Tokio inside our runtime and async-io for desktop consumers
+# outside it. Both transports share the existing application runtime safely.
 notify-rust = "4.18.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Direct async SNI: runs on our existing Tokio runtime; observes tray-host loss.
+ksni = "0.3.6"
+# Required for dual-runtime selection shared with accessibility/notifications.
+zbus = { version = "5.19", default-features = false, features = ["async-io"] }
+
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+# Native menus on the existing eframe event loop; no GTK or extra UI thread.
+tray-icon = { version = "0.26.1", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # The same modern backend offered by notify-rust, with cancellable async responses.
@@ -93,4 +103,8 @@ required-features = ["test-support"]
 
 [[example]]
 name = "v05_visibility_validation"
+required-features = ["test-support"]
+
+[[example]]
+name = "v06_desktop_validation"
 required-features = ["test-support"]

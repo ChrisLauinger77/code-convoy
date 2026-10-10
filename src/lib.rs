@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod attachments;
 pub mod continuation;
+pub mod desktop;
 pub mod domain;
 pub mod git;
 pub mod notifications;
