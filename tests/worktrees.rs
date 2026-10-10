@@ -1648,3 +1648,208 @@ async fn direct_retry_waits_for_normal_locks_and_limits_and_checks_reviewed_base
         h.close().await;
     }
 }
+
+#[tokio::test]
+async fn location_changes_affect_new_convoys_but_not_queued_or_running_jobs() {
+    let mut h = Harness::new(1);
+    let repo = repository(h.root.path(), "repo").await;
+    let base_a = h.root.path().canonicalize().unwrap().join("base a");
+    let base_b = h.root.path().canonicalize().unwrap().join("base b");
+    h.manager.set_worktree_base(Some(base_a.clone()));
+    h.start(
+        101,
+        h.task(101, AgentId::Codex, false, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.until(|e| Harness::ready(e, 101)).await;
+    h.start(
+        102,
+        h.task(102, AgentId::Codex, false, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.manager.set_worktree_base(Some(base_b.clone()));
+    h.start(
+        103,
+        h.task(103, AgentId::Codex, false, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.release(101, "tree");
+    h.until(|e| Harness::ready(e, 102)).await;
+    assert_eq!(
+        h.metadata(101).path.parent().unwrap().parent().unwrap(),
+        base_a
+    );
+    assert_eq!(
+        h.metadata(102).path.parent().unwrap().parent().unwrap(),
+        base_a
+    );
+    h.release(102, "tree");
+    h.until(|e| Harness::ready(e, 103)).await;
+    assert_eq!(
+        h.metadata(103).path.parent().unwrap().parent().unwrap(),
+        base_b
+    );
+    h.manager.set_worktree_base(None);
+    h.start(
+        104,
+        h.task(104, AgentId::Codex, false, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.release(103, "tree");
+    h.until(|e| Harness::ready(e, 104)).await;
+    assert_eq!(
+        h.metadata(104).path.parent().unwrap().parent().unwrap(),
+        h.root
+            .path()
+            .canonicalize()
+            .unwrap()
+            .join("retained worktrees ü")
+    );
+    assert!(h.metadata(101).path.exists());
+    h.release(104, "tree");
+    h.until(|e| Harness::finished(e, 104, JobStatus::Succeeded))
+        .await;
+    h.close().await;
+}
+
+#[tokio::test]
+async fn unusable_custom_location_fails_job_without_default_or_direct_execution() {
+    let mut h = Harness::new(1);
+    let repo = repository(h.root.path(), "repo").await;
+    let invalid = h.root.path().join("not a directory");
+    fs::write(&invalid, "keep").unwrap();
+    h.manager.set_worktree_base(Some(invalid.clone()));
+    h.start(
+        105,
+        h.task(105, AgentId::Codex, true, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.until(|e| Harness::finished(e, 105, JobStatus::Failed))
+        .await;
+    assert!(!h.events.iter().any(|e| matches!(
+        e,
+        Event::Preparing {
+            worktree: Some(_),
+            ..
+        } | Event::Started { .. }
+    )));
+    assert_eq!(
+        fs::read_to_string(repo.path.join("tracked.txt")).unwrap(),
+        "committed base\n"
+    );
+    assert_eq!(fs::read_to_string(invalid).unwrap(), "keep");
+    assert!(!h.root.path().join("retained worktrees ü").exists());
+    h.close().await;
+}
+
+#[tokio::test]
+async fn binding_failure_retains_attempt_metadata_through_restart_and_blocks_git() {
+    let mut h = Harness::new(1);
+    let repo = repository(h.root.path(), "repo").await;
+    let original_git = command(&repo.path, &["worktree", "list", "--porcelain"]);
+    let storage = h
+        .root
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("retained worktrees ü");
+    fs::create_dir(&storage).unwrap();
+    // Deterministic Store-side write failure, independent of user privileges.
+    fs::write(storage.join(".locations"), "conflicting file; keep").unwrap();
+    let custom = h.root.path().canonicalize().unwrap().join("external");
+    h.manager.set_worktree_base(Some(custom.clone()));
+    let mut run = h
+        .start(
+            106,
+            h.task(106, AgentId::Codex, true, false),
+            vec![repo.clone()],
+        )
+        .await;
+    h.until(|e| Harness::finished(e, 106, JobStatus::Failed))
+        .await;
+    assert!(!h.events.iter().any(|e| matches!(e, Event::Started { .. })));
+    assert_eq!(
+        command(&repo.path, &["worktree", "list", "--porcelain"]),
+        original_git
+    );
+    let metadata = h.metadata(106);
+    assert!(metadata.path.starts_with(&custom));
+    let manifest = metadata.path.parent().unwrap().join("owner.json");
+    assert!(metadata.path.parent().unwrap().is_dir());
+    assert!(!manifest.exists(), "Binding must precede initialization");
+    assert!(!metadata.path.exists());
+    let mut prepared = false;
+    for event in &h.events {
+        match event {
+            Event::Preparing {
+                worktree: Some(m), ..
+            } => {
+                run.jobs[0].worktree = Some(m.clone());
+                prepared = true;
+            }
+            Event::Finished {
+                status,
+                exit_code,
+                detail,
+                ..
+            } => {
+                assert!(prepared, "Ownership event must precede terminal failure");
+                assert!(detail.contains("Could not bind original worktree location"));
+                run.jobs[0].finish(*status, *exit_code, detail.clone());
+            }
+            _ => {}
+        }
+    }
+    let store = Store::open(&h.root.path().join("state")).unwrap();
+    store
+        .save(&AppState {
+            repositories: vec![repo.clone()],
+            runs: vec![run],
+            next_run: 107,
+            ..Default::default()
+        })
+        .unwrap();
+    h.manager.shutdown();
+    (&mut h.manager.join).await.unwrap();
+    let (tx, rx) = mpsc::channel(256);
+    h.manager = RunManager::with_worktree_directory(1, tx, storage.clone());
+    h.rx = rx;
+    let mut restored = store.load().unwrap();
+    let job = &restored.runs[0].jobs[0];
+    assert_eq!(job.worktree.as_ref(), Some(&metadata));
+    assert_eq!(job.status, JobStatus::Failed);
+    assert!(job.unresolved_retained_result());
+    let report = h.manager.lifecycle().inspect(106, 0, job, false).await;
+    assert_eq!(
+        report.availability,
+        ResultAvailability::Invalid,
+        "{}",
+        report.detail
+    );
+    report.apply(&mut restored.runs[0].jobs[0]);
+    assert!(
+        store
+            .cleanup_result(&mut restored, &h.manager, 106, 0)
+            .await
+            .is_err()
+    );
+    assert!(metadata.path.parent().unwrap().is_dir());
+    assert!(!manifest.exists());
+    assert!(!metadata.path.exists());
+    assert_eq!(
+        fs::read_to_string(storage.join(".locations")).unwrap(),
+        "conflicting file; keep"
+    );
+    assert_eq!(
+        fs::read_to_string(repo.path.join("tracked.txt")).unwrap(),
+        "committed base\n"
+    );
+    // History protections still pin this unbound partial result.
+    assert!(restored.runs[0].unresolved_results());
+    h.close().await;
+}

@@ -115,8 +115,10 @@ fn resolve(path: &Path) -> Result<PathBuf> {
     }
 }
 
-/// The root comes from the application's Store, never from persisted job paths.
+/// Custom boundaries require an exact original-location record in the Store.
 fn layout(root: &Path, m: &WorktreeMetadata) -> Result<PathBuf> {
+    let recorded = super::location::recorded_root(root, m)?;
+    let root = recorded.as_path();
     anyhow::ensure!(
         root.is_absolute()
             && m.path.is_absolute()
@@ -153,6 +155,7 @@ fn layout(root: &Path, m: &WorktreeMetadata) -> Result<PathBuf> {
 }
 fn manifest(root: &Path, m: &WorktreeMetadata) -> Result<()> {
     let attempt = layout(root, m)?;
+    let root = attempt.parent().context("Missing original storage root.")?;
     ordinary(root, true)?;
     anyhow::ensure!(
         root.canonicalize()? == root,
@@ -229,9 +232,12 @@ async fn verify(
     m: &WorktreeMetadata,
     i: &git::Inspection<'_>,
 ) -> VerifiedResult<Verified> {
-    layout(root, m).map_err(invalid)?;
+    let attempt = layout(root, m).map_err(invalid)?;
+    let original = attempt
+        .parent()
+        .ok_or_else(|| invalid(anyhow::anyhow!("Missing storage root.")))?;
     // Removed storage is missing, not an invitation to recreate or delete it.
-    if absent(root).map_err(stale)?
+    if absent(original).map_err(stale)?
         || absent(
             m.path
                 .parent()
@@ -563,8 +569,14 @@ pub fn orphans(root: &Path, referenced: &HashSet<PathBuf>) -> Result<Vec<PathBuf
         "Worktree storage now resolves elsewhere."
     );
     let mut found = Vec::new();
-    for entry in fs::read_dir(root)? {
-        let path = entry?.path();
+    let paths = fs::read_dir(root)?
+        .map(|e| e.map(|e| e.path()))
+        .collect::<std::io::Result<Vec<_>>>()?;
+    for path in paths
+        .into_iter()
+        .filter(|p| p.file_name().is_none_or(|n| n != ".locations"))
+        .chain(super::location::recorded_attempts(root)?)
+    {
         let tree = path.join("tree");
         if referenced.contains(&tree) {
             continue;

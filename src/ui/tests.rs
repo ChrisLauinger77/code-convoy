@@ -1987,3 +1987,28 @@ fn review_controls_ignore_unrelated_inspections_and_preserve_uncertain_results()
         }
     }
 }
+
+#[test]
+fn worktree_picker_cancel_validation_failure_and_save_preserve_preferences() {
+    let (_temp, mut app) = app();
+    let base = app.store.directory().join("custom ü");
+    app.worktree_location.input = "draft path".into();
+    app.worktree_location.pending = true;
+    app.worktree_folder_selected(None);
+    assert!(!app.worktree_location.pending);
+    assert_eq!(app.worktree_location.input, "draft path");
+    assert_eq!(app.state.worktree_base, None);
+    app.worktree_folder_selected(Some(base.clone()));
+    assert_eq!(app.worktree_location.input, base.display().to_string());
+    assert_eq!(app.state.worktree_base, None);
+    app.worktree_location_checked(Ok(base.clone()));
+    app.save();
+    assert_eq!(app.store.load().unwrap().worktree_base, Some(base.clone()));
+    app.worktree_location_checked(Err("permission denied".into()));
+    assert_eq!(app.state.worktree_base, Some(base));
+    assert!(
+        app.worktree_location
+            .detail
+            .contains("Location not changed")
+    );
+}

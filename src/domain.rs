@@ -427,6 +427,8 @@ pub struct AppState {
     pub appearance: Appearance,
     pub notifications: crate::notifications::Preferences,
     pub desktop: crate::desktop::Preferences,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree_base: Option<PathBuf>,
 }
 impl Default for AppState {
     fn default() -> Self {
@@ -444,6 +446,7 @@ impl Default for AppState {
             appearance: Appearance::default(),
             notifications: crate::notifications::Preferences::default(),
             desktop: crate::desktop::Preferences::default(),
+            worktree_base: None,
         }
     }
 }

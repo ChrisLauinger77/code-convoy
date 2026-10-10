@@ -1,5 +1,6 @@
 //! Retained detached worktrees and owned result lifecycle.
 pub mod apply;
+pub mod location;
 pub mod recovery;
 use crate::{
     domain::{ExecutionMode, Repository, WorktreeMetadata, WorktreeResult},
@@ -41,9 +42,23 @@ fn ordinary(path: &Path, directory: bool) -> Result<()> {
     Ok(())
 }
 
-/// Atomically reserve a random attempt directory, retaining it even on failure.
-/// The manifest is a sibling of the checkout, never an agent-created file in it.
+/// Reserve and initialize an attempt under the default storage root.
 pub fn reserve(
+    root: &Path,
+    run: u64,
+    job: usize,
+    repository: Repository,
+    common_dir: std::path::PathBuf,
+    base_commit: String,
+) -> Result<WorktreeMetadata> {
+    let metadata = allocate(root, run, job, repository, common_dir, base_commit)?;
+    initialize(&metadata)?;
+    Ok(metadata)
+}
+
+/// Return metadata immediately after allocation; all later filesystem errors
+/// must preserve it so a partial attempt in a custom base stays discoverable.
+fn allocate(
     root: &Path,
     run: u64,
     job: usize,
@@ -55,6 +70,7 @@ pub fn reserve(
         valid_commit(&base_commit),
         "Invalid isolated base commit; start a fresh convoy."
     );
+    location::validate_base(root)?;
     // Inspect the root itself before canonicalization can follow a link. Dangling
     // links must also fail without creating directories at their target.
     match fs::symlink_metadata(root) {
@@ -82,7 +98,7 @@ pub fn reserve(
         .tempdir_in(&root)
         .context("Cannot reserve a unique worktree directory. Check permissions and free space.")?
         .keep();
-    let metadata = WorktreeMetadata {
+    Ok(WorktreeMetadata {
         owner: OWNER.into(),
         run,
         job,
@@ -91,20 +107,67 @@ pub fn reserve(
         path: attempt.join("tree"),
         base_commit,
         execution_mode: ExecutionMode::IsolatedWorktree,
-    };
+    })
+}
+
+/// The manifest is a sibling of the checkout, never an agent-created file in it.
+fn initialize(metadata: &WorktreeMetadata) -> Result<()> {
+    let attempt = metadata
+        .path
+        .parent()
+        .context("Missing attempt directory.")?;
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(attempt.join("owner.json"))
         .context("Cannot write worktree ownership metadata; Git has not been started.")?;
-    serde_json::to_writer_pretty(&mut file, &metadata)?;
+    serde_json::to_writer_pretty(&mut file, metadata)?;
     file.write_all(b"\n")?;
     file.sync_all()?;
     fs::create_dir(attempt.join("hooks"))?;
     #[cfg(unix)]
-    fs::File::open(&attempt)?.sync_all()?;
-    Ok(metadata)
+    fs::File::open(attempt)?.sync_all()?;
+    Ok(())
 }
+/// A reserved attempt survives every initialization failure. Callers must retain
+/// its metadata before propagating `preparation`, and only start Git on success.
+#[derive(Debug)]
+pub struct Reservation {
+    pub metadata: WorktreeMetadata,
+    pub preparation: Result<()>,
+}
+
+/// Reserve using the chosen base, retaining the Store's original trust boundary.
+#[allow(clippy::too_many_arguments)]
+pub fn reserve_at(
+    storage: &Path,
+    custom: Option<&Path>,
+    run: u64,
+    job: usize,
+    repository: Repository,
+    common_dir: std::path::PathBuf,
+    base_commit: String,
+) -> Result<Reservation> {
+    let base = location::resolve_base(storage, custom)?;
+    let metadata = allocate(&base, run, job, repository, common_dir, base_commit)?;
+    Ok(finish_reservation(storage, metadata))
+}
+
+fn finish_reservation(storage: &Path, metadata: WorktreeMetadata) -> Reservation {
+    // Bind before the owner file, hooks directory or their syncs can fail. The
+    // Store can then discover even an attempt with no readable sibling manifest.
+    let preparation = location::record(storage, &metadata).with_context(|| format!(
+        "Could not bind original worktree location {} to application storage. Reserved metadata is retained; Git has not been started.", metadata.path.display()));
+    let preparation = preparation.and_then(|()| initialize(&metadata).with_context(|| format!(
+        "Could not initialize worktree attempt at {}. Reserved metadata is retained; Git has not been started.", metadata.path.display())));
+    Reservation {
+        metadata,
+        preparation,
+    }
+}
+
+#[cfg(test)]
+mod tests;
 fn valid_commit(commit: &str) -> bool {
     matches!(commit.len(), 40 | 64) && commit.bytes().all(|b| b.is_ascii_hexdigit())
 }
@@ -123,6 +186,7 @@ fn verify_manifest(metadata: &WorktreeMetadata) -> Result<()> {
         metadata.path.file_name().is_some_and(|p| p == "tree"),
         "Invalid worktree checkout path."
     );
+    ordinary(&parent.join("owner.json"), false)?;
     let file = fs::File::open(parent.join("owner.json"))
         .context("Worktree ownership record is missing; no operation was performed.")?;
     let recorded: WorktreeMetadata = serde_json::from_reader(std::io::Read::take(file, 64 * 1024))?;
@@ -161,6 +225,11 @@ pub async fn create(
     let m = metadata.clone();
     tokio::task::spawn_blocking(move || -> Result<()> {
         verify_manifest(&m)?;
+        let attempt = m.path.parent().context("Missing attempt directory.")?;
+        let root = attempt.parent().context("Missing worktree base.")?;
+        anyhow::ensure!(location::validate_base(root)? == root, "Worktree base now resolves elsewhere.");
+        ordinary(attempt, true)?;
+        anyhow::ensure!(attempt.canonicalize()? == attempt, "Worktree attempt now resolves elsewhere.");
         anyhow::ensure!(fs::symlink_metadata(&m.path).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
             "Worktree destination already exists or cannot be inspected: {}. Start a fresh convoy; the existing path is retained.", m.path.display());
         Ok(())

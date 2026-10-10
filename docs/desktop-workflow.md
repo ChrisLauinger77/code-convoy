@@ -21,6 +21,49 @@ unavailable, but the current close behavior safely falls back to Quit. No restar
 is needed to change close behavior. After fixing tray-host support, toggle tray
 off/on to explicitly retry; initialization never retries continuously.
 
+## Worktree location
+
+Open **Settings → Worktree location**. Enter an absolute base directory, or use
+**Browse…** to open the native directory picker, then **Apply location**. The
+current saved location stays visible; cancelling the picker or failing validation
+does not replace it. **Use default** clears the override and restores
+`<application data directory>/worktrees`. This optional `worktree_base` preference
+uses the existing local version-1 settings file; older settings retain the default.
+
+Each newly launched convoy captures the current preference. Already launched
+convoys, including their queued jobs, keep their captured location. Retrying or
+reusing a convoy creates new worktrees using the current preference. Existing
+worktrees are never moved, renamed or deleted by a setting change.
+
+The configured directory is a base, not a checkout: each job atomically reserves
+`run-<id>-job-<index>-<random>/tree` below it. Missing directories are created during
+preparation, after validation. Spaces and Unicode are supported. Use an absolute
+native path (including drive/UNC paths on Windows), without `.` or `..`; `~` and
+environment variables are not expanded. Directory aliases are resolved to their
+canonical location when saved. A symlink/junction selected as the base is rejected.
+Bases inside Git working trees, managed attempts (including partial attempts), or
+CodeConvoy's internal ownership-record directory are refused.
+
+Preparation revalidates the location and checks access by actually reserving the
+unique attempt and writing its ownership records before invoking Git. Invalid,
+missing-parent, permission and disk-space failures are explicit job errors; there
+is no fallback to the default directory or Direct execution. Partially reserved
+metadata is retained with its location in diagnostics. The Store-side location
+record is written before initializing the sibling ownership file and hooks directory.
+If any of these operations or their syncs fail, the job still records the reserved
+attempt before failing, so its original location survives restart; Git is not started.
+Successfully recorded locations also remain discoverable without a saved run, even
+when the sibling ownership file could not be initialized.
+
+Custom attempts have both the existing sibling `owner.json` and an exact original
+location record under `<application data directory>/worktrees/.locations`. Retain
+this application data alongside custom worktrees. Recovery, Apply and cleanup use
+that record, never the current preference, and still verify the original Git
+identity, detached ownership lock, backlink and exact checkout. Missing, altered
+or redirected ownership records block cleanup. Cleanup removes only the recorded
+checkout through Git and retains the existing metadata tombstones; it never removes
+the base directory. Startup orphan diagnostics also cover recorded old locations.
+
 ## Close, minimize, restore and Quit
 
 - **Close + Quit application:** follow the existing active-work confirmation.
@@ -102,8 +145,15 @@ describes why a watcher alone is insufficient without a registered host.
 2026-10-10, macOS Apple Silicon, Homebrew Rust/Cargo 1.99:
 
 - `cargo fmt --check`, strict Clippy, `cargo test --all-features` and
-  `cargo build --release`: passed. 331 Rust tests passed, with four optional CLI
+  `cargo build --release`: passed. 346 Rust tests passed, with four optional CLI
   probes ignored. Automated tests use no live desktop session.
+- Thirteen additional worktree-location tests cover legacy/custom persistence,
+  default and missing-directory resolution, concurrent unique reservations,
+  invalid/traversing/nested paths, permission/link failures, queued-convoy setting
+  snapshots, no fallback, settings picker cancellation, original-location cleanup
+  after restart, missing/tampered ownership records, and persisted partial attempts
+  after Store binding failure, plus orphan discovery and returned metadata after
+  ownership-file or hooks-directory initialization failures. Existing recovery tests pass.
 - 16 packaging tests and `packaging/release.py check-tag v0.6.0`: passed using
   Python 3.14. The system Python 3.9 lacks the required `tomllib` module.
 - Linux and Windows target checks were attempted; both stopped because their Rust
@@ -136,5 +186,6 @@ host, macOS Intel/Apple Silicon and Windows 10/11. Verify icon/menu and count up
 disable/re-enable, Show preserving view, Show Active navigation, close with active
 and queued work, Cancel, repeated Quit, full process-tree cleanup, notification
 clicks while minimized, and recovery when the tray host/shell disappears. Confirm
-settings round-trip and no replay/resume after restart. No tags or packages have
+settings round-trip, native worktree folder selection on each platform, and no
+replay/resume after restart. No tags or packages have
 been published by this implementation.

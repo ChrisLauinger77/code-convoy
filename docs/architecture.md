@@ -239,7 +239,8 @@ Agent CLI configuration, permissions and Git content filters retain their normal
 semantics; worktrees are filesystem separation, not a security sandbox. No
 submodule initialization, dependency copying or agent authentication is added.
 
-Storage is `<Store data directory>/worktrees/run-<id>-job-<index>-<random>/tree`.
+Default storage is `<Store data directory>/worktrees/run-<id>-job-<index>-<random>/tree`.
+The v0.6 custom-base extension is described below.
 Reservation checks the storage root with `symlink_metadata` before creating an
 attempt or resolving its identity. Symlinks (including dangling links) and Windows
 reparse points are rejected using the same resource checks as recovery.
@@ -735,7 +736,7 @@ unchanged.
 `desktop` owns persisted preferences, a generation-scoped tray service, minimal menu
 state and a shared restore-before-focus helper. `desktop/native` owns tray-icon and
 muda objects on the existing eframe UI thread. `desktop/linux` uses ksni on the
-existing Tokio runtime. No scheduler/backend/Git changes, daemon, new event loop,
+existing Tokio runtime. No scheduler policy/backend changes, daemon, new event loop,
 application thread or startup service are introduced. The library's D-Bus work is
 asynchronous; native callbacks only send messages and request egui repaint.
 
@@ -772,3 +773,40 @@ Focus on a later event-loop pass. Existing notification policy/backend selection
 and stable convoy navigation are unchanged. No second notification transport is
 introduced. See [desktop workflow](desktop-workflow.md) for platform limitations,
 library rationale, settings compatibility and validation.
+
+
+### Configurable worktree base
+
+The additive optional `AppState::worktree_base` is a global preference, independent
+of backend settings and repository registrations. `ui/worktree_settings` reuses
+rfd's native async directory picker; filesystem validation runs on a blocking
+worker. Successful Apply saves the canonical absolute base, while Use default
+clears the override. Selection and validation errors leave the saved preference
+intact. Validation creates no directories; reservation creates missing parents
+and reports write/permission failures without fallback.
+
+`RunManager::start` captures this preference into each in-memory convoy. Queued
+jobs keep that value even after a subsequent setting change. Restart never resumes
+queued work. `worktrees::reserve_at` uses the existing atomic random reservation
+and sibling ownership format. Immediately after allocation, custom attempts write
+and sync an exact metadata binding under the immutable Store default root's
+`.locations` directory, before initializing the sibling manifest and hooks directory.
+The current preference never changes that trusted root. Reservation returns the
+attempt metadata even when binding, manifest creation, hooks creation or a sync
+fails. The worker emits the metadata through the existing Preparing event before
+propagating that error, so failed attempts remain pinned in persisted history and
+visible after restart. A successful binding also lets orphan discovery find partial
+attempts without a valid manifest or persisted run. Git creation requires both a
+successful binding and complete initialization.
+
+`worktrees/location` resolves default/custom bases, rejects traversal and nested
+Git/managed attempts, and verifies original-location bindings. Recovery's layout
+check accepts an external base only with an exact, bounded, ordinary-file binding
+inside the original Store. The existing sibling manifest, canonical source/common
+identity, detached registration, ownership lock, Git backlink, durable cleanup
+journal and lifecycle lease checks remain required on that original path. Apply,
+Discard and internal cleanup share this path; no alternate deletion primitive is
+introduced. Original location bindings and cleanup tombstones are retained after
+verified removal. Orphan discovery includes registered custom attempts regardless
+of the current preference. No worktree or base is relocated or automatically
+removed, and the base itself is never a cleanup target.

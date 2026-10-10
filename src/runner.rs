@@ -149,6 +149,7 @@ async fn job_work(
     repository_safe: &AtomicBool,
     tx: &mpsc::Sender<Event>,
     storage: Option<std::path::PathBuf>,
+    worktree_base: Option<std::path::PathBuf>,
     administration: Arc<Administration>,
 ) -> Result<(JobStatus, Option<i32>, String)> {
     let mut launched = false;
@@ -210,9 +211,12 @@ async fn job_work(
         let base = prepared.state.summary.head.clone().context("Isolated execution requires a committed HEAD. Create an initial commit yourself, then start a fresh convoy.")?;
         // Await this small filesystem worker even on cancellation, so its ownership
         // record can always be delivered before the job becomes terminal.
-        let metadata = tokio::task::spawn_blocking(move || crate::worktrees::reserve(&root, run, job, repo, common, base)).await??;
+        let crate::worktrees::Reservation { metadata, preparation } = tokio::task::spawn_blocking(move || crate::worktrees::reserve_at(&root, worktree_base.as_deref(), run, job, repo, common, base)).await??;
         retained = Some(metadata.clone());
         tx.send(Event::Preparing { run, job, worktree: Some(metadata.clone()) }).await.context("Application closed.")?;
+        // Every initialization failure must still pin the reserved attempt in history.
+        // It grants no creation or cleanup authority, even if the checkout is absent.
+        preparation?;
         administration.healthy.store(false, Ordering::Release);
         let creation = crate::worktrees::create(&metadata, cancellation, repository_safe).await;
         administration.healthy.store(repository_safe.load(Ordering::Acquire), Ordering::Release);
