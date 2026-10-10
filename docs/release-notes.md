@@ -20,6 +20,11 @@ of this work.
   window and disables tray minimization until explicitly re-enabled.
 - Settings and run changes persist while the window is minimized. Existing v1
   settings (including 0.5.0) default safely to tray disabled and Quit behavior.
+- Configurable **Settings → Worktree location** with a native directory picker,
+  absolute custom base or the existing default. New convoys capture the setting;
+  queued and existing worktrees retain their original location. Unique attempts,
+  pre-creation validation and Store-owned original-location records preserve
+  recovery/Apply/cleanup safety without fallback, relocation or automatic deletion.
 - Tests for settings compatibility, tray failure/routing/count changes, stale
   callbacks, close/quit decisions and notification restoration; a disposable
   native desktop validation example.

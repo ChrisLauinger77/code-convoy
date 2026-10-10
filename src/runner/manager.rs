@@ -27,6 +27,7 @@ struct Control {
     done: Arc<AtomicBool>,
 }
 pub(super) struct Convoy {
+    worktree_base: Option<std::path::PathBuf>,
     task: Arc<TaskConfig>,
     backend: Arc<dyn AgentBackend>,
     repositories: Vec<Option<PreparedRepository>>,
@@ -50,6 +51,7 @@ pub(super) enum Command {
 /// Application-owned execution. Methods enqueue work or signal cancellation;
 /// Git, processes, admission, and cleanup run entirely on the Tokio runtime.
 pub struct RunManager {
+    worktree_base: Option<std::path::PathBuf>,
     commands: mpsc::UnboundedSender<Command>,
     controls: BTreeMap<u64, Control>,
     pub join: JoinHandle<()>,
@@ -96,12 +98,17 @@ impl RunManager {
             storage,
         ));
         Self {
+            worktree_base: None,
             commands,
             controls: BTreeMap::new(),
             join,
             closing: false,
             stopping,
         }
+    }
+    /// Changes only the base captured by subsequent convoy launches.
+    pub fn set_worktree_base(&mut self, base: Option<std::path::PathBuf>) {
+        self.worktree_base = base;
     }
     pub fn lifecycle(&self) -> LifecycleClient {
         LifecycleClient {
@@ -133,6 +140,7 @@ impl RunManager {
             .collect();
         let done = Arc::new(AtomicBool::new(false));
         let convoy = Convoy {
+            worktree_base: self.worktree_base.clone(),
             task: Arc::new(prepared.task),
             backend,
             remaining: prepared.repositories.len(),
@@ -420,6 +428,7 @@ async fn manage(
             let tx = events.clone();
             let worker_stopping = stopping.clone();
             let storage = storage.clone();
+            let worktree_base = convoy.worktree_base.clone();
             let admin = operations
                 .administration
                 .entry(
@@ -444,6 +453,7 @@ async fn manage(
                     &worker_safe,
                     &tx,
                     storage,
+                    worktree_base,
                     admin,
                 )
                 .await

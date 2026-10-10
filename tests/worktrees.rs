@@ -1648,3 +1648,101 @@ async fn direct_retry_waits_for_normal_locks_and_limits_and_checks_reviewed_base
         h.close().await;
     }
 }
+
+#[tokio::test]
+async fn location_changes_affect_new_convoys_but_not_queued_or_running_jobs() {
+    let mut h = Harness::new(1);
+    let repo = repository(h.root.path(), "repo").await;
+    let base_a = h.root.path().canonicalize().unwrap().join("base a");
+    let base_b = h.root.path().canonicalize().unwrap().join("base b");
+    h.manager.set_worktree_base(Some(base_a.clone()));
+    h.start(
+        101,
+        h.task(101, AgentId::Codex, false, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.until(|e| Harness::ready(e, 101)).await;
+    h.start(
+        102,
+        h.task(102, AgentId::Codex, false, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.manager.set_worktree_base(Some(base_b.clone()));
+    h.start(
+        103,
+        h.task(103, AgentId::Codex, false, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.release(101, "tree");
+    h.until(|e| Harness::ready(e, 102)).await;
+    assert_eq!(
+        h.metadata(101).path.parent().unwrap().parent().unwrap(),
+        base_a
+    );
+    assert_eq!(
+        h.metadata(102).path.parent().unwrap().parent().unwrap(),
+        base_a
+    );
+    h.release(102, "tree");
+    h.until(|e| Harness::ready(e, 103)).await;
+    assert_eq!(
+        h.metadata(103).path.parent().unwrap().parent().unwrap(),
+        base_b
+    );
+    h.manager.set_worktree_base(None);
+    h.start(
+        104,
+        h.task(104, AgentId::Codex, false, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.release(103, "tree");
+    h.until(|e| Harness::ready(e, 104)).await;
+    assert_eq!(
+        h.metadata(104).path.parent().unwrap().parent().unwrap(),
+        h.root
+            .path()
+            .canonicalize()
+            .unwrap()
+            .join("retained worktrees ü")
+    );
+    assert!(h.metadata(101).path.exists());
+    h.release(104, "tree");
+    h.until(|e| Harness::finished(e, 104, JobStatus::Succeeded))
+        .await;
+    h.close().await;
+}
+
+#[tokio::test]
+async fn unusable_custom_location_fails_job_without_default_or_direct_execution() {
+    let mut h = Harness::new(1);
+    let repo = repository(h.root.path(), "repo").await;
+    let invalid = h.root.path().join("not a directory");
+    fs::write(&invalid, "keep").unwrap();
+    h.manager.set_worktree_base(Some(invalid.clone()));
+    h.start(
+        105,
+        h.task(105, AgentId::Codex, true, false),
+        vec![repo.clone()],
+    )
+    .await;
+    h.until(|e| Harness::finished(e, 105, JobStatus::Failed))
+        .await;
+    assert!(!h.events.iter().any(|e| matches!(
+        e,
+        Event::Preparing {
+            worktree: Some(_),
+            ..
+        } | Event::Started { .. }
+    )));
+    assert_eq!(
+        fs::read_to_string(repo.path.join("tracked.txt")).unwrap(),
+        "committed base\n"
+    );
+    assert_eq!(fs::read_to_string(invalid).unwrap(), "keep");
+    assert!(!h.root.path().join("retained worktrees ü").exists());
+    h.close().await;
+}

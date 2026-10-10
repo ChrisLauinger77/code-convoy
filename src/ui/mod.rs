@@ -25,6 +25,7 @@ mod snapshot;
 mod tests;
 mod text_view;
 mod theme;
+mod worktree_settings;
 
 use crate::{
     agents,
@@ -49,6 +50,8 @@ enum Message {
     Notification(crate::notifications::Event),
     FoundCli(u64, Result<Vec<PathBuf>, String>),
     RepositoryFolder(Option<PathBuf>),
+    WorktreeFolder(Option<PathBuf>),
+    WorktreeLocation(Result<PathBuf, String>),
     Attachments(u64, Vec<crate::attachments::Attachment>, Vec<String>),
     ReusedAttachments(u64, Vec<crate::attachments::Attachment>, Vec<String>),
     Registered(Result<(Repository, WorkingTree), String>),
@@ -94,6 +97,7 @@ pub struct App {
     picked_repository_path: Option<PathBuf>,
     repository_dialog: rfd::AsyncFileDialog,
     browsing_repository: bool,
+    worktree_location: worktree_settings::LocationEditor,
     focus_repository_input: bool,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     repository_refresh: u64,
@@ -210,7 +214,16 @@ impl App {
             runtime.handle().clone(),
             move || repaint.request_repaint(),
         );
+        let worktree_location = worktree_settings::LocationEditor {
+            input: state
+                .worktree_base
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
+            ..Default::default()
+        };
         let mut app = Self {
+            worktree_location,
             store,
             state,
             runtime: Some(runtime),
@@ -383,6 +396,8 @@ impl App {
                             }
                             ui.separator();
                             self.notification_settings(ui);
+                            ui.separator();
+                            ui.menu_button("Worktree location", |ui| self.worktree_settings(ui));
                             ui.separator();
                             self.desktop_settings(ui);
                         });
@@ -633,6 +648,8 @@ impl App {
             self.notice = format!("Cannot save run; nothing was started: {error:#}");
             return;
         }
+        self.manager
+            .set_worktree_base(self.state.worktree_base.clone());
         if let Err(error) = self.manager.start(id, prepared, backend) {
             for job in &mut self.state.runs[0].jobs {
                 job.finish(
@@ -677,6 +694,8 @@ impl App {
                 Message::DesktopAction(action) => self.desktop_action(action),
                 Message::Notification(event) => self.notification_event(event),
                 Message::RepositoryFolder(path) => self.repository_folder_selected(path),
+                Message::WorktreeFolder(path) => self.worktree_folder_selected(path),
+                Message::WorktreeLocation(result) => self.worktree_location_checked(result),
                 Message::Attachments(request, files, errors) => {
                     self.attachments_added(request, files, errors)
                 }

@@ -1,5 +1,6 @@
 //! Retained detached worktrees and owned result lifecycle.
 pub mod apply;
+pub mod location;
 pub mod recovery;
 use crate::{
     domain::{ExecutionMode, Repository, WorktreeMetadata, WorktreeResult},
@@ -55,6 +56,7 @@ pub fn reserve(
         valid_commit(&base_commit),
         "Invalid isolated base commit; start a fresh convoy."
     );
+    location::validate_base(root)?;
     // Inspect the root itself before canonicalization can follow a link. Dangling
     // links must also fail without creating directories at their target.
     match fs::symlink_metadata(root) {
@@ -105,6 +107,23 @@ pub fn reserve(
     fs::File::open(&attempt)?.sync_all()?;
     Ok(metadata)
 }
+/// Reserve using the chosen base, retaining the Store's original trust boundary.
+#[allow(clippy::too_many_arguments)]
+pub fn reserve_at(
+    storage: &Path,
+    custom: Option<&Path>,
+    run: u64,
+    job: usize,
+    repository: Repository,
+    common_dir: std::path::PathBuf,
+    base_commit: String,
+) -> Result<WorktreeMetadata> {
+    let base = location::resolve_base(storage, custom)?;
+    let metadata = reserve(&base, run, job, repository, common_dir, base_commit)?;
+    location::record(storage, &metadata).with_context(|| format!(
+        "Could not bind original worktree location {} to application storage. Reserved metadata is retained; Git has not been started.", metadata.path.display()))?;
+    Ok(metadata)
+}
 fn valid_commit(commit: &str) -> bool {
     matches!(commit.len(), 40 | 64) && commit.bytes().all(|b| b.is_ascii_hexdigit())
 }
@@ -123,6 +142,7 @@ fn verify_manifest(metadata: &WorktreeMetadata) -> Result<()> {
         metadata.path.file_name().is_some_and(|p| p == "tree"),
         "Invalid worktree checkout path."
     );
+    ordinary(&parent.join("owner.json"), false)?;
     let file = fs::File::open(parent.join("owner.json"))
         .context("Worktree ownership record is missing; no operation was performed.")?;
     let recorded: WorktreeMetadata = serde_json::from_reader(std::io::Read::take(file, 64 * 1024))?;
@@ -161,6 +181,11 @@ pub async fn create(
     let m = metadata.clone();
     tokio::task::spawn_blocking(move || -> Result<()> {
         verify_manifest(&m)?;
+        let attempt = m.path.parent().context("Missing attempt directory.")?;
+        let root = attempt.parent().context("Missing worktree base.")?;
+        anyhow::ensure!(location::validate_base(root)? == root, "Worktree base now resolves elsewhere.");
+        ordinary(attempt, true)?;
+        anyhow::ensure!(attempt.canonicalize()? == attempt, "Worktree attempt now resolves elsewhere.");
         anyhow::ensure!(fs::symlink_metadata(&m.path).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
             "Worktree destination already exists or cannot be inspected: {}. Start a fresh convoy; the existing path is retained.", m.path.display());
         Ok(())
