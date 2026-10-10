@@ -226,6 +226,14 @@ Selecting a group adds available members; deselecting removes all its current
 members, including overlapping or individual selections. Unavailable memberships
 stay visible and repairable. Loading a template never starts work.
 
+The repository picker shows **Ungrouped** first, followed by your saved groups.
+Click a section header to expand or collapse it; each remembers its state during
+the session, including after a group rename. Header checkboxes select or deselect
+members without expanding the group, and **Select all / Select none** still cover
+every registered repository. Counts show each section's membership and selection;
+the overall count counts each repository once. Repositories in multiple groups
+share one selection and receive only one job per convoy.
+
 **Add files…** opens a native multi-file picker for Markdown, text, JSON, YAML,
 PNG, JPEG and WebP. Files can also be dropped onto the attachment area. Each
 job receives the task context through its backend's documented interface.

@@ -16,6 +16,7 @@ mod quit;
 #[cfg(target_os = "macos")]
 mod quit_macos;
 mod repositories;
+mod repository_sections;
 #[cfg(target_os = "macos")]
 pub use quit_macos::init_native_application;
 mod results;
@@ -93,6 +94,7 @@ pub struct App {
     focus_draft: bool,
     library_editor: Option<library::LibraryEditor>,
     attachment_work: attachments_ui::AttachmentWork,
+    repository_sections: repository_sections::RepositorySections,
     repository_input: String,
     picked_repository_path: Option<PathBuf>,
     repository_dialog: rfd::AsyncFileDialog,
@@ -232,6 +234,7 @@ impl App {
             focus_draft: false,
             library_editor: None,
             attachment_work: attachments_ui::AttachmentWork::default(),
+            repository_sections: repository_sections::RepositorySections::default(),
             repository_input: String::new(),
             picked_repository_path: None,
             repository_dialog: rfd::AsyncFileDialog::new()

@@ -2,6 +2,9 @@
 use super::*;
 use egui::accesskit::{Node, NodeId};
 
+#[path = "repository_groups_tests.rs"]
+mod repository_groups;
+
 struct Keyboard {
     ctx: egui::Context,
     nodes: HashMap<NodeId, Node>,
@@ -60,10 +63,10 @@ impl Keyboard {
     fn input(&mut self, app: &mut App, input: egui::RawInput) {
         let mut output = self.ctx.run_ui(
             egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
+                screen_rect: input.screen_rect.or(Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
                     egui::vec2(700.0, 1600.0),
-                )),
+                ))),
                 ..input
             },
             |ui| {
@@ -186,14 +189,15 @@ fn templates_and_groups_are_operable_with_tab_and_enter() {
     });
     let mut keys = Keyboard::new(|app, ui, _| {
         app.template_menu(ui);
-        app.groups_section(ui);
+        app.manage_groups_button(ui);
+        app.grouped_repositories(ui);
     });
     keys.frame(&mut app, vec![]);
     keys.activate(&mut app, "Templates");
     keys.activate(&mut app, "Load template Review");
     assert_eq!(app.state.draft.prompt, "Review README");
     assert!(app.manager.is_idle());
-    keys.activate(&mut app, "Both · 2 repos");
+    keys.activate(&mut app, "Select group Both");
     assert_eq!(app.selected.len(), 2);
     keys.activate(&mut app, "Manage groups…");
     keys.focus(&mut app, "Save group");
