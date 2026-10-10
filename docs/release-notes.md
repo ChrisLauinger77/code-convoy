@@ -1,5 +1,25 @@
 # CodeConvoy 0.8.0 — Workflow & Productivity (unreleased)
 
+## PR 3: Keyboard Shortcuts
+
+- Ctrl/Cmd+Enter uses the Run Convoy button's shared action and existing preflight
+  review. Readiness checks, dirty-tree acknowledgment and explicit Start remain
+  in place. Held keys and repeated layout passes do not repeat dispatch.
+- Ctrl/Cmd+F focuses and selects the existing repository filter text when the
+  filter is available. Escape leaves focus without changing query, selection or
+  group expansion; history search is unaffected.
+- Ctrl/Cmd+1–4 select Activity, Diff, Raw Output and Task & Settings for the
+  selected convoy using the existing tab state and cached views.
+- Text editors retain Run/view key events; dialogs and menus take precedence.
+  Modified Enter cannot accidentally activate a focused confirmation button.
+  Escape uses each modal's existing safe dismissal, only for the topmost dialog.
+- Compact **Settings → Keyboard Shortcuts…** reference uses egui's platform
+  labels. No hotkey dependency, global hooks, settings schema or execution and
+  scheduling changes. Validation Presets remain outside this PR.
+
+See [keyboard shortcut validation](keyboard-shortcuts-validation.md) for checks
+and platform coverage. No version bump, release tag or package publication.
+
 ## PR 2: Copy Results
 
 - **Copy Summary** for terminal/historical convoys and **Copy Repository Result**

@@ -407,6 +407,28 @@ The execution controls stay visible while the task and repository pane scrolls. 
 
 Keyboard navigation uses egui's Tab / Shift+Tab focus traversal, with task, backend settings, repositories, then execution controls in order. Use arrows within menus and Enter / Space to activate controls. Numeric fields become editable when focused. Launch review and About keep focus inside their dialog; Escape closes them. Path entry supports paste. No file chooser is required.
 
+Application shortcuts use **Command (⌘) on macOS** and **Ctrl on Linux/Windows**.
+Open **Settings → Keyboard Shortcuts…** for the in-app reference.
+
+| Shortcut | Action and availability |
+| --- | --- |
+| Ctrl/Cmd+Enter | Run Convoy: opens the same preflight review as the button when the draft is ready. Requires explicit confirmation to start. |
+| Ctrl/Cmd+F | Focus and select text in the existing repository filter, when present and enabled in NEW CONVOY. Never targets history search. |
+| Ctrl/Cmd+1 | Activity for the selected convoy |
+| Ctrl/Cmd+2 | Diff for the selected convoy |
+| Ctrl/Cmd+3 | Raw Output for the selected convoy |
+| Ctrl/Cmd+4 | Task & Settings for the selected convoy |
+| Escape | Close the topmost dialog through its safe Cancel/Close action, or leave repository search focus while preserving the query and selection. Open menus take precedence. |
+
+Run and view shortcuts are inactive while editing text, including the multiline
+task and search fields. Use Tab or Escape to leave the editor first. Ctrl/Cmd+F
+can move from a text editor to repository search. Dialogs and open menus block
+background shortcuts; held keys do not repeat actions. Shortcuts apply only in
+the focused application window. Combinations reserved by your operating system
+or window manager may not reach CodeConvoy; no global hotkeys are registered.
+See [keyboard shortcut validation](docs/keyboard-shortcuts-validation.md) for
+test coverage and platform limitations.
+
 **Select all / Select none** changes repository selection without hiding Git state or skipping launch review. Automatic CLI checks report Checking…, Available, Unavailable (executable not found), or Invalid configuration for each executable independently. **Check CLI** refreshes the selected agent. Detailed diagnostics can be expanded and copied. Availability confirms CLI compatibility, not authentication or model access; job settings are validated during launch review.
 
 **Task & settings** shows friendly option labels, repository paths, the original per-convoy limit, and UTC timestamps. The live global limit is not part of a historical snapshot. **About**, in the footer, shows version, build-time base Git commit when available, project link, and license without a network request. See the [second UX pass validation](docs/ui-ux-validation.md) for native checks and remaining platform limitations.

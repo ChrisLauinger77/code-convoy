@@ -111,18 +111,11 @@ impl App {
             "Run this task in {} selected repositories.",
             self.selected.len()
         ));
-        let enabled = !self.busy
-            && !self.attachment_work.pending
-            && self.attachment_error().is_none()
-            && !self.current_cli_check()
-            && !self.selected.is_empty()
-            && !self.state.draft.prompt.trim().is_empty()
-            && agents::backend(self.state.draft.agent).is_ok();
-        if theme::primary(ui, enabled, "Run Convoy")
+        if theme::primary(ui, self.can_run_convoy(), "Run Convoy")
             .on_hover_text("Review repository state before starting jobs")
             .clicked()
         {
-            self.preflight(ctx.clone());
+            self.run_convoy(ctx);
         }
         let hint = if self.busy {
             "Checking repository state…"

@@ -23,6 +23,7 @@ mod result_markdown;
 pub use quit_macos::init_native_application;
 mod results;
 mod review;
+mod shortcuts;
 mod snapshot;
 #[cfg(test)]
 mod tests;
@@ -78,7 +79,7 @@ enum Message {
     ),
     Orphans(Result<Vec<PathBuf>, String>),
 }
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
     Review,
     Validation,
@@ -115,6 +116,9 @@ pub struct App {
     cli_search: Option<cli_discovery::CliSearch>,
     next_cli_search: u64,
     about_open: bool,
+    shortcuts_open: bool,
+    shortcuts: shortcuts::Dispatcher,
+    focus_repository_filter: bool,
     #[cfg(target_os = "macos")]
     native_about: Option<about_macos::NativeAbout>,
     execution_height: f32,
@@ -258,6 +262,9 @@ impl App {
             cli_search: None,
             next_cli_search: 0,
             about_open: false,
+            shortcuts_open: false,
+            shortcuts: shortcuts::Dispatcher::default(),
+            focus_repository_filter: false,
             #[cfg(target_os = "macos")]
             native_about: None,
             execution_height: 184.0,
@@ -411,6 +418,11 @@ impl App {
                             ui.menu_button("Worktree location", |ui| self.worktree_settings(ui));
                             ui.separator();
                             self.desktop_settings(ui);
+                            ui.separator();
+                            if ui.button("Keyboard Shortcuts…").clicked() {
+                                self.shortcuts_open = true;
+                                ui.close();
+                            }
                         });
                         if !self.manager.is_idle() {
                             ui.menu_button("All convoys", |ui| {
@@ -1079,6 +1091,37 @@ impl App {
         self.last_save = Instant::now();
     }
 }
+impl App {
+    fn main_ui(&mut self, ui: &mut egui::Ui) {
+        let ctx = &ui.ctx().clone();
+        self.handle_shortcuts(ctx);
+        self.header(ui, ctx);
+        self.footer(ui);
+        egui::Panel::left("task_editor")
+            .resizable(true)
+            .default_size(360.0)
+            .size_range(310.0..=(ui.available_width() * 0.55).max(310.0))
+            .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
+            .show(ui, |ui| {
+                self.editor_pane(ui, ctx);
+            });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::central_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
+            .show(ui, |ui| self.results(ui, ctx));
+        if !self.quit_requested && !self.closing {
+            self.preflight_window(ctx);
+            self.about_window(ctx);
+            self.cli_search_window(ctx);
+            self.library_window(ctx);
+            self.validation_settings_window(ctx);
+            self.shortcuts_window(ctx);
+        }
+        self.quit_window(ctx);
+        self.discard_window(ctx);
+        self.bulk_discard_window(ctx);
+    }
+}
+
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         // eframe also calls logic for hidden/minimized windows. A native quit
@@ -1112,30 +1155,7 @@ impl eframe::App for App {
         ));
     }
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
-        let ctx = &ui.ctx().clone();
-        self.header(ui, ctx);
-        self.footer(ui);
-        egui::Panel::left("task_editor")
-            .resizable(true)
-            .default_size(360.0)
-            .size_range(310.0..=(ui.available_width() * 0.55).max(310.0))
-            .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
-            .show(ui, |ui| {
-                self.editor_pane(ui, ctx);
-            });
-        egui::CentralPanel::default()
-            .frame(egui::Frame::central_panel(ui.style()).inner_margin(theme::PANEL_MARGIN))
-            .show(ui, |ui| self.results(ui, ctx));
-        if !self.quit_requested && !self.closing {
-            self.preflight_window(ctx);
-            self.about_window(ctx);
-            self.cli_search_window(ctx);
-            self.library_window(ctx);
-            self.validation_settings_window(ctx);
-        }
-        self.quit_window(ctx);
-        self.discard_window(ctx);
-        self.bulk_discard_window(ctx);
+        self.main_ui(ui);
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
         self.repository_health_cancel.cancel();
