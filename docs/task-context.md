@@ -26,6 +26,17 @@ remove/replace its membership in Manage groups. Group selection skips members
 known to be unavailable; normal Git preflight remains mandatory for every
 selected repository. It catches failures even if the cached state was stale.
 
+### Bulk validation configuration
+
+**Assign Validation Preset…** opens a separate repository/group selection. Select
+one or several groups and refine individual targets; overlapping canonical paths
+are updated once. This selection never changes NEW CONVOY or memberships. Unlike
+convoy admission, configuration does not need Git or an available folder.
+Unregistered members are reported explicitly. Existing commands are preserved by
+default; replacing them requires the overwrite option and a confirmation showing
+the count. Each repository owns its saved command independently, with no group
+inheritance. See [validation configuration](validation.md#assign-to-several-repositories).
+
 ## Task templates
 
 The **Templates** menu saves current task text, loads a template, or opens its

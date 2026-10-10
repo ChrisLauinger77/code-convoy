@@ -1,24 +1,88 @@
-# Manual repository validation — 0.7.0
+# Manual repository validation
 
 ## Configure a repository
 
 In Repositories, choose **Configure validation…**. Each registration starts
-unconfigured. Enter an executable name on the desktop application's PATH, or an
-absolute executable path. Enter arguments as a JSON array: every string becomes
-one argument, including spaces, quotes, Unicode and empty strings. Use **Save
-command** or **Remove command**. Cancel/Escape leaves settings unchanged.
-Configuration lives in CodeConvoy's existing local state, keyed by registered
-canonical repository path; unregistering removes that configuration, while saved
-executions remain in history. Repository files and agent output cannot configure
-or start validation. Configuration/discovery/health inspection never execute it.
+unconfigured. Select a built-in **Preset** to populate the executable and JSON
+argument fields, or keep **Custom**. Inspect the preview and edit either field
+before **Save command**. Manual editing changes the draft to Custom. Selecting
+another preset deliberately replaces both draft fields; choosing Custom keeps
+them. Cancel/Escape leaves saved settings unchanged. **Remove command** clears
+the repository configuration.
 
-| Executable | Arguments | Meaning |
+Enter an executable name on the desktop application's PATH, or an absolute path.
+Every string in the argument array becomes one literal argument, including spaces,
+quotes, Unicode and empty strings. The preview shows simple commands as
+`npm run lint`; complex values use JSON quoting, for example
+`cargo test "two words" ""`. This is display notation, not a portable shell command.
+
+Configuration lives in CodeConvoy's existing local state, keyed by registered
+canonical repository path. Only executable and arguments are saved; reopening an
+editor shows Custom, without remembering a preset association. Unregistering removes
+that configuration, while saved executions remain in history. Repository files
+and agent output cannot configure or start validation. Configuration, preset
+selection, bulk assignment, discovery and health inspection never execute it.
+
+## Built-in presets
+
+| Preset | Executable | Arguments |
 | --- | --- | --- |
-| `cargo` | `["test"]` | Rust tests |
-| `npm` | `["test"]` | Node tests on platforms with an executable npm launcher |
-| `cmake` | `["--build", "build"]` | Build an existing CMake build directory |
-| `pytest` | `[]` | Python tests |
-| `make` | `["test"]` | Project-defined test target |
+| npm Lint | `npm` | `["run", "lint"]` |
+| Rust Tests | `cargo` | `["test"]` |
+| Rust Check | `cargo` | `["check"]` |
+| Rust Clippy | `cargo` | `["clippy", "--all-targets"]` |
+| npm Test | `npm` | `["test"]` |
+| npm Build | `npm` | `["run", "build"]` |
+| Python pytest | `pytest` | `[]` |
+| CMake Build | `cmake` | `["--build", "build"]` |
+| Make Test | `make` | `["test"]` |
+
+These are static templates. CodeConvoy does not detect project types, download
+presets, install tools or maintain a user-defined preset catalog.
+
+## Assign to several repositories
+
+Choose **Assign Validation Preset…** in Repositories. Select individual repositories,
+one group or several groups; group selection edits this dialog's own explicit
+repository set. Overlapping memberships count once. Deselecting a group removes
+its members from this set, including those selected through another group.
+Individual checkboxes can adjust the result. The main convoy selection and group
+membership remain unchanged; the repository filter does not limit these targets.
+
+Choose a preset and review the target count and existing configuration count.
+**Only repositories without validation** is the default. To replace commands,
+choose **Overwrite … existing configurations**. **Review assignment…** shows the
+command and target list, followed by **Confirm assignment** or **Confirm overwrite**.
+Cancel is focused by default; Cancel/Escape saves nothing. Assignment changes
+configuration only, even while agents or manually started validations are active.
+Their existing execution snapshots are unchanged.
+
+The result lists updated, preserved and failed repositories. Unregistered or
+removed targets fail explicitly without being re-created. Registered but unavailable
+paths can still receive configuration: assignment does not inspect Git, create
+worktrees or require the folder to be accessible. Execution keeps its existing
+availability checks. Commands changed after an overwrite review fail that target
+and must be reviewed again. With preservation selected, newly configured targets
+are skipped.
+
+Eligible updates use one existing atomic state-file replacement. A save failure
+reports all proposed updates as failed and leaves live configuration unchanged;
+there is no per-repository save loop. If replacement succeeded but final disk sync
+failed, durability is uncertain: the error asks you to fix state-directory access
+and retry or reload to inspect saved state. Existing configuration serialization
+and state version remain unchanged.
+
+## One command per repository
+
+For multiple checks, configure a project-owned script or command. For example,
+a project's `package.json` can define `"validate": "npm run lint && npm run test"`;
+configure executable `npm` and arguments `["run", "validate"]`. A Rust project's
+own validation script can run fmt, Clippy and tests; configure its absolute executable
+path (or a deliberately chosen interpreter and literal script argument).
+CodeConvoy never generates those scripts or creates command chains, pipelines,
+automatic post-convoy checks or scheduled validation.
+
+## Execution and platform requirements
 
 No shell is inserted. `&&`, `$VAR`, pipes, glob characters and quotes in an argument
 are literal data; JSON escaping only expresses the argument strings. Relative
@@ -118,3 +182,7 @@ an active validation, inspect output, refresh a changed diff, restart the app to
 read history, and Quit during validation on Linux, macOS and Windows. Check keyboard
 focus and modal dismissal at all three sizes. Platform execution evidence for this
 implementation is recorded in the release notes; no package publication is implied.
+
+
+Preset configuration coverage and native smoke evidence are recorded in
+[Validation Presets validation](validation-presets-validation.md).

@@ -30,6 +30,7 @@ mod tests;
 mod text_view;
 mod theme;
 mod validation;
+mod validation_assignment;
 mod worktree_settings;
 
 use crate::{
@@ -143,6 +144,7 @@ pub struct App {
     manager: RunManager,
     validations: crate::validation::Service,
     validation_editor: Option<validation::Editor>,
+    validation_assignment: Option<validation_assignment::Dialog>,
     prepared: Option<PreparedRun>,
     prepared_provenance: Option<crate::continuation::Provenance>,
     followup_pending: bool,
@@ -289,6 +291,7 @@ impl App {
             manager,
             validations: crate::validation::Service::default(),
             validation_editor: None,
+            validation_assignment: None,
             prepared: None,
             prepared_provenance: None,
             followup_pending: false,
@@ -1114,6 +1117,7 @@ impl App {
             self.cli_search_window(ctx);
             self.library_window(ctx);
             self.validation_settings_window(ctx);
+            self.validation_assignment_window(ctx);
             self.shortcuts_window(ctx);
         }
         self.quit_window(ctx);
