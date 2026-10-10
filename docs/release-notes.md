@@ -1,5 +1,11 @@
 # CodeConvoy 0.7.0 — Validation & Confidence
 
+Adds optional per-repository validation with configurable commands, manual Run/Cancel controls,
+live output, and persisted results. Validation runs safely in the correct Direct or isolated worktree,
+supports cancellation, and respects existing repository locks. Agent outcomes, Git state,
+and validation results remain independent. Fully backward-compatible, with no automatic actions,
+new dependencies, or architectural changes.
+
 ## Changes since 0.6.0
 
 - Optional per-repository validation configuration: executable plus literal
