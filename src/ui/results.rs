@@ -518,8 +518,7 @@ impl App {
         let mut remove = None;
         let mut clear = false;
         let mut discard = None;
-        let discard_enabled = self.validations.is_idle()
-            && !self.closing
+        let discard_enabled = !self.closing
             && !self.quit_requested
             && self.result_operation.is_none()
             && self.bulk_discard.is_none();

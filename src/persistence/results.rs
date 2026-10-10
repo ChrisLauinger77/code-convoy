@@ -60,10 +60,8 @@ impl Store {
             .context("No isolated result was recorded.")?;
         anyhow::ensure!(j.status.is_terminal(), "Active work cannot be resolved.");
         anyhow::ensure!(
-            !j.validation
-                .as_ref()
-                .is_some_and(|v| v.status == crate::validation::Status::Running),
-            "Wait for validation to finish before resolving this result."
+            !crate::validation::blocks_result_operation(state, &j),
+            "Wait for validation in the affected repository to finish before resolving this result."
         );
         anyhow::ensure!(
             j.resolution != ResultResolution::ApplyPending,

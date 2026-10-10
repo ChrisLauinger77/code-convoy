@@ -179,6 +179,28 @@ pub fn label(job: &Job, configured: bool) -> &'static str {
     )
 }
 
+/// Check saved in-flight intents before a result transaction changes metadata.
+/// The manager still revalidates identity and acquires the authoritative lease.
+pub(crate) fn blocks_result_operation(state: &domain::AppState, job: &Job) -> bool {
+    fn common_dir(job: &Job) -> Option<&Path> {
+        match job.execution_mode {
+            ExecutionMode::Direct => job.before.as_ref()?.common_dir.as_deref(),
+            ExecutionMode::IsolatedWorktree => Some(&job.worktree.as_ref()?.common_dir),
+        }
+    }
+    fn paths(job: &Job) -> impl Iterator<Item = &PathBuf> {
+        std::iter::once(&job.repository.path).chain(job.worktree.iter().map(|m| &m.path))
+    }
+    state.runs.iter().flat_map(|run| &run.jobs).any(|active| {
+        active
+            .validation
+            .as_ref()
+            .is_some_and(|v| v.status == Status::Running)
+            && ((common_dir(job).is_some() && common_dir(job) == common_dir(active))
+                || paths(job).any(|a| paths(active).any(|b| a.starts_with(b) || b.starts_with(a))))
+    })
+}
+
 struct Worker {
     started: Instant,
     cancellation: Cancellation,

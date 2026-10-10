@@ -233,7 +233,7 @@ impl App {
                     && self.review_pending != Some((id, self.selected_job))
                     && self.result_operation.is_none()
                     && self.bulk_discard.is_none()
-                    && self.validations.is_idle();
+                    && !crate::validation::blocks_result_operation(&self.state, job);
                 ui.horizontal_wrapped(|ui| {
                     if job.resolution == R::Unresolved {
                         let changed = job
@@ -311,7 +311,6 @@ impl App {
         action: Action,
     ) {
         if self.result_operation.is_some()
-            || !self.validations.is_idle()
             || self.bulk_discard.is_some()
             || self.closing
             || self.quit_requested

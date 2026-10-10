@@ -64,7 +64,9 @@ Up to four explicitly requested validations can be active. There is no queue,
 retry loop or automatic post-convoy action. Validation acquires the existing
 exclusive repository lifecycle lease, including source and retained/nested paths.
 It blocks conflicting agent preparation/execution, validation, Apply and cleanup
-without consuming agent concurrency slots. Unrelated convoys continue normally.
+without consuming agent concurrency slots. Unrelated convoys and result actions
+continue normally. Bulk discard checks each result independently: conflicting
+results stay retained with an explanation while unrelated results can proceed.
 If conflicting work already holds access, validation reports Unavailable; run it
 again after that work finishes. Stop Convoy controls agents; Cancel Validation
 controls validation. Explicit Quit stops both.

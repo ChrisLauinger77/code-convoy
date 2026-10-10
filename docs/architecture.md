@@ -852,7 +852,10 @@ updates. Explicit Run/Cancel controls and a separate Validation tab reuse existi
 output rendering. Current command editing never mutates an in-flight snapshot.
 Review/Diff/health caches are invalidated around execution, and new inspection is
 suppressed for conflicting active work. Quit drains validations before the final
-save; history removal and result transactions guard active validation. Historical
+save; history removal protects active validation. Result transactions reject only
+validations with overlapping source/checkout paths or a shared Git common directory,
+including between different historical jobs. Bulk discard applies this guard to each
+result independently, leaving unrelated results usable. Historical
 passes are always qualified as past executions, never current file certification.
 
 See [validation configuration and use](validation.md) for platform resolution,
