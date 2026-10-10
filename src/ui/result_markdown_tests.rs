@@ -331,6 +331,58 @@ fn absolute_paths_after_list_delimiters_are_omitted_from_all_copied_fields() {
 }
 
 #[test]
+fn named_user_home_paths_are_omitted_only_at_token_boundaries() {
+    let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
+    validated(&mut run.jobs[0], Status::Passed);
+    for path in [
+        "~alice/private",
+        "~alice\\private",
+        "~service.account-2/private",
+        "~álîce/private",
+        "~domain-user$/private",
+        "~user@domain/private",
+        "~/private",
+        "~\\private",
+    ] {
+        for prefix in [
+            "",
+            "Inspect ",
+            "--config=",
+            "'",
+            "\"",
+            "`",
+            "(",
+            "[",
+            "{",
+            "src,",
+            "src;",
+            "src|",
+            "src&",
+            "config:",
+        ] {
+            let value = format!("{prefix}{path}");
+            run.task.prompt = value.clone();
+            run.jobs[0].repository.name = value.clone();
+            run.jobs[0].validation.as_mut().unwrap().command.arguments = vec![value.clone()];
+            assert_eq!(field(&value, 160), "[local path omitted]", "{value}");
+            for text in [convoy(&run), repository(&run, &run.jobs[0])] {
+                assert!(!text.contains("private"), "{value}: {text}");
+                assert!(text.contains("[local path omitted]"));
+            }
+        }
+    }
+    for literal in [
+        "repository~alice/docs",
+        "--tag=release~alice/docs",
+        "~alice",
+        "~alice notes/docs",
+        "~alice,notes/docs",
+    ] {
+        assert_eq!(field(literal, 160), markdown(literal), "{literal}");
+    }
+}
+
+#[test]
 fn all_backends_and_validation_states_use_their_recorded_labels() {
     let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
     for agent in AgentId::ALL {

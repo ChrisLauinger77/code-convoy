@@ -205,11 +205,11 @@ fn command(saved: &Command) -> String {
     markdown(&bounded(&label, 320))
 }
 
-/// Conservative omission of a free-text field containing a local absolute path.
+/// Conservative omission of a field containing an absolute or home-relative path.
 /// This is not a general secret scrubber; names, tasks and command arguments must
 /// still be reviewed before sharing. Recognize Windows paths on every host too.
 fn local_path(value: &str) -> bool {
-    if value.contains("\\\\") || value.contains("~/") || value.contains("~\\") {
+    if value.contains("\\\\") {
         return true;
     }
     if value
@@ -220,32 +220,29 @@ fn local_path(value: &str) -> bool {
         return true;
     }
     let mut previous = None;
+    let mut home_prefix = false;
     for ch in value.chars() {
-        if matches!(ch, '/' | '\\')
-            && previous.is_none_or(|p: char| {
-                p.is_whitespace()
-                    || matches!(
-                        p,
-                        '\'' | '"'
-                            | '`'
-                            | '='
-                            | ':'
-                            | '('
-                            | '['
-                            | '{'
-                            | '>'
-                            | ','
-                            | ';'
-                            | '|'
-                            | '&'
-                    )
-            })
-        {
+        let at_boundary = path_boundary(previous);
+        if matches!(ch, '/' | '\\') && (at_boundary || home_prefix) {
             return true;
         }
+        // A token beginning with ~ may contain a named user before its separator.
+        // Do not resolve accounts or restrict names to the current host's syntax.
+        home_prefix = (ch == '~' && at_boundary)
+            || (home_prefix && !path_boundary(Some(ch)) && !ch.is_control());
         previous = Some(ch);
     }
     false
+}
+
+fn path_boundary(previous: Option<char>) -> bool {
+    previous.is_none_or(|p| {
+        p.is_whitespace()
+            || matches!(
+                p,
+                '\'' | '"' | '`' | '=' | ':' | '(' | '[' | '{' | '>' | ',' | ';' | '|' | '&'
+            )
+    })
 }
 
 fn field(value: &str, limit: usize) -> String {
