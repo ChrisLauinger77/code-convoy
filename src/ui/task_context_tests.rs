@@ -6,6 +6,8 @@ use egui::accesskit::{Node, NodeId};
 mod copy_results;
 #[path = "repository_groups_tests.rs"]
 mod repository_groups;
+#[path = "shortcut_tests.rs"]
+mod shortcuts;
 
 struct Keyboard {
     ctx: egui::Context,

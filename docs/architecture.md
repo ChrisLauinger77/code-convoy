@@ -81,6 +81,19 @@ App construction schedules checks for all four configured/default executables on
 
 Run Convoy is disabled while the selected backend's check is pending. The preflight entry point also reconciles executable edits and refuses to snapshot a pending selection. This ensures a discovered absolute path is applied before preflight captures immutable options, including when the default launcher is absent from the GUI PATH. Checks for other backends do not delay review; task editing, repository loading and existing convoys stay independent.
 
+`ui/shortcuts` defines the application-local key map and compact help from one
+binding table. Its dispatcher runs before widgets, at most once per egui frame,
+and rejects repeated key events. It uses egui's logical Command modifier with
+exact modifier matching. Modal state, native picker work, open popups and text
+focus gate dispatch. Modal Escape remains with `Modal::should_close`; repeated
+Escape events cannot cascade through dialogs. Modified Enter outside text edits
+is consumed even when Run is unavailable because egui otherwise interprets it
+as button activation. Both Run inputs call `run_convoy`, gated by
+`can_run_convoy`, then the existing asynchronous `preflight`. Search requests
+focus/selection on the existing filter's stable widget ID; navigation only sets
+the existing `Tab`. This adds session-only UI state, with no persistence or
+backend/scheduler changes.
+
 The Agent selector restores that backend's preferences and explicitly requests validation for its executable. The existing session result or in-flight check is reused when the executable matches; an unchecked backend or a changed executable starts its asynchronous check. Switching away does not cancel another backend's work or discard its result. `Check CLI` bypasses the session result and requests fresh validation, while still suppressing duplicate in-flight probes.
 
 Changing an executable immediately invalidates the result, cancels its old probe and queues only the latest selection. A 300 ms delay coalesces typing. Generation IDs reject late results, including A → B → A edits and discovery results arriving after manual selection. Process cancellation is awaited before a replacement starts. `Check CLI` explicitly refreshes an idle backend; duplicate requests during a check are ignored. Unchanged settings only compare in-memory values, with no continuous rediscovery. Availability checks use executable options only; model/permission edits do not spawn probes and full job settings still receive normal preflight validation. A per-backend async mutex also serializes these probes with preflight help/version and conditional attachment-interface checks. For tasks without attachments, agent execution commands and authentication remain unchanged. See [CLI lifecycle validation](cli-availability-validation.md).

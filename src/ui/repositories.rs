@@ -138,7 +138,7 @@ impl App {
             });
         }
         self.manage_groups_button(ui);
-        if !self.state.repositories.is_empty() || !self.repository_sections.query.is_empty() {
+        if self.repository_filter_present() {
             ui.horizontal(|ui| {
                 let search = ui.add_sized(
                     [
@@ -146,7 +146,7 @@ impl App {
                         ui.spacing().interact_size.y,
                     ],
                     egui::TextEdit::singleline(&mut self.repository_sections.query)
-                        .id_salt("repository_filter")
+                        .id(shortcuts::repository_filter_id())
                         .hint_text("Filter repositories…")
                         .desired_width(f32::INFINITY),
                 );
@@ -157,6 +157,10 @@ impl App {
                         "Filter repositories",
                     )
                 });
+                if std::mem::take(&mut self.focus_repository_filter) {
+                    search.request_focus();
+                    search.scroll_to_me(None);
+                }
                 if search.has_focus() {
                     search.scroll_to_me(None);
                 }
