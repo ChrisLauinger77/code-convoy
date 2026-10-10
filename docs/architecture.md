@@ -29,6 +29,20 @@ Backend status: Codex and Copilot are implemented and user-verified end-to-end o
 
 ## Presentation
 
+`ui/repository_sections` caches the flat group-to-registration mapping for the
+repository picker, rebuilding only after registration or group definition changes.
+Ungrouped contains registrations with no memberships. Cached sections hold indices
+into registrations; all occurrences read and edit the existing canonical-path
+selection set. Header counts reflect current selection and cached Git availability,
+including explicit unavailable/unregistered memberships. Launch snapshots still
+filter registrations once, independently of groups or expansion.
+
+Section expansion uses egui's `CollapsingState` with session IDs, carried across
+renames and retained when group positions change. A deleted and recreated group
+gets a fresh ID. These IDs and the cache are UI-only; group persistence and scheduler
+contracts are unchanged. Header checkboxes remain accessible while collapsed,
+and section bodies share the editor's existing scroll area.
+
 `ui/library` owns group/template editing and explicit selection actions. `ui/attachments_ui` owns native file selection, optional drops, background inspection/reuse and stale-result rejection. `ui/editor` coordinates the task, scrolling editor, fixed execution controls, and modal preflight review. `ui/agent_config` renders only the selected backend's option specifications; `ui/repositories` handles registration, Git-state presentation and bulk selection. `ui/results` presents run navigation, cleanup, jobs and result tabs; `ui/snapshot` displays declared option labels, repository paths and UTC timestamps. `ui/diagnostics` keeps concise messages separate from expandable, copyable raw details. `ui/about` shows offline application metadata. `ui/theme` centralizes palettes, typography, spacing, focus/selection, primary actions and a painted success mark (the bundled fonts lack check glyphs). `ui/format` formats duration, dates, options and status text; overall status and progress remain domain-derived.
 
 The compact run selector groups active and terminal runs in a height-bounded scrolling popup. Active means any queued/preparing/running job, including a partially failed convoy that still has work. History cleanup methods in `AppState` guard against removing active runs; the UI offers individual removal only for terminal runs and bulk removal through History cleanup. Removal immediately saves metadata and reconciles selection (prefer an active convoy, then the newest history, then empty), clearing stale job/diff/output views. It never calls Git, the scheduler, cancellation, or agent configuration APIs.

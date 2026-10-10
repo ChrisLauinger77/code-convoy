@@ -1,8 +1,5 @@
 # CodeConvoy 0.6.0 — Desktop Workflow
 
-Unreleased source implementation. No tag, release or package publication is part
-of this work.
-
 ## Changes since 0.5.0
 
 - Optional native system tray with Show, running-convoy count, Show Active Convoys

@@ -45,7 +45,15 @@ impl App {
     }
 
     pub(super) fn repositories_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        theme::section(ui, "Repositories");
+        ui.add_space(theme::SECTION_GAP);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new("Repositories").strong().size(14.0));
+            ui.small(format!(
+                "{} / {} selected",
+                self.selected.len(),
+                self.state.repositories.len()
+            ));
+        });
         let path = ui.add(
             egui::TextEdit::singleline(&mut self.repository_input)
                 .hint_text("/path/to/git/repository")
@@ -103,11 +111,6 @@ impl App {
         }
         if !self.state.repositories.is_empty() {
             ui.horizontal_wrapped(|ui| {
-                ui.small(format!(
-                    "{} of {} selected",
-                    self.selected.len(),
-                    self.state.repositories.len()
-                ));
                 if ui
                     .add_enabled(
                         self.selected.len() < self.state.repositories.len(),
@@ -128,127 +131,88 @@ impl App {
                 }
             });
         }
-        self.groups_section(ui);
-        if !self.state.groups.is_empty() {
-            ui.small("Individual repositories");
-        }
+        self.manage_groups_button(ui);
+        self.grouped_repositories(ui);
+    }
+
+    pub(super) fn grouped_repositories(&mut self, ui: &mut egui::Ui) {
+        // Move out temporarily so rendering can mutate selection without cloning
+        // the cached membership lists on every frame.
+        let mut sections = std::mem::take(&mut self.repository_sections);
+        sections.sync(&self.state.repositories, &self.state.groups);
         let mut remove = None;
-        let p = theme::Palette::of(ui);
-        for (index, repository) in self.state.repositories.iter().enumerate() {
-            let in_use = self.repository_in_use(&repository.path);
-            ui.push_id(&repository.path, |ui| {
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-                    let mut selected = self.selected.contains(&repository.path);
-                    let width = (ui.available_width() - 80.0).max(40.0);
-                    let response = ui
-                        .allocate_ui_with_layout(
-                            egui::vec2(width, 26.0),
-                            egui::Layout::left_to_right(egui::Align::Center),
-                            |ui| {
-                                ui.set_min_width(width);
-                                ui.add(egui::Checkbox::new(
-                                    &mut selected,
-                                    egui::RichText::new(&repository.name).strong(),
-                                ))
-                            },
-                        )
-                        .inner
-                        .on_hover_text(repository.path.display().to_string());
-                    if response.has_focus() {
-                        response.scroll_to_me(None);
-                    }
-                    if response.changed() {
-                        if selected {
-                            self.selected.insert(repository.path.clone());
-                        } else {
-                            self.selected.remove(&repository.path);
+        for section in &sections.sections {
+            ui.push_id(section.id, |ui| {
+                let counts = section.counts(self);
+                let mut toggle = false;
+                let mut selection = None;
+                let mut header = egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ui.ctx(),
+                    section.id,
+                    section.group.is_none(),
+                )
+                .show_header(ui, |ui| {
+                    (toggle, selection) = group_header_controls(ui, section, &counts, self.busy);
+                });
+                if toggle {
+                    header.toggle();
+                }
+                if let Some(selected) = selection {
+                    if let Some(index) = section.group {
+                        self.select_group(index, selected);
+                    } else {
+                        for &index in &section.repositories {
+                            let path = &self.state.repositories[index].path;
+                            if selected {
+                                if !matches!(self.repository_states.get(path), Some(Err(_))) {
+                                    self.selected.insert(path.clone());
+                                }
+                            } else {
+                                self.selected.remove(path);
+                            }
                         }
                     }
-                    if ui
-                        .add(theme::quiet("Remove").small())
-                        .on_hover_text(
-                            "Unregister this repository only; files and history are untouched.",
-                        )
-                        .clicked()
-                    {
-                        remove = Some(index);
+                }
+                let (arrow, _, _) = header.body(|ui| {
+                    if section.repositories.is_empty() {
+                        ui.weak("No registered repositories");
+                    }
+                    for &index in &section.repositories {
+                        if self.repository_row(ui, index) {
+                            remove = Some(index);
+                        }
                     }
                 });
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(repository.path.display().to_string())
-                            .small()
-                            .color(p.muted),
+                arrow.widget_info(|| {
+                    egui::WidgetInfo::labeled(
+                        egui::WidgetType::CollapsingHeader,
+                        arrow.enabled(),
+                        format!("Toggle {}", section.name),
                     )
-                    .truncate(),
-                )
-                .on_hover_text(repository.path.display().to_string());
-                if in_use {
-                    ui.weak("Unknown · active work; refresh after completion");
-                    return;
+                });
+                if arrow.has_focus() {
+                    arrow.scroll_to_me(None);
                 }
-                if self.repository_pending.contains_key(&repository.path) {
-                    ui.weak("Unknown · checking Git…");
-                    return;
-                }
-                match self.repository_states.get(&repository.path) {
-                    Some(Ok(state)) => {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.small("Available");
-                            ui.label(
-                                egui::RichText::new(&state.summary.branch)
-                                    .small()
-                                    .color(p.muted),
-                            );
-                            if state.summary.changed == 0 {
-                                ui.label(egui::RichText::new("Clean").small().color(p.success));
-                            } else {
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "Dirty · {} {}",
-                                        state.summary.changed,
-                                        if state.summary.changed == 1 {
-                                            "change"
-                                        } else {
-                                            "changes"
-                                        }
-                                    ))
-                                    .small()
-                                    .color(p.warning),
-                                );
-                            }
-                        });
-                        if !state.entries.is_empty() {
-                            ui.collapsing("Existing changes", |ui| {
-                                egui::ScrollArea::both().max_height(150.0).show(ui, |ui| {
-                                    for entry in state.entries.iter().take(100) {
-                                        ui.add(
-                                            egui::Label::new(
-                                                egui::RichText::new(entry).monospace(),
-                                            )
-                                            .extend(),
-                                        );
-                                    }
-                                    if state.entries.len() > 100 {
-                                        ui.label("More entries; inspect all in the run review.");
-                                    }
-                                });
-                            });
+                if counts.unavailable > 0 {
+                    ui.colored_label(
+                        theme::Palette::of(ui).warning,
+                        format!("{} unavailable or unregistered", counts.unavailable),
+                    )
+                    .on_hover_ui(|ui| {
+                        for path in &section.unregistered {
+                            ui.label(path.display().to_string());
                         }
-                    }
-                    Some(Err(error)) => {
-                        ui.colored_label(p.error, "Unavailable · Git state unknown")
-                            .on_hover_text(diagnostics::summary(error));
-                        diagnostics::details(ui, "repository_error", error);
-                    }
-                    None => {
-                        ui.weak("Unknown · refresh state; checked before running");
-                    }
+                        for &index in &section.repositories {
+                            let path = &self.state.repositories[index].path;
+                            if matches!(self.repository_states.get(path), Some(Err(_))) {
+                                ui.label(path.display().to_string());
+                            }
+                        }
+                    });
                 }
             });
         }
+        self.repository_sections = sections;
         if let Some(index) = remove {
             let repo = self.state.repositories.remove(index);
             self.selected.remove(&repo.path);
@@ -257,4 +221,204 @@ impl App {
             self.dirty = true;
         }
     }
+
+    fn repository_row(&mut self, ui: &mut egui::Ui, index: usize) -> bool {
+        let p = theme::Palette::of(ui);
+        let mut remove = false;
+        let repository = &self.state.repositories[index];
+        let in_use = self.repository_in_use(&repository.path);
+        ui.push_id(&repository.path, |ui| {
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                let mut selected = self.selected.contains(&repository.path);
+                let width = (ui.available_width() - 80.0).max(40.0);
+                let response = ui
+                    .allocate_ui_with_layout(
+                        egui::vec2(width, 26.0),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.set_min_width(width);
+                            ui.add(egui::Checkbox::new(
+                                &mut selected,
+                                egui::RichText::new(&repository.name).strong(),
+                            ))
+                        },
+                    )
+                    .inner
+                    .on_hover_text(repository.path.display().to_string());
+                if response.has_focus() {
+                    response.scroll_to_me(None);
+                }
+                if response.changed() {
+                    if selected {
+                        self.selected.insert(repository.path.clone());
+                    } else {
+                        self.selected.remove(&repository.path);
+                    }
+                }
+                if ui
+                    .add(theme::quiet("Remove").small())
+                    .on_hover_text(
+                        "Unregister this repository only; files and history are untouched.",
+                    )
+                    .clicked()
+                {
+                    remove = true;
+                }
+            });
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(repository.path.display().to_string())
+                        .small()
+                        .color(p.muted),
+                )
+                .truncate(),
+            )
+            .on_hover_text(repository.path.display().to_string());
+            if in_use {
+                ui.weak("Unknown · active work; refresh after completion");
+                return;
+            }
+            if self.repository_pending.contains_key(&repository.path) {
+                ui.weak("Unknown · checking Git…");
+                return;
+            }
+            match self.repository_states.get(&repository.path) {
+                Some(Ok(state)) => {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.small("Available");
+                        ui.label(
+                            egui::RichText::new(&state.summary.branch)
+                                .small()
+                                .color(p.muted),
+                        );
+                        if state.summary.changed == 0 {
+                            ui.label(egui::RichText::new("Clean").small().color(p.success));
+                        } else {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "Dirty · {} {}",
+                                    state.summary.changed,
+                                    if state.summary.changed == 1 {
+                                        "change"
+                                    } else {
+                                        "changes"
+                                    }
+                                ))
+                                .small()
+                                .color(p.warning),
+                            );
+                        }
+                    });
+                    if !state.entries.is_empty() {
+                        ui.collapsing("Existing changes", |ui| {
+                            egui::ScrollArea::both().max_height(150.0).show(ui, |ui| {
+                                for entry in state.entries.iter().take(100) {
+                                    ui.add(
+                                        egui::Label::new(egui::RichText::new(entry).monospace())
+                                            .extend(),
+                                    );
+                                }
+                                if state.entries.len() > 100 {
+                                    ui.label("More entries; inspect all in the run review.");
+                                }
+                            });
+                        });
+                    }
+                }
+                Some(Err(error)) => {
+                    ui.colored_label(p.error, "Unavailable · Git state unknown")
+                        .on_hover_text(diagnostics::summary(error));
+                    diagnostics::details(ui, "repository_error", error);
+                }
+                None => {
+                    ui.weak("Unknown · refresh state; checked before running");
+                }
+            }
+        });
+        remove
+    }
+}
+
+fn group_header_controls(
+    ui: &mut egui::Ui,
+    section: &repository_sections::Section,
+    counts: &repository_sections::Counts,
+    busy: bool,
+) -> (bool, Option<bool>) {
+    let selection_label = format!("{} selected", counts.selected);
+    let selection_text = egui::RichText::new(&selection_label);
+    let selection_width = egui::WidgetText::from(selection_text.clone())
+        .into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Button,
+        )
+        .size()
+        .x
+        + ui.spacing().icon_width
+        + ui.spacing().icon_spacing;
+    let count_text = egui::RichText::new(format!("({})", counts.total));
+    let count_width = egui::WidgetText::from(count_text.clone())
+        .into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Button,
+        )
+        .size()
+        .x;
+    let width =
+        (ui.available_width() - selection_width - count_width - 2.0 * ui.spacing().item_spacing.x)
+            .max(20.0);
+    let title = format!("{} ({})", section.name, counts.total);
+    let response = ui
+        .add_sized(
+            [width, ui.spacing().interact_size.y],
+            theme::quiet(&section.name).right_text(()).truncate(),
+        )
+        .on_hover_text(&title);
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::CollapsingHeader,
+            response.enabled(),
+            &title,
+        )
+    });
+    if response.has_focus() {
+        response.scroll_to_me(None);
+    }
+    // Keep the total visible even when a long group name is truncated.
+    let count_response = ui.add(egui::Label::new(count_text).sense(egui::Sense::click()));
+    let toggle = response.clicked() || count_response.clicked();
+    count_response.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::CollapsingHeader,
+            count_response.enabled(),
+            &title,
+        )
+    });
+    if count_response.has_focus() {
+        count_response.scroll_to_me(None);
+    }
+    let mut selected = counts.selected > 0 && counts.selected_available == counts.available;
+    let response = ui.add_enabled(
+        !busy && (counts.available > 0 || counts.selected > 0),
+        egui::Checkbox::new(&mut selected, selection_text)
+            .indeterminate(counts.selected > 0 && (counts.selected < counts.total || counts.unavailable > 0)),
+    ).on_hover_text("Select adds available members. Deselect removes every current member, including individual and overlapping-group selections.");
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Checkbox,
+            response.enabled(),
+            selected,
+            format!("Select group {}", section.name),
+        )
+    });
+    if response.has_focus() {
+        response.scroll_to_me(None);
+    }
+    (toggle, response.changed().then_some(selected))
 }
