@@ -3,6 +3,9 @@ use super::*;
 use crate::ui::repository_sections::{Counts, RepositorySections};
 use egui::collapsing_header::CollapsingState;
 
+#[path = "repository_filter_tests.rs"]
+mod filter;
+
 fn grouped_app() -> (tempfile::TempDir, App) {
     let (temp, mut app) = app();
     app.state.repositories = vec![repository("alpha"), repository("beta"), repository("gamma")];

@@ -43,6 +43,16 @@ gets a fresh ID. These IDs and the cache are UI-only; group persistence and sche
 contracts are unchanged. Header checkboxes remain accessible while collapsed,
 and section bodies share the editor's existing scroll area.
 
+The same session-only cache owns the quick repository filter query and a match
+mask over registrations. It recomputes case-insensitive name/path substring
+matches only when the query, registrations or groups change, trimming surrounding
+query whitespace. Search never inspects Git or the filesystem. It hides empty
+sections and renders matching bodies directly under their existing IDs, without
+reading or writing manual `CollapsingState` or its animation. Clearing the query
+returns to normal collapsible rendering. Full membership lists, header counts,
+group selection actions and the shared path selection set remain independent of
+visibility. No persistent model or launch/scheduling contract changes.
+
 `ui/library` owns group/template editing and explicit selection actions. `ui/attachments_ui` owns native file selection, optional drops, background inspection/reuse and stale-result rejection. `ui/editor` coordinates the task, scrolling editor, fixed execution controls, and modal preflight review. `ui/agent_config` renders only the selected backend's option specifications; `ui/repositories` handles registration, Git-state presentation and bulk selection. `ui/results` presents run navigation, cleanup, jobs and result tabs; `ui/snapshot` displays declared option labels, repository paths and UTC timestamps. `ui/diagnostics` keeps concise messages separate from expandable, copyable raw details. `ui/about` shows offline application metadata. `ui/theme` centralizes palettes, typography, spacing, focus/selection, primary actions and a painted success mark (the bundled fonts lack check glyphs). `ui/format` formats duration, dates, options and status text; overall status and progress remain domain-derived.
 
 The compact run selector groups active and terminal runs in a height-bounded scrolling popup. Active means any queued/preparing/running job, including a partially failed convoy that still has work. History cleanup methods in `AppState` guard against removing active runs; the UI offers individual removal only for terminal runs and bulk removal through History cleanup. Removal immediately saves metadata and reconciles selection (prefer an active convoy, then the newest history, then empty), clearing stale job/diff/output views. It never calls Git, the scheduler, cancellation, or agent configuration APIs.

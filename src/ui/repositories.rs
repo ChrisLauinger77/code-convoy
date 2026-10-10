@@ -116,6 +116,9 @@ impl App {
                         self.selected.len() < self.state.repositories.len(),
                         theme::quiet("Select all").small(),
                     )
+                    .on_hover_text(
+                        "Select every registered repository, including those hidden by the filter",
+                    )
                     .clicked()
                 {
                     self.select_repositories(true);
@@ -125,6 +128,9 @@ impl App {
                         !self.selected.is_empty(),
                         theme::quiet("Select none").small(),
                     )
+                    .on_hover_text(
+                        "Deselect every repository, including those hidden by the filter",
+                    )
                     .clicked()
                 {
                     self.select_repositories(false);
@@ -132,6 +138,41 @@ impl App {
             });
         }
         self.manage_groups_button(ui);
+        if !self.state.repositories.is_empty() || !self.repository_sections.query.is_empty() {
+            ui.horizontal(|ui| {
+                let search = ui.add_sized(
+                    [
+                        (ui.available_width() - 60.0).max(40.0),
+                        ui.spacing().interact_size.y,
+                    ],
+                    egui::TextEdit::singleline(&mut self.repository_sections.query)
+                        .id_salt("repository_filter")
+                        .hint_text("Filter repositories…")
+                        .desired_width(f32::INFINITY),
+                );
+                search.widget_info(|| {
+                    egui::WidgetInfo::labeled(
+                        egui::WidgetType::TextEdit,
+                        search.enabled(),
+                        "Filter repositories",
+                    )
+                });
+                if search.has_focus() {
+                    search.scroll_to_me(None);
+                }
+                if ui
+                    .add_enabled(
+                        !self.repository_sections.query.is_empty(),
+                        theme::quiet("Clear").small(),
+                    )
+                    .on_hover_text("Clear repository filter")
+                    .clicked()
+                {
+                    self.repository_sections.query.clear();
+                    search.request_focus();
+                }
+            });
+        }
         self.grouped_repositories(ui);
     }
 
@@ -140,23 +181,54 @@ impl App {
         // the cached membership lists on every frame.
         let mut sections = std::mem::take(&mut self.repository_sections);
         sections.sync(&self.state.repositories, &self.state.groups);
+        let filtering = sections.filtering();
+        if filtering
+            && !sections
+                .sections
+                .iter()
+                .any(|section| sections.visible(section))
+        {
+            ui.weak("No repositories match. Clear the filter to see all.");
+        }
         let mut remove = None;
-        for section in &sections.sections {
+        for section in sections
+            .sections
+            .iter()
+            .filter(|section| sections.visible(section))
+        {
             ui.push_id(section.id, |ui| {
                 let counts = section.counts(self);
                 let mut toggle = false;
                 let mut selection = None;
-                let mut header = egui::collapsing_header::CollapsingState::load_with_default_open(
-                    ui.ctx(),
-                    section.id,
-                    section.group.is_none(),
-                )
-                .show_header(ui, |ui| {
-                    (toggle, selection) = group_header_controls(ui, section, &counts, self.busy);
-                });
-                if toggle {
-                    header.toggle();
-                }
+                let header = if filtering {
+                    // Search is a fully expanded presentation, never a write to
+                    // the manual CollapsingState (including its animation).
+                    ui.horizontal(|ui| {
+                        let (_, arrow) = ui.allocate_exact_size(
+                            egui::vec2(ui.spacing().indent, ui.spacing().icon_width),
+                            egui::Sense::hover(),
+                        );
+                        egui::collapsing_header::paint_default_icon(ui, 1.0, &arrow);
+                        (_, selection) =
+                            group_header_controls(ui, section, &counts, self.busy, true);
+                    });
+                    None
+                } else {
+                    let mut header =
+                        egui::collapsing_header::CollapsingState::load_with_default_open(
+                            ui.ctx(),
+                            section.id,
+                            section.group.is_none(),
+                        )
+                        .show_header(ui, |ui| {
+                            (toggle, selection) =
+                                group_header_controls(ui, section, &counts, self.busy, false);
+                        });
+                    if toggle {
+                        header.toggle();
+                    }
+                    Some(header)
+                };
                 if let Some(selected) = selection {
                     if let Some(index) = section.group {
                         self.select_group(index, selected);
@@ -173,25 +245,30 @@ impl App {
                         }
                     }
                 }
-                let (arrow, _, _) = header.body(|ui| {
+                let body = |ui: &mut egui::Ui| {
                     if section.repositories.is_empty() {
                         ui.weak("No registered repositories");
                     }
                     for &index in &section.repositories {
-                        if self.repository_row(ui, index) {
+                        if sections.matches(index) && self.repository_row(ui, index) {
                             remove = Some(index);
                         }
                     }
-                });
-                arrow.widget_info(|| {
-                    egui::WidgetInfo::labeled(
-                        egui::WidgetType::CollapsingHeader,
-                        arrow.enabled(),
-                        format!("Toggle {}", section.name),
-                    )
-                });
-                if arrow.has_focus() {
-                    arrow.scroll_to_me(None);
+                };
+                if let Some(header) = header {
+                    let (arrow, _, _) = header.body(body);
+                    arrow.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::WidgetType::CollapsingHeader,
+                            arrow.enabled(),
+                            format!("Toggle {}", section.name),
+                        )
+                    });
+                    if arrow.has_focus() {
+                        arrow.scroll_to_me(None);
+                    }
+                } else {
+                    ui.indent(section.id, body);
                 }
                 if counts.unavailable > 0 {
                     ui.colored_label(
@@ -369,6 +446,7 @@ fn group_header_controls(
     section: &repository_sections::Section,
     counts: &repository_sections::Counts,
     busy: bool,
+    filtering: bool,
 ) -> (bool, Option<bool>) {
     let selection_label = format!("{} selected", counts.selected);
     let selection_text = egui::RichText::new(&selection_label);
@@ -400,7 +478,14 @@ fn group_header_controls(
     let response = ui
         .add_sized(
             [width, ui.spacing().interact_size.y],
-            theme::quiet(&section.name).right_text(()).truncate(),
+            theme::quiet(&section.name)
+                .right_text(())
+                .truncate()
+                .sense(if filtering {
+                    egui::Sense::hover()
+                } else {
+                    egui::Sense::click()
+                }),
         )
         .on_hover_text(&title);
     response.widget_info(|| {
@@ -414,7 +499,11 @@ fn group_header_controls(
         response.scroll_to_me(None);
     }
     // Keep the total visible even when a long group name is truncated.
-    let count_response = ui.add(egui::Label::new(count_text).sense(egui::Sense::click()));
+    let count_response = ui.add(egui::Label::new(count_text).sense(if filtering {
+        egui::Sense::hover()
+    } else {
+        egui::Sense::click()
+    }));
     let toggle = response.clicked() || count_response.clicked();
     count_response.widget_info(|| {
         egui::WidgetInfo::labeled(
@@ -431,7 +520,7 @@ fn group_header_controls(
         !busy && (counts.available > 0 || counts.selected > 0),
         egui::Checkbox::new(&mut selected, selection_text)
             .indeterminate(counts.selected > 0 && (counts.selected < counts.total || counts.unavailable > 0)),
-    ).on_hover_text("Select adds available members. Deselect removes every current member, including individual and overlapping-group selections.");
+    ).on_hover_text("Select adds all available members, including those hidden by the filter. Deselect removes every current member, including individual and overlapping-group selections.");
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::Checkbox,
