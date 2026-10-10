@@ -2,12 +2,15 @@
 use super::*;
 use egui::accesskit::{Node, NodeId};
 
+#[path = "copy_results_tests.rs"]
+mod copy_results;
 #[path = "repository_groups_tests.rs"]
 mod repository_groups;
 
 struct Keyboard {
     ctx: egui::Context,
     nodes: HashMap<NodeId, Node>,
+    commands: Vec<egui::OutputCommand>,
     surface: fn(&mut App, &mut egui::Ui, &egui::Context),
 }
 
@@ -46,6 +49,7 @@ impl Keyboard {
         Self {
             ctx,
             nodes: HashMap::new(),
+            commands: Vec::new(),
             surface,
         }
     }
@@ -76,6 +80,7 @@ impl Keyboard {
             },
         );
         output.textures_delta.clear();
+        self.commands.extend(output.platform_output.commands);
         if let Some(update) = output.platform_output.accesskit_update {
             self.nodes.extend(update.nodes);
         }

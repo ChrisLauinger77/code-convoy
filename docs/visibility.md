@@ -66,6 +66,57 @@ Direct changes and recorded Unknown results. Later clean or unavailable working
 trees cannot replace it. Only jobs without an observation use the older live
 fallback; saved history never triggers a new notification on restart.
 
+## Copy results (0.8.0)
+
+**Copy Summary** appears beside the selected terminal convoy's progress, including
+historical convoys. **Copy Repository Result** appears beside the selected terminal
+job's name in Review and the existing result detail tabs. A finished job can be
+copied while other jobs continue. Empty histories and active jobs have no copy
+action. Both controls support normal Tab/Enter navigation and briefly display
+“Summary copied” or “Repository result copied”.
+
+The system clipboard receives Markdown with headings, concise metadata and, for
+the convoy, a repository table in its original launch order. Copying includes all
+jobs in that convoy regardless of search/comparison filters. Execution outcome,
+completion changes, review status and latest validation result remain separate.
+Failed validation never turns a successful agent job into Failed.
+
+Only saved completion observations supply Git change flags and optional file
+counts. No Git command, filesystem read or live Review/Diff cache is used by copy.
+Absent measurements stay Unknown; aggregate change counts say “known” when some
+jobs lack observations. Missing timestamps/durations say Unavailable. Durations
+use `m:ss` or `h:mm:ss`; convoy duration includes queue time from creation through
+the last recorded completion and requires every job's completion timestamp.
+Timestamps use UTC. The first recorded start is labelled as such because partial
+history may omit other starts.
+
+The latest saved validation command, status and optional exit code appear in a
+repository report. Without a record, validation says **Not run / not recorded**:
+historical validation configuration was not saved, so today's configuration
+cannot establish “Not configured” for an older job. A recorded validation pass
+describes that execution, not today's mutable files.
+
+Copy excludes process environments, backend options, diagnostics, Activity/Raw
+output, full diffs, validation logs and attachment references/contents. Repository
+paths, worktree paths and validation directories are never selected for output.
+The task summary uses the first nonempty line (at most 160 characters); repository
+names use at most 80 characters. Validation commands use display quoting, at most
+24 arguments and 320 characters. Truncation is marked with an ellipsis. Multiline
+metadata is flattened and Markdown/HTML special characters are escaped.
+
+Free-text fields containing recognizable absolute Unix, Windows or home-relative
+paths are conservatively replaced with `[local path omitted]`; an absolute
+validation executable is reduced to its basename. Attached single-letter option
+values such as `-I/path`, `-L/path` and `-o/path` are recognized too; relative
+values such as `-Iinclude/project` remain visible. A recognized path-containing
+argument is omitted in full, including paths with spaces. This can omit useful
+text too.
+**Review before sharing**: task summaries, names and command arguments can still
+contain sensitive information. The copied Markdown is not guaranteed secret-free.
+
+See [copy-results validation and fixture](copy-results-validation.md) for automated
+coverage and native clipboard platform checks.
+
 ## Current repository health
 
 Repositories in New Convoy show path, branch (including detached HEAD), Clean/Dirty,

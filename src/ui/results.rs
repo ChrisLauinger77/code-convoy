@@ -54,6 +54,7 @@ impl App {
                 duration(run.elapsed(domain::now())),
                 run.task.concurrency
             ));
+            copy_results::summary(ui, run);
             if run.active()
                 && ui
                     .button("Stop Convoy")
@@ -183,6 +184,7 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             ui.strong(&job.repository.name);
             theme::job_status(ui, job);
+            copy_results::repository(ui, run, self.selected_job);
         });
         ui.add(
             egui::Label::new(

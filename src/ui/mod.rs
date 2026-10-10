@@ -6,6 +6,7 @@ mod attachments_ui;
 mod bulk_discard;
 mod cli_discovery;
 mod continuation;
+mod copy_results;
 mod desktop;
 mod diagnostics;
 mod editor;
@@ -17,6 +18,7 @@ mod quit;
 mod quit_macos;
 mod repositories;
 mod repository_sections;
+mod result_markdown;
 #[cfg(target_os = "macos")]
 pub use quit_macos::init_native_application;
 mod results;
