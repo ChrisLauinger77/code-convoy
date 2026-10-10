@@ -10,6 +10,10 @@
 
 A local, native desktop task runner for coding-agent CLIs.
 
+The project homepage is prepared for
+[GitHub Pages](https://chrislauinger77.github.io/code-convoy/).
+See [homepage preview and publishing](website/README.md) for deployment setup.
+
 **Write one task → choose an agent → select local Git repositories → run with a concurrency limit → inspect each result.**
 
 CodeConvoy is a native Rust/egui implementation with four independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.

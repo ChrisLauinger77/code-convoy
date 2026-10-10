@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7f2">
+    <title>CodeConvoy — One task. Multiple repositories. Your agent.</title>
+    <meta name="description" content="Run one task across your local Git repositories with Codex, GitHub Copilot, OpenCode or Claude Code. A native, open-source desktop app for Linux, macOS and Windows.">
+    <link rel="canonical" href="https://chrislauinger77.github.io/code-convoy/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="CodeConvoy — One task. Multiple repositories. Your agent.">
+    <meta property="og:description" content="Bring your coding agent and your local repositories. Run a convoy, then review every result in one native desktop app.">
+    <meta property="og:url" content="https://chrislauinger77.github.io/code-convoy/">
+    <meta property="og:image" content="https://chrislauinger77.github.io/code-convoy/assets/screenshot.png">
+    <meta property="og:image:alt" content="CodeConvoy running a task across five local repositories on macOS.">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" type="image/png" href="assets/codeconvoy-128.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header wrap">
+      <a class="wordmark" href="./" aria-label="CodeConvoy home">
+        <img src="assets/codeconvoy-128.png" width="40" height="40" alt="">
+        <span>CodeConvoy</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#workflow">How it works</a>
+        <a href="https://github.com/ChrisLauinger77/code-convoy#readme">Docs <span aria-hidden="true">↗</span></a>
+        <a class="nav-download" href="#download">Get CodeConvoy <span aria-hidden="true">↓</span></a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero wrap" aria-labelledby="hero-title">
+        <div class="hero-heading">
+          <p class="eyebrow"><span class="signal" aria-hidden="true"></span> A native home for your coding agents</p>
+          <h1 id="hero-title">One task.<br>Multiple repos.<br><span>Your agent.</span></h1>
+        </div>
+        <div class="hero-intro">
+          <p class="lead">Move your repositories<br class="desktop-break"> forward, together.</p>
+          <p>Give the same task to your local Git repositories. Choose your coding agent, set the pace, and review each result in one desktop app.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#download">Get CodeConvoy <span aria-hidden="true">↓</span></a>
+            <a class="text-link" href="https://github.com/ChrisLauinger77/code-convoy">View on GitHub <span aria-hidden="true">↗</span></a>
+          </div>
+          <p class="hero-meta">Linux · macOS · Windows<br>Open source · Built with Rust + egui</p>
+        </div>
+      </section>
+
+      <figure class="product wrap">
+        <div class="product-label"><span><span class="signal" aria-hidden="true"></span> One workspace. Every result.</span><span class="mono">THE DESKTOP APP / macOS</span></div>
+        <a class="screenshot-link" href="assets/screenshot.png" aria-label="View the full-size CodeConvoy screenshot">
+          <img class="screenshot" src="assets/screenshot.png" width="2584" height="1928" fetchpriority="high" alt="CodeConvoy on macOS: task, agent and execution settings on the left; five repository jobs, running and queued states, and Activity output on the right.">
+        </a>
+        <figcaption><span>Write once. Run across repositories. Inspect independently.</span><a href="assets/screenshot.png">View full size <span aria-hidden="true">↗</span></a></figcaption>
+      </figure>
+
+      <section class="agents wrap" aria-labelledby="agents-title">
+        <div class="agents-intro">
+          <p class="eyebrow" id="agents-title">Bring the CLI you use</p>
+          <p>Your installation. Your authentication. Agent-specific settings.</p>
+        </div>
+        <ul class="agent-list" aria-label="Supported coding-agent CLIs">
+          <li><span class="agent-glyph" aria-hidden="true">&gt;_</span> Codex</li>
+          <li><span class="agent-glyph" aria-hidden="true">⌘</span> GitHub Copilot</li>
+          <li><span class="agent-glyph" aria-hidden="true">[&nbsp;]</span> OpenCode</li>
+          <li><span class="agent-glyph" aria-hidden="true">✳</span> Claude Code</li>
+        </ul>
+        <p class="small-note">Install and authenticate your chosen CLI separately. <a href="https://github.com/ChrisLauinger77/code-convoy#codeconvoy">See backend compatibility and validation status <span aria-hidden="true">↗</span></a></p>
+      </section>
+
+      <section class="workflow wrap section-space" id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">01 / The workflow</p><h2 id="workflow-title">A small routine.<br>A lot of repositories.</h2></div>
+          <p>Dependency updates, documentation passes, code reviews. The work repeats; writing the task doesn’t have to.</p>
+        </div>
+        <ol class="steps">
+          <li>
+            <span class="step-number" aria-hidden="true">01 <span>↗</span></span>
+            <h3>Set the direction.</h3>
+            <p>Write your task, pick an agent, and select your local repositories. Reuse task templates and repository groups when the same work comes around again.</p>
+            <div class="step-detail"><span class="mono">TASK EXAMPLE</span><q>Review the README and fix outdated setup instructions.</q></div>
+          </li>
+          <li>
+            <span class="step-number" aria-hidden="true">02 <span>↗</span></span>
+            <h3>Run at your pace.</h3>
+            <p>Review Git state before launch. Work directly or in isolated worktrees, with a limit for each convoy and a global limit across all running jobs.</p>
+            <div class="step-detail"><span class="mono">YOU SET THE LIMITS</span><span>Per-convoy concurrency + global job limit</span></div>
+          </li>
+          <li>
+            <span class="step-number" aria-hidden="true">03 <span>✓</span></span>
+            <h3>Review every result.</h3>
+            <p>See each repository’s status, activity, diff and raw output. Inspect retained isolated changes before explicitly applying or discarding a result.</p>
+            <div class="step-detail"><span class="mono">A CLEAR VIEW</span><span>Activity / Diff / Raw output / Task &amp; settings</span></div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="control" aria-labelledby="control-title">
+        <div class="wrap control-grid">
+          <div class="control-intro">
+            <p class="eyebrow">02 / Your repositories, your control</p>
+            <h2 id="control-title">Local by design.<br>Explicit by default.</h2>
+            <p>CodeConvoy coordinates the tools already on your machine. You choose the repositories, the backend permissions, and how results move forward.</p>
+            <a class="text-link" href="https://github.com/ChrisLauinger77/code-convoy#first-run">Read the execution and safety details <span aria-hidden="true">↗</span></a>
+          </div>
+          <dl class="principles">
+            <div><dt><span aria-hidden="true">↳</span> Review before running</dt><dd>Check branches and existing changes before launch. CodeConvoy prevents its jobs from writing to the same or nested working tree concurrently.</dd></div>
+            <div><dt><span aria-hidden="true">↳</span> Room to work in isolation</dt><dd>Optional worktrees start from the committed HEAD you reviewed. Results stay available for inspection, with explicit Apply and Discard actions.</dd></div>
+            <div><dt><span aria-hidden="true">↳</span> Your CLI stays in charge</dt><dd>Use each agent’s own configuration and authentication. CodeConvoy adds no provider login or credential store; your chosen CLI’s data policy still applies.</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="downloads wrap section-space" id="download" aria-labelledby="download-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">03 / Ready when you are</p><h2 id="download-title">Meet your next convoy.</h2></div>
+          <p>Pick your platform. Bring Git and an authenticated agent CLI. Start with the repositories already on your machine.</p>
+        </div>
+        <div class="platforms">
+          <article class="platform">
+            <p class="platform-arch mono">01 / x86_64</p>
+            <h3>Linux <span aria-hidden="true">↙</span></h3>
+            <p>AppImage, Debian and RPM packages.</p>
+            <a class="button button-outline" href="https://github.com/ChrisLauinger77/code-convoy/releases/latest">Get Linux packages <span aria-hidden="true">↗</span></a>
+            <a class="install-link" href="https://github.com/ChrisLauinger77/code-convoy#linux">Installation &amp; system requirements <span aria-hidden="true">↗</span></a>
+          </article>
+          <article class="platform">
+            <p class="platform-arch mono">02 / APPLE SILICON + INTEL</p>
+            <h3>macOS <span aria-hidden="true">↙</span></h3>
+            <p>Universal disk image. Also on Homebrew.</p>
+            <a class="button button-outline" href="https://github.com/ChrisLauinger77/code-convoy/releases/latest">Get macOS app <span aria-hidden="true">↗</span></a>
+            <a class="install-link" href="https://github.com/ChrisLauinger77/code-convoy#homebrew-on-macos">Install with Homebrew <span aria-hidden="true">↗</span></a>
+          </article>
+          <article class="platform">
+            <p class="platform-arch mono">03 / WINDOWS 11 · x86_64</p>
+            <h3>Windows <span aria-hidden="true">↙</span></h3>
+            <p>Installer or portable ZIP. Also on Scoop.</p>
+            <a class="button button-outline" href="https://github.com/ChrisLauinger77/code-convoy/releases/latest">Get Windows app <span aria-hidden="true">↗</span></a>
+            <a class="install-link" href="https://github.com/ChrisLauinger77/code-convoy#scoop-on-windows">Install with Scoop <span aria-hidden="true">↗</span></a>
+          </article>
+        </div>
+        <p class="download-note">Downloads open the latest GitHub release with packages and SHA-256 checksums. Windows packages are unsigned; macOS is ad-hoc signed and not notarized. See <a href="https://github.com/ChrisLauinger77/code-convoy#downloads-and-platform-support">platform support and first-launch notes</a>.</p>
+        <div class="source-note"><span>Prefer to build it yourself?</span><a class="text-link" href="https://github.com/ChrisLauinger77/code-convoy#build-and-run">Get the source &amp; build instructions <span aria-hidden="true">↗</span></a></div>
+      </section>
+    </main>
+
+    <footer class="site-footer wrap">
+      <a class="wordmark" href="./"><img src="assets/codeconvoy-128.png" width="30" height="30" alt=""><span>CodeConvoy</span></a>
+      <p>One task. Multiple repositories. Your agent.</p>
+      <nav aria-label="Footer navigation">
+        <a href="https://github.com/ChrisLauinger77/code-convoy">GitHub <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/ChrisLauinger77/code-convoy/issues">Issues <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/ChrisLauinger77/code-convoy/blob/main/LICENSE">MIT license <span aria-hidden="true">↗</span></a>
+      </nav>
+    </footer>
+  </body>
+</html>
