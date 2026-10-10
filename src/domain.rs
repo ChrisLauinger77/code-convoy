@@ -426,6 +426,7 @@ pub struct AppState {
     #[serde(skip_serializing_if = "Appearance::is_system")]
     pub appearance: Appearance,
     pub notifications: crate::notifications::Preferences,
+    pub desktop: crate::desktop::Preferences,
 }
 impl Default for AppState {
     fn default() -> Self {
@@ -442,6 +443,7 @@ impl Default for AppState {
             global_concurrency: DEFAULT_GLOBAL_CONCURRENCY,
             appearance: Appearance::default(),
             notifications: crate::notifications::Preferences::default(),
+            desktop: crate::desktop::Preferences::default(),
         }
     }
 }

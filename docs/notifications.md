@@ -52,6 +52,16 @@ keep separate IDs. A removed convoy produces a “no longer in history” notice
 unavailable retained files still open their existing diagnostics. Assessment can
 finish after history removal without retaining/pinning that history.
 
+## Tray and window lifecycle (0.6)
+
+Notifications are processed in `App::logic` while minimized, including optional
+close-to-tray. Tray support is not required for notification delivery. A notification
+activation selects its stable convoy and uses the shared window restoration path;
+duplicate activation callbacks are ignored. Existing filtering and foreground
+suppression are unchanged. Explicit Quit stops notification listeners after the
+user confirms active-work cancellation; cancelling Quit leaves them running.
+See [desktop settings and recovery](desktop-workflow.md).
+
 ## Platforms and permissions
 
 - **Linux / GNOME / Wayland:** `notify-rust` 4.18.2 uses the session D-Bus desktop
@@ -96,9 +106,9 @@ once means one eligible submission attempt, not guaranteed OS presentation.
 ## Library decision and sources
 
 The maintained [notify-rust](https://github.com/hoodie/notify-rust) family provides
-all three native transports. Linux uses its asynchronous API with the same zbus
-async-io configuration already used by accessibility. Enabling zbus's Tokio
-feature globally would also change those other consumers. On macOS and Windows
+all three native transports. Linux uses its asynchronous API. With desktop integration in 0.6, zbus 5.19 or
+newer selects Tokio for connections created inside the application runtime and
+retains async-io for consumers outside it, including desktop accessibility. On macOS and Windows
 we call its underlying libraries directly because the common response API blocks:
 [mac-usernotifications](https://github.com/hoodie/mac-usernotifications) exposes a
 cancellable response future and

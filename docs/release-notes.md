@@ -1,52 +1,44 @@
-# CodeConvoy 0.5.0 — Visibility & Review
+# CodeConvoy 0.6.0 — Desktop Workflow
 
-Unreleased source preparation. No release, tag, package publication or push is
-part of this implementation.
+Unreleased source implementation. No tag, release or package publication is part
+of this work.
 
-## Changes since 0.4.0
+## Changes since 0.5.0
 
-- Case-insensitive History search by convoy ID, task, repository and backend,
-  with All, Completed, Failed, Cancelled and Needs Review filters. Active convoys
-  remain separate; filters preserve selection and history order.
-- Compact Review comparison with execution totals, changed/unchanged/unknown
-  counts, review attention, per-repository outcomes and recorded duration.
-  Filter rows and select a repository to use the existing detailed views.
-- New jobs persist completion-time change observations separately from current
-  Review and repository health. Direct counts compare against the reviewed HEAD
-  and include pre-existing edits. Isolated results retain their fixed-base change
-  flag. Older entries show Unknown without reconstructing history from live Git.
-- Responsive repository health with branch, Clean/Dirty and availability,
-  a shared four-check limit across refreshes, cancellation and stale-reply rejection. Active
-  repository work shows Unknown until an explicit refresh after completion;
-  unrelated repositories remain available during Apply and single/bulk Discard.
-- Review-needed notifications prefer saved completion observations, including
-  committed Direct changes and Unknown results. Delivery filters, outcome priority
-  and exactly-once tracking remain unchanged.
-- Text-backed change and review indicators support System/Dark/Light themes.
-  Narrow comparison rows wrap instead of requiring a wide table.
+- Optional native system tray with Show, running-convoy count, Show Active Convoys
+  and safe Quit. Off by default; counts include queued and preparing convoys.
+- Immediate, persisted close-window preference: Quit by default, or minimize with
+  an operational tray. Jobs continue while minimized; Dock/taskbar access remains
+  available for recovery. Missing/failed trays use the normal Quit workflow.
+- Shared restore-before-focus handling for tray, notification and quit actions.
+  Show retains the current view; Show Active opens the existing ACTIVE group.
+- Native macOS Cmd+Q, application-menu and Dock Quit remain explicit Quit actions
+  regardless of the close preference. Repeated requests share one confirmation
+  and cancellation path. Cancel leaves jobs and notification listeners unaffected.
+- Linux StatusNotifierItem support without GTK/AppIndicator system libraries or a
+  required GNOME extension. Missing hosts fail once; watcher loss restores the
+  window and disables tray minimization until explicitly re-enabled.
+- Settings and run changes persist while the window is minimized. Existing v1
+  settings (including 0.5.0) default safely to tray disabled and Quit behavior.
+- Tests for settings compatibility, tray failure/routing/count changes, stale
+  callbacks, close/quit decisions and notification restoration; a disposable
+  native desktop validation example.
 
-No new dependencies, agent backends, Git mutation actions or background monitoring.
-Existing notification policy, scheduling, cancellation, repository safety and result
-resolution remain intact. The optional completion field is compatible with existing
-version-1 state. Template names are not persisted in historical tasks and are not
-searchable. Direct Diff remains live, and isolated completion file counts are not
-available. See [behavior and compatibility](visibility.md).
+Selected dependencies are tray-icon 0.26.1 for macOS/Windows and ksni 0.3.6 for
+Linux. Linux requires zbus >=5.19 for safe runtime selection when Tokio and
+async-io are both enabled. See [rationale and platform behavior](desktop-workflow.md).
+Scheduling, process-tree cancellation, repository safety, history, notification
+filters and execution backends retain their existing behavior.
 
-## Validation and remaining release work
+## Validation and remaining platform work
 
-macOS Apple Silicon validation passed formatting, strict Clippy, 320 Rust tests
-(four optional CLI probes ignored), the release build, 16 packaging tests and
-version/tag consistency. A disposable native macOS smoke pass verified search,
-filtering, comparison selection and Diff navigation; headless layout checks cover
-all requested sizes and themes. Detailed evidence and remaining native checks are
-recorded in [visibility validation](visibility.md#validation).
-Native Linux/Windows UI checks, macOS Intel execution, release packages and the
-[native notification checklist](notifications.md#validation-and-native-smoke-checklist)
-remain release checks. No authenticated backend E2E or native notification delivery
-is claimed by this feature implementation.
+See the dated [validation record](desktop-workflow.md#validation) for actual build,
+test and native-smoke evidence. Linux/Windows native builds and desktop smoke
+checks, macOS Intel execution, status-menu interaction and native notification
+activation remain platform checks. No authenticated backend execution is claimed.
 
-Existing limits remain: external applications are outside CodeConvoy's leases;
-unsupported Apply transfers are refused; uncertain Apply retains evidence and has
-no in-app uncertainty-resolution flow. Review changes before committing. Package
-signing, platform compatibility and installation requirements follow the
-[release procedure](releasing.md) and existing validation records.
+Known limits: tray presence cannot guarantee an icon is visible through every OS
+or third-party menu-bar policy. Dock/taskbar access is retained deliberately.
+Wayland and Windows can restrict focus; native notifications require existing OS
+permissions and activation support. Jobs run only while the application process
+exists; no daemon, cold-start notification routing or automatic restart is added.
