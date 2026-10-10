@@ -610,6 +610,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tray-icon",
+ "unicase",
  "wgpu",
  "windows",
  "windows-registry",
@@ -3506,6 +3507,12 @@ dependencies = [
  "tempfile",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "unicase"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "357cc3acc6a036009fd6c973ed009037c732d60d0b4f6c673e9041497482a28f"
 
 [[package]]
 name = "unicode-general-category"

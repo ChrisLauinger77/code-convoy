@@ -1,9 +1,13 @@
 //! Session-only identities and cached membership for the repository picker.
 use super::*;
 use domain::RepositoryGroup;
+use unicase::UniCase;
 
 #[derive(Default)]
 pub(super) struct RepositorySections {
+    pub query: String,
+    cached_query: String,
+    matches: Vec<bool>,
     repositories: Vec<Repository>,
     groups: Vec<RepositoryGroup>,
     next_id: u64,
@@ -54,6 +58,9 @@ impl RepositorySections {
         // Selection, Git refreshes and expansion never rebuild membership. The
         // borrowed equality check also catches registration/reuse/library edits.
         if !self.sections.is_empty() && self.repositories == repositories && self.groups == groups {
+            if self.query != self.cached_query {
+                self.filter();
+            }
             return;
         }
         let registered: HashMap<_, _> = repositories
@@ -108,6 +115,43 @@ impl RepositorySections {
         self.repositories = repositories.to_vec();
         self.groups = groups.to_vec();
         self.sections = sections;
+        self.filter();
+    }
+
+    // Only query/registry/group edits recompute matches. This is display-text
+    // matching over the registry, with no filesystem or Git inspection.
+    fn filter(&mut self) {
+        let needle = UniCase::new(self.query.trim()).to_folded_case();
+        self.matches = self
+            .repositories
+            .iter()
+            .map(|repository| {
+                needle.is_empty()
+                    || UniCase::new(&repository.name)
+                        .to_folded_case()
+                        .contains(&needle)
+                    || UniCase::new(repository.path.to_string_lossy())
+                        .to_folded_case()
+                        .contains(&needle)
+            })
+            .collect();
+        self.cached_query.clone_from(&self.query);
+    }
+
+    pub fn filtering(&self) -> bool {
+        !self.cached_query.trim().is_empty()
+    }
+
+    pub fn matches(&self, index: usize) -> bool {
+        self.matches[index]
+    }
+
+    pub fn visible(&self, section: &Section) -> bool {
+        !self.filtering()
+            || section
+                .repositories
+                .iter()
+                .any(|&index| self.matches(index))
     }
 
     pub fn rename(&mut self, index: usize, name: &str) {

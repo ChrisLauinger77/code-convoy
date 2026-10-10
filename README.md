@@ -259,6 +259,15 @@ every registered repository. Counts show each section's membership and selection
 the overall count counts each repository once. Repositories in multiple groups
 share one selection and receive only one job per convoy.
 
+Use **Filter repositories…** above the picker to find registered repositories by
+name or path. Matching ignores case and surrounding whitespace. Matching groups
+open while searching; empty groups are hidden and **Ungrouped** remains first.
+**Clear** restores your manual expansion choices. Filtering only changes what is
+visible: hidden selections remain selected and the overall count includes them.
+**Select all / Select none** still affect every registered repository, and group
+checkboxes still affect their full membership, including hidden members. The query
+is temporary and is never saved in settings, templates, or convoy history.
+
 **Add files…** opens a native multi-file picker for Markdown, text, JSON, YAML,
 PNG, JPEG and WebP. Files can also be dropped onto the attachment area. Each
 job receives the task context through its backend's documented interface.

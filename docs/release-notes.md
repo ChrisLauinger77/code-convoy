@@ -1,3 +1,27 @@
+# CodeConvoy 0.8.0 — Workflow & Productivity (unreleased)
+
+## PR 1: Quick Repository Filter
+
+- Find registered repositories immediately by name or path with case-insensitive
+  substring matching using full Unicode case folding (for example,
+  `Straße`/`STRASSE`); surrounding query whitespace is ignored.
+- Matching groups open temporarily, retain their order and shared selection,
+  and show only matching repositories. Ungrouped stays first when it has matches.
+- Clear restores manual expansion. Hidden selections remain selected; global
+  and group selection controls retain their full-membership behavior.
+- Compact empty state and keyboard-accessible filter/Clear controls, using native
+  egui styling. The overall selected count remains visible.
+- Session-only cached matching; no search dependency, filesystem/Git work, new
+  persistent settings, backend changes or scheduling changes.
+- The small `unicase` text utility supplies Unicode folding without transitive
+  dependencies or application-maintained character tables.
+
+See [filter validation](repository-filter-validation.md) for automated coverage
+and native smoke results. This is an unreleased feature entry; package version
+and release tags remain unchanged.
+
+---
+
 # CodeConvoy 0.7.0 — Validation & Confidence
 
 Adds optional per-repository validation with configurable commands, manual Run/Cancel controls,
