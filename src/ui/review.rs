@@ -189,7 +189,10 @@ impl App {
         ui.separator();
         let mut action = None;
         if let Some(job) = run.jobs.get(self.selected_job) {
-            ui.strong(&job.repository.name);
+            ui.horizontal_wrapped(|ui| {
+                ui.strong(&job.repository.name);
+                copy_results::repository(ui, run, self.selected_job);
+            });
             ui.label(result_label(job));
             if !self.comparison_filter.matches(job) {
                 ui.small("Selected repository is outside the comparison filter.");

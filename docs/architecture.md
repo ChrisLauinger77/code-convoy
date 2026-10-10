@@ -63,6 +63,14 @@ identity. See [UniCase's folding API](https://docs.rs/unicase/2.10.0/unicase/str
 
 `ui/library` owns group/template editing and explicit selection actions. `ui/attachments_ui` owns native file selection, optional drops, background inspection/reuse and stale-result rejection. `ui/editor` coordinates the task, scrolling editor, fixed execution controls, and modal preflight review. `ui/agent_config` renders only the selected backend's option specifications; `ui/repositories` handles registration, Git-state presentation and bulk selection. `ui/results` presents run navigation, cleanup, jobs and result tabs; `ui/snapshot` displays declared option labels, repository paths and UTC timestamps. `ui/diagnostics` keeps concise messages separate from expandable, copyable raw details. `ui/about` shows offline application metadata. `ui/theme` centralizes palettes, typography, spacing, focus/selection, primary actions and a painted success mark (the bundled fonts lack check glyphs). `ui/format` formats duration, dates, options and status text; overall status and progress remain domain-derived.
 
+Copy Results uses pure `ui/result_markdown` helpers over `Run`, `Job`,
+`visibility::summary`/`changes`/`needs_review` and the latest saved validation
+record. It reuses `ui/format` date, duration and convoy-status presentation.
+`ui/copy_results` generates text on activation only, sends egui's clipboard output
+command and holds expiring feedback in egui's temporary widget data. Copy never
+consults live Git caches, current validation configuration or process environments,
+and adds no persisted fields or execution operations.
+
 The compact run selector groups active and terminal runs in a height-bounded scrolling popup. Active means any queued/preparing/running job, including a partially failed convoy that still has work. History cleanup methods in `AppState` guard against removing active runs; the UI offers individual removal only for terminal runs and bulk removal through History cleanup. Removal immediately saves metadata and reconciles selection (prefer an active convoy, then the newest history, then empty), clearing stale job/diff/output views. It never calls Git, the scheduler, cancellation, or agent configuration APIs.
 
 Reuse copies a run's task/options and selects its still-registered canonical repository paths. It reports skipped registrations, leaves the global limit alone, and requires the normal preflight for any subsequent launch. Reuse is unavailable during preflight/review/shutdown. No historical configuration is mutated or automatically executed.

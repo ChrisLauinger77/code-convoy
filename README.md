@@ -14,6 +14,12 @@ A local, native desktop task runner for coding-agent CLIs.
 
 CodeConvoy is a native Rust/egui implementation with four independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
 
+Inspect saved execution outcomes, Git completion observations and validation results,
+then use **Copy Summary** or **Copy Repository Result** to share concise Markdown.
+Review copied task summaries, repository names and command arguments before sharing;
+logs, diffs, attachments and local path metadata are excluded. See
+[copying results](docs/visibility.md#copy-results-080).
+
 ![image](assets/screenshot.png)
 
 | Backend            | Status    | Authenticated E2E status                                                                             |

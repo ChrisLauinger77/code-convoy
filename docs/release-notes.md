@@ -1,5 +1,25 @@
 # CodeConvoy 0.8.0 — Workflow & Productivity (unreleased)
 
+## PR 2: Copy Results
+
+- **Copy Summary** for terminal/historical convoys and **Copy Repository Result**
+  in the existing job details copy concise Markdown via egui's system clipboard.
+  Both actions support keyboard navigation and brief inline copy feedback.
+- Saved execution metadata, UTC timestamps, durations, completion observations,
+  review status and latest validation records remain distinct. The convoy table
+  keeps original repository order, independent of view filters.
+- Missing historical changes stay Unknown; partial counts are labelled “known”.
+  Missing validation says “Not run / not recorded”, without consulting today's
+  mutable configuration. Copy never invokes Git or reads live review statistics.
+- Bounded, escaped task/name/command metadata; no automatic logs, diffs,
+  environments, attachments or local path metadata. Recognizable local paths in
+  free text are omitted. Review copied text for sensitive content before sharing.
+- Pure formatting tests and headless egui clipboard/keyboard coverage; no new
+  dependency, persistence field, execution behavior or export screen.
+
+See [copy-results validation](copy-results-validation.md). Package version and
+release tags remain unchanged.
+
 ## PR 1: Quick Repository Filter
 
 - Find registered repositories immediately by name or path with case-insensitive
