@@ -48,7 +48,9 @@ Preparation revalidates the location and checks access by actually reserving the
 unique attempt and writing its ownership records before invoking Git. Invalid,
 missing-parent, permission and disk-space failures are explicit job errors; there
 is no fallback to the default directory or Direct execution. Partially reserved
-metadata is retained with its location in diagnostics.
+metadata is retained with its location in diagnostics. If the Store-side location
+record cannot be written or synced, the job still records the reserved attempt
+before failing, so its original location survives restart; Git is not started.
 
 Custom attempts have both the existing sibling `owner.json` and an exact original
 location record under `<application data directory>/worktrees/.locations`. Retain
@@ -140,13 +142,14 @@ describes why a watcher alone is insufficient without a registered host.
 2026-10-10, macOS Apple Silicon, Homebrew Rust/Cargo 1.99:
 
 - `cargo fmt --check`, strict Clippy, `cargo test --all-features` and
-  `cargo build --release`: passed. 341 Rust tests passed, with four optional CLI
+  `cargo build --release`: passed. 342 Rust tests passed, with four optional CLI
   probes ignored. Automated tests use no live desktop session.
-- Ten additional worktree-location tests cover legacy/custom persistence,
+- Eleven additional worktree-location tests cover legacy/custom persistence,
   default and missing-directory resolution, concurrent unique reservations,
   invalid/traversing/nested paths, permission/link failures, queued-convoy setting
   snapshots, no fallback, settings picker cancellation, original-location cleanup
-  after restart, and missing/tampered ownership records. Existing recovery tests pass.
+  after restart, missing/tampered ownership records, and persisted partial attempts
+  after Store binding failure. Existing recovery tests pass.
 - 16 packaging tests and `packaging/release.py check-tag v0.6.0`: passed using
   Python 3.14. The system Python 3.9 lacks the required `tomllib` module.
 - Linux and Windows target checks were attempted; both stopped because their Rust

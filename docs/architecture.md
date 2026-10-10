@@ -791,6 +791,10 @@ queued work. `worktrees::reserve_at` uses the existing atomic random reservation
 and sibling ownership format. Before Git creation, custom attempts additionally
 write and sync an exact metadata binding under the immutable Store default root's
 `.locations` directory. The current preference never changes that trusted root.
+Reservation returns the attempt metadata even when writing or syncing this binding
+fails. The worker emits the metadata through the existing Preparing event before
+propagating that error, so failed attempts remain pinned in persisted history and
+visible after restart. Git creation still requires a successful binding.
 
 `worktrees/location` resolves default/custom bases, rejects traversal and nested
 Git/managed attempts, and verifies original-location bindings. Recovery's layout

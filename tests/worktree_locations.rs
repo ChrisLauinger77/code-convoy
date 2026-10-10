@@ -47,7 +47,7 @@ async fn reserve(
     run: u64,
 ) -> WorktreeMetadata {
     let summary = git::status(&repo.path).await.unwrap().summary;
-    worktrees::reserve_at(
+    let reservation = worktrees::reserve_at(
         storage,
         base,
         run,
@@ -56,7 +56,9 @@ async fn reserve(
         summary.common_dir.unwrap(),
         summary.head.unwrap(),
     )
-    .unwrap()
+    .unwrap();
+    reservation.binding.unwrap();
+    reservation.metadata
 }
 fn record(storage: &Path, m: &WorktreeMetadata) -> PathBuf {
     storage.join(".locations").join(format!(
@@ -215,7 +217,9 @@ async fn concurrent_repositories_and_convoys_get_unique_attempts() {
     }
     let mut paths = std::collections::HashSet::new();
     for task in tasks {
-        assert!(paths.insert(task.await.unwrap().path));
+        let reservation = task.await.unwrap();
+        reservation.binding.unwrap();
+        assert!(paths.insert(reservation.metadata.path));
     }
     assert_eq!(paths.len(), 32);
     assert_eq!(

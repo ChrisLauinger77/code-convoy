@@ -107,6 +107,14 @@ pub fn reserve(
     fs::File::open(&attempt)?.sync_all()?;
     Ok(metadata)
 }
+/// A reserved attempt survives a failed Store binding. Callers must retain its
+/// metadata before propagating `binding`, and must not start Git unless it succeeds.
+#[derive(Debug)]
+pub struct Reservation {
+    pub metadata: WorktreeMetadata,
+    pub binding: Result<()>,
+}
+
 /// Reserve using the chosen base, retaining the Store's original trust boundary.
 #[allow(clippy::too_many_arguments)]
 pub fn reserve_at(
@@ -117,12 +125,12 @@ pub fn reserve_at(
     repository: Repository,
     common_dir: std::path::PathBuf,
     base_commit: String,
-) -> Result<WorktreeMetadata> {
+) -> Result<Reservation> {
     let base = location::resolve_base(storage, custom)?;
     let metadata = reserve(&base, run, job, repository, common_dir, base_commit)?;
-    location::record(storage, &metadata).with_context(|| format!(
-        "Could not bind original worktree location {} to application storage. Reserved metadata is retained; Git has not been started.", metadata.path.display()))?;
-    Ok(metadata)
+    let binding = location::record(storage, &metadata).with_context(|| format!(
+        "Could not bind original worktree location {} to application storage. Reserved metadata is retained; Git has not been started.", metadata.path.display()));
+    Ok(Reservation { metadata, binding })
 }
 fn valid_commit(commit: &str) -> bool {
     matches!(commit.len(), 40 | 64) && commit.bytes().all(|b| b.is_ascii_hexdigit())
