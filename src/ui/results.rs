@@ -71,6 +71,7 @@ impl App {
             ui.selectable_value(&mut self.tab, Tab::Activity, "Activity");
             ui.selectable_value(&mut self.tab, Tab::Diff, "Diff");
             ui.selectable_value(&mut self.tab, Tab::Raw, "Raw output");
+            ui.selectable_value(&mut self.tab, Tab::Validation, "Validation");
             ui.selectable_value(&mut self.tab, Tab::Task, "Task & settings");
         });
         if self.tab == Tab::Review {
@@ -231,9 +232,13 @@ impl App {
             }
         }
         ui.add_space(theme::GAP);
+        if self.tab == Tab::Validation {
+            self.validation_view(ui, ctx, bottom);
+            return;
+        }
         let mut load_diff = None;
         match self.tab {
-            Tab::Review => unreachable!("Review is rendered above"),
+            Tab::Review | Tab::Validation => unreachable!("Rendered above"),
             Tab::Activity | Tab::Raw => {
                 let raw = self.tab == Tab::Raw;
                 let log = if raw { &job.raw_log } else { &job.log };
@@ -309,6 +314,7 @@ impl App {
                     if ui
                         .add_enabled(
                             !loading
+                                && !self.repository_in_use(&job.repository.path)
                                 && self.review_pending.is_none()
                                 && self.result_operation.is_none()
                                 && self.bulk_discard.is_none(),
@@ -560,7 +566,9 @@ impl App {
             && !run.active()
             && run.history_protected()
         {
-            ui.small(if run.unresolved_results() {
+            ui.small(if run.jobs.iter().any(|j| j.validation.as_ref().is_some_and(|v| v.status == crate::validation::Status::Running)) {
+                "History removal blocked: validation is running."
+            } else if run.unresolved_results() {
                 "History removal blocked: retained isolated results still exist. Use Discard convoy… or resolve results in Review."
             } else {
                 "History removal blocked: retained copies need explicit cleanup in Review, or cleanup verification is pending."

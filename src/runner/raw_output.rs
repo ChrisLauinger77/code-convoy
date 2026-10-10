@@ -3,7 +3,7 @@ use crate::process::Stream;
 /// Retain stream bytes as text without corrupting split UTF-8 characters.
 /// Only an incomplete UTF-8 suffix (at most three bytes per stream) is buffered.
 #[derive(Default)]
-pub(super) struct RawOutput {
+pub(crate) struct RawOutput {
     pending: [Vec<u8>; 2],
 }
 

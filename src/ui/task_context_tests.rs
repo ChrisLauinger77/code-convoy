@@ -72,6 +72,7 @@ impl Keyboard {
             |ui| {
                 egui::CentralPanel::default().show(ui, |ui| (self.surface)(app, ui, &self.ctx));
                 app.library_window(&self.ctx);
+                app.validation_settings_window(&self.ctx);
             },
         );
         output.textures_delta.clear();
@@ -543,4 +544,110 @@ fn keyboard_can_select_followup_rows_create_a_draft_and_reach_retry() {
     keyboard.activate(&mut app, "Retry");
     assert!(app.busy && app.prepared.is_none());
     assert!(app.manager.is_idle());
+}
+
+#[test]
+fn validation_configuration_and_run_controls_are_keyboard_accessible() {
+    let (_temp, mut app) = app();
+    app.state.repositories = vec![repository("alpha")];
+    let path = app.state.repositories[0].path.clone();
+    let mut keys = Keyboard::new(|app, ui, ctx| app.repositories_section(ui, ctx));
+    keys.frame(&mut app, vec![]);
+    keys.activate(&mut app, "Configure validation…");
+    keys.replace_text(
+        &mut app,
+        "Executable name on PATH or absolute path",
+        "cargo",
+    );
+    keys.replace_text(
+        &mut app,
+        "Arguments (JSON array; each string is one literal argument)",
+        "[\"test\", \"literal argument\"]",
+    );
+    keys.activate(&mut app, "Save command");
+    assert_eq!(
+        app.state.repository_validation[&path].arguments,
+        ["test", "literal argument"]
+    );
+    assert!(app.validation_editor.is_none());
+    assert!(app.validations.is_idle());
+    app.state.runs = vec![run(9, &[JobStatus::Succeeded])];
+    app.state.runs[0].jobs[0].repository = app.state.repositories[0].clone();
+    app.select_run(Some(9));
+    let mut keys = Keyboard::new(|app, ui, ctx| app.validation_controls(ui, ctx));
+    keys.frame(&mut app, vec![]);
+    keys.activate(&mut app, "Run Validation");
+    assert!(!app.validations.is_idle());
+    assert!(!app.request_quit());
+    app.cancel_quit();
+    keys.activate(&mut app, "Cancel Validation");
+    assert_eq!(app.state.runs[0].jobs[0].status, JobStatus::Succeeded);
+    // This un-driven runtime never executes a validation command.
+    app.confirm_quit();
+    assert!(app.closing);
+}
+
+#[test]
+fn result_actions_remain_usable_during_unrelated_validation() {
+    use crate::{persistence::results::Action, validation::Command};
+    use domain::{ResultAvailability as A, ResultResolution as R};
+    for (action, label) in [
+        (Action::Apply, "Apply result"),
+        (Action::Discard, "Discard result"),
+        (Action::CleanupApplied, "Clean up retained copy"),
+    ] {
+        let (_temp, mut app) = app();
+        app.state.runs = vec![
+            isolated_history(1, JobStatus::Succeeded, Some(true)),
+            run(2, &[JobStatus::Succeeded]),
+        ];
+        let job = &mut app.state.runs[0].jobs[0];
+        job.result_checked = true;
+        job.result_availability = A::Available;
+        job.review = Some(Ok(crate::review::Statistics {
+            files: 1,
+            ..Default::default()
+        }));
+        if action == Action::CleanupApplied {
+            job.resolution = R::Applied;
+        }
+        app.state.repositories = vec![job.repository.clone()];
+        app.state.runs[1].jobs[0].repository = repository("unrelated");
+        let handle = app.runtime().handle().clone();
+        let record = app
+            .validations
+            .start(
+                &handle,
+                app.manager.lifecycle(),
+                (2, 0),
+                app.state.runs[1].jobs[0].clone(),
+                Command {
+                    executable: "unused-fixture".into(),
+                    arguments: vec![],
+                },
+            )
+            .unwrap();
+        app.state.runs[1].jobs[0].validation = Some(record);
+        app.select_run(Some(1));
+        let mut keys = Keyboard::new(|app, ui, ctx| {
+            app.review_view(ui, ctx, 1500.0);
+            app.discard_window(ctx);
+        });
+        keys.frame(&mut app, vec![]);
+        let button = keys
+            .nodes
+            .values()
+            .find(|node| node.label() == Some(label))
+            .unwrap();
+        assert!(!button.is_disabled(), "{label} must remain available");
+        keys.activate(&mut app, label);
+        if action != Action::Apply {
+            assert_eq!(app.discard_confirmation, Some((1, 0, action)));
+            keys.activate(&mut app, label);
+        }
+        assert_eq!(app.result_operation, Some((1, 0)), "{label}");
+        assert!(!app.validations.is_idle());
+        assert_eq!(app.state.runs[0].jobs[0].status, JobStatus::Succeeded);
+        // The test runtime is never driven: no command or Git mutation executes.
+    }
 }

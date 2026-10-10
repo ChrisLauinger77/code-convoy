@@ -60,6 +60,10 @@ impl Store {
             .context("No isolated result was recorded.")?;
         anyhow::ensure!(j.status.is_terminal(), "Active work cannot be resolved.");
         anyhow::ensure!(
+            !crate::validation::blocks_result_operation(state, &j),
+            "Wait for validation in the affected repository to finish before resolving this result."
+        );
+        anyhow::ensure!(
             j.resolution != ResultResolution::ApplyPending,
             "Apply outcome is pending or uncertain. Inspect the destination manually; the retained result and recovery evidence cannot be discarded or cleaned up."
         );

@@ -14,6 +14,8 @@ mod desktop;
 mod notifications;
 #[path = "task_context_tests.rs"]
 mod task_context;
+#[path = "validation_tests.rs"]
+mod validation;
 #[path = "visibility_tests.rs"]
 mod visibility;
 

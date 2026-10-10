@@ -3,7 +3,8 @@ use super::*;
 
 impl App {
     fn has_active_work(&self) -> bool {
-        self.result_operation.is_some()
+        !self.validations.is_idle()
+            || self.result_operation.is_some()
             || self.bulk_discard.is_some()
             || !self.manager.is_idle()
             || self.state.runs.iter().any(Run::active)
@@ -44,6 +45,7 @@ impl App {
         self.notification_service.stop();
         self.desktop.stop();
         // Shutdown closes admission synchronously, then uses Stop All's tokens.
+        self.validations.shutdown();
         self.manager.shutdown();
     }
 
@@ -74,6 +76,7 @@ impl App {
         if self.closing
             && !self.exit_ready
             && self.manager.join.is_finished()
+            && self.validations.finished()
             && self.result_operation.is_none()
             && self.bulk_discard.is_none()
         {
@@ -82,6 +85,7 @@ impl App {
             while let Ok(event) = self.events_rx.try_recv() {
                 self.apply_event(event);
             }
+            self.poll_validations();
             self.state.recover_interrupted();
             self.save();
             self.exit_ready = true;
@@ -113,7 +117,7 @@ impl App {
             ui.label(format!(
                 "Preparing: {preparing} · Running: {running} · Queued: {queued}"
             ));
-            ui.label("Closing CodeConvoy will stop all active jobs.");
+            ui.label("Closing CodeConvoy will stop all active jobs and validations.");
             if self.bulk_discard.is_some() || self.result_operation.is_some() {
                 ui.label("Closing waits for result-operation cleanup; remaining bulk discards will not be attempted.");
             }

@@ -126,7 +126,7 @@ A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
-`./CodeConvoy-0.6.0-x86_64.AppImage --appimage-extract-and-run`.
+`./CodeConvoy-0.7.0-x86_64.AppImage --appimage-extract-and-run`.
 
 X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
 `libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,
@@ -174,6 +174,31 @@ checked again after restart. See the
 See [release procedure and packaging design](docs/releasing.md) and the
 [release validation record](docs/release-validation.md) for tested behavior and
 remaining platform checks.
+
+## Manual validation (0.7.0)
+
+Each repository can optionally configure one local validation command under
+**Repositories → Configure validation…**. Enter an executable (for example `cargo`)
+and literal arguments as a JSON array (for example `["test"]`). Commands are
+unconfigured by default, persist across restarts, and can be edited or removed.
+
+After an agent job finishes, select its result and choose **Run Validation** in
+Review or the **Validation** tab. The command and target directory are shown
+before execution. Isolated results always use their original retained worktree;
+missing or unverified worktrees report Unavailable, without using another checkout.
+Direct results use their original recorded working tree and Git identity.
+
+Validation streams bounded output, shows status, elapsed time, exit code and
+execution timestamp, and offers **Cancel Validation**. Its latest command and
+execution metadata are saved with that exact repository job. The latest 64 KiB of
+output and execution diagnostics remain available only in the current session.
+Agent success and Git review remain independent. A saved pass describes that
+execution only: subsequent file changes require another validation. Validation can
+modify files; Review, Diff and repository-health observations are invalidated afterward.
+
+Validation never starts automatically, commits, stages, pushes, or approves a
+result. Commands you configure execute with your local account's permissions.
+See [configuration, platform details and validation usage](docs/validation.md).
 
 ## Desktop workflow (0.6.0)
 
@@ -543,7 +568,7 @@ State is saved atomically in the conventional per-user application data director
 
 A lock prevents two instances sharing the same state directory. On Unix the directory is owner-only and state files are created with mode `0600`. Invalid or newer-format state fails startup with an actionable error and is preserved. Unfinished saved jobs are marked cancelled/interrupted at next startup; they are never silently resumed.
 
-**Prompts, templates, groups and attachment metadata are saved, so do not paste credentials into tasks.** Attachment contents are not saved. CLI stdout/stderr, diagnostic messages, and diffs are never persisted by CodeConvoy. Output is bounded to the latest 512 KiB per job/view (32 MiB shared total, oldest job logs evicted first) and retained only for the application session. The UI reports truncated/dropped output. Diffs are live views: direct mode includes pre-existing edits; isolated mode uses the retained checkout and its fixed base commit. They are not saved patch snapshots. The agent CLIs may maintain their own operational logs according to their configuration.
+**Prompts, templates, groups and attachment metadata are saved, so do not paste credentials into tasks.** Attachment contents are not saved. Agent and validation stdout/stderr, execution diagnostics, and diffs are never persisted by CodeConvoy. Validation saves its latest command and execution metadata with its repository job; do not place secrets in validation arguments. Agent output is bounded to the latest 512 KiB per job/view (32 MiB shared total, oldest job logs evicted first); validation output retains the latest 64 KiB per job. Both remain available only for the application session. The UI reports truncated/dropped output. Diffs are live views: direct mode includes pre-existing edits; isolated mode uses the retained checkout and its fixed base commit. They are not saved patch snapshots. The agent CLIs may maintain their own operational logs according to their configuration.
 
 ## Development
 

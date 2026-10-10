@@ -66,6 +66,13 @@ impl Store {
             state.repositories.len() <= MAX_REPOSITORIES,
             "Too many registered repositories in saved state."
         );
+        anyhow::ensure!(
+            state.repository_validation.len() <= MAX_REPOSITORIES,
+            "Too many validation commands in saved state."
+        );
+        for command in state.repository_validation.values() {
+            command.validate()?;
+        }
         state.recover_interrupted();
         state.trim_history();
         state.global_concurrency = state.global_concurrency.clamp(1, MAX_CONCURRENCY);
