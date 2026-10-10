@@ -189,11 +189,12 @@ missing or unverified worktrees report Unavailable, without using another checko
 Direct results use their original recorded working tree and Git identity.
 
 Validation streams bounded output, shows status, elapsed time, exit code and
-execution timestamp, and offers **Cancel Validation**. Its latest result and
-64 KiB of output are saved with that exact repository job. Agent success and Git
-review remain independent. A saved pass describes that execution only: subsequent
-file changes require another validation. Validation can modify files; Review,
-Diff and repository-health observations are invalidated afterward.
+execution timestamp, and offers **Cancel Validation**. Its latest command and
+execution metadata are saved with that exact repository job. The latest 64 KiB of
+output and execution diagnostics remain available only in the current session.
+Agent success and Git review remain independent. A saved pass describes that
+execution only: subsequent file changes require another validation. Validation can
+modify files; Review, Diff and repository-health observations are invalidated afterward.
 
 Validation never starts automatically, commits, stages, pushes, or approves a
 result. Commands you configure execute with your local account's permissions.
@@ -567,7 +568,7 @@ State is saved atomically in the conventional per-user application data director
 
 A lock prevents two instances sharing the same state directory. On Unix the directory is owner-only and state files are created with mode `0600`. Invalid or newer-format state fails startup with an actionable error and is preserved. Unfinished saved jobs are marked cancelled/interrupted at next startup; they are never silently resumed.
 
-**Prompts, templates, groups and attachment metadata are saved, so do not paste credentials into tasks.** Attachment contents are not saved. Agent CLI stdout/stderr, agent diagnostic messages, and diffs are never persisted by CodeConvoy. Validation is an explicit exception: its latest command, execution metadata, diagnostics and bounded output are saved with its repository job. Do not place secrets in validation arguments or output. Output is bounded to the latest 512 KiB per job/view (32 MiB shared total, oldest job logs evicted first) and retained only for the application session. The UI reports truncated/dropped output. Diffs are live views: direct mode includes pre-existing edits; isolated mode uses the retained checkout and its fixed base commit. They are not saved patch snapshots. The agent CLIs may maintain their own operational logs according to their configuration.
+**Prompts, templates, groups and attachment metadata are saved, so do not paste credentials into tasks.** Attachment contents are not saved. Agent and validation stdout/stderr, execution diagnostics, and diffs are never persisted by CodeConvoy. Validation saves its latest command and execution metadata with its repository job; do not place secrets in validation arguments. Agent output is bounded to the latest 512 KiB per job/view (32 MiB shared total, oldest job logs evicted first); validation output retains the latest 64 KiB per job. Both remain available only for the application session. The UI reports truncated/dropped output. Diffs are live views: direct mode includes pre-existing edits; isolated mode uses the retained checkout and its fixed base commit. They are not saved patch snapshots. The agent CLIs may maintain their own operational logs according to their configuration.
 
 ## Development
 

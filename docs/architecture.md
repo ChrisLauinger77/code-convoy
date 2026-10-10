@@ -834,8 +834,10 @@ no queue). Repository commands are stored in the existing `AppState` as a canoni
 path map, keeping immutable Repository/WorktreeMetadata identity unchanged.
 `Job.validation` is an optional additive field; old version-1 state loads without
 migration. Running validations protect history and recover as interrupted, never
-resume. Each latest record includes bounded output, independently of agent status,
-completion observations, baseline and isolated-result resolution.
+resume. Each latest record saves command and execution metadata independently of
+agent status, completion observations, baseline and isolated-result resolution.
+Bounded output, truncation state and diagnostics use `serde(skip)` for session-only
+display; legacy saved values are ignored when loading and omitted on the next save.
 
 `LifecycleClient::validation_permit` validates the immutable job identity and
 acquires an exclusive maintenance lease in RunManager. Leases include the original

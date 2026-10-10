@@ -105,20 +105,8 @@ impl LifecycleClient {
         job: &Job,
         cancellation: &Cancellation,
     ) -> Result<Permit> {
-        use crate::domain::{ExecutionMode, ResultResolution};
-        anyhow::ensure!(
-            job.status.is_terminal(),
-            "Wait for the agent job to finish before validation."
-        );
-        anyhow::ensure!(
-            !matches!(
-                job.resolution,
-                ResultResolution::ApplyPending
-                    | ResultResolution::DiscardPending
-                    | ResultResolution::Discarded
-            ),
-            "Result is discarded or an operation is pending; validation is unavailable."
-        );
+        use crate::domain::ExecutionMode;
+        crate::validation::ensure_eligible(job)?;
         let path = crate::validation::directory(job)?;
         let common = match job.execution_mode {
             ExecutionMode::IsolatedWorktree => {
@@ -272,5 +260,46 @@ impl LifecycleClient {
         let _guard = permit.admin.mutex.lock().await;
         let _health = AdministrationHealth::protect(&permit.admin, &permit.safe)?;
         recovery::cleanup(&permit.root, m, &permit.cancellation, &permit.safe).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{ExecutionMode, JobStatus, Repository, ResultResolution};
+
+    #[tokio::test]
+    async fn validation_rejects_resolved_and_pending_results_before_acquiring_a_lease() {
+        let (commands, mut requests) = mpsc::unbounded_channel();
+        let client = LifecycleClient { commands };
+        let mut job = Job::queued(Repository {
+            name: "fixture".into(),
+            path: PathBuf::from("unused-repository"),
+        });
+        job.status = JobStatus::Succeeded;
+        job.execution_mode = ExecutionMode::IsolatedWorktree;
+        for resolution in [
+            ResultResolution::Applied,
+            ResultResolution::ApplyPending,
+            ResultResolution::DiscardPending,
+            ResultResolution::Discarded,
+        ] {
+            job.resolution = resolution;
+            let result = client
+                .validation_permit(1, 0, &job, &Cancellation::default())
+                .await;
+            let Err(error) = result else {
+                panic!("Validation must reject {resolution:?}");
+            };
+            let message = error.to_string();
+            assert!(message.contains("unavailable"), "{resolution:?}: {message}");
+            if resolution == ResultResolution::Applied {
+                assert!(message.contains("Applied"));
+            }
+            assert!(matches!(
+                requests.try_recv(),
+                Err(mpsc::error::TryRecvError::Empty)
+            ));
+        }
     }
 }

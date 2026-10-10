@@ -463,7 +463,7 @@ impl App {
                     ui.small("Tab / Shift+Tab to navigate · Enter / Space to activate");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.add(theme::quiet("About").small()).clicked() { self.about_open = true; }
-                        ui.small("Local session").on_hover_text(format!("Local state: {}\nPrompts, run metadata and the latest validation output are saved locally. Agent output stays in memory. Do not put credentials in tasks or validation commands/output.", self.store.directory().display()));
+                        ui.small("Local session").on_hover_text(format!("Local state: {}\nPrompts, run metadata and validation commands are saved locally. Agent and validation output and diagnostics stay in memory. Do not put credentials in tasks or validation arguments.", self.store.directory().display()));
                     });
                 });
             });

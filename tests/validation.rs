@@ -272,10 +272,79 @@ async fn pass_captures_literal_arguments_output_time_and_history_without_changin
         .remove(0)
         .validation
         .unwrap();
-    assert_eq!(saved.output, record.output);
+    assert!(saved.output.is_empty());
+    assert!(saved.detail.is_empty());
+    assert!(!saved.truncated);
+    assert_eq!(f.job().validation.as_ref().unwrap().output, record.output);
     assert_eq!(saved.command, c);
     assert_eq!(saved.status, Status::Passed);
+    assert_eq!(saved.started_at, record.started_at);
+    assert_eq!(saved.finished_at, record.finished_at);
+    assert_eq!(saved.duration_ms, record.duration_ms);
+    assert_eq!(saved.exit_code, record.exit_code);
     assert_eq!(saved.directory, f.job().repository.path);
+}
+#[tokio::test]
+async fn validation_output_and_diagnostics_never_enter_state_or_restore_from_legacy_records() {
+    let mut f = Fixture::new(false).await;
+    let state_path = f.store.directory().join("state.json");
+    let output = "fixture-only-sensitive-stdout-and-stderr";
+    let detail = "fixture-only-sensitive-process-diagnostic";
+    for status in [
+        Status::Running,
+        Status::Passed,
+        Status::Failed,
+        Status::Cancelled,
+        Status::Unavailable,
+    ] {
+        let mut record = Record::pending(command("validation-pass", &[]), f.job());
+        record.status = status;
+        record.finished_at = (status != Status::Running).then_some(record.started_at + 1);
+        record.duration_ms = 123;
+        record.exit_code = (status == Status::Passed).then_some(0);
+        record.output = output.into();
+        record.detail = detail.into();
+        record.truncated = true;
+        f.state.runs[0].jobs[0].validation = Some(record.clone());
+        f.store.save(&f.state).unwrap();
+        let saved = std::fs::read_to_string(&state_path).unwrap();
+        assert!(!saved.contains(output));
+        assert!(!saved.contains(detail));
+        let mut legacy: serde_json::Value = serde_json::from_str(&saved).unwrap();
+        let saved_record = &mut legacy["runs"][0]["jobs"][0]["validation"];
+        for field in ["output", "detail", "truncated"] {
+            assert!(saved_record.get(field).is_none(), "{status:?}: {field}");
+        }
+        // Saving must leave the current session's display/copy data intact.
+        let live = f.job().validation.as_ref().unwrap();
+        assert_eq!(live.output, output);
+        assert_eq!(live.detail, detail);
+        assert!(live.truncated);
+
+        // Early 0.7.0 snapshots included these fields. Loading must ignore them.
+        saved_record["output"] = output.into();
+        saved_record["detail"] = detail.into();
+        saved_record["truncated"] = true.into();
+        std::fs::write(&state_path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let restored = f.store.load().unwrap();
+        let loaded = restored.runs[0].jobs[0].validation.as_ref().unwrap();
+        assert!(loaded.output.is_empty());
+        assert!(!loaded.truncated);
+        record.recover_interrupted();
+        assert_eq!(
+            serde_json::to_value(loaded).unwrap(),
+            serde_json::to_value(&record).unwrap()
+        );
+        if status == Status::Running {
+            assert!(loaded.detail.contains("Interrupted by application exit"));
+        } else {
+            assert!(loaded.detail.is_empty());
+        }
+        f.store.save(&restored).unwrap();
+        let resaved = std::fs::read_to_string(&state_path).unwrap();
+        assert!(!resaved.contains(output));
+        assert!(!resaved.contains(detail));
+    }
 }
 #[tokio::test]
 async fn failure_is_separate_from_agent_outcome_and_latest_result_replaces_previous() {
@@ -326,6 +395,60 @@ async fn isolated_execution_uses_original_worktree_and_never_falls_back_when_mis
         std::fs::read_to_string(f.job().repository.path.join("tracked.txt")).unwrap(),
         "baseline\n"
     );
+}
+#[tokio::test]
+async fn applied_result_rejects_validation_and_preserves_files_diff_and_history() {
+    use codeconvoy::persistence::results::Action;
+    let mut f = Fixture::new(true).await;
+    let retained = f.job().worktree.as_ref().unwrap().path.clone();
+    std::fs::write(retained.join("tracked.txt"), "applied result\n").unwrap();
+    f.start(command("validation-pass", &[]));
+    assert_eq!(f.finish().await.status, Status::Passed);
+    let report = f.manager.lifecycle().inspect(1, 0, f.job(), true).await;
+    report.apply(&mut f.state.runs[0].jobs[0]);
+    let diff = report.diff.unwrap();
+    assert!(diff.contains("applied result"));
+    let op = f
+        .store
+        .begin_result_operation(&mut f.state, 1, 0, Action::Apply)
+        .unwrap();
+    let completion = op.execute(&f.manager.lifecycle()).await;
+    f.store
+        .finish_result_operation(&mut f.state, &op, completion)
+        .unwrap();
+    assert_eq!(f.job().resolution, ResultResolution::Applied);
+
+    // Both the live result and its reloaded history must reject a mutating command.
+    for reload in [false, true] {
+        if reload {
+            f.state = f.store.load().unwrap();
+        }
+        let before = serde_json::to_value(&f.state).unwrap();
+        let review = f.job().review.clone();
+        let job = f.job().clone();
+        let error = f
+            .service
+            .start(
+                &tokio::runtime::Handle::current(),
+                f.manager.lifecycle(),
+                (1, 0),
+                job,
+                command("validation-edit", &[]),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("Applied"));
+        assert!(f.service.is_idle());
+        assert_eq!(serde_json::to_value(&f.state).unwrap(), before);
+        assert_eq!(f.job().review, review);
+        assert_eq!(f.job().validation.as_ref().unwrap().status, Status::Passed);
+        for path in [&retained, &f.job().repository.path] {
+            assert_eq!(
+                std::fs::read_to_string(path.join("tracked.txt")).unwrap(),
+                "applied result\n"
+            );
+        }
+        assert_eq!(git::diff_job(f.job()).await.unwrap(), diff);
+    }
 }
 #[tokio::test]
 async fn missing_or_mismatched_historical_identity_cannot_launch() {
@@ -515,6 +638,7 @@ async fn output_is_bounded_and_later_file_changes_do_not_rewrite_historical_resu
         serde_json::to_value(f.job().validation.as_ref().unwrap()).unwrap(),
         saved
     );
+    assert_eq!(f.job().validation.as_ref().unwrap().output, record.output);
     assert!(
         git::diff_job(f.job())
             .await

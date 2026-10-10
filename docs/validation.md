@@ -34,8 +34,9 @@ The child inherits the process environment, except `PWD` and `GIT_*` overrides,
 which are removed to keep repository targeting local to this operation. Key matching
 is case-insensitive on Windows and case-sensitive on Unix. CodeConvoy does not dump
 environment values. These commands run with your account's access;
-they can write files or produce artifacts. Avoid credentials in arguments/output:
-the command and latest output are deliberately persisted locally.
+they can write files or produce artifacts. Avoid credentials in arguments: the
+command is persisted locally. Captured output and diagnostics stay in memory for
+the current session and are never written to CodeConvoy's state file.
 
 ## Run, inspect and cancel
 
@@ -49,9 +50,12 @@ Raw output, Diff, and agent success/failure keep their existing meaning.
 Direct results target the original recorded canonical working tree and Git common
 directory, not whichever registration happens to be selected now. Isolated results
 use the exact retained worktree and recheck its ownership manifest, original storage
-location, Git backlink, base availability and identity. Missing, cleaned, mismatched,
-pending/uncertain or unrecorded results are Unavailable. CodeConvoy neither
-recreates a worktree nor falls back to the registered source. Legacy Direct entries
+location, Git backlink, base availability and identity. Applied results cannot run
+validation: their retained copy and Diff stay unchanged until explicit cleanup.
+Previous validation output remains readable in the current session. Missing,
+cleaned, mismatched, pending/uncertain, discarded or unrecorded results are
+unavailable. CodeConvoy neither recreates a worktree nor falls back to the
+registered source. Legacy Direct entries
 without recorded Git identity cannot be validated safely.
 
 Validation runs asynchronously using the existing process owner: Unix process
@@ -82,12 +86,14 @@ controls validation. Explicit Quit stops both.
 - **Unavailable**: identity/access verification or process launch/cleanup failed.
 
 Each job saves only its latest attempt: executed command, directory, UTC start/end
-when known, measured duration, exit code when available, diagnostics, and the last
-64 KiB of combined stdout/stderr (stderr is labelled, truncation is disclosed).
-Output is UTF-8 decoded with split characters preserved. A fresh attempt replaces
-the previous record. Persistence uses the existing atomic state file, not another
-database. Active validation protects its history entry from removal. Restart never
-resumes commands; a saved Running record becomes Cancelled with interruption text.
+when known, measured duration, and exit code when available. Diagnostics and the
+last 64 KiB of combined stdout/stderr remain available only in memory (stderr is
+labelled, truncation is disclosed). Output is UTF-8 decoded with split characters
+preserved. A fresh attempt replaces the previous record. Persistence uses the
+existing atomic state file, not another database. Older saved output and diagnostics
+are ignored on load and omitted on the next save. Active validation protects its
+history entry from removal. Restart never restores output or resumes commands;
+a saved Running record becomes Cancelled with interruption text.
 
 A pass is an observation at its timestamp, **not certification of current files**.
 The UI repeats that qualification; no file watcher or continuous revalidation is

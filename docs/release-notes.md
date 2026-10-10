@@ -16,7 +16,8 @@ new dependencies, or architectural changes.
   checks; unavailable historical worktrees never fall back to the source checkout.
 - Responsive background execution with streamed bounded stdout/stderr, elapsed
   time, exit status, timestamp, process-tree cancellation and coordinated Quit.
-- Latest validation record and 64 KiB output saved with the exact convoy/job.
+- Latest validation command and execution metadata saved with the exact convoy/job.
+  The latest 64 KiB of output and diagnostics stay in memory for the current session.
   Existing history remains compatible; interrupted validation never resumes.
 - Agent outcomes, Git completion observations and result resolution stay independent.
   Saved passes describe past executions, and current Git views refresh after commands

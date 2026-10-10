@@ -41,7 +41,7 @@ impl App {
             let arguments_label = ui.label("Arguments (JSON array; each string is one literal argument)");
             ui.add(egui::TextEdit::multiline(&mut editor.arguments).desired_rows(2).desired_width(f32::INFINITY).hint_text("[\"test\"]")).labelled_by(arguments_label.id);
             ui.small("Examples: cargo + [\"test\"], npm + [\"test\"], cmake + [\"--build\", \"build\"]. No shell parsing.");
-            ui.label("Runs only when you choose Run Validation. Commands can modify files. The command and latest 64 KiB of output are saved locally; avoid secrets.");
+            ui.label("Runs only when you choose Run Validation. Commands can modify files. The command and execution metadata are saved locally; avoid secrets in arguments. Output and diagnostics stay in memory for this session.");
             if !editor.error.is_empty() { ui.colored_label(theme::Palette::of(ui).error, &editor.error); }
             ui.horizontal_wrapped(|ui| {
                 cancel = ui.button("Cancel").clicked();
@@ -96,6 +96,7 @@ impl App {
         };
         let key = (run.id, self.selected_job);
         let command = self.state.repository_validation.get(&job.repository.path);
+        let eligibility = crate::validation::ensure_eligible(job);
         let running = job
             .validation
             .as_ref()
@@ -114,7 +115,7 @@ impl App {
             } else if command.is_some() {
                 start = ui
                     .add_enabled(
-                        job.status.is_terminal()
+                        eligibility.is_ok()
                             && !self.closing
                             && !self.quit_requested
                             && self.review_pending.is_none()
@@ -126,6 +127,9 @@ impl App {
                     .clicked();
             }
         });
+        if let Err(error) = &eligibility {
+            ui.small(error.to_string());
+        }
         if let Some(command) = command {
             ui.add(egui::Label::new(egui::RichText::new(command.label()).monospace()).wrap());
         } else {
@@ -153,7 +157,11 @@ impl App {
                         .map(|c| c.to_string())
                         .unwrap_or_else(|| "unavailable".into())
                 ));
-                ui.small("Historical execution only. Files may have changed since then; run again to validate current files.");
+                ui.small(if eligibility.is_ok() {
+                    "Historical execution only. Files may have changed since then; run again to validate current files."
+                } else {
+                    "Historical execution only. This record does not certify current files."
+                });
             }
             if !record.detail.is_empty() {
                 ui.label(&record.detail);
@@ -177,7 +185,7 @@ impl App {
             return;
         };
         ui.label(format!("Executed command: {}", record.command.label()));
-        ui.small("Latest validation output · saved locally with this result");
+        ui.small("Validation output and diagnostics · this session only, not saved");
         if record.truncated {
             ui.small("Earlier output omitted; retaining the latest 64 KiB.");
         }
@@ -191,7 +199,7 @@ impl App {
             ctx.copy_text(record.output.clone());
         }
         if record.output.is_empty() {
-            ui.weak("No captured output.");
+            ui.weak("No captured output in this session. Output is not restored after restart.");
         } else {
             self.output_view.show(
                 ui,
@@ -222,11 +230,14 @@ impl App {
         else {
             return;
         };
-        if !job.status.is_terminal()
-            || job
-                .validation
-                .as_ref()
-                .is_some_and(|v| v.status == Status::Running)
+        if let Err(error) = crate::validation::ensure_eligible(&job) {
+            self.notice = error.to_string();
+            return;
+        }
+        if job
+            .validation
+            .as_ref()
+            .is_some_and(|v| v.status == Status::Running)
         {
             return;
         }

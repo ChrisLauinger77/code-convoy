@@ -114,8 +114,12 @@ pub struct Record {
     pub finished_at: Option<u64>,
     pub duration_ms: u64,
     pub exit_code: Option<i32>,
+    // CLI output and diagnostics can contain secrets. Ignore legacy saved values too.
+    #[serde(skip)]
     pub output: String,
+    #[serde(skip)]
     pub truncated: bool,
+    #[serde(skip)]
     pub detail: String,
 }
 impl Record {
@@ -166,6 +170,24 @@ pub fn directory(job: &Job) -> Result<&Path> {
             .as_ref()
             .map(|m| m.path.as_path())
             .context("Original isolated worktree was not recorded; validation is unavailable."),
+    }
+}
+pub(crate) fn ensure_eligible(job: &Job) -> Result<()> {
+    use domain::ResultResolution;
+    anyhow::ensure!(
+        job.status.is_terminal(),
+        "Wait for the agent job to finish before validation."
+    );
+    match job.resolution {
+        ResultResolution::Unresolved => Ok(()),
+        ResultResolution::Applied => anyhow::bail!(
+            "Validation is unavailable for Applied results; the retained Diff must stay unchanged until cleanup."
+        ),
+        ResultResolution::ApplyPending
+        | ResultResolution::DiscardPending
+        | ResultResolution::Discarded => anyhow::bail!(
+            "Result is discarded or an operation is pending; validation is unavailable."
+        ),
     }
 }
 pub fn label(job: &Job, configured: bool) -> &'static str {
@@ -231,10 +253,7 @@ impl Service {
             self.workers.len() < MAX_ACTIVE,
             "At most four validations may run at once."
         );
-        anyhow::ensure!(
-            job.status.is_terminal(),
-            "Wait for the agent job to finish before validation."
-        );
+        ensure_eligible(&job)?;
         command.validate()?;
         let record = Record::pending(command, &job);
         let (tx, updates) = watch::channel(record.clone());

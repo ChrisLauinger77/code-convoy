@@ -85,6 +85,69 @@ fn validation_is_explicit_and_does_not_rewrite_agent_outcomes_or_start_during_re
     assert_eq!(app.state.runs[0].jobs[0].exit_code, None);
 }
 #[test]
+fn validation_controls_disable_resolved_and_pending_results_without_replacing_history() {
+    use domain::ResultResolution as R;
+    for resolution in [
+        R::Unresolved,
+        R::Applied,
+        R::ApplyPending,
+        R::DiscardPending,
+        R::Discarded,
+    ] {
+        let (_temp, mut app) = configured();
+        app.state.runs = vec![isolated_history(7, JobStatus::Succeeded, Some(true))];
+        let job = &mut app.state.runs[0].jobs[0];
+        job.resolution = resolution;
+        job.review = Some(Ok(crate::review::Statistics {
+            files: 1,
+            ..Default::default()
+        }));
+        let mut record = Record::pending(
+            app.state.repository_validation[&job.repository.path].clone(),
+            job,
+        );
+        record.status = Status::Passed;
+        record.output = "session validation output".into();
+        job.validation = Some(record);
+        let diff_target = job.worktree.as_ref().unwrap().path.clone();
+        app.diff_target = Some(diff_target.clone());
+        app.diff = Some(Ok("saved applied diff".into()));
+        let before = serde_json::to_value(&app.state).unwrap();
+        let review = app.state.runs[0].jobs[0].review.clone();
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            egui::CentralPanel::default().show(ui, |ui| app.validation_view(ui, &ctx, 800.0));
+        });
+        output.textures_delta.clear();
+        let tree = output.platform_output.accesskit_update.unwrap();
+        for (label, disabled) in [
+            ("Run Validation", resolution != R::Unresolved),
+            ("Copy validation output", false),
+        ] {
+            let (_, button) = tree
+                .nodes
+                .iter()
+                .find(|(_, node)| node.label() == Some(label))
+                .unwrap();
+            assert_eq!(button.is_disabled(), disabled, "{resolution:?}: {label}");
+        }
+        assert!(app.validations.is_idle());
+        assert_eq!(
+            app.state.runs[0].jobs[0]
+                .validation
+                .as_ref()
+                .unwrap()
+                .output,
+            "session validation output"
+        );
+        assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
+        assert_eq!(app.state.runs[0].jobs[0].review, review);
+        assert_eq!(app.diff, Some(Ok("saved applied diff".into())));
+        assert_eq!(app.diff_target, Some(diff_target));
+    }
+}
+#[test]
 fn configuration_escape_closes_without_saving() {
     let (_temp, mut app) = configured();
     let before = app.state.repository_validation.clone();
