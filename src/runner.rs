@@ -16,7 +16,7 @@ use tokio::sync::mpsc;
 mod lifecycle;
 mod manager;
 pub use lifecycle::LifecycleClient;
-mod raw_output;
+pub(crate) mod raw_output;
 mod schedule;
 pub use manager::RunManager;
 

@@ -242,6 +242,8 @@ pub struct Job {
     /// Completion-time Git observation. Never updated by Review or recovery.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion_changes: Option<crate::visibility::Changes>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation: Option<crate::validation::Record>,
     #[serde(default)]
     pub execution_mode: ExecutionMode,
     #[serde(default)]
@@ -296,6 +298,7 @@ impl Job {
         Self {
             repository,
             completion_changes: None,
+            validation: None,
             execution_mode: ExecutionMode::Direct,
             worktree: None,
             worktree_result: None,
@@ -352,6 +355,11 @@ impl Run {
     }
     pub fn history_protected(&self) -> bool {
         self.active()
+            || self.jobs.iter().any(|j| {
+                j.validation
+                    .as_ref()
+                    .is_some_and(|v| v.status == crate::validation::Status::Running)
+            })
             || self.unresolved_results()
             || self.jobs.iter().any(|j| {
                 j.worktree.is_some()
@@ -415,6 +423,8 @@ pub struct AppState {
     pub version: u32,
     pub next_run: u64,
     pub repositories: Vec<Repository>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub repository_validation: BTreeMap<PathBuf, crate::validation::Command>,
     pub groups: Vec<RepositoryGroup>,
     pub templates: Vec<TaskTemplate>,
     pub draft: TaskConfig,
@@ -436,6 +446,7 @@ impl Default for AppState {
             version: 1,
             next_run: 1,
             repositories: Vec::new(),
+            repository_validation: BTreeMap::new(),
             groups: Vec::new(),
             templates: Vec::new(),
             draft: TaskConfig::default(),
@@ -451,6 +462,23 @@ impl Default for AppState {
     }
 }
 impl AppState {
+    pub fn save_validation(
+        &mut self,
+        path: PathBuf,
+        command: Option<crate::validation::Command>,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.repositories.iter().any(|r| r.path == path),
+            "Repository is no longer registered."
+        );
+        if let Some(command) = command {
+            command.validate()?;
+            self.repository_validation.insert(path, command);
+        } else {
+            self.repository_validation.remove(&path);
+        }
+        Ok(())
+    }
     pub fn save_group(
         &mut self,
         index: Option<usize>,
@@ -571,6 +599,9 @@ impl AppState {
     }
     pub fn recover_interrupted(&mut self) {
         for job in self.runs.iter_mut().flat_map(|r| &mut r.jobs) {
+            if let Some(v) = &mut job.validation {
+                v.recover_interrupted();
+            }
             if !job.status.is_terminal() {
                 job.finish(
                     JobStatus::Cancelled,

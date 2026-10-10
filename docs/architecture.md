@@ -824,3 +824,36 @@ introduced. Original location bindings and cleanup tombstones are retained after
 verified removal. Orphan discovery includes registered custom attempts regardless
 of the current preference. No worktree or base is relocated or automatically
 removed, and the base itself is never a cleanup target.
+
+
+## v0.7 explicit validation
+
+`validation` owns bounded user-configured executable/argv commands, serializable
+execution records and a small application-owned service (at most four operations,
+no queue). Repository commands are stored in the existing `AppState` as a canonical
+path map, keeping immutable Repository/WorktreeMetadata identity unchanged.
+`Job.validation` is an optional additive field; old version-1 state loads without
+migration. Running validations protect history and recover as interrupted, never
+resume. Each latest record includes bounded output, independently of agent status,
+completion observations, baseline and isolated-result resolution.
+
+`LifecycleClient::validation_permit` validates the immutable job identity and
+acquires an exclusive maintenance lease in RunManager. Leases include the original
+source and actual checkout paths for nested-repository protection. Existing Git
+identity/ownership verification executes under the administration mutex. Validation
+uses the existing ManagedChild spawn/execute/cancel owner and RawOutput UTF-8 decoder;
+unconfirmed cleanup poisons the existing lease boundary. User Cancel and manager
+shutdown share the operation's cancellation token, including pre-execution Git
+inspection. No agent slot, backend protocol or scheduling policy is added.
+
+The UI persists intent before starting a worker. A watch channel coalesces progress
+without an unbounded output queue; only the latest bounded record is copied on
+updates. Explicit Run/Cancel controls and a separate Validation tab reuse existing
+output rendering. Current command editing never mutates an in-flight snapshot.
+Review/Diff/health caches are invalidated around execution, and new inspection is
+suppressed for conflicting active work. Quit drains validations before the final
+save; history removal and result transactions guard active validation. Historical
+passes are always qualified as past executions, never current file certification.
+
+See [validation configuration and use](validation.md) for platform resolution,
+local command trust, persistence and the manual acceptance checklist.

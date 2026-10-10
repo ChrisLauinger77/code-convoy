@@ -37,8 +37,10 @@ pub(super) struct Convoy {
 }
 pub(super) enum Command {
     Acquire {
-        metadata: crate::domain::WorktreeMetadata,
+        key: Key,
+        lease: Lease,
         cleanup: bool,
+        cancellation: Option<Cancellation>,
         reply: tokio::sync::oneshot::Sender<Result<Permit>>,
         commands: mpsc::UnboundedSender<Command>,
     },
@@ -243,8 +245,10 @@ fn command(
 ) {
     match command {
         Command::Acquire {
-            metadata,
+            key,
+            lease,
             cleanup,
+            cancellation,
             reply,
             commands,
         } => {
@@ -261,20 +265,19 @@ fn command(
                 operations.next = id
                     .checked_add(1)
                     .context("Result operation IDs exhausted.")?;
-                let lease = Lease {
-                    path: metadata.repository.path.clone(),
-                    common_dir: Some(metadata.common_dir.clone()),
-                    mode: crate::domain::ExecutionMode::Direct,
-                };
+                let common_dir = lease
+                    .common_dir
+                    .clone()
+                    .unwrap_or_else(|| lease.path.clone());
                 anyhow::ensure!(
-                    schedule.begin_maintenance(id, (metadata.run, metadata.job), lease, cleanup),
+                    schedule.begin_maintenance(id, key, lease, cleanup),
                     "Repository is in use by preparation, execution or another result operation. Wait for it to finish; result was preserved."
                 );
-                let cancellation = Cancellation::default();
+                let cancellation = cancellation.unwrap_or_default();
                 operations.active.insert(id, cancellation.clone());
                 let admin = operations
                     .administration
-                    .entry(metadata.common_dir)
+                    .entry(common_dir)
                     .or_default()
                     .clone();
                 Ok(Permit {
@@ -300,6 +303,7 @@ fn command(
                 convoy.repositories.iter().filter_map(|r| {
                     r.as_ref().map(|r| Lease {
                         path: r.repository.path.clone(),
+                        worktree: None,
                         common_dir: r.state.summary.common_dir.clone(),
                         mode: convoy.task.execution_mode,
                     })

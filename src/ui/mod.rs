@@ -26,6 +26,7 @@ mod snapshot;
 mod tests;
 mod text_view;
 mod theme;
+mod validation;
 mod worktree_settings;
 
 use crate::{
@@ -78,6 +79,7 @@ enum Message {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
     Review,
+    Validation,
     Activity,
     Raw,
     Diff,
@@ -133,6 +135,8 @@ pub struct App {
     rx: mpsc::Receiver<Message>,
     events_rx: async_mpsc::Receiver<Event>,
     manager: RunManager,
+    validations: crate::validation::Service,
+    validation_editor: Option<validation::Editor>,
     prepared: Option<PreparedRun>,
     prepared_provenance: Option<crate::continuation::Provenance>,
     followup_pending: bool,
@@ -274,6 +278,8 @@ impl App {
             rx,
             events_rx,
             manager,
+            validations: crate::validation::Service::default(),
+            validation_editor: None,
             prepared: None,
             prepared_provenance: None,
             followup_pending: false,
@@ -457,7 +463,7 @@ impl App {
                     ui.small("Tab / Shift+Tab to navigate · Enter / Space to activate");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.add(theme::quiet("About").small()).clicked() { self.about_open = true; }
-                        ui.small("Local session").on_hover_text(format!("Local state: {}\nPrompts and run metadata are saved locally. Output stays in memory. Do not put credentials in the task.", self.store.directory().display()));
+                        ui.small("Local session").on_hover_text(format!("Local state: {}\nPrompts, run metadata and the latest validation output are saved locally. Agent output stays in memory. Do not put credentials in tasks or validation commands/output.", self.store.directory().display()));
                     });
                 });
             });
@@ -515,7 +521,7 @@ impl App {
             .runs
             .iter()
             .flat_map(|r| &r.jobs)
-            .any(|job| !job.status.is_terminal() && overlaps(job))
+            .any(|job| (!job.status.is_terminal() || job.validation.as_ref().is_some_and(|v| v.status == crate::validation::Status::Running)) && overlaps(job))
             // Bulk discard also dispatches one result_operation at a time.
             || self.result_operation
                 .and_then(|(run, index)| {
@@ -679,6 +685,7 @@ impl App {
         self.dirty_ack = false;
     }
     fn poll(&mut self) {
+        self.poll_validations();
         // Reconcile edits before receiving results, including task reuse and
         // edits made while a previous generation's completion was queued.
         self.sync_cli_checks();
@@ -1085,6 +1092,7 @@ impl eframe::App for App {
         }
         ctx.request_repaint_after(Duration::from_millis(
             if !self.manager.is_idle()
+                || !self.validations.is_idle()
                 || self.closing
                 || self.state.runs.iter().any(Run::active)
                 || self.busy
@@ -1121,6 +1129,7 @@ impl eframe::App for App {
             self.about_window(ctx);
             self.cli_search_window(ctx);
             self.library_window(ctx);
+            self.validation_settings_window(ctx);
         }
         self.quit_window(ctx);
         self.discard_window(ctx);
@@ -1131,6 +1140,7 @@ impl eframe::App for App {
         self.notification_service.stop();
         self.desktop.stop();
         self.cli_checks.stop();
+        self.validations.shutdown();
         self.manager.shutdown();
         // Continue draining lifecycle/output events while process trees stop.
         let final_events = self.runtime.as_ref().expect("Runtime exists before Drop").block_on(async {
@@ -1144,7 +1154,7 @@ impl eframe::App for App {
                         while let Ok(event) = self.events_rx.try_recv() {
                             if !matches!(event, Event::Output { .. }) { final_events.push(event); }
                         }
-                        if self.manager.join.is_finished() { break; }
+                        if self.manager.join.is_finished() && self.validations.finished() { break; }
                     }
                 }
             }
@@ -1153,6 +1163,7 @@ impl eframe::App for App {
         for event in final_events {
             self.apply_event(event);
         }
+        self.poll_validations();
         self.state.recover_interrupted();
         self.save();
     }
@@ -1164,6 +1175,8 @@ impl Drop for App {
         self.notification_service.stop();
         self.desktop.stop();
         self.cli_checks.stop();
+        self.validations.shutdown();
+        self.manager.shutdown();
         if let Some(runtime) = self.runtime.take() {
             // A stuck filesystem discovery worker must not hold application
             // shutdown open. Async probe drops retain ManagedChild cleanup.

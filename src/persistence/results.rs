@@ -60,6 +60,12 @@ impl Store {
             .context("No isolated result was recorded.")?;
         anyhow::ensure!(j.status.is_terminal(), "Active work cannot be resolved.");
         anyhow::ensure!(
+            !j.validation
+                .as_ref()
+                .is_some_and(|v| v.status == crate::validation::Status::Running),
+            "Wait for validation to finish before resolving this result."
+        );
+        anyhow::ensure!(
             j.resolution != ResultResolution::ApplyPending,
             "Apply outcome is pending or uncertain. Inspect the destination manually; the retained result and recovery evidence cannot be discarded or cleaned up."
         );

@@ -25,7 +25,11 @@ impl App {
                     .enumerate()
                     .map(move |(index, j)| (r.id, index, j))
             })
-            .find(|(_, _, j)| j.status.is_terminal() && j.review.is_none());
+            .find(|(_, _, j)| {
+                j.status.is_terminal()
+                    && j.review.is_none()
+                    && !self.repository_in_use(&j.repository.path)
+            });
         let Some((run, index, job)) = next else {
             return;
         };
@@ -159,6 +163,15 @@ impl App {
                             theme::job_status(ui, job);
                             theme::change_status(ui, crate::visibility::changes(job));
                             theme::review_status(ui, job);
+                            ui.small(format!(
+                                "Validation: {}",
+                                crate::validation::label(
+                                    job,
+                                    self.state
+                                        .repository_validation
+                                        .contains_key(&job.repository.path)
+                                )
+                            ));
                             if let Some(start) = job.started_at {
                                 ui.small(format::duration(
                                     job.finished_at
@@ -206,6 +219,7 @@ impl App {
                     (Tab::Activity, "Inspect activity"),
                     (Tab::Diff, "Inspect diff"),
                     (Tab::Raw, "Raw output"),
+                    (Tab::Validation, "Validation output"),
                     (Tab::Task, "Task & settings"),
                 ] {
                     if ui.button(label).clicked() {
@@ -218,7 +232,8 @@ impl App {
                     && !self.quit_requested
                     && self.review_pending != Some((id, self.selected_job))
                     && self.result_operation.is_none()
-                    && self.bulk_discard.is_none();
+                    && self.bulk_discard.is_none()
+                    && self.validations.is_idle();
                 ui.horizontal_wrapped(|ui| {
                     if job.resolution == R::Unresolved {
                         let changed = job
@@ -286,6 +301,7 @@ impl App {
         if followup {
             self.followup(ctx, id);
         }
+        self.validation_controls(ui, ctx);
     }
     fn start_result_operation(
         &mut self,
@@ -295,6 +311,7 @@ impl App {
         action: Action,
     ) {
         if self.result_operation.is_some()
+            || !self.validations.is_idle()
             || self.bulk_discard.is_some()
             || self.closing
             || self.quit_requested

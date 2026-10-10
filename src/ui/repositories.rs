@@ -216,6 +216,7 @@ impl App {
         if let Some(index) = remove {
             let repo = self.state.repositories.remove(index);
             self.selected.remove(&repo.path);
+            self.state.repository_validation.remove(&repo.path);
             self.repository_states.remove(&repo.path);
             self.repository_pending.remove(&repo.path);
             self.dirty = true;
@@ -276,6 +277,28 @@ impl App {
                 .truncate(),
             )
             .on_hover_text(repository.path.display().to_string());
+            ui.horizontal_wrapped(|ui| {
+                ui.small(
+                    if self
+                        .state
+                        .repository_validation
+                        .contains_key(&repository.path)
+                    {
+                        "Validation configured"
+                    } else {
+                        "Validation not configured"
+                    },
+                );
+                if ui
+                    .add(theme::quiet("Configure validation…").small())
+                    .clicked()
+                {
+                    self.validation_editor = Some(validation::Editor::new(
+                        repository,
+                        self.state.repository_validation.get(&repository.path),
+                    ));
+                }
+            });
             if in_use {
                 ui.weak("Unknown · active work; refresh after completion");
                 return;

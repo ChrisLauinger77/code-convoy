@@ -10,13 +10,20 @@ pub(super) type Key = (u64, usize);
 #[derive(Clone)]
 pub(super) struct Lease {
     pub path: PathBuf,
+    pub worktree: Option<PathBuf>,
     pub common_dir: Option<PathBuf>,
     pub mode: ExecutionMode,
 }
 impl Lease {
     fn conflicts(&self, other: &Self) -> bool {
         let same_git = self.common_dir.is_some() && self.common_dir == other.common_dir;
-        let overlap = self.path.starts_with(&other.path) || other.path.starts_with(&self.path);
+        let overlap = std::iter::once(&self.path)
+            .chain(self.worktree.iter())
+            .any(|a| {
+                std::iter::once(&other.path)
+                    .chain(other.worktree.iter())
+                    .any(|b| a.starts_with(b) || b.starts_with(a))
+            });
         if self.mode == ExecutionMode::Direct || other.mode == ExecutionMode::Direct {
             same_git || overlap
         } else {
@@ -198,16 +205,37 @@ mod tests {
             limit,
             paths.iter().map(|p| Lease {
                 path: PathBuf::from(p),
+                worktree: None,
                 common_dir: None,
                 mode: ExecutionMode::Direct,
             }),
         );
     }
     #[test]
+    fn validation_blocks_source_and_retained_nested_trees_without_using_agent_slots() {
+        let mut s = Schedule::new(1);
+        let lease = Lease {
+            path: "/source".into(),
+            worktree: Some("/retained/tree".into()),
+            common_dir: Some("/source/.git".into()),
+            mode: ExecutionMode::Direct,
+        };
+        assert!(s.begin_maintenance(1, (7, 0), lease, true));
+        add(&mut s, 1, 1, &["/retained/tree/nested"]);
+        add(&mut s, 2, 1, &["/source/nested"]);
+        add(&mut s, 3, 1, &["/independent"]);
+        assert_eq!(s.next(), Some((3, 0)));
+        s.finish((3, 0), true);
+        assert_eq!(s.next(), None);
+        s.end_maintenance(1, true);
+        assert!(s.next().is_some());
+    }
+    #[test]
     fn maintenance_is_exclusive_per_repository_without_consuming_agent_slots() {
         let mut s = Schedule::new(1);
         let lease = Lease {
             path: "/source".into(),
+            worktree: None,
             common_dir: Some("/source/.git".into()),
             mode: ExecutionMode::Direct,
         };
@@ -230,6 +258,7 @@ mod tests {
     fn isolated_leases_share_git_but_preserve_nested_and_exclusive_access() {
         let lease = |path: &str, common: &str, mode| Lease {
             path: path.into(),
+            worktree: None,
             common_dir: Some(common.into()),
             mode,
         };

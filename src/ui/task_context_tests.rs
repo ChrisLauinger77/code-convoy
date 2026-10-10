@@ -72,6 +72,7 @@ impl Keyboard {
             |ui| {
                 egui::CentralPanel::default().show(ui, |ui| (self.surface)(app, ui, &self.ctx));
                 app.library_window(&self.ctx);
+                app.validation_settings_window(&self.ctx);
             },
         );
         output.textures_delta.clear();
@@ -543,4 +544,45 @@ fn keyboard_can_select_followup_rows_create_a_draft_and_reach_retry() {
     keyboard.activate(&mut app, "Retry");
     assert!(app.busy && app.prepared.is_none());
     assert!(app.manager.is_idle());
+}
+
+#[test]
+fn validation_configuration_and_run_controls_are_keyboard_accessible() {
+    let (_temp, mut app) = app();
+    app.state.repositories = vec![repository("alpha")];
+    let path = app.state.repositories[0].path.clone();
+    let mut keys = Keyboard::new(|app, ui, ctx| app.repositories_section(ui, ctx));
+    keys.frame(&mut app, vec![]);
+    keys.activate(&mut app, "Configure validation…");
+    keys.replace_text(
+        &mut app,
+        "Executable name on PATH or absolute path",
+        "cargo",
+    );
+    keys.replace_text(
+        &mut app,
+        "Arguments (JSON array; each string is one literal argument)",
+        "[\"test\", \"literal argument\"]",
+    );
+    keys.activate(&mut app, "Save command");
+    assert_eq!(
+        app.state.repository_validation[&path].arguments,
+        ["test", "literal argument"]
+    );
+    assert!(app.validation_editor.is_none());
+    assert!(app.validations.is_idle());
+    app.state.runs = vec![run(9, &[JobStatus::Succeeded])];
+    app.state.runs[0].jobs[0].repository = app.state.repositories[0].clone();
+    app.select_run(Some(9));
+    let mut keys = Keyboard::new(|app, ui, ctx| app.validation_controls(ui, ctx));
+    keys.frame(&mut app, vec![]);
+    keys.activate(&mut app, "Run Validation");
+    assert!(!app.validations.is_idle());
+    assert!(!app.request_quit());
+    app.cancel_quit();
+    keys.activate(&mut app, "Cancel Validation");
+    assert_eq!(app.state.runs[0].jobs[0].status, JobStatus::Succeeded);
+    // This un-driven runtime never executes a validation command.
+    app.confirm_quit();
+    assert!(app.closing);
 }

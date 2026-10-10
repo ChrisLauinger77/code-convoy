@@ -7,6 +7,9 @@ use std::{
 mod workflow;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).is_some_and(|a| a.starts_with("validation-")) {
+        return validation_fixture(&args);
+    }
     if args.get(1).is_some_and(|a| a == "passthrough") {
         std::io::copy(&mut std::io::stdin(), &mut std::io::stdout())?;
         return Ok(());
@@ -353,4 +356,60 @@ fn claude_result(failed: bool) {
             "duration_ms":1, "duration_api_ms":1, "num_turns":1, "session_id":"fixture"
         })
     );
+}
+
+fn validation_fixture(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let mode = &args[1];
+    if mode == "validation-gate" || mode == "validation-child" {
+        let control = std::path::Path::new(&args[2]);
+        let name = if mode == "validation-gate" {
+            "parent"
+        } else {
+            "child"
+        };
+        let lock = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(control.join(format!("{name}.lock")))?;
+        fs2::FileExt::lock_exclusive(&lock)?;
+        let mut child = if mode == "validation-gate" {
+            Some(
+                Command::new(std::env::current_exe()?)
+                    .args(["validation-child", &args[2]])
+                    .spawn()?,
+            )
+        } else {
+            None
+        };
+        std::fs::write(control.join(format!("{name}.ready")), "ready")?;
+        println!("validation {name} ready");
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        while !control.join("release").exists() {
+            if std::time::Instant::now() > deadline {
+                return Err("validation gate timed out".into());
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        if let Some(child) = &mut child {
+            let _ = child.wait()?;
+        }
+        return Ok(());
+    }
+    if mode == "validation-flood" {
+        for _ in 0..32 {
+            std::io::stdout().write_all(&[b'x'; 8192])?;
+        }
+    }
+    if mode == "validation-edit" {
+        std::fs::write("tracked.txt", "validation changed this file\n")?;
+    }
+    println!("arguments={}", serde_json::to_string(&args[2..])?);
+    println!("directory={}", std::env::current_dir()?.display());
+    println!("validation stdout Grüße 日本語");
+    eprintln!("validation stderr");
+    if mode == "validation-fail" {
+        std::process::exit(7);
+    }
+    Ok(())
 }

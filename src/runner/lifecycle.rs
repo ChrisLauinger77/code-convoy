@@ -20,9 +20,9 @@ use tokio::sync::{mpsc, oneshot};
 pub struct LifecycleClient {
     pub(super) commands: mpsc::UnboundedSender<Command>,
 }
-pub(super) struct Permit {
+pub(crate) struct Permit {
     pub id: u64,
-    pub commands: mpsc::UnboundedSender<Command>,
+    pub(super) commands: mpsc::UnboundedSender<Command>,
     pub admin: Arc<Administration>,
     pub cancellation: Cancellation,
     pub safe: Arc<AtomicBool>,
@@ -63,11 +63,33 @@ impl Drop for AdministrationHealth<'_> {
 
 impl LifecycleClient {
     async fn permit(&self, metadata: &WorktreeMetadata, cleanup: bool) -> Result<Permit> {
+        self.acquire(
+            (metadata.run, metadata.job),
+            super::schedule::Lease {
+                path: metadata.repository.path.clone(),
+                worktree: Some(metadata.path.clone()),
+                common_dir: Some(metadata.common_dir.clone()),
+                mode: crate::domain::ExecutionMode::Direct,
+            },
+            cleanup,
+            None,
+        )
+        .await
+    }
+    async fn acquire(
+        &self,
+        key: (u64, usize),
+        lease: super::schedule::Lease,
+        cleanup: bool,
+        cancellation: Option<Cancellation>,
+    ) -> Result<Permit> {
         let (reply, response) = oneshot::channel();
         self.commands
             .send(Command::Acquire {
-                metadata: metadata.clone(),
+                key,
+                lease,
                 cleanup,
+                cancellation,
                 reply,
                 commands: self.commands.clone(),
             })
@@ -75,6 +97,82 @@ impl LifecycleClient {
         response
             .await
             .context("Result operation was interrupted; result was preserved.")?
+    }
+    pub(crate) async fn validation_permit(
+        &self,
+        run: u64,
+        index: usize,
+        job: &Job,
+        cancellation: &Cancellation,
+    ) -> Result<Permit> {
+        use crate::domain::{ExecutionMode, ResultResolution};
+        anyhow::ensure!(
+            job.status.is_terminal(),
+            "Wait for the agent job to finish before validation."
+        );
+        anyhow::ensure!(
+            !matches!(
+                job.resolution,
+                ResultResolution::ApplyPending
+                    | ResultResolution::DiscardPending
+                    | ResultResolution::Discarded
+            ),
+            "Result is discarded or an operation is pending; validation is unavailable."
+        );
+        let path = crate::validation::directory(job)?;
+        let common = match job.execution_mode {
+            ExecutionMode::IsolatedWorktree => {
+                let m = job
+                    .worktree
+                    .as_ref()
+                    .context("Original worktree is unavailable.")?;
+                anyhow::ensure!(
+                    m.run == run
+                        && m.job == index
+                        && m.repository == job.repository
+                        && m.execution_mode == job.execution_mode,
+                    "Original worktree identity does not match this result."
+                );
+                m.common_dir.clone()
+            }
+            ExecutionMode::Direct => job
+                .before
+                .as_ref()
+                .and_then(|b| b.common_dir.clone())
+                .context(
+                    "Original repository identity was not recorded; validation is unavailable.",
+                )?,
+        };
+        let permit = self
+            .acquire(
+                (run, index),
+                super::schedule::Lease {
+                    path: job.repository.path.clone(),
+                    worktree: Some(path.to_owned()),
+                    common_dir: Some(common.clone()),
+                    mode: ExecutionMode::Direct,
+                },
+                true,
+                Some(cancellation.clone()),
+            )
+            .await?;
+        {
+            let _guard = permit.admin.mutex.lock().await;
+            let _health = AdministrationHealth::protect(&permit.admin, &permit.safe)?;
+            let i = crate::git::Inspection {
+                cancellation: &permit.cancellation,
+                safe: &permit.safe,
+            };
+            if let Some(m) = &job.worktree {
+                recovery::verify_available(&permit.root, m, &i).await
+                    .context("Original retained worktree is unavailable; no alternative directory will be used.")?;
+            }
+            anyhow::ensure!(
+                i.register(path).await?.path == path && i.common_dir(path).await? == common,
+                "Original working directory identity changed; validation is unavailable."
+            );
+        }
+        Ok(permit)
     }
     /// Validates the immutable job identity before trusting any persisted resource.
     pub async fn inspect(&self, run: u64, index: usize, job: &Job, with_diff: bool) -> Report {
