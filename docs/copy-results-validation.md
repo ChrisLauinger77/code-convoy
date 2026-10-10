@@ -6,7 +6,7 @@ scheduling changes, release tag or package publication.
 
 ## Automated coverage
 
-Fifteen pure formatting tests in `src/ui/result_markdown_tests.rs` cover successful,
+Sixteen pure formatting tests in `src/ui/result_markdown_tests.rs` cover successful,
 mixed, failed, cancelled and interrupted results; known/unknown change counts;
 review/resolution states; independent validation outcomes; empty/partial history;
 missing or reversed timestamps; all backends; persisted round-trip equivalence;
@@ -47,6 +47,12 @@ repository names and validation arguments, including redirection without spaces.
 Path-containing fields and arguments are omitted in full, while relative paths
 and ordinary HTML-like text retain their Markdown escaping.
 
+The at-marker regression failed for `@/home/alice/private` before the fix. It
+covers plain and option-prefixed markers in task summaries, repository names
+and validation arguments, with absolute and home-relative paths omitted in full.
+Qualified usernames such as `~user@domain/private` remain recognized. Relative
+response-file paths, scoped package names and ordinary email addresses stay visible.
+
 Three egui tests in `src/ui/copy_results_tests.rs` exercise the real result views
 through Tab/Enter and check emitted native clipboard commands and unchanged
 persisted state. Coverage includes both actions, every existing detail tab,
@@ -59,7 +65,7 @@ platform output commands for assertions.
 
 - `cargo fmt --check`: passed.
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed.
-- `cargo test --all-features`: passed, including all 18 new tests. Existing
+- `cargo test --all-features`: passed, including all 19 new tests. Existing
   optional authenticated/installed CLI probes remain ignored.
 - `cargo build --release`: passed.
 - `git diff --check`: passed.

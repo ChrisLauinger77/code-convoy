@@ -505,6 +505,46 @@ fn input_redirection_paths_are_omitted_from_all_copied_fields() {
 }
 
 #[test]
+fn at_marker_paths_are_omitted_from_all_copied_fields() {
+    let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
+    validated(&mut run.jobs[0], Status::Passed);
+    for value in [
+        "@/home/alice/private",
+        "--response=@/home/alice/private",
+        "Read @/home/alice/private",
+        "@\\private",
+        "@~alice/private",
+        "@~user@domain/private",
+    ] {
+        run.task.prompt = value.into();
+        run.jobs[0].repository.name = value.into();
+        run.jobs[0].validation.as_mut().unwrap().command.arguments = vec![value.into()];
+        assert_eq!(field(value, 160), "[local path omitted]", "{value}");
+        for text in [convoy(&run), repository(&run, &run.jobs[0])] {
+            assert!(!text.contains("private"), "{value}: {text}");
+            assert!(text.contains("[local path omitted]"));
+        }
+        assert!(
+            repository(&run, &run.jobs[0])
+                .contains("Command: \"cargo\" \"\\[local path omitted\\]\"")
+        );
+    }
+    for value in [
+        "@relative/file",
+        "--response=@args/file",
+        "@scope/pkg",
+        "user@example.org",
+    ] {
+        assert_eq!(field(value, 160), markdown(value), "{value}");
+        let saved = Command {
+            executable: "cargo".into(),
+            arguments: vec![value.into()],
+        };
+        assert_eq!(command(&saved), markdown(&saved.label()), "{value}");
+    }
+}
+
+#[test]
 fn all_backends_and_validation_states_use_their_recorded_labels() {
     let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
     for agent in AgentId::ALL {

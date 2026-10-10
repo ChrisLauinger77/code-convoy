@@ -233,7 +233,9 @@ fn local_path(value: &str) -> bool {
         // Do not resolve accounts or restrict names to the current host's syntax.
         // Keep that prefix across controls removed by Markdown, but not whitespace.
         if !ch.is_control() || ch.is_whitespace() {
-            home_prefix = (ch == '~' && at_boundary) || (home_prefix && !path_boundary(Some(ch)));
+            // @ also occurs inside qualified usernames, as in ~user@domain/path.
+            home_prefix = (ch == '~' && at_boundary)
+                || (home_prefix && (ch == '@' || !path_boundary(Some(ch))));
             // Recognize -<letter><value> without interpreting any CLI's flag semantics.
             // Only the first value character is a boundary: -Irelative/path stays relative.
             short_option_value = short_option_start && ch.is_ascii_alphabetic();
@@ -250,7 +252,20 @@ fn path_boundary(previous: Option<char>) -> bool {
             || p.is_control()
             || matches!(
                 p,
-                '\'' | '"' | '`' | '=' | ':' | '(' | '[' | '{' | '<' | '>' | ',' | ';' | '|' | '&'
+                '\'' | '"'
+                    | '`'
+                    | '='
+                    | ':'
+                    | '('
+                    | '['
+                    | '{'
+                    | '<'
+                    | '>'
+                    | ','
+                    | ';'
+                    | '|'
+                    | '&'
+                    | '@'
             )
     })
 }
