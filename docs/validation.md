@@ -31,8 +31,9 @@ installed separately and usable without interactive stdin. GUI PATH may differ
 from terminal PATH, so an absolute executable is useful when discovery fails.
 
 The child inherits the process environment, except `PWD` and `GIT_*` overrides,
-which are removed to keep repository targeting local to this operation. CodeConvoy
-does not dump environment values. These commands run with your account's access;
+which are removed to keep repository targeting local to this operation. Key matching
+is case-insensitive on Windows and case-sensitive on Unix. CodeConvoy does not dump
+environment values. These commands run with your account's access;
 they can write files or produce artifacts. Avoid credentials in arguments/output:
 the command and latest output are deliberately persisted locally.
 

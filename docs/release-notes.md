@@ -28,7 +28,7 @@ Linux x86-64 source validation on 2026-10-10 with Rust 1.95 passed:
 
 - `cargo fmt --check`
 - `cargo clippy --locked --all-targets --all-features -- -D warnings`
-- `cargo test --locked --all-features`: 370 tests passed, four optional installed-CLI
+- `cargo test --locked --all-features`: 372 tests passed, four optional installed-CLI
   probes ignored (excluding duplicate subprocess-test reporting).
 - `python3 -m unittest discover -s packaging -p 'test_*.py'`: 16 passed.
 - `cargo build --locked --release`

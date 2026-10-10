@@ -67,9 +67,22 @@ impl Command {
         // Preserve toolchain/auth environment, while keeping Git and PWD rooted here.
         spec.remove_env = std::env::vars_os()
             .filter_map(|(k, _)| k.into_string().ok())
-            .filter(|k| k == "PWD" || k.starts_with("GIT_"))
+            .filter(|k| repository_environment_override(k, cfg!(windows)))
             .collect();
         spec
+    }
+}
+
+fn repository_environment_override(key: &str, windows: bool) -> bool {
+    // Windows environment lookup ignores ASCII case. Keep the original key
+    // spelling in remove_env so every inherited override is removed explicitly.
+    if windows {
+        key.eq_ignore_ascii_case("PWD")
+            || key
+                .get(..4)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("GIT_"))
+    } else {
+        key == "PWD" || key.starts_with("GIT_")
     }
 }
 
@@ -364,6 +377,95 @@ async fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn repository_overrides_follow_platform_environment_case_rules() {
+        for windows in [false, true] {
+            for key in [
+                "PWD",
+                "GIT_DIR",
+                "GIT_WORK_TREE",
+                "GIT_INDEX_FILE",
+                "GIT_CONFIG_COUNT",
+            ] {
+                assert!(repository_environment_override(key, windows), "{key}");
+            }
+            for key in [
+                "pwd",
+                "pWd",
+                "git_dir",
+                "Git_Work_Tree",
+                "gIt_InDeX_fIlE",
+                "git_config_count",
+            ] {
+                assert_eq!(
+                    repository_environment_override(key, windows),
+                    windows,
+                    "{key}"
+                );
+            }
+            for key in [
+                "",
+                "P",
+                "GIT",
+                "GITHUB_TOKEN",
+                "PATH",
+                "Path",
+                "PWDX",
+                "XGIT_DIR",
+                "日本語",
+            ] {
+                assert!(!repository_environment_override(key, windows), "{key}");
+            }
+        }
+    }
+    #[test]
+    fn command_spec_removes_repository_overrides_with_original_key_spelling() {
+        const CHILD: &str = "CODECONVOY_VALIDATION_ENV_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            // Use a fresh process: mutating this test runner's environment would
+            // race other tests and requires unsafe set_var on multithreaded Rust.
+            let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
+                .args(["--exact", "validation::tests::command_spec_removes_repository_overrides_with_original_key_spelling"])
+                .env(CHILD, "1")
+                .env("GIT_INDEX_FILE", "synthetic index")
+                .env("Git_Dir", "synthetic git directory")
+                .env("pWd", "synthetic working directory")
+                .env("CODECONVOY_UNRELATED_ENV_TEST", "preserve")
+                .status().expect("start isolated environment test");
+            assert!(status.success());
+            return;
+        }
+        let spec = Command {
+            executable: "cargo".into(),
+            arguments: vec!["test".into()],
+        }
+        .spec(Path::new("."));
+        for (injected, removed) in [
+            ("GIT_INDEX_FILE", true),
+            ("Git_Dir", cfg!(windows)),
+            ("pWd", cfg!(windows)),
+        ] {
+            // Windows can retain an inherited key's spelling when its value is
+            // replaced by Command::env; assert against the actual child key.
+            let key = std::env::vars_os()
+                .filter_map(|(key, _)| key.into_string().ok())
+                .find(|key| {
+                    if cfg!(windows) {
+                        key.eq_ignore_ascii_case(injected)
+                    } else {
+                        key == injected
+                    }
+                })
+                .expect("injected environment key");
+            assert_eq!(spec.remove_env.contains(&key), removed, "{key}");
+        }
+        assert!(
+            !spec
+                .remove_env
+                .iter()
+                .any(|k| k == "CODECONVOY_UNRELATED_ENV_TEST")
+        );
+    }
     #[test]
     fn commands_reject_ambiguous_paths_nuls_and_excessive_inputs() {
         let command = |executable: &str, arguments: Vec<String>| Command {
