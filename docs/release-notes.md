@@ -1,6 +1,9 @@
-# CodeConvoy 0.8.0 — Workflow & Productivity (unreleased)
+# CodeConvoy 0.8.0 — Workflow & Productivity
 
 ## Changes since 0.7.0
+
+This release adds reusable validation command presets, bulk validation setup,
+keyboard shortcuts, Markdown result copying and quick repository filtering.
 
 ### Validation Presets & Bulk Assignment
 
@@ -83,3 +86,8 @@ See [copy-results validation](copy-results-validation.md).
 
 See [filter validation](repository-filter-validation.md) for automated coverage
 and native smoke results.
+
+### Maintenance
+
+- Update `serde_json` to 1.0.152.
+- Update GitHub Pages actions and use Python 3.15 in CI and release packaging.

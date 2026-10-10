@@ -4,7 +4,7 @@
 
 `Cargo.toml` is the version authority. About, Windows resources, package
 metadata, bundle versions and final filenames derive from it. For this release
-it is `0.7.0`, with tag `v0.7.0`, without a prerelease suffix.
+it is `0.8.0`, with tag `v0.8.0`, without a prerelease suffix.
 
 1. Review [release-notes.md](release-notes.md) and commit the release changes.
    Confirm applicable normal CI checks are green; Markdown-only changes skip CI.
@@ -20,7 +20,7 @@ it is `0.7.0`, with tag `v0.7.0`, without a prerelease suffix.
 
 Only manual runs build packages. They build Linux x86-64 on `ubuntu-26.04`,
 Windows x86-64 on `windows-2025`, and both macOS architectures using Apple's SDK on `macos-26`. Rust 1.99.0,
-Python 3.14 and the committed lockfile are used. Each platform runs formatting,
+Python 3.15 and the committed lockfile are used. Each platform runs formatting,
 strict Clippy and all non-ignored tests; no authenticated agent tasks or provider
 credentials are used.
 
@@ -95,7 +95,7 @@ to their package repositories' `main` branches.
 requests targeting `main`, excluding changes consisting entirely of `**/*.md`
 files. Mixed Markdown/code/configuration changes still run CI. Its matrix uses
 `ubuntu-latest`, `macos-latest`, and `windows-latest`, stable Rust, and Python
-3.14. Packaging unit tests, formatting, strict Clippy, all non-ignored Rust tests
+3.15. Packaging unit tests, formatting, strict Clippy, all non-ignored Rust tests
 and a locked release build run on each platform; Windows also runs the explicit
 software graphics initialization test. Markdown-only edits have no new CI run.
 
@@ -210,7 +210,7 @@ packages: `rpm desktop-file-utils file patchelf squashfs-tools xvfb xauth`.
 python3 packaging/build.py
 python3 packaging/build.py --probe
 python3 packaging/release.py linux
-xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.7.0-x86_64.AppImage
+xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.8.0-x86_64.AppImage
 ```
 
 On Windows, from a development shell with Python, Rust MSVC and Windows SDK:
