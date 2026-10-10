@@ -35,6 +35,8 @@ async fn repository(root: &Path, name: &str) -> Repository {
     let path = root.join(name);
     fs::create_dir(&path).unwrap();
     git_cmd(&path, &["init", "--quiet"]);
+    // Keep fixture bytes independent of Git for Windows' global CRLF policy.
+    git_cmd(&path, &["config", "core.autocrlf", "false"]);
     fs::write(path.join("tracked"), "base\n").unwrap();
     git_cmd(&path, &["add", "tracked"]);
     git_cmd(&path, &["commit", "-qm", "base"]);
@@ -156,11 +158,19 @@ async fn invalid_locations_and_nested_attempts_fail_before_git_or_fallback() {
     let file = root.join("file");
     fs::write(&file, "keep").unwrap();
     let reserved = reserve(&storage, None, &repo, 1).await;
+    // PathBuf::join removes dot components on Windows verbatim paths. Preserve
+    // the original spelling so these cases actually reach traversal validation.
+    let raw_path = |suffix: &str| {
+        let mut path = root.as_os_str().to_owned();
+        path.push(std::path::MAIN_SEPARATOR_STR);
+        path.push(suffix.replace('/', std::path::MAIN_SEPARATOR_STR));
+        PathBuf::from(path)
+    };
     for path in [
         PathBuf::new(),
         "relative".into(),
-        root.join("missing/../escape"),
-        root.join("./dot"),
+        raw_path("missing/../escape"),
+        raw_path("./dot"),
         root.join("nul\0path"),
         file.clone(),
         file.join("child"),
