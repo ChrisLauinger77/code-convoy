@@ -223,11 +223,23 @@ fn local_path(value: &str) -> bool {
     let mut home_prefix = false;
     let mut short_option_start = false;
     let mut short_option_value = false;
+    let mut ansi = AnsiSequence::None;
+    let mut ansi_boundary = false;
     for ch in value.chars() {
-        let token_boundary = path_boundary(previous);
+        let token_boundary = path_boundary(previous) || ansi_boundary;
         let at_boundary = token_boundary || short_option_value;
         if matches!(ch, '/' | '\\') && (at_boundary || home_prefix) {
             return true;
+        }
+        // Printable escape payloads must not overwrite the boundary or an
+        // existing home/option prefix. Keep scanning their contents for paths.
+        ansi_boundary = ansi.consume(ch);
+        if ansi_boundary {
+            // A bare stripped control can precede a home prefix, even when ~
+            // also qualifies as an escape terminator (e.g. ESC followed by ~).
+            home_prefix |= ch == '~' && path_boundary(previous);
+            previous = Some(ch);
+            continue;
         }
         // A token beginning with ~ may contain a named user before its separator.
         // Do not resolve accounts or restrict names to the current host's syntax.
@@ -244,6 +256,32 @@ fn local_path(value: &str) -> bool {
         previous = Some(ch);
     }
     false
+}
+
+#[derive(Clone, Copy)]
+enum AnsiSequence {
+    None,
+    Escape,
+    Csi,
+}
+
+impl AnsiSequence {
+    /// Recognize ESC and CSI payloads through their final byte. This only
+    /// affects path detection; it does not strip sequences from rendered text.
+    fn consume(&mut self, ch: char) -> bool {
+        *self = match (*self, ch) {
+            (_, '\u{1b}') => Self::Escape,
+            (_, '\u{9b}') | (Self::Escape, '[') => Self::Csi,
+            (Self::Escape, ' '..='/') | (Self::Csi, ' '..='?') => *self,
+            (Self::Escape, '0'..='~') | (Self::Csi, '@'..='~') => Self::None,
+            (Self::Escape | Self::Csi, ch) if ch.is_control() && !ch.is_whitespace() => *self,
+            _ => {
+                *self = Self::None;
+                return false;
+            }
+        };
+        true
+    }
 }
 
 fn path_boundary(previous: Option<char>) -> bool {

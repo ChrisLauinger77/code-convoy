@@ -545,6 +545,65 @@ fn at_marker_paths_are_omitted_from_all_copied_fields() {
 }
 
 #[test]
+fn ansi_sequences_cannot_hide_paths_in_copied_metadata() {
+    let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
+    validated(&mut run.jobs[0], Status::Passed);
+    for sequence in [
+        "\u{1b}[31m",
+        "\u{1b}[0m",
+        "\u{1b}[1;38;2;255;0;0m",
+        "\u{1b}[38:2::255:0:0m",
+        "\u{1b}[?25l",
+        "\u{1b}[2 q",
+        "\u{1b}[1~",
+        "\u{1b}[1m\u{1b}[31m",
+        "\u{9b}31m",
+        "\u{1b}(B",
+        "\u{1b}7",
+    ] {
+        for value in [
+            format!("{sequence}/home/alice/private"),
+            format!("Read{sequence}/home/alice/private"),
+            format!("--response={sequence}/home/alice/private"),
+            format!("{sequence}\\private"),
+            format!("{sequence}~alice/private"),
+            format!("-I{sequence}~alice/private"),
+            format!("~ali{sequence}ce/private"),
+        ] {
+            run.task.prompt = value.clone();
+            run.jobs[0].repository.name = value.clone();
+            let saved = &mut run.jobs[0].validation.as_mut().unwrap().command;
+            saved.arguments = vec![value.clone()];
+            assert!(saved.validate().is_ok());
+            assert_eq!(field(&value, 160), "[local path omitted]", "{value:?}");
+            for text in [convoy(&run), repository(&run, &run.jobs[0])] {
+                assert!(!text.contains("private"), "{value:?}: {text}");
+                assert!(text.contains("[local path omitted]"));
+            }
+            assert!(
+                repository(&run, &run.jobs[0])
+                    .contains("Command: \"cargo\" \"\\[local path omitted\\]\"")
+            );
+        }
+        // The boundary ends at the next ordinary character, not a later slash.
+        let relative = format!("{sequence}relative/file");
+        assert_eq!(field(&relative, 160), markdown(&relative));
+        let saved = Command {
+            executable: "cargo".into(),
+            arguments: vec![relative],
+        };
+        assert_eq!(command(&saved), markdown(&saved.label()));
+    }
+    for value in [
+        "literal[31m/relative",
+        "\u{1b}[31",
+        "\u{1b}[31💡relative/file",
+    ] {
+        assert_eq!(field(value, 160), markdown(value), "{value:?}");
+    }
+}
+
+#[test]
 fn all_backends_and_validation_states_use_their_recorded_labels() {
     let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
     for agent in AgentId::ALL {
