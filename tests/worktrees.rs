@@ -1780,7 +1780,8 @@ async fn binding_failure_retains_attempt_metadata_through_restart_and_blocks_git
     let metadata = h.metadata(106);
     assert!(metadata.path.starts_with(&custom));
     let manifest = metadata.path.parent().unwrap().join("owner.json");
-    assert!(manifest.exists());
+    assert!(metadata.path.parent().unwrap().is_dir());
+    assert!(!manifest.exists(), "Binding must precede initialization");
     assert!(!metadata.path.exists());
     let mut prepared = false;
     for event in &h.events {
@@ -1837,7 +1838,8 @@ async fn binding_failure_retains_attempt_metadata_through_restart_and_blocks_git
             .await
             .is_err()
     );
-    assert!(manifest.exists());
+    assert!(metadata.path.parent().unwrap().is_dir());
+    assert!(!manifest.exists());
     assert!(!metadata.path.exists());
     assert_eq!(
         fs::read_to_string(storage.join(".locations")).unwrap(),

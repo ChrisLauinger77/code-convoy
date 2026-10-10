@@ -788,13 +788,16 @@ and reports write/permission failures without fallback.
 `RunManager::start` captures this preference into each in-memory convoy. Queued
 jobs keep that value even after a subsequent setting change. Restart never resumes
 queued work. `worktrees::reserve_at` uses the existing atomic random reservation
-and sibling ownership format. Before Git creation, custom attempts additionally
-write and sync an exact metadata binding under the immutable Store default root's
-`.locations` directory. The current preference never changes that trusted root.
-Reservation returns the attempt metadata even when writing or syncing this binding
+and sibling ownership format. Immediately after allocation, custom attempts write
+and sync an exact metadata binding under the immutable Store default root's
+`.locations` directory, before initializing the sibling manifest and hooks directory.
+The current preference never changes that trusted root. Reservation returns the
+attempt metadata even when binding, manifest creation, hooks creation or a sync
 fails. The worker emits the metadata through the existing Preparing event before
 propagating that error, so failed attempts remain pinned in persisted history and
-visible after restart. Git creation still requires a successful binding.
+visible after restart. A successful binding also lets orphan discovery find partial
+attempts without a valid manifest or persisted run. Git creation requires both a
+successful binding and complete initialization.
 
 `worktrees/location` resolves default/custom bases, rejects traversal and nested
 Git/managed attempts, and verifies original-location bindings. Recovery's layout

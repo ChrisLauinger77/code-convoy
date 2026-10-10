@@ -25,6 +25,8 @@ of this work.
   queued and existing worktrees retain their original location. Unique attempts,
   pre-creation validation and Store-owned original-location records preserve
   recovery/Apply/cleanup safety without fallback, relocation or automatic deletion.
+  Partial attempts retain their location after ownership or hooks initialization
+  errors, with Git creation blocked until all preparation succeeds.
 - Tests for settings compatibility, tray failure/routing/count changes, stale
   callbacks, close/quit decisions and notification restoration; a disposable
   native desktop validation example.
