@@ -224,7 +224,21 @@ fn local_path(value: &str) -> bool {
         if matches!(ch, '/' | '\\')
             && previous.is_none_or(|p: char| {
                 p.is_whitespace()
-                    || matches!(p, '\'' | '"' | '`' | '=' | ':' | '(' | '[' | '{' | '>')
+                    || matches!(
+                        p,
+                        '\'' | '"'
+                            | '`'
+                            | '='
+                            | ':'
+                            | '('
+                            | '['
+                            | '{'
+                            | '>'
+                            | ','
+                            | ';'
+                            | '|'
+                            | '&'
+                    )
             })
         {
             return true;

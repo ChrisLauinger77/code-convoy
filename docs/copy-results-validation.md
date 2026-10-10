@@ -6,7 +6,7 @@ scheduling changes, release tag or package publication.
 
 ## Automated coverage
 
-Ten pure formatting tests in `src/ui/result_markdown_tests.rs` cover successful,
+Eleven pure formatting tests in `src/ui/result_markdown_tests.rs` cover successful,
 mixed, failed, cancelled and interrupted results; known/unknown change counts;
 review/resolution states; independent validation outcomes; empty/partial history;
 missing or reversed timestamps; all backends; persisted round-trip equivalence;
@@ -14,6 +14,12 @@ launch ordering; Unicode, pipes, Markdown/HTML and multiline escaping; bounded
 metadata; omitted logs, diagnostics, backend options, attachments and paths.
 Live Review, pre-run Git statistics and mutable worktree observations cannot
 replace the recorded completion metadata.
+
+The PR review regression reproduces an absolute path leaking from a list-valued
+argument such as `--inputs=src,/home/alice/private`. It failed before the fix and
+passes with comma, semicolon, pipe and ampersand boundaries recognized across
+task summaries, repository names and validation arguments. Relative list items
+such as `src,tests/unit` remain visible.
 
 Three egui tests in `src/ui/copy_results_tests.rs` exercise the real result views
 through Tab/Enter and check emitted native clipboard commands and unchanged
@@ -27,7 +33,7 @@ platform output commands for assertions.
 
 - `cargo fmt --check`: passed.
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed.
-- `cargo test --all-features`: passed, including all 13 new tests. Existing
+- `cargo test --all-features`: passed, including all 14 new tests. Existing
   optional authenticated/installed CLI probes remain ignored.
 - `cargo build --release`: passed.
 - `git diff --check`: passed.

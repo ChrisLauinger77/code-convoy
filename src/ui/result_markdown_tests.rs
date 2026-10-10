@@ -306,6 +306,31 @@ fn private_sources_and_local_paths_are_omitted_on_every_host() {
 }
 
 #[test]
+fn absolute_paths_after_list_delimiters_are_omitted_from_all_copied_fields() {
+    let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
+    validated(&mut run.jobs[0], Status::Passed);
+    for delimiter in [',', ';', '|', '&'] {
+        let value = format!("--inputs=src{delimiter}/home/alice/private");
+        run.task.prompt = value.clone();
+        run.jobs[0].repository.name = value.clone();
+        run.jobs[0].validation.as_mut().unwrap().command.arguments = vec![value.clone()];
+        assert_eq!(field(&value, 160), "[local path omitted]", "{value}");
+        for text in [convoy(&run), repository(&run, &run.jobs[0])] {
+            assert!(!text.contains("/home/alice/private"), "{value}: {text}");
+            assert!(text.contains("[local path omitted]"));
+        }
+        assert!(
+            repository(&run, &run.jobs[0])
+                .contains("Command: \"cargo\" \"\\[local path omitted\\]\"")
+        );
+
+        // A slash within a relative list item is not an absolute-path boundary.
+        let relative = format!("--inputs=src{delimiter}tests/unit");
+        assert_eq!(field(&relative, 160), markdown(&relative));
+    }
+}
+
+#[test]
 fn all_backends_and_validation_states_use_their_recorded_labels() {
     let mut run = run(vec![job("repo", JobStatus::Succeeded, Some(false), None)]);
     for agent in AgentId::ALL {
