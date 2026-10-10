@@ -1,5 +1,6 @@
 pub mod bulk_discard;
 pub mod results;
+mod validation;
 use crate::domain::{AppState, MAX_CONCURRENCY, MAX_REPOSITORIES};
 use anyhow::{Context, Result};
 use directories::ProjectDirs;

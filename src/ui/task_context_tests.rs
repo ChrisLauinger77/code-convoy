@@ -8,6 +8,8 @@ mod copy_results;
 mod repository_groups;
 #[path = "shortcut_tests.rs"]
 mod shortcuts;
+#[path = "validation_presets_tests.rs"]
+mod validation_presets;
 
 struct Keyboard {
     ctx: egui::Context,
@@ -79,6 +81,7 @@ impl Keyboard {
                 egui::CentralPanel::default().show(ui, |ui| (self.surface)(app, ui, &self.ctx));
                 app.library_window(&self.ctx);
                 app.validation_settings_window(&self.ctx);
+                app.validation_assignment_window(&self.ctx);
             },
         );
         output.textures_delta.clear();

@@ -901,3 +901,22 @@ passes are always qualified as past executions, never current file certification
 
 See [validation configuration and use](validation.md) for platform resolution,
 local command trust, persistence and the manual acceptance checklist.
+
+
+### v0.8 validation presets and bulk assignment
+
+`validation/presets` contains nine static command templates with stable identifiers;
+only the existing executable/argument command is persisted. `validation/configuration`
+owns the independent canonical-path selection, immutable assignment review,
+preserve/overwrite policy and per-target report. It has no process, Git or filesystem
+inspection dependencies. Group selection edits explicit paths and deduplicates overlaps.
+
+`ui/validation` keeps single-repository preset choices in its editor draft. Manual
+edits switch to Custom. `ui/validation_assignment` owns a compact selection, review
+and report modal, integrated with the existing modal shortcut gate. Overwrite requires
+an explicit final confirmation. The Store stages both single and bulk command edits
+in cloned state, invokes the existing atomic save once, and publishes only the command
+map after success. Target registration and reviewed overwrite values are rechecked.
+Save failure produces per-target diagnostics and does not leak staged changes into
+later background saves. No new schema, scheduler, lifecycle lease or execution path
+is introduced. See [preset validation](validation-presets-validation.md).

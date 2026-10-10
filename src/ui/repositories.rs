@@ -138,6 +138,15 @@ impl App {
             });
         }
         self.manage_groups_button(ui);
+        if ui
+            .add_enabled(
+                !self.state.repositories.is_empty() || !self.state.groups.is_empty(),
+                theme::quiet("Assign Validation Preset…").small(),
+            )
+            .clicked()
+        {
+            self.validation_assignment = Some(validation_assignment::Dialog::new());
+        }
         if self.repository_filter_present() {
             ui.horizontal(|ui| {
                 let search = ui.add_sized(

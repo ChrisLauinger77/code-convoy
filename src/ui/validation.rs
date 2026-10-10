@@ -1,11 +1,15 @@
 use super::*;
-use crate::validation::{Command, Record, Status};
+use crate::validation::{
+    Command, Record, Status,
+    presets::{BUILT_INS, Preset},
+};
 
 pub(super) struct Editor {
     path: PathBuf,
     name: String,
     executable: String,
-    arguments: String,
+    pub(super) arguments: String,
+    pub(super) preset: Option<&'static str>,
     error: String,
     focus: bool,
 }
@@ -18,8 +22,99 @@ impl Editor {
             arguments: command
                 .map(|c| serde_json::to_string(&c.arguments).unwrap_or_default())
                 .unwrap_or_else(|| "[]".into()),
+            preset: None,
             error: String::new(),
             focus: true,
+        }
+    }
+    fn select_preset(&mut self, preset: Option<&Preset>) {
+        self.preset = preset.map(|p| p.id);
+        if let Some(preset) = preset {
+            let command = preset.command();
+            self.executable = command.executable;
+            self.arguments = serde_json::to_string(&command.arguments).unwrap_or_default();
+            self.error.clear();
+        }
+    }
+    pub(super) fn command(&self) -> anyhow::Result<Command> {
+        let arguments = serde_json::from_str::<Vec<String>>(&self.arguments).map_err(|_| {
+            anyhow::anyhow!("Arguments must be a JSON array of strings, for example [\"test\"].")
+        })?;
+        let command = Command {
+            executable: self.executable.clone(),
+            arguments,
+        };
+        command.validate()?;
+        Ok(command)
+    }
+    fn fields(&mut self, ui: &mut egui::Ui) {
+        ui.add(egui::Label::new(&self.name).truncate())
+            .on_hover_text(&self.name);
+        let mut preset = self.preset;
+        egui::ComboBox::from_label("Preset")
+            .selected_text(
+                BUILT_INS
+                    .iter()
+                    .find(|p| Some(p.id) == preset)
+                    .map_or("Custom", |p| p.name),
+            )
+            .show_ui(ui, |ui| {
+                if ui.selectable_value(&mut preset, None, "Custom").clicked() {
+                    ui.close();
+                }
+                for p in BUILT_INS {
+                    if ui
+                        .selectable_value(&mut preset, Some(p.id), p.name)
+                        .on_hover_text(p.description)
+                        .clicked()
+                    {
+                        ui.close();
+                    }
+                }
+            });
+        if preset != self.preset {
+            self.select_preset(BUILT_INS.iter().find(|p| Some(p.id) == preset));
+        }
+        ui.small("Choosing a preset replaces these draft fields. Edits become Custom; only Save changes configuration.");
+        let executable_label = ui.label("Executable name on PATH or absolute path");
+        let input = ui
+            .add(
+                egui::TextEdit::singleline(&mut self.executable)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("cargo"),
+            )
+            .labelled_by(executable_label.id);
+        if self.focus {
+            input.request_focus();
+            self.focus = false;
+        }
+        if input.changed() {
+            self.preset = None;
+        }
+        let arguments_label =
+            ui.label("Arguments (JSON array; each string is one literal argument)");
+        if ui
+            .add(
+                egui::TextEdit::multiline(&mut self.arguments)
+                    .desired_rows(2)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("[\"test\"]"),
+            )
+            .labelled_by(arguments_label.id)
+            .changed()
+        {
+            self.preset = None;
+        }
+        if let Ok(command) = self.command() {
+            ui.add(egui::Label::new(egui::RichText::new(command.preview()).monospace()).wrap());
+        }
+        ui.small(
+            "Preview only: quoted values use JSON notation to show literal argument boundaries.",
+        );
+
+        ui.label("Runs only when you choose Run Validation. Commands can modify files. The command and execution metadata are saved locally; avoid secrets in arguments. Output and diagnostics stay in memory for this session.");
+        if !self.error.is_empty() {
+            ui.colored_label(theme::Palette::of(ui).error, &self.error);
         }
     }
 }
@@ -31,24 +126,21 @@ impl App {
         let mut save = false;
         let mut remove = false;
         let mut cancel = false;
-        let response = egui::Modal::new(egui::Id::new("validation_configuration")).show(ctx, |ui| {
-            ui.set_max_width(460.0);
-            ui.heading("Repository validation");
-            ui.label(&editor.name);
-            let executable_label = ui.label("Executable name on PATH or absolute path");
-            let input = ui.add(egui::TextEdit::singleline(&mut editor.executable).desired_width(f32::INFINITY).hint_text("cargo")).labelled_by(executable_label.id);
-            if editor.focus { input.request_focus(); editor.focus = false; }
-            let arguments_label = ui.label("Arguments (JSON array; each string is one literal argument)");
-            ui.add(egui::TextEdit::multiline(&mut editor.arguments).desired_rows(2).desired_width(f32::INFINITY).hint_text("[\"test\"]")).labelled_by(arguments_label.id);
-            ui.small("Examples: cargo + [\"test\"], npm + [\"test\"], cmake + [\"--build\", \"build\"]. No shell parsing.");
-            ui.label("Runs only when you choose Run Validation. Commands can modify files. The command and execution metadata are saved locally; avoid secrets in arguments. Output and diagnostics stay in memory for this session.");
-            if !editor.error.is_empty() { ui.colored_label(theme::Palette::of(ui).error, &editor.error); }
-            ui.horizontal_wrapped(|ui| {
-                cancel = ui.button("Cancel").clicked();
-                remove = ui.button("Remove command").clicked();
-                save = ui.button("Save command").clicked();
+        let response =
+            egui::Modal::new(egui::Id::new("validation_configuration")).show(ctx, |ui| {
+                ui.set_width(460.0_f32.min(ctx.content_rect().width() - 60.0));
+                ui.heading("Repository validation");
+                egui::ScrollArea::vertical()
+                    .max_height((ctx.content_rect().height() - 140.0).max(80.0))
+                    .show(ui, |ui| {
+                        editor.fields(ui);
+                    });
+                ui.horizontal_wrapped(|ui| {
+                    cancel = ui.button("Cancel").clicked();
+                    remove = ui.button("Remove command").clicked();
+                    save = ui.button("Save command").clicked();
+                });
             });
-        });
         if cancel || response.should_close() {
             self.validation_editor = None;
             return;
@@ -57,28 +149,22 @@ impl App {
             let command = if remove {
                 Ok(None)
             } else {
-                serde_json::from_str::<Vec<String>>(&editor.arguments)
-                    .map_err(|_| {
-                        anyhow::anyhow!(
-                            "Arguments must be a JSON array of strings, for example [\"test\"]."
-                        )
-                    })
-                    .and_then(|arguments| {
-                        let command = Command {
-                            executable: editor.executable.clone(),
-                            arguments,
-                        };
-                        command.validate()?;
-                        Ok(Some(command))
-                    })
+                editor.command().map(Some)
             };
-            match command.and_then(|c| self.state.save_validation(editor.path.clone(), c)) {
+            match command.and_then(|c| {
+                self.store
+                    .save_validation_command(&mut self.state, editor.path.clone(), c)
+            }) {
                 Ok(()) => {
                     self.validation_editor = None;
-                    self.dirty = true;
-                    self.save();
+                    self.notice = if remove {
+                        "Validation command removed."
+                    } else {
+                        "Validation command saved. Nothing was executed."
+                    }
+                    .into();
                 }
-                Err(error) => editor.error = error.to_string(),
+                Err(error) => editor.error = format!("Could not save configuration: {error:#}"),
             }
         }
     }

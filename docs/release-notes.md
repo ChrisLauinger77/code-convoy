@@ -1,6 +1,32 @@
 # CodeConvoy 0.8.0 — Workflow & Productivity (unreleased)
 
-## PR 3: Keyboard Shortcuts
+## Changes since 0.7.0
+
+### Validation Presets & Bulk Assignment
+
+- Nine built-in command templates: npm Lint, Rust Tests, Rust Check,
+  Rust Clippy, npm Test, npm Build, Python pytest, CMake Build and Make Test.
+- Single-repository Preset/Custom selection fills the existing executable and
+  literal JSON argument fields. Commands remain editable, with a readable preview;
+  only Save changes configuration. Reopening preserves existing custom commands.
+- **Assign Validation Preset…** selects repositories or multiple overlapping groups
+  independently of convoy selection. Canonical paths deduplicate targets; group
+  membership stays unchanged. Review shows target and existing-command counts.
+- Preserve existing commands by default. Explicit overwrite requires a separate
+  confirmation with Cancel focused. Updated, preserved and failed targets are
+  reported individually, including removed registrations and stale overwrite reviews.
+- Stage eligible updates and persist them with one atomic state replacement.
+  Failed saves keep live settings unchanged and report unconfirmed disk outcomes.
+  Existing command serialization and state version stay unchanged; no migration,
+  preset IDs in saved settings, dependencies or additional validation backends.
+- Configuration never executes commands or agents, inspects Git, creates worktrees,
+  changes scheduling or rewrites saved validation execution records. One command
+  per repository remains the rule; multiple checks belong in project-owned scripts.
+
+See [validation usage](validation.md) and
+[preset validation evidence](validation-presets-validation.md).
+
+### Keyboard Shortcuts
 
 - Ctrl/Cmd+Enter uses the Run Convoy button's shared action and existing preflight
   review. Readiness checks, dirty-tree acknowledgment and explicit Start remain
@@ -15,12 +41,12 @@
   Escape uses each modal's existing safe dismissal, only for the topmost dialog.
 - Compact **Settings → Keyboard Shortcuts…** reference uses egui's platform
   labels. No hotkey dependency, global hooks, settings schema or execution and
-  scheduling changes. Validation Presets remain outside this PR.
+  scheduling changes.
 
 See [keyboard shortcut validation](keyboard-shortcuts-validation.md) for checks
-and platform coverage. No version bump, release tag or package publication.
+and platform coverage.
 
-## PR 2: Copy Results
+### Copy Results
 
 - **Copy Summary** for terminal/historical convoys and **Copy Repository Result**
   in the existing job details copy concise Markdown via egui's system clipboard.
@@ -37,10 +63,9 @@ and platform coverage. No version bump, release tag or package publication.
 - Pure formatting tests and headless egui clipboard/keyboard coverage; no new
   dependency, persistence field, execution behavior or export screen.
 
-See [copy-results validation](copy-results-validation.md). Package version and
-release tags remain unchanged.
+See [copy-results validation](copy-results-validation.md).
 
-## PR 1: Quick Repository Filter
+### Quick Repository Filter
 
 - Find registered repositories immediately by name or path with case-insensitive
   substring matching using full Unicode case folding (for example,
@@ -57,70 +82,4 @@ release tags remain unchanged.
   dependencies or application-maintained character tables.
 
 See [filter validation](repository-filter-validation.md) for automated coverage
-and native smoke results. This is an unreleased feature entry; package version
-and release tags remain unchanged.
-
----
-
-# CodeConvoy 0.7.0 — Validation & Confidence
-
-Adds optional per-repository validation with configurable commands, manual Run/Cancel controls,
-live output, and persisted results. Validation runs safely in the correct Direct or isolated worktree,
-supports cancellation, and respects existing repository locks. Agent outcomes, Git state,
-and validation results remain independent. Fully backward-compatible, with no automatic actions,
-new dependencies, or architectural changes.
-
-## Changes since 0.6.0
-
-- Optional per-repository validation configuration: executable plus literal
-  arguments, edit/remove, persisted in the existing state file. Disabled by default.
-- Explicit **Run Validation** and **Cancel Validation** in repository result details,
-  a separate Validation output tab, and compact comparison indicators.
-- Correct original Direct/isolated directory targeting with identity and ownership
-  checks; unavailable historical worktrees never fall back to the source checkout.
-- Responsive background execution with streamed bounded stdout/stderr, elapsed
-  time, exit status, timestamp, process-tree cancellation and coordinated Quit.
-- Latest validation command and execution metadata saved with the exact convoy/job.
-  The latest 64 KiB of output and diagnostics stay in memory for the current session.
-  Existing history remains compatible; interrupted validation never resumes.
-- Agent outcomes, Git completion observations and result resolution stay independent.
-  Saved passes describe past executions, and current Git views refresh after commands
-  modify files. No automatic execution, staging, commits, push or approval.
-- Existing repository leases coordinate validation, agents and result operations;
-  unrelated convoys keep their normal concurrency and scheduling. No new scheduler,
-  database, dependency, backend, pipeline or validation dashboard.
-
-See [validation usage and configuration](validation.md) and
-[architecture](architecture.md#v07-explicit-validation).
-
-## Validation and remaining platform work
-
-Linux x86-64 source validation on 2026-10-10 with Rust 1.95 passed:
-
-- `cargo fmt --check`
-- `cargo clippy --locked --all-targets --all-features -- -D warnings`
-- `cargo test --locked --all-features`: 375 tests passed, four optional installed-CLI
-  probes ignored (excluding duplicate subprocess-test reporting).
-- `python3 -m unittest discover -s packaging -p 'test_*.py'`: 16 passed.
-- `cargo build --locked --release`
-- `git diff --check`
-
-Headless egui coverage includes all three requested sizes and System/Dark/Light
-modes, keyboard configuration/Run/Cancel, Escape dismissal and active-validation
-quit confirmation. A native Linux X11 debug build started with disposable state
-and repositories; Review and the Validation tab were visually inspected at
-1180 × 820, including the displayed command and original target path. Native
-Run/Cancel/history interaction acceptance was not completed; automated X11 input
-was not reliable in this desktop session. Process execution/cancellation and
-history behavior are covered by the deterministic tests, not claimed as native
-interaction acceptance.
-
-macOS/Windows builds and native runtime checks, full Linux/Wayland interaction
-smoke, native theme/size/keyboard coverage, and exact release-package checks remain
-required. No tag, push or package publication is part of this implementation.
-
-Known limits: historical passes are timestamped observations, not continuous
-certificates. Commands execute with local user permissions and may modify files;
-side effects are retained on failure/cancellation. Intentionally detached Unix
-children can escape process groups. Windows batch launchers require a directly
-configured native interpreter such as node.exe; CodeConvoy never inserts a shell.
+and native smoke results.

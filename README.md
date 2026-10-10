@@ -20,6 +20,13 @@ Review copied task summaries, repository names and command arguments before shar
 logs, diffs, attachments and local path metadata are excluded. See
 [copying results](docs/visibility.md#copy-results-080).
 
+Configure one manual validation command per repository with built-in presets such as
+**npm Lint** (`npm run lint`) and **Rust Tests** (`cargo test`), or edit
+a Custom command. **Assign Validation Preset…** configures multiple repositories
+or overlapping groups, preserving existing commands by default. Overwrite requires
+explicit confirmation; assignment never runs validation. See
+[validation configuration](docs/validation.md).
+
 ![image](assets/screenshot.png)
 
 | Backend            | Status    | Authenticated E2E status                                                                             |

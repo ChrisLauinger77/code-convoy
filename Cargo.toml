@@ -110,3 +110,7 @@ required-features = ["test-support"]
 [[example]]
 name = "v06_desktop_validation"
 required-features = ["test-support"]
+
+[[example]]
+name = "v08_validation_presets"
+required-features = ["test-support"]

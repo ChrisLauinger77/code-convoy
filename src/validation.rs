@@ -1,4 +1,6 @@
 //! Explicit local validation, separate from agent outcomes and scheduling.
+pub mod configuration;
+pub mod presets;
 use crate::{
     domain::{self, ExecutionMode, Job},
     process::{self, Cancellation, CommandSpec},
@@ -54,10 +56,26 @@ impl Command {
         Ok(())
     }
     pub fn label(&self) -> String {
-        // JSON quoting is display-only; no parser or shell interprets this text.
         std::iter::once(&self.executable)
             .chain(&self.arguments)
             .map(|s| serde_json::to_string(s).unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+    pub fn preview(&self) -> String {
+        // JSON quoting is display-only; no parser or shell interprets this text.
+        std::iter::once(&self.executable)
+            .chain(&self.arguments)
+            .map(|s| {
+                if !s.is_empty()
+                    && s.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"-_.:/".contains(&b))
+                {
+                    s.clone()
+                } else {
+                    serde_json::to_string(s).unwrap_or_default()
+                }
+            })
             .collect::<Vec<_>>()
             .join(" ")
     }

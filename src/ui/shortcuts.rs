@@ -152,6 +152,7 @@ impl App {
             || self.cli_search.is_some()
             || self.library_editor.is_some()
             || self.validation_editor.is_some()
+            || self.validation_assignment.is_some()
             || self.discard_confirmation.is_some()
             || self.bulk_confirmation.is_some()
             || self.quit_requested
