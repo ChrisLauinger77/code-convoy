@@ -126,21 +126,20 @@ impl App {
         let mut save = false;
         let mut remove = false;
         let mut cancel = false;
-        let response =
-            egui::Modal::new(egui::Id::new("validation_configuration")).show(ctx, |ui| {
-                ui.set_width(460.0_f32.min(ctx.content_rect().width() - 60.0));
-                ui.heading("Repository validation");
-                egui::ScrollArea::vertical()
-                    .max_height((ctx.content_rect().height() - 140.0).max(80.0))
-                    .show(ui, |ui| {
-                        editor.fields(ui);
-                    });
-                ui.horizontal_wrapped(|ui| {
-                    cancel = ui.button("Cancel").clicked();
-                    remove = ui.button("Remove command").clicked();
-                    save = ui.button("Save command").clicked();
+        let response = dialog::show(ctx, "validation_configuration", |ui, _opening| {
+            ui.set_width(460.0_f32.min(ctx.content_rect().width() - 60.0));
+            ui.heading("Repository validation");
+            egui::ScrollArea::vertical()
+                .max_height((ctx.content_rect().height() - 140.0).max(80.0))
+                .show(ui, |ui| {
+                    editor.fields(ui);
                 });
+            ui.horizontal_wrapped(|ui| {
+                cancel = ui.button("Cancel").clicked();
+                remove = ui.button("Remove command").clicked();
+                save = ui.button("Save command").clicked();
             });
+        });
         if cancel || response.should_close() {
             self.validation_editor = None;
             return;

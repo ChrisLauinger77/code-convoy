@@ -437,7 +437,7 @@ Retry and follow-up provenance are informational links to a previous convoy, wit
 
 The execution controls stay visible while the task and repository pane scrolls. **Appearance** follows the system theme by default and saves dark/light overrides across restarts. Older state without a saved choice uses System. Output and diffs render only visible lines, with Copy actions for the full retained text. Diff headers, additions, and removals have distinct styling; wide lines scroll horizontally.
 
-Keyboard navigation uses egui's Tab / Shift+Tab focus traversal, with task, backend settings, repositories, then execution controls in order. Use arrows within menus and Enter / Space to activate controls. Numeric fields become editable when focused. Launch review and About keep focus inside their dialog; Escape closes them. Path entry supports paste. No file chooser is required.
+Keyboard navigation uses egui's Tab / Shift+Tab focus traversal, with task, backend settings, repositories, then execution controls in order. Use arrows within menus and Enter / Space to activate controls. In the convoy list, Up/Down and Home/End reach history beyond the visible rows. Numeric fields become editable when focused. Dialogs keep focus inside, open on a safe action or an editable field, and return focus to their available launcher when closed. Escape dismisses an open menu before its dialog. Path entry supports paste. No file chooser is required.
 
 Application shortcuts use **Command (⌘) on macOS** and **Ctrl on Linux/Windows**.
 Open **Settings → Keyboard Shortcuts…** for the in-app reference.
@@ -460,6 +460,12 @@ the focused application window. Combinations reserved by your operating system
 or window manager may not reach CodeConvoy; no global hotkeys are registered.
 See [keyboard shortcut validation](docs/keyboard-shortcuts-validation.md) for
 test coverage and platform limitations.
+
+Task, backend, path and history controls expose names through the existing
+egui/AccessKit integration. Statuses include text as well as color, and focused
+primary actions have a contrasting outline. This is not a claim of verified
+screen-reader compatibility. See the [accessibility validation record](docs/accessibility-validation.md)
+for keyboard, scaling and platform coverage.
 
 **Select all / Select none** changes repository selection without hiding Git state or skipping launch review. Automatic CLI checks report Checking…, Available, Unavailable (executable not found), or Invalid configuration for each executable independently. **Check CLI** refreshes the selected agent. Detailed diagnostics can be expanded and copied. Availability confirms CLI compatibility, not authentication or model access; job settings are validated during launch review.
 

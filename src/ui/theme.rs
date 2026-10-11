@@ -187,9 +187,9 @@ pub fn install(ctx: &egui::Context) {
     }
 }
 
-pub fn section(ui: &mut egui::Ui, title: &str) {
+pub fn section(ui: &mut egui::Ui, title: &str) -> egui::Response {
     ui.add_space(SECTION_GAP);
-    ui.label(RichText::new(title).strong().size(14.0));
+    ui.label(RichText::new(title).strong().size(14.0))
 }
 
 pub fn eyebrow(ui: &mut egui::Ui, title: &str) {
@@ -203,12 +203,23 @@ pub fn eyebrow(ui: &mut egui::Ui, title: &str) {
 
 pub fn primary(ui: &mut egui::Ui, enabled: bool, label: &str) -> egui::Response {
     let p = Palette::of(ui);
-    ui.add_enabled(
+    let response = ui.add_enabled(
         enabled,
         egui::Button::new(RichText::new(label).strong().color(Color32::WHITE))
             .fill(p.primary)
             .min_size(egui::vec2(ui.available_width(), 34.0)),
-    )
+    );
+    if response.has_focus() {
+        // The explicit primary fill overrides egui's focused fill. An inset
+        // white ring remains distinct from that fill in both themes.
+        ui.painter().rect_stroke(
+            response.rect.shrink(2.0),
+            CORNER,
+            Stroke::new(1.5, Color32::WHITE),
+            egui::StrokeKind::Inside,
+        );
+    }
+    response
 }
 
 pub fn quiet(label: &str) -> egui::Button<'_> {

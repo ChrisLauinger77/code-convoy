@@ -24,7 +24,7 @@ impl App {
     }
 
     pub(super) fn agent_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        theme::section(ui, "Agent");
+        let label = theme::section(ui, "Agent");
         let old_agent = self.state.draft.agent;
         let mut chosen_agent = old_agent;
         egui::ComboBox::from_id_salt("agent")
@@ -36,6 +36,7 @@ impl App {
                 }
             })
             .response
+            .labelled_by(label.id)
             .on_hover_text("Agent used for every repository in this convoy");
         if chosen_agent != old_agent {
             self.select_agent(chosen_agent);

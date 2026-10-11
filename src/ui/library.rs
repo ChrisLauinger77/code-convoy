@@ -155,51 +155,117 @@ impl App {
             return;
         };
         let mut close = false;
-        let response = egui::Modal::new(egui::Id::new("task_library")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "task_library", |ui, opening| {
             ui.set_width(480.0_f32.min((ctx.content_rect().width() - 64.0).max(240.0)));
             match &mut editor {
-                LibraryEditor::Group { index, value, error } => {
+                LibraryEditor::Group {
+                    index,
+                    value,
+                    error,
+                } => {
                     ui.heading("Repository groups");
                     let previous = *index;
                     let group = ui.label("Group");
-                    egui::ComboBox::from_id_salt("edit_group").width(ui.available_width()).truncate()
-                        .selected_text(index.and_then(|i| self.state.groups.get(i)).map_or("New group", |g| g.name.as_str()))
+                    egui::ComboBox::from_id_salt("edit_group")
+                        .width(ui.available_width())
+                        .truncate()
+                        .selected_text(
+                            index
+                                .and_then(|i| self.state.groups.get(i))
+                                .map_or("New group", |g| g.name.as_str()),
+                        )
                         .show_ui(ui, |ui| {
                             ui.selectable_value(index, None, "New group");
                             for (i, group) in self.state.groups.iter().enumerate() {
-                                if ui.add(egui::Button::selectable(*index == Some(i), &group.name).truncate()).on_hover_text(&group.name).clicked() { *index = Some(i); }
+                                if ui
+                                    .add(
+                                        egui::Button::selectable(*index == Some(i), &group.name)
+                                            .truncate(),
+                                    )
+                                    .on_hover_text(&group.name)
+                                    .clicked()
+                                {
+                                    *index = Some(i);
+                                }
                             }
-                        }).response.labelled_by(group.id);
+                        })
+                        .response
+                        .labelled_by(group.id);
                     if previous != *index {
-                        *value = index.and_then(|i| self.state.groups.get(i)).cloned().unwrap_or(RepositoryGroup { name: String::new(), repositories: Vec::new() });
+                        *value = index
+                            .and_then(|i| self.state.groups.get(i))
+                            .cloned()
+                            .unwrap_or(RepositoryGroup {
+                                name: String::new(),
+                                repositories: Vec::new(),
+                            });
                         error.clear();
                     }
                     let name = ui.label("Name");
-                    ui.text_edit_singleline(&mut value.name).labelled_by(name.id);
+                    let input = ui
+                        .text_edit_singleline(&mut value.name)
+                        .labelled_by(name.id);
+                    if opening {
+                        input.request_focus();
+                    }
                     ui.small("Membership changes only the group. Runs and current selections stay unchanged.");
-                    egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 320.0).max(100.0)).show(ui, |ui| {
-                        for repository in &self.state.repositories {
-                            let mut member = value.repositories.contains(&repository.path);
-                            let response = ui.scope(|ui| {
-                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-                                ui.checkbox(&mut member, &repository.name)
-                            }).inner.on_hover_text(format!("{}\n{}", repository.name, repository.path.display()));
-                            if response.changed() {
-                                if member { value.repositories.push(repository.path.clone()); } else { value.repositories.retain(|p| p != &repository.path); }
+                    egui::ScrollArea::vertical()
+                        .max_height((ctx.content_rect().height() - 320.0).max(100.0))
+                        .show(ui, |ui| {
+                            for repository in &self.state.repositories {
+                                let mut member = value.repositories.contains(&repository.path);
+                                let response = ui
+                                    .scope(|ui| {
+                                        ui.style_mut().wrap_mode =
+                                            Some(egui::TextWrapMode::Truncate);
+                                        ui.checkbox(&mut member, &repository.name)
+                                    })
+                                    .inner
+                                    .on_hover_text(format!(
+                                        "{}\n{}",
+                                        repository.name,
+                                        repository.path.display()
+                                    ));
+                                if response.changed() {
+                                    if member {
+                                        value.repositories.push(repository.path.clone());
+                                    } else {
+                                        value.repositories.retain(|p| p != &repository.path);
+                                    }
+                                }
+                                if matches!(
+                                    self.repository_states.get(&repository.path),
+                                    Some(Err(_))
+                                ) {
+                                    ui.colored_label(
+                                        theme::Palette::of(ui).warning,
+                                        "Unavailable · membership retained",
+                                    );
+                                }
                             }
-                            if matches!(self.repository_states.get(&repository.path), Some(Err(_))) {
-                                ui.colored_label(theme::Palette::of(ui).warning, "Unavailable · membership retained");
+                            let orphaned: Vec<_> = value
+                                .repositories
+                                .iter()
+                                .filter(|path| {
+                                    !self.state.repositories.iter().any(|r| &r.path == *path)
+                                })
+                                .cloned()
+                                .collect();
+                            for path in orphaned {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.colored_label(
+                                        theme::Palette::of(ui).warning,
+                                        format!("Unregistered: {}", path.display()),
+                                    );
+                                    if ui.button("Remove membership").clicked() {
+                                        value.repositories.retain(|p| p != &path);
+                                    }
+                                });
                             }
-                        }
-                        let orphaned: Vec<_> = value.repositories.iter().filter(|path| !self.state.repositories.iter().any(|r| &r.path == *path)).cloned().collect();
-                        for path in orphaned {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.colored_label(theme::Palette::of(ui).warning, format!("Unregistered: {}", path.display()));
-                                if ui.button("Remove membership").clicked() { value.repositories.retain(|p| p != &path); }
-                            });
-                        }
-                    });
-                    if !error.is_empty() { ui.colored_label(theme::Palette::of(ui).error, error.as_str()); }
+                        });
+                    if !error.is_empty() {
+                        ui.colored_label(theme::Palette::of(ui).error, error.as_str());
+                    }
                     ui.horizontal_wrapped(|ui| {
                         if ui.button("Cancel").clicked() { close = true; }
                         if ui.button("Save group").clicked() {
@@ -215,25 +281,58 @@ impl App {
                         }
                     });
                 }
-                LibraryEditor::Template { index, value, error } => {
-                    ui.heading(if index.is_some() { "Edit template" } else { "Save task template" });
-                    let name = ui.label("Name");
-                    ui.text_edit_singleline(&mut value.name).labelled_by(name.id);
-                    let task = ui.label("Task text");
-                    egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 270.0).max(100.0)).show(ui, |ui| {
-                        ui.add(egui::TextEdit::multiline(&mut value.prompt).desired_rows(8).desired_width(f32::INFINITY)).labelled_by(task.id);
+                LibraryEditor::Template {
+                    index,
+                    value,
+                    error,
+                } => {
+                    ui.heading(if index.is_some() {
+                        "Edit template"
+                    } else {
+                        "Save task template"
                     });
+                    let name = ui.label("Name");
+                    let input = ui
+                        .text_edit_singleline(&mut value.name)
+                        .labelled_by(name.id);
+                    if opening {
+                        input.request_focus();
+                    }
+                    let task = ui.label("Task text");
+                    egui::ScrollArea::vertical()
+                        .max_height((ctx.content_rect().height() - 270.0).max(100.0))
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::TextEdit::multiline(&mut value.prompt)
+                                    .desired_rows(8)
+                                    .desired_width(f32::INFINITY),
+                            )
+                            .labelled_by(task.id);
+                        });
                     ui.small("Templates store only name and task text. Load from Templates to populate the draft.");
-                    if !error.is_empty() { ui.colored_label(theme::Palette::of(ui).error, error.as_str()); }
+                    if !error.is_empty() {
+                        ui.colored_label(theme::Palette::of(ui).error, error.as_str());
+                    }
                     ui.horizontal_wrapped(|ui| {
-                        if ui.button("Cancel").clicked() { close = true; }
+                        if ui.button("Cancel").clicked() {
+                            close = true;
+                        }
                         if ui.button("Save template").clicked() {
                             match self.state.save_template(*index, value.clone()) {
-                                Ok(()) => { self.dirty = true; close = true; }
+                                Ok(()) => {
+                                    self.dirty = true;
+                                    close = true;
+                                }
                                 Err(e) => *error = e.to_string(),
                             }
                         }
-                        if let Some(i) = *index && ui.add(theme::destructive(ui, "Delete template")).clicked() { self.state.templates.remove(i); self.dirty = true; close = true; }
+                        if let Some(i) = *index
+                            && ui.add(theme::destructive(ui, "Delete template")).clicked()
+                        {
+                            self.state.templates.remove(i);
+                            self.dirty = true;
+                            close = true;
+                        }
                     });
                 }
             }

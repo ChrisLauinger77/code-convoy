@@ -59,6 +59,13 @@ impl App {
                 .hint_text("/path/to/git/repository")
                 .desired_width(f32::INFINITY),
         );
+        path.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::TextEdit,
+                path.enabled(),
+                "Repository path",
+            )
+        });
         if path.changed() {
             self.picked_repository_path = None;
         }

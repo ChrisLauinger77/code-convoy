@@ -255,3 +255,40 @@ fn text_editor_receives_original_events_and_escape_repeat_is_suppressed() {
         },
     );
 }
+
+#[test]
+fn activation_key_repeat_is_preserved_for_text_editors_only() {
+    for editing in [false, true] {
+        for activation in [Key::Enter, Key::Space] {
+            let ctx = egui::Context::default();
+            let mut dispatcher = Dispatcher::default();
+            for repeat in [false, true] {
+                frame(
+                    &ctx,
+                    egui::RawInput {
+                        events: vec![key(activation, Modifiers::NONE, repeat)],
+                        ..Default::default()
+                    },
+                    |_| {
+                        let before = ctx.input(|input| input.events.clone());
+                        assert_eq!(
+                            dispatcher.take(
+                                &ctx,
+                                Scope {
+                                    text_edit: editing,
+                                    ..available()
+                                }
+                            ),
+                            None
+                        );
+                        if editing || !repeat {
+                            assert_eq!(ctx.input(|input| input.events.clone()), before);
+                        } else {
+                            assert!(ctx.input(|input| input.events.is_empty()));
+                        }
+                    },
+                );
+            }
+        }
+    }
+}

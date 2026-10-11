@@ -442,13 +442,20 @@ impl App {
         }
         let active = self.state.runs.iter().filter(|r| r.active()).count();
         let history = self.state.runs.len() - active;
-        ui.add(
+        let search = ui.add(
             egui::TextEdit::singleline(&mut self.history_search.query)
                 .hint_text("Search history: ID, task, repository, backend")
                 .desired_width(f32::INFINITY),
         );
+        search.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::TextEdit,
+                search.enabled(),
+                "Search history",
+            )
+        });
         ui.horizontal_wrapped(|ui| {
-            egui::ComboBox::from_id_salt("history_filter")
+            let filter = egui::ComboBox::from_id_salt("history_filter")
                 .selected_text(self.history_search.filter.label())
                 .show_ui(ui, |ui| {
                     for filter in crate::visibility::HistoryFilter::ALL {
@@ -458,7 +465,15 @@ impl App {
                             filter.label(),
                         );
                     }
-                });
+                })
+                .response;
+            filter.widget_info(|| {
+                egui::WidgetInfo::labeled(
+                    egui::WidgetType::ComboBox,
+                    filter.enabled(),
+                    "History filter",
+                )
+            });
             if ui
                 .add_enabled(
                     !self.history_search.query.is_empty()
@@ -662,7 +677,9 @@ impl App {
                         else { "Discard unresolved retained isolated results after confirmation. Direct and already resolved results stay untouched." }).clicked() {
                 discard = Some(crate::persistence::bulk_discard::Scope::Convoy(run.id));
             }
-            {
+            // Keep the launcher identity when Discard convoy disappears after
+            // resolution, so dialog focus cannot move to a neighboring action.
+            ui.scope_builder(egui::UiBuilder::new().id(egui::Id::new("history_cleanup_menu")), |ui| {
                 ui.menu_button("History cleanup", |ui| {
                     if ui.add_enabled(discard_enabled && self.state.runs.iter().any(|r| !r.active() && r.unresolved_results()),
                         egui::Button::new("Discard all unresolved results…"))
@@ -686,7 +703,7 @@ impl App {
                         ui.close();
                     }
                 });
-            }
+            });
         });
         if let Some(run) = self
             .state

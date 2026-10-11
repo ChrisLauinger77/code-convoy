@@ -182,7 +182,7 @@ impl App {
     }
     pub(super) fn history_window(&mut self, ctx: &egui::Context) {
         if self.history_write.is_some() {
-            egui::Modal::new(egui::Id::new("history_saving")).show(ctx, |ui| {
+            dialog::show(ctx, "history_saving", |ui, _opening| {
                 ui.heading("Saving history cleanup…");
                 ui.label(
                     "Running jobs and validations continue. Please wait for the save to finish.",
@@ -198,7 +198,7 @@ impl App {
         };
         let mut cancel = false;
         let mut confirm = false;
-        let response = egui::Modal::new(egui::Id::new("history_cleanup")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "history_cleanup", |ui, _opening| {
             ui.set_width(430.0_f32.min(ctx.content_rect().width() - 60.0));
             ui.heading("History Cleanup");
             let p = &dialog.preview;
@@ -206,26 +206,55 @@ impl App {
             ui.label(format!("Keep newest: {}", count_label(&p.policy)));
             ui.label(format!("Maximum age: {}", age_label(&p.policy)));
             ui.separator();
-            ui.label(format!("Entries to remove: {} · Entries to retain: {}", p.remove.len(), p.retained()));
-            ui.small(format!("Protected: {} · Unreliable completion dates: {}", p.protected, p.undated));
+            ui.label(format!(
+                "Entries to remove: {} · Entries to retain: {}",
+                p.remove.len(),
+                p.retained()
+            ));
+            ui.small(format!(
+                "Protected: {} · Unreliable completion dates: {}",
+                p.protected, p.undated
+            ));
             ui.label("Worktrees affected: None");
             if !p.remove.is_empty() {
-                egui::ScrollArea::vertical().max_height(65.0).show(ui, |ui| {
-                    ui.label(format!("Convoys: {}", p.remove.iter().map(|id| format!("#{id}")).collect::<Vec<_>>().join(", ")));
-                });
+                egui::ScrollArea::vertical()
+                    .max_height(65.0)
+                    .show(ui, |ui| {
+                        ui.label(format!(
+                            "Convoys: {}",
+                            p.remove
+                                .iter()
+                                .map(|id| format!("#{id}"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
+                    });
             } else {
                 ui.label("No entries match this policy.");
             }
             ui.small("History removal is permanent and may not be recoverable. Retained worktree ownership stays protected.");
-            if dialog.refreshed { ui.colored_label(theme::Palette::of(ui).warning, "History changed. Review this updated preview and confirm again."); }
+            if dialog.refreshed {
+                ui.colored_label(
+                    theme::Palette::of(ui).warning,
+                    "History changed. Review this updated preview and confirm again.",
+                );
+            }
             if self.state_write.is_some() {
                 ui.small("Saving application state. Please wait before cleaning history.");
             }
             ui.horizontal(|ui| {
                 let button = ui.button("Cancel");
-                if dialog.focus_cancel { button.request_focus(); dialog.focus_cancel = false; }
+                if dialog.focus_cancel {
+                    button.request_focus();
+                    dialog.focus_cancel = false;
+                }
                 cancel = button.clicked();
-                confirm = ui.add_enabled(!p.remove.is_empty() && self.state_write.is_none(), theme::destructive(ui, "Clean Up History")).clicked();
+                confirm = ui
+                    .add_enabled(
+                        !p.remove.is_empty() && self.state_write.is_none(),
+                        theme::destructive(ui, "Clean Up History"),
+                    )
+                    .clicked();
             });
         });
         if cancel || response.should_close() {
@@ -240,18 +269,37 @@ impl App {
         };
         let mut cancel = false;
         let mut save = false;
-        let response = egui::Modal::new(egui::Id::new("history_settings")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "history_settings", |ui, opening| {
             ui.set_width(430.0_f32.min(ctx.content_rect().width() - 60.0));
             ui.heading("History Retention");
             egui::ComboBox::from_label("Maximum entries")
-                .selected_text(if settings.custom { "Custom".into() } else { count_label(&settings.policy) })
+                .selected_text(if settings.custom {
+                    "Custom".into()
+                } else {
+                    count_label(&settings.policy)
+                })
                 .show_ui(ui, |ui| {
-                    if ui.selectable_label(!settings.custom && settings.policy.max_entries.is_none(), "Unlimited").clicked() {
-                        settings.policy.max_entries = None; settings.custom = false;
+                    if ui
+                        .selectable_label(
+                            !settings.custom && settings.policy.max_entries.is_none(),
+                            "Unlimited",
+                        )
+                        .clicked()
+                    {
+                        settings.policy.max_entries = None;
+                        settings.custom = false;
                     }
                     for n in [100, 250, 500, 1000] {
-                        if ui.selectable_label(!settings.custom && settings.policy.max_entries.map(|n| n.get()) == Some(n), n.to_string()).clicked() {
-                            settings.policy.max_entries = std::num::NonZeroUsize::new(n); settings.custom = false;
+                        if ui
+                            .selectable_label(
+                                !settings.custom
+                                    && settings.policy.max_entries.map(|n| n.get()) == Some(n),
+                                n.to_string(),
+                            )
+                            .clicked()
+                        {
+                            settings.policy.max_entries = std::num::NonZeroUsize::new(n);
+                            settings.custom = false;
                         }
                     }
                     ui.selectable_value(&mut settings.custom, true, "Custom positive integer");
@@ -259,21 +307,40 @@ impl App {
             if settings.custom {
                 ui.horizontal(|ui| {
                     let label = ui.label("Custom maximum");
-                    ui.add(egui::TextEdit::singleline(&mut settings.count).desired_width(120.0)).labelled_by(label.id);
+                    ui.add(egui::TextEdit::singleline(&mut settings.count).desired_width(120.0))
+                        .labelled_by(label.id);
                 });
             }
-            egui::ComboBox::from_label("Maximum age").selected_text(age_label(&settings.policy)).show_ui(ui, |ui| {
-                ui.selectable_value(&mut settings.policy.max_age_days, None, "Unlimited");
-                for days in [30, 90, 180, 365] {
-                    ui.selectable_value(&mut settings.policy.max_age_days, std::num::NonZeroU32::new(days), format!("{days} days"));
-                }
-            });
-            ui.checkbox(&mut settings.policy.automatic, "Automatically apply retention policy");
+            egui::ComboBox::from_label("Maximum age")
+                .selected_text(age_label(&settings.policy))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut settings.policy.max_age_days, None, "Unlimited");
+                    for days in [30, 90, 180, 365] {
+                        ui.selectable_value(
+                            &mut settings.policy.max_age_days,
+                            std::num::NonZeroU32::new(days),
+                            format!("{days} days"),
+                        );
+                    }
+                });
+            ui.checkbox(
+                &mut settings.policy.automatic,
+                "Automatically apply retention policy",
+            );
             ui.small("When enabled, retention runs once at the next application startup and can permanently remove eligible history. Deleted entries may not be recoverable.");
             ui.small("Both limits apply. Newest means completion time, then convoy ID. Active work, validations, retained worktree ownership and unreliable dates are preserved outside the limits.");
             ui.small("Use History cleanup → Clean Up History… to preview and apply the policy now. Unlimited is the default. Worktrees are never removed here.");
-            if !settings.error.is_empty() { ui.colored_label(theme::Palette::of(ui).error, &settings.error); }
-            ui.horizontal(|ui| { cancel = ui.button("Cancel").clicked(); save = ui.button("Save settings").clicked(); });
+            if !settings.error.is_empty() {
+                ui.colored_label(theme::Palette::of(ui).error, &settings.error);
+            }
+            ui.horizontal(|ui| {
+                let button = ui.button("Cancel");
+                if opening {
+                    button.request_focus();
+                }
+                cancel = button.clicked();
+                save = ui.button("Save settings").clicked();
+            });
         });
         if cancel || response.should_close() {
             self.history_settings = None;

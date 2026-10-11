@@ -371,18 +371,37 @@ impl App {
         let saving = self.history_write.is_some() || self.state_write.is_some();
         let mut cancel = false;
         let mut confirm = false;
-        let response = egui::Modal::new(egui::Id::new("discard_result")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "discard_result", |ui, _opening| {
             ui.set_width(430.0_f32.min(ctx.content_rect().width() - 64.0));
-            ui.heading(if action == Action::Discard { "Discard isolated changes?" } else { "Remove retained isolated copy?" });
+            ui.heading(if action == Action::Discard {
+                "Discard isolated changes?"
+            } else {
+                "Remove retained isolated copy?"
+            });
             ui.label("This removes the retained CodeConvoy worktree and its historical Diff. The registered repository will not be changed.");
             if saving {
                 ui.small("Saving application state. Please wait before confirming removal.");
             }
             ui.horizontal_wrapped(|ui| {
                 let button = ui.button("Cancel");
-                if self.focus_discard_cancel { button.request_focus(); self.focus_discard_cancel = false; }
+                if self.focus_discard_cancel {
+                    button.request_focus();
+                    self.focus_discard_cancel = false;
+                }
                 cancel = button.clicked();
-                confirm = ui.add_enabled(!saving, theme::destructive(ui, if action == Action::Discard { "Discard result" } else { "Clean up retained copy" })).clicked();
+                confirm = ui
+                    .add_enabled(
+                        !saving,
+                        theme::destructive(
+                            ui,
+                            if action == Action::Discard {
+                                "Discard result"
+                            } else {
+                                "Clean up retained copy"
+                            },
+                        ),
+                    )
+                    .clicked();
             });
         });
         if cancel || response.should_close() {

@@ -3,7 +3,7 @@ use super::*;
 use crate::ui::shortcuts::repository_filter_id;
 use egui::{Event, Key, Modifiers};
 
-fn chord(keys: &mut Keyboard, app: &mut App, key: Key, modifiers: Modifiers) {
+pub(super) fn chord(keys: &mut Keyboard, app: &mut App, key: Key, modifiers: Modifiers) {
     keys.frame(
         app,
         [true, false]

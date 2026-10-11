@@ -130,14 +130,17 @@ impl App {
                 _ => {}
             }
         }
-        let response = egui::Modal::new(egui::Id::new("confirm_quit")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "confirm_quit", |ui, _opening| {
             ui.set_max_width(420.0);
             ui.heading("Work is still in progress");
             ui.label(format!(
                 "Preparing: {preparing} · Running: {running} · Queued: {queued}"
             ));
             ui.label("Closing CodeConvoy will stop all active jobs and validations.");
-            if self.bulk_discard.is_some() || self.result_operation.is_some() || self.worktree_management.batch.is_some() {
+            if self.bulk_discard.is_some()
+                || self.result_operation.is_some()
+                || self.worktree_management.batch.is_some()
+            {
                 ui.label("Closing waits for result-operation cleanup; remaining bulk removals will not be attempted.");
             }
             ui.add_space(8.0);

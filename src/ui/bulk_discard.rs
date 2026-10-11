@@ -85,21 +85,45 @@ impl App {
         let convoy = matches!(plan.scope, Scope::Convoy(_));
         let mut cancel = false;
         let mut confirm = false;
-        let response = egui::Modal::new(egui::Id::new("bulk_discard")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "bulk_discard", |ui, _opening| {
             ui.set_width(460.0_f32.min(ctx.content_rect().width() - 64.0));
-            ui.heading(if convoy { "Discard convoy results?" } else { "Discard all unresolved results?" });
+            ui.heading(if convoy {
+                "Discard convoy results?"
+            } else {
+                "Discard all unresolved results?"
+            });
             let location = match plan.scope {
                 Scope::Convoy(id) => format!("in convoy #{id}"),
-                Scope::All => format!("across {} {}", plan.convoys(), if plan.convoys() == 1 { "convoy" } else { "convoys" }),
+                Scope::All => format!(
+                    "across {} {}",
+                    plan.convoys(),
+                    if plan.convoys() == 1 {
+                        "convoy"
+                    } else {
+                        "convoys"
+                    }
+                ),
             };
             ui.label(format!("This will attempt to discard {} retained isolated {} owned by CodeConvoy {location}.", plan.len(), if plan.len() == 1 { "result" } else { "results" }));
             ui.label("Registered repositories and direct working tree changes will not be modified. Active convoys and already resolved results are excluded.");
             ui.label("Each result must pass ownership and safety checks. Blocked results stay in history; successful discards cannot be undone. History entries are removed separately.");
             ui.horizontal_wrapped(|ui| {
                 let button = ui.button("Cancel");
-                if self.focus_bulk_cancel { button.request_focus(); self.focus_bulk_cancel = false; }
+                if self.focus_bulk_cancel {
+                    button.request_focus();
+                    self.focus_bulk_cancel = false;
+                }
                 cancel = button.clicked();
-                confirm = ui.add(theme::destructive(ui, if convoy { "Discard convoy" } else { "Discard all" })).clicked();
+                confirm = ui
+                    .add(theme::destructive(
+                        ui,
+                        if convoy {
+                            "Discard convoy"
+                        } else {
+                            "Discard all"
+                        },
+                    ))
+                    .clicked();
             });
         });
         if cancel || response.should_close() {
