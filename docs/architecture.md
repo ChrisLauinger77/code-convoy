@@ -1082,6 +1082,8 @@ captures a metadata-only `AppState::persistence_snapshot`, runs saving on the
 blocking pool and holds the reservation through UI acknowledgement. Edits during
 I/O remain dirty. Result operations suppress background saves; new durable intents
 cannot overtake one. Quit waits before its existing lifecycle/final-save sequence.
+Fallback native exit also joins the periodic writer and releases its reservation
+before saving interrupted job and validation states, without relying on UI polls.
 Explicit intent/outcome/configuration and final saves remain synchronous and
 buffered; slow filesystem latency at those boundaries is a remaining limitation.
 

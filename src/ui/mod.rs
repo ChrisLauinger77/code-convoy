@@ -169,7 +169,7 @@ pub struct App {
     storage: crate::storage::service::Service,
     worktree_management: worktree_management::Management,
     history_write: Option<std::sync::Arc<crate::persistence::history::HistoryWrite>>,
-    state_write: Option<std::sync::Arc<crate::persistence::history::HistoryWrite>>,
+    state_write: Option<persistence::StateWrite>,
     automatic_retention_pending: bool,
     comparison_filter: crate::visibility::RepositoryFilter,
     selected_job: usize,
@@ -1251,6 +1251,7 @@ impl eframe::App for App {
         }
         self.poll_validations();
         self.state.recover_interrupted();
+        self.finish_state_write_on_exit();
         if self.history_write.is_none() {
             self.save();
         }

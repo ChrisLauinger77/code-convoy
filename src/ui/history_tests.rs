@@ -378,6 +378,78 @@ fn background_save_failure_retains_dirty_state_and_never_starts_a_launch() {
 }
 
 #[test]
+fn fallback_exit_waits_for_background_save_and_persists_interruption() {
+    for (finish_before_exit, fail_background) in [(false, false), (true, false), (true, true)] {
+        let (_temp, mut app) = fixture();
+        app.state.next_run = 6;
+        app.state.runs.insert(
+            0,
+            run(
+                5,
+                &[JobStatus::Running, JobStatus::Queued, JobStatus::Preparing],
+            ),
+        );
+        let job = &mut app.state.runs[0].jobs[0];
+        job.validation = Some(crate::validation::Record::pending(
+            crate::validation::Command {
+                executable: "never-executed".into(),
+                arguments: vec![],
+            },
+            job,
+        ));
+        if fail_background {
+            std::fs::create_dir(app.store.history_path()).unwrap();
+        }
+        app.state.draft.prompt = "older snapshot".into();
+        app.dirty = true;
+        app.save_background();
+        if finish_before_exit {
+            let result = app.runtime().block_on(async {
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    loop {
+                        if let Ok(Message::StateSaved(result)) = app.rx.try_recv() {
+                            break result;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .unwrap()
+            });
+            assert_eq!(result.is_err(), fail_background);
+            // Leave acknowledgement queued, as when native teardown precedes poll().
+            app.tx.send(Message::StateSaved(result)).unwrap();
+            if fail_background {
+                std::fs::remove_dir(app.store.history_path()).unwrap();
+            }
+        }
+        assert!(app.state_write.is_some());
+        app.state.draft.prompt = "latest edit before native teardown".into();
+        app.dirty = true;
+        assert!(!app.closing && !app.exit_ready);
+        eframe::App::on_exit(&mut app, None);
+
+        assert!(app.state_write.is_none());
+        assert!(!app.dirty, "final save failed: {}", app.notice);
+        // Read the file directly: Store::load would recover stale running records
+        // and could hide a missing final save from this regression test.
+        let saved: AppState =
+            serde_json::from_slice(&std::fs::read(app.store.history_path()).unwrap()).unwrap();
+        assert_eq!(saved.draft.prompt, "latest edit before native teardown");
+        assert_eq!(saved.runs.len(), 5);
+        for job in &saved.runs[0].jobs {
+            assert_eq!(job.status, JobStatus::Cancelled);
+            assert!(job.interrupted);
+            assert!(job.finished_at.is_none());
+        }
+        assert_eq!(
+            saved.runs[0].jobs[0].validation.as_ref().unwrap().status,
+            crate::validation::Status::Cancelled
+        );
+    }
+}
+
+#[test]
 fn virtual_history_rows_stay_bounded_and_keyboard_reaches_both_ends() {
     let (_temp, mut app) = fixture();
     app.state.runs = (1..=5000).rev().map(historical).collect();

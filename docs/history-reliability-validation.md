@@ -107,6 +107,12 @@ New regression sources: `tests/history_scale.rs`, `tests/support/history_scale.r
 The two ignored performance checks are reproducible manual checks, not flaky
 wall-clock assertions in ordinary CI.
 
+PR review added fallback-exit coverage: native teardown joins an outstanding
+periodic writer before the final save, including when its UI acknowledgement was
+never polled. Queued, completed and failed writes are exercised; direct file reads
+verify that newer edits and interrupted job/validation states were saved without
+relying on startup recovery to repair a stale snapshot.
+
 Key implementation files: `src/persistence.rs`, `src/persistence/history.rs`,
 `src/domain.rs`, `src/ui/persistence.rs`, `src/ui/results.rs`, `src/ui/quit.rs`,
 `src/storage/history.rs`, `src/export/file.rs`, `src/visibility.rs`.
@@ -163,7 +169,7 @@ Final validation on Linux:
 
 - `cargo fmt --check`: passed.
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed.
-- `cargo test --all-features`: 530 passed, zero failed, six intentionally ignored.
+- `cargo test --all-features`: 531 passed, zero failed, six intentionally ignored.
   This includes two manual performance checks and four installed-backend checks.
   Both performance checks were run separately and passed. Counts exclude filtered
   child-process re-executions used by environment-isolation tests.
