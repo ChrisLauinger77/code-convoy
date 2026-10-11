@@ -360,6 +360,54 @@ fn review_retains_dirty_ack_and_modified_enter_cannot_confirm() {
 }
 
 #[test]
+fn review_start_waits_for_state_save_and_preserves_acknowledgement() {
+    let (_temp, mut app) = app();
+    prepare(&mut app, AgentId::Codex);
+    app.prepared.as_mut().unwrap().repositories[0]
+        .state
+        .summary
+        .changed = 1;
+    let mut keys = execution();
+    keys.frame(&mut app, vec![]);
+    assert!(
+        keys.nodes
+            .values()
+            .any(|node| node.label() == Some("Start convoy") && node.is_disabled())
+    );
+    app.dirty_ack = true;
+    keys.focus(&mut app, "Start convoy");
+    app.dirty = true;
+    app.save_background();
+    assert!(app.state_write.is_some());
+    keys.frame(&mut app, vec![]);
+    assert!(
+        keys.nodes
+            .values()
+            .any(|node| node.label() == Some("Start convoy") && node.is_disabled())
+    );
+    assert!(keys.nodes.values().any(|node| {
+        keys.label(node) == "Saving application state. Please wait before starting."
+    }));
+    keys.key(&mut app, Key::Enter);
+    assert!(app.prepared.is_some() && app.dirty_ack);
+    assert!(app.state.runs.is_empty() && app.manager.is_idle());
+
+    finish_state_write(&mut app);
+    keys.frame(&mut app, vec![]);
+    assert!(
+        keys.nodes
+            .values()
+            .any(|node| node.label() == Some("Start convoy") && !node.is_disabled())
+    );
+    assert!(app.prepared.is_some() && app.dirty_ack);
+    assert!(app.state.runs.is_empty() && app.manager.is_idle());
+    keys.focus(&mut app, "Start convoy");
+    keys.key(&mut app, Key::Enter);
+    assert!(app.prepared.is_none());
+    assert_eq!(app.state.runs.len(), 1);
+}
+
+#[test]
 fn escape_cancels_destructive_dialogs_without_operating_and_only_closes_top_modal() {
     for modal in 0..3 {
         let (_temp, mut app) = app();

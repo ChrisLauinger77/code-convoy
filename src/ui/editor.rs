@@ -139,6 +139,7 @@ impl App {
         let Some(prepared) = &self.prepared else {
             return;
         };
+        let saving = self.history_write.is_some() || self.state_write.is_some();
         let mut start = false;
         let mut cancel = false;
         let response = egui::Modal::new(egui::Id::new("review_convoy")).show(ctx, |ui| {
@@ -205,8 +206,11 @@ impl App {
                     }
                 });
             ui.separator();
+            if saving {
+                ui.small("Saving application state. Please wait before starting.");
+            }
             start =
-                theme::primary(ui, !prepared.dirty() || self.dirty_ack, "Start convoy").clicked();
+                theme::primary(ui, !saving && (!prepared.dirty() || self.dirty_ack), "Start convoy").clicked();
             cancel = ui.add(theme::quiet("Back to task")).clicked();
         });
         cancel |= response.should_close();

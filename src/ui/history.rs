@@ -32,7 +32,8 @@ impl App {
     pub(super) fn apply_startup_retention(&mut self, now: u64) {
         // Called only after Store::load has completely validated/recovered state.
         // Consume once even for no-op policies/errors; never retry automatically.
-        if std::mem::take(&mut self.automatic_retention_pending)
+        if self.state_write.is_none()
+            && std::mem::take(&mut self.automatic_retention_pending)
             && self.state.history_retention.automatic
             && !self.closing
         {
@@ -75,6 +76,7 @@ impl App {
         !self.closing
             && !self.quit_requested
             && self.history_write.is_none()
+            && self.state_write.is_none()
             && self.result_operation.is_none()
             && self.bulk_discard.is_none()
             && self.worktree_management.batch.is_none()
@@ -216,11 +218,14 @@ impl App {
             }
             ui.small("History removal is permanent and may not be recoverable. Retained worktree ownership stays protected.");
             if dialog.refreshed { ui.colored_label(theme::Palette::of(ui).warning, "History changed. Review this updated preview and confirm again."); }
+            if self.state_write.is_some() {
+                ui.small("Saving application state. Please wait before cleaning history.");
+            }
             ui.horizontal(|ui| {
                 let button = ui.button("Cancel");
                 if dialog.focus_cancel { button.request_focus(); dialog.focus_cancel = false; }
                 cancel = button.clicked();
-                confirm = ui.add_enabled(!p.remove.is_empty(), egui::Button::new("Clean Up History")).clicked();
+                confirm = ui.add_enabled(!p.remove.is_empty() && self.state_write.is_none(), egui::Button::new("Clean Up History")).clicked();
             });
         });
         if cancel || response.should_close() {
@@ -284,7 +289,7 @@ impl App {
                     }
                 }
             }
-            let mut staged = self.state.clone();
+            let mut staged = self.state.persistence_snapshot();
             staged.history_retention = settings.policy.clone();
             match self.store.save(&staged) {
                 Ok(()) => {

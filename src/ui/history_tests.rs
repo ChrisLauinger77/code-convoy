@@ -321,3 +321,341 @@ fn manager_owned_terminal_and_cancelling_convoys_cannot_be_removed() {
         assert!(app.manager.is_active(id));
     }
 }
+
+#[test]
+fn background_save_serializes_writers_preserves_new_edits_and_delays_quit() {
+    let (_temp, mut app) = fixture();
+    app.dirty = true;
+    app.state.draft.prompt = "captured".into();
+    app.save_background();
+    assert!(app.state_write.is_some());
+    assert!(!app.dirty);
+    assert!(app.store.save(&app.state).is_err());
+    assert!(!app.history_available());
+    assert!(!app.request_quit());
+    assert!(!app.closing);
+    // Worker owns an independent metadata snapshot while the UI keeps editing.
+    app.state.draft.prompt = "newer edit".into();
+    app.dirty = true;
+    app.state.runs[0].jobs[0].validation = Some(crate::validation::Record::pending(
+        crate::validation::Command {
+            executable: "never-executed".into(),
+            arguments: vec![],
+        },
+        &app.state.runs[0].jobs[0],
+    ));
+    app.save_background(); // no second writer
+    finish_state_write(&mut app);
+    assert!(app.dirty);
+    assert_eq!(app.state.draft.prompt, "newer edit");
+    assert_eq!(app.store.load().unwrap().draft.prompt, "captured");
+    app.save_background();
+    assert!(
+        app.state_write.is_none(),
+        "a pending quit must not be starved by another save"
+    );
+    assert!(app.request_quit()); // Final save includes newer lifecycle/settings state.
+    assert!(!app.dirty);
+    let saved = app.store.load().unwrap();
+    assert_eq!(saved.draft.prompt, "newer edit");
+    assert!(saved.runs[0].jobs[0].validation.is_some());
+}
+
+#[test]
+fn background_save_failure_retains_dirty_state_and_never_starts_a_launch() {
+    let (_temp, mut app) = fixture();
+    std::fs::create_dir(app.store.history_path()).unwrap();
+    app.dirty = true;
+    app.save_background();
+    prepare(&mut app, AgentId::Codex);
+    app.start();
+    assert!(app.prepared.is_some());
+    assert!(app.manager.is_idle());
+    finish_state_write(&mut app);
+    assert!(app.notice.contains("Could not save state"));
+    assert!(app.dirty);
+    assert_eq!(ids(&app), [4, 3, 2, 1]);
+}
+
+#[test]
+fn fallback_exit_waits_for_background_save_and_persists_interruption() {
+    for (finish_before_exit, fail_background) in [(false, false), (true, false), (true, true)] {
+        let (_temp, mut app) = fixture();
+        app.state.next_run = 6;
+        app.state.runs.insert(
+            0,
+            run(
+                5,
+                &[JobStatus::Running, JobStatus::Queued, JobStatus::Preparing],
+            ),
+        );
+        let job = &mut app.state.runs[0].jobs[0];
+        job.validation = Some(crate::validation::Record::pending(
+            crate::validation::Command {
+                executable: "never-executed".into(),
+                arguments: vec![],
+            },
+            job,
+        ));
+        if fail_background {
+            std::fs::create_dir(app.store.history_path()).unwrap();
+        }
+        app.state.draft.prompt = "older snapshot".into();
+        app.dirty = true;
+        app.save_background();
+        if finish_before_exit {
+            let result = app.runtime().block_on(async {
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    loop {
+                        if let Ok(Message::StateSaved(result)) = app.rx.try_recv() {
+                            break result;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .unwrap()
+            });
+            assert_eq!(result.is_err(), fail_background);
+            // Leave acknowledgement queued, as when native teardown precedes poll().
+            app.tx.send(Message::StateSaved(result)).unwrap();
+            if fail_background {
+                std::fs::remove_dir(app.store.history_path()).unwrap();
+            }
+        }
+        assert!(app.state_write.is_some());
+        app.state.draft.prompt = "latest edit before native teardown".into();
+        app.dirty = true;
+        assert!(!app.closing && !app.exit_ready);
+        eframe::App::on_exit(&mut app, None);
+
+        assert!(app.state_write.is_none());
+        assert!(!app.dirty, "final save failed: {}", app.notice);
+        // Read the file directly: Store::load would recover stale running records
+        // and could hide a missing final save from this regression test.
+        let saved: AppState =
+            serde_json::from_slice(&std::fs::read(app.store.history_path()).unwrap()).unwrap();
+        assert_eq!(saved.draft.prompt, "latest edit before native teardown");
+        assert_eq!(saved.runs.len(), 5);
+        for job in &saved.runs[0].jobs {
+            assert_eq!(job.status, JobStatus::Cancelled);
+            assert!(job.interrupted);
+            assert!(job.finished_at.is_none());
+        }
+        assert_eq!(
+            saved.runs[0].jobs[0].validation.as_ref().unwrap().status,
+            crate::validation::Status::Cancelled
+        );
+    }
+}
+
+#[test]
+fn virtual_history_rows_stay_bounded_and_keyboard_reaches_both_ends() {
+    let (_temp, mut app) = fixture();
+    app.state.runs = (1..=5000).rev().map(historical).collect();
+    app.select_run(Some(5000));
+    let mut keys = Keyboard::new(|app, ui, _| {
+        app.run_navigation(ui);
+    });
+    app.show_active_navigation = true;
+    for _ in 0..3 {
+        keys.frame(&mut app, vec![]);
+    }
+    // AccessKit sees only the visible widgets, independent of total history.
+    assert!(
+        keys.nodes.len() < 150,
+        "{} widgets created",
+        keys.nodes.len()
+    );
+    keys.key(&mut app, egui::Key::End);
+    assert_eq!(app.selected_run, Some(1));
+    keys.key(&mut app, egui::Key::ArrowUp);
+    assert_eq!(app.selected_run, Some(2));
+    keys.key(&mut app, egui::Key::Home);
+    assert_eq!(app.selected_run, Some(5000));
+    keys.key(&mut app, egui::Key::ArrowDown);
+    assert_eq!(app.selected_run, Some(4999));
+    app.history_search.query = "Task 1".into();
+    keys.frame(&mut app, vec![]);
+    assert_eq!(app.selected_run, Some(4999));
+}
+
+fn reviewed_result(action: crate::persistence::results::Action) -> (tempfile::TempDir, App) {
+    let (temp, mut app) = app();
+    app.state.next_run = 2;
+    app.state.runs = vec![isolated_history(1, JobStatus::Succeeded, Some(true))];
+    let job = &mut app.state.runs[0].jobs[0];
+    job.result_checked = true;
+    job.result_availability = domain::ResultAvailability::Available;
+    job.review = Some(Ok(crate::review::Statistics {
+        files: 1,
+        ..Default::default()
+    }));
+    if action == crate::persistence::results::Action::CleanupApplied {
+        job.resolution = domain::ResultResolution::Applied;
+    }
+    app.state.repositories = vec![job.repository.clone()];
+    app.select_run(Some(1));
+    (temp, app)
+}
+
+#[track_caller]
+fn assert_button_enabled(keys: &Keyboard, label: &str, enabled: bool) {
+    let button = keys
+        .nodes
+        .values()
+        .find(|node| node.label() == Some(label))
+        .unwrap();
+    assert_eq!(!button.is_disabled(), enabled, "{label}");
+}
+
+#[test]
+fn result_controls_wait_for_state_save_without_changing_results() {
+    use crate::persistence::results::Action;
+    for (action, label) in [
+        (Action::Apply, "Apply result"),
+        (Action::Discard, "Discard result"),
+        (Action::CleanupApplied, "Clean up retained copy"),
+    ] {
+        let (_temp, mut app) = reviewed_result(action);
+        let before = serde_json::to_value(&app.state.runs).unwrap();
+        let mut keys = Keyboard::new(|app, ui, ctx| app.review_view(ui, ctx, 1500.0));
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, true);
+        keys.focus(&mut app, label);
+        app.dirty = true;
+        app.save_background();
+        assert!(app.state_write.is_some());
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, false);
+        assert!(keys.nodes.values().any(|node| {
+            keys.label(node) == "Saving application state. Please wait before changing results."
+        }));
+        keys.key(&mut app, egui::Key::Enter);
+        assert!(app.result_operation.is_none() && app.discard_confirmation.is_none());
+        assert_eq!(serde_json::to_value(&app.state.runs).unwrap(), before);
+        finish_state_write(&mut app);
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, true);
+        assert!(app.result_operation.is_none() && app.discard_confirmation.is_none());
+    }
+}
+
+#[test]
+fn result_confirmation_survives_state_save_and_cancel_remains_available() {
+    use crate::persistence::results::Action;
+    for (action, label) in [
+        (Action::Discard, "Discard result"),
+        (Action::CleanupApplied, "Clean up retained copy"),
+    ] {
+        let (_temp, mut app) = reviewed_result(action);
+        let before = serde_json::to_value(&app.state.runs).unwrap();
+        app.discard_confirmation = Some((1, 0, action));
+        app.focus_discard_cancel = true;
+        let mut keys = Keyboard::new(|app, _, ctx| app.discard_window(ctx));
+        keys.focus(&mut app, label);
+        app.dirty = true;
+        app.save_background();
+        assert!(app.state_write.is_some());
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, false);
+        assert_button_enabled(&keys, "Cancel", true);
+        assert!(keys.nodes.values().any(|node| {
+            keys.label(node) == "Saving application state. Please wait before confirming removal."
+        }));
+        keys.key(&mut app, egui::Key::Enter);
+        assert_eq!(app.discard_confirmation, Some((1, 0, action)));
+        assert!(app.result_operation.is_none());
+        finish_state_write(&mut app);
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, true);
+        assert_eq!(app.discard_confirmation, Some((1, 0, action)));
+        assert!(app.result_operation.is_none());
+        keys.key(&mut app, egui::Key::Escape);
+        assert!(app.discard_confirmation.is_none());
+        assert_eq!(serde_json::to_value(&app.state.runs).unwrap(), before);
+    }
+}
+
+#[test]
+fn validation_controls_wait_for_state_save_in_review_and_validation_views() {
+    for tab in [Tab::Review, Tab::Validation] {
+        let (_temp, mut app) = reviewed_result(crate::persistence::results::Action::Apply);
+        app.state
+            .save_validation(
+                app.state.repositories[0].path.clone(),
+                Some(crate::validation::Command {
+                    executable: "never-executed".into(),
+                    arguments: vec![],
+                }),
+            )
+            .unwrap();
+        app.tab = tab;
+        let mut keys = Keyboard::new(|app, ui, ctx| match app.tab {
+            Tab::Review => app.review_view(ui, ctx, 1500.0),
+            _ => app.validation_view(ui, ctx, 1500.0),
+        });
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, "Run Validation", true);
+        keys.focus(&mut app, "Run Validation");
+        app.dirty = true;
+        app.save_background();
+        assert!(app.state_write.is_some());
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, "Run Validation", false);
+        assert!(keys.nodes.values().any(|node| {
+            keys.label(node) == "Saving application state. Please wait before starting validation."
+        }));
+        keys.key(&mut app, egui::Key::Enter);
+        assert!(app.validations.is_idle());
+        assert!(app.state.runs[0].jobs[0].validation.is_none());
+        finish_state_write(&mut app);
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, "Run Validation", true);
+        assert!(app.validations.is_idle());
+        assert!(app.state.runs[0].jobs[0].validation.is_none());
+    }
+}
+
+#[test]
+fn history_confirmation_waits_for_state_save_without_losing_the_preview() {
+    let (_temp, mut app) = fixture();
+    app.offer_history_cleanup(CLOCK);
+    let preview = app.history_dialog.as_ref().unwrap().preview.clone();
+    let mut keys = keyboard();
+    keys.focus(&mut app, "Clean Up History");
+    app.dirty = true;
+    app.save_background();
+    assert!(app.state_write.is_some());
+    keys.nodes.clear();
+    keys.frame(&mut app, vec![]);
+    assert_button_enabled(&keys, "Clean Up History", false);
+    keys.key(&mut app, egui::Key::Enter);
+    assert!(app.history_write.is_none());
+    assert_eq!(app.history_dialog.as_ref().unwrap().preview, preview);
+    finish_state_write(&mut app);
+    keys.nodes.clear();
+    keys.frame(&mut app, vec![]);
+    assert_button_enabled(&keys, "Clean Up History", true);
+    assert_eq!(app.history_dialog.as_ref().unwrap().preview, preview);
+    keys.key(&mut app, egui::Key::Escape);
+    assert_eq!(ids(&app), [4, 3, 2, 1]);
+}
+
+#[test]
+fn exhausted_run_counter_cannot_reuse_a_stable_id() {
+    let (_temp, mut app) = fixture();
+    app.state.next_run = u64::MAX;
+    prepare(&mut app, AgentId::Codex);
+    app.start();
+    assert!(app.manager.is_idle());
+    assert_eq!(ids(&app), [4, 3, 2, 1]);
+    assert_eq!(app.state.next_run, u64::MAX);
+    assert!(app.notice.contains("exhausted"));
+}

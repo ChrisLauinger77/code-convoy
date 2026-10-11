@@ -19,6 +19,9 @@ impl App {
     }
 
     pub(super) fn pump_bulk_discard(&mut self, ctx: &egui::Context) {
+        if self.state_write.is_some() {
+            return;
+        }
         if self.result_operation.is_some() {
             return;
         }

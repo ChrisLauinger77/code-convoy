@@ -1,8 +1,19 @@
 use super::{Measurement, filesystem::ordinary_path};
 use crate::{
-    domain::{AppState, WorktreeMetadata},
+    domain::{Run, WorktreeMetadata},
     process::Cancellation,
 };
+
+// Require the same core envelope as Store, but do not perform recovery. Keep
+// the existing Run parser so malformed historical fields never look complete.
+// Reading references is not recovery validation and grants no cleanup authority.
+#[derive(serde::Deserialize)]
+struct StoredHistory {
+    version: u32,
+    #[serde(rename = "next_run")]
+    _next_run: u64,
+    runs: Vec<Run>,
+}
 use std::{
     fs::File,
     io::{self, Read},
@@ -56,8 +67,15 @@ pub(super) fn measure(path: &Path, cancel: &Cancellation) -> History {
         inner: file,
         cancel,
     });
-    match serde_json::from_reader::<_, AppState>(reader) {
+    match serde_json::from_reader::<_, StoredHistory>(reader) {
         Ok(state) if state.version == 1 => {
+            let mut ids = std::collections::HashSet::new();
+            if state.runs.iter().any(|r| r.id == 0 || !ids.insert(r.id)) {
+                result
+                    .measurement
+                    .issue("Ambiguous convoy IDs; count and history references are unknown.");
+                return result;
+            }
             result.convoys = Some(state.runs.iter().filter(|r| !r.active()).count());
             result.references = state
                 .runs

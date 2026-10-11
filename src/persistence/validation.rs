@@ -16,7 +16,7 @@ impl Store {
         path: PathBuf,
         command: Option<Command>,
     ) -> Result<()> {
-        let mut staged = state.clone();
+        let mut staged = state.persistence_snapshot();
         staged.save_validation(path, command)?;
         self.save(&staged)?;
         state.repository_validation = staged.repository_validation;
@@ -26,7 +26,7 @@ impl Store {
     /// One atomic state replacement for all eligible targets. A failed save never
     /// leaks staged changes into the live state or its later background saves.
     pub fn assign_validation(&self, state: &mut AppState, assignment: &Assignment) -> Report {
-        let mut staged = state.clone();
+        let mut staged = state.persistence_snapshot();
         let mut report = assignment.stage(&mut staged);
         if !report.updated.is_empty() {
             match self.save(&staged) {

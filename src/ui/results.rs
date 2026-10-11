@@ -405,7 +405,7 @@ impl App {
         }
     }
 
-    fn run_navigation(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn run_navigation(&mut self, ui: &mut egui::Ui) {
         if ui
             .add_enabled(
                 self.export_available() && self.state.runs.iter().any(|r| !r.active()),
@@ -490,11 +490,25 @@ impl App {
             .truncate()
             .selected_text(label)
             .show_ui(ui, |ui| {
-                for (is_active, title, count) in
-                    [(true, "ACTIVE", active), (false, "HISTORY", matching.len())]
-                {
-                    theme::eyebrow(ui, &format!("{title} ({count})"));
-                    if count == 0 {
+                // Membership is O(1), and only visible rows create widgets or
+                // format summaries. The references die with this frame: no
+                // cached presentation can outlive a validation/result mutation.
+                let matching: HashSet<_> = matching.iter().copied().collect();
+                let active_runs: Vec<_> = self.state.runs.iter().filter(|r| r.active()).collect();
+                let history_runs: Vec<_> = self
+                    .state
+                    .runs
+                    .iter()
+                    .filter(|r| matching.contains(&r.id))
+                    .collect();
+                let all: Vec<_> = active_runs.iter().chain(&history_runs).copied().collect();
+                let keyboard = navigate_history(ui, &all, &mut selected);
+                for (is_active, title, rows) in [
+                    (true, "ACTIVE", &active_runs),
+                    (false, "HISTORY", &history_runs),
+                ] {
+                    theme::eyebrow(ui, &format!("{title} ({})", rows.len()));
+                    if rows.is_empty() {
                         ui.weak(if is_active {
                             "No active convoys"
                         } else if history == 0 {
@@ -502,44 +516,106 @@ impl App {
                         } else {
                             "No history matches"
                         });
+                        continue;
                     }
-                    for run in self.state.runs.iter().filter(|r| {
-                        r.active() == is_active && (is_active || matching.contains(&r.id))
-                    }) {
-                        let summary: String = run
-                            .task
-                            .prompt
-                            .lines()
-                            .next()
-                            .unwrap_or("Untitled task")
-                            .chars()
-                            .take(64)
-                            .collect();
-                        ui.selectable_value(
-                            &mut selected,
-                            Some(run.id),
-                            format!(
-                                "{} · {}\n{summary}",
-                                run_label(run),
-                                duration(run.elapsed(domain::now()))
-                            ),
-                        )
-                        .on_hover_text(format!(
-                            "{}\nCreated {}",
-                            run.task.prompt,
-                            format::timestamp(run.created_at)
-                        ));
-                        if !is_active {
-                            let s = crate::visibility::summary(run);
-                            ui.small(format!(
-                                "{} changed · {} unchanged · {} unknown · {} need review",
-                                s.changed, s.unchanged, s.unknown, s.review
-                            ));
+                    let spacing = ui.spacing().item_spacing.y;
+                    let row_height = ui.spacing().interact_size.y
+                        + ui.text_style_height(&egui::TextStyle::Small) * 2.0
+                        + spacing * 2.0;
+                    let mut scroll = egui::ScrollArea::vertical()
+                        .id_salt(("history_rows", is_active))
+                        .max_height(if is_active && !history_runs.is_empty() {
+                            100.0
+                        } else {
+                            220.0
+                        });
+                    if keyboard
+                        && let Some(index) = rows.iter().position(|r| Some(r.id) == selected)
+                    {
+                        scroll =
+                            scroll.vertical_scroll_offset(index as f32 * (row_height + spacing));
+                    }
+                    scroll.show_rows(ui, row_height, rows.len(), |ui, visible| {
+                        for index in visible {
+                            let run = rows[index];
+                            ui.push_id(("convoy", run.id), |ui| {
+                                let response = ui.add(
+                                    egui::Button::selectable(
+                                        selected == Some(run.id),
+                                        format!(
+                                            "{} · {}",
+                                            run_label(run),
+                                            duration(run.elapsed(domain::now()))
+                                        ),
+                                    )
+                                    .truncate(),
+                                );
+                                response.widget_info(|| {
+                                    egui::WidgetInfo::selected(
+                                        egui::WidgetType::Button,
+                                        response.enabled(),
+                                        selected == Some(run.id),
+                                        format!(
+                                            "{} · {}\n{}",
+                                            run_label(run),
+                                            duration(run.elapsed(domain::now())),
+                                            run.task
+                                                .prompt
+                                                .lines()
+                                                .next()
+                                                .unwrap_or("Untitled task")
+                                                .chars()
+                                                .take(64)
+                                                .collect::<String>()
+                                        ),
+                                    )
+                                });
+                                if response.clicked() {
+                                    selected = Some(run.id);
+                                }
+                                if keyboard && selected == Some(run.id) {
+                                    response.request_focus();
+                                }
+                                if response.has_focus() {
+                                    response.scroll_to_me(None);
+                                }
+                                response.on_hover_ui(|ui| {
+                                    ui.label(&run.task.prompt);
+                                    ui.small(format!(
+                                        "Created {}",
+                                        format::timestamp(run.created_at)
+                                    ));
+                                });
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(
+                                            run.task
+                                                .prompt
+                                                .lines()
+                                                .next()
+                                                .unwrap_or("Untitled task"),
+                                        )
+                                        .small(),
+                                    )
+                                    .truncate(),
+                                );
+                                if is_active {
+                                    ui.add(
+                                        egui::Label::new(
+                                            egui::RichText::new("In progress").small(),
+                                        )
+                                        .truncate(),
+                                    );
+                                } else {
+                                    let s = crate::visibility::summary(run);
+                                    ui.add(egui::Label::new(egui::RichText::new(format!(
+                                        "{} changed · {} unchanged · {} unknown · {} need review",
+                                        s.changed, s.unchanged, s.unknown, s.review
+                                    )).small()).truncate());
+                                }
+                            });
                         }
-                    }
-                    if is_active {
-                        ui.separator();
-                    }
+                    });
                 }
             });
         if self.show_active_navigation {
@@ -630,4 +706,30 @@ impl App {
             self.remove_history(Some(id));
         }
     }
+}
+
+// Arrow/Home/End navigation reaches off-screen rows without depending on which
+// widgets virtualization created. Selection always uses the immutable convoy ID.
+fn navigate_history(ui: &mut egui::Ui, runs: &[&Run], selected: &mut Option<u64>) -> bool {
+    if runs.is_empty() {
+        return false;
+    }
+    let current = runs.iter().position(|r| Some(r.id) == *selected);
+    let target = ui.input_mut(|input| {
+        if input.consume_key(egui::Modifiers::NONE, egui::Key::Home) {
+            Some(0)
+        } else if input.consume_key(egui::Modifiers::NONE, egui::Key::End) {
+            Some(runs.len() - 1)
+        } else if input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
+            Some(current.map_or(0, |i| (i + 1).min(runs.len() - 1)))
+        } else if input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) {
+            Some(current.map_or(0, |i| i.saturating_sub(1)))
+        } else {
+            None
+        }
+    });
+    if let Some(index) = target {
+        *selected = Some(runs[index].id);
+    }
+    target.is_some()
 }

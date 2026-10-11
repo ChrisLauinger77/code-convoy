@@ -21,10 +21,10 @@ impl App {
                 return false;
             }
         }
-        if self.history_write.is_some() {
+        if self.history_write.is_some() || self.state_write.is_some() {
             self.explicit_quit = true;
             self.notice =
-                "History cleanup is being saved. Quit will continue when it finishes.".into();
+                "Application state is being saved. Quit will continue when it finishes.".into();
             return false;
         }
         if self.exit_ready {
@@ -97,6 +97,7 @@ impl App {
             && self.bulk_discard.is_none()
             && self.worktree_management.batch.is_none()
             && self.history_write.is_none()
+            && self.state_write.is_none()
         {
             // poll() is bounded. Drain the last lifecycle events before saving,
             // even when the manager finished between frames or its worker failed.

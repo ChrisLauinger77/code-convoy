@@ -141,6 +141,10 @@ fn atomic_write(
             .map_err(|e| e.error)
             .context("Could not create export file (the destination may now exist)")?;
     }
+    #[cfg(unix)]
+    fs::File::open(parent)
+        .and_then(|file| file.sync_all())
+        .context("Export was published, but directory sync failed; durability is uncertain")?;
     Ok(())
 }
 fn check_cancel(cancel: &Cancellation) -> io::Result<()> {

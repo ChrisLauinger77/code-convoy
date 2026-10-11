@@ -15,6 +15,7 @@ mod format;
 mod history;
 mod library;
 mod notifications;
+mod persistence;
 mod quit;
 #[cfg(target_os = "macos")]
 mod quit_macos;
@@ -84,6 +85,7 @@ enum Message {
     ),
     Orphans(Result<Vec<PathBuf>, String>),
     HistorySaved(Result<(), String>),
+    StateSaved(Result<(), String>),
     ExportDestination(Result<Option<crate::export::file::Destination>, String>),
     ExportSaved(Result<String, String>),
     StorageMeasured(u64, Result<Option<crate::storage::Snapshot>, String>),
@@ -167,6 +169,7 @@ pub struct App {
     storage: crate::storage::service::Service,
     worktree_management: worktree_management::Management,
     history_write: Option<std::sync::Arc<crate::persistence::history::HistoryWrite>>,
+    state_write: Option<persistence::StateWrite>,
     automatic_retention_pending: bool,
     comparison_filter: crate::visibility::RepositoryFilter,
     selected_job: usize,
@@ -322,6 +325,7 @@ impl App {
             storage: Default::default(),
             worktree_management: Default::default(),
             history_write: None,
+            state_write: None,
             automatic_retention_pending: true,
             comparison_filter: crate::visibility::RepositoryFilter::default(),
             selected_job: 0,
@@ -661,7 +665,11 @@ impl App {
         });
     }
     fn start(&mut self) {
-        if self.history_write.is_some() || self.closing || self.quit_requested {
+        if self.history_write.is_some()
+            || self.state_write.is_some()
+            || self.closing
+            || self.quit_requested
+        {
             return;
         }
         let Some(prepared) = self.prepared.take() else {
@@ -691,7 +699,13 @@ impl App {
             }
         };
         let id = self.state.next_run;
-        self.state.next_run = id.saturating_add(1);
+        let Some(next) = id.checked_add(1) else {
+            self.notice =
+                "Cannot launch: convoy identifiers are exhausted. Existing history was preserved."
+                    .into();
+            return;
+        };
+        self.state.next_run = next;
         let mut run = prepared.snapshot(id);
         if let Some(origin) = &provenance {
             for job in &mut run.jobs {
@@ -745,6 +759,7 @@ impl App {
         while let Ok(message) = self.rx.try_recv() {
             match message {
                 Message::HistorySaved(result) => self.history_saved(result),
+                Message::StateSaved(result) => self.state_saved(result),
                 Message::ExportDestination(result) => self.export_destination(result),
                 Message::ExportSaved(result) => self.export_saved(result),
                 Message::Desktop(generation, event) => {
@@ -921,7 +936,7 @@ impl App {
         }
         if recovered {
             self.dirty = true;
-            self.save();
+            self.save_background();
         }
         for _ in 0..256 {
             let Ok(event) = self.events_rx.try_recv() else {
@@ -1115,7 +1130,7 @@ impl App {
         }
     }
     fn save(&mut self) {
-        if self.history_write.is_some() {
+        if self.history_write.is_some() || self.state_write.is_some() {
             return;
         }
         match self.store.save(&self.state) {
@@ -1174,7 +1189,7 @@ impl eframe::App for App {
         self.pump_review(ctx);
         self.handle_close(ctx);
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
-            self.save();
+            self.save_background();
         }
         ctx.request_repaint_after(Duration::from_millis(
             if self.storage.running()
@@ -1182,6 +1197,7 @@ impl eframe::App for App {
                 || self.result_operation.is_some()
                 || self.export.pending.is_some()
                 || self.history_write.is_some()
+                || self.state_write.is_some()
                 || !self.manager.is_idle()
                 || !self.validations.is_idle()
                 || self.closing
@@ -1235,6 +1251,7 @@ impl eframe::App for App {
         }
         self.poll_validations();
         self.state.recover_interrupted();
+        self.finish_state_write_on_exit();
         if self.history_write.is_none() {
             self.save();
         }

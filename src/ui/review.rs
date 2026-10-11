@@ -233,7 +233,9 @@ impl App {
                 }
             });
             if job.worktree.is_some() && job.status.is_terminal() {
-                let enabled = !self.closing
+                let saving = self.history_write.is_some() || self.state_write.is_some();
+                let enabled = !saving
+                    && !self.closing
                     && !self.quit_requested
                     && self.review_pending != Some((id, self.selected_job))
                     && self.result_operation.is_none()
@@ -279,6 +281,9 @@ impl App {
                         action = Some(Action::Discard);
                     }
                 });
+                if saving {
+                    ui.small("Saving application state. Please wait before changing results.");
+                }
                 if self.result_operation == Some((id, self.selected_job)) {
                     ui.label("Result operation in progress…");
                 }
@@ -316,7 +321,9 @@ impl App {
         index: usize,
         action: Action,
     ) {
-        if self.result_operation.is_some()
+        if self.history_write.is_some()
+            || self.state_write.is_some()
+            || self.result_operation.is_some()
             || self.bulk_discard.is_some()
             || self.worktree_management.batch.is_some()
             || self.closing
@@ -357,17 +364,21 @@ impl App {
         if self.quit_requested {
             return;
         }
+        let saving = self.history_write.is_some() || self.state_write.is_some();
         let mut cancel = false;
         let mut confirm = false;
         let response = egui::Modal::new(egui::Id::new("discard_result")).show(ctx, |ui| {
             ui.set_max_width(430.0);
             ui.heading(if action == Action::Discard { "Discard isolated changes?" } else { "Remove retained isolated copy?" });
             ui.label("This removes the retained CodeConvoy worktree and its historical Diff. The registered repository will not be changed.");
+            if saving {
+                ui.small("Saving application state. Please wait before confirming removal.");
+            }
             ui.horizontal(|ui| {
                 let button = ui.button("Cancel");
                 if self.focus_discard_cancel { button.request_focus(); self.focus_discard_cancel = false; }
                 cancel = button.clicked();
-                confirm = ui.button(if action == Action::Discard { "Discard result" } else { "Clean up retained copy" }).clicked();
+                confirm = ui.add_enabled(!saving, egui::Button::new(if action == Action::Discard { "Discard result" } else { "Clean up retained copy" })).clicked();
             });
         });
         if cancel || response.should_close() {

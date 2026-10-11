@@ -278,6 +278,45 @@ pub struct Job {
     pub queue_reason: Option<QueueReason>,
 }
 impl Job {
+    /// Copy saved metadata without duplicating session output or Git review caches.
+    fn persistence_snapshot(&self) -> Self {
+        Self {
+            repository: self.repository.clone(),
+            completion_changes: self.completion_changes,
+            validation: self.validation.as_ref().map(|v| crate::validation::Record {
+                command: v.command.clone(),
+                directory: v.directory.clone(),
+                status: v.status,
+                started_at: v.started_at,
+                finished_at: v.finished_at,
+                duration_ms: v.duration_ms,
+                exit_code: v.exit_code,
+                output: String::new(),
+                truncated: false,
+                detail: String::new(),
+            }),
+            execution_mode: self.execution_mode,
+            worktree: self.worktree.clone(),
+            worktree_result: self.worktree_result.clone(),
+            result_availability: self.result_availability,
+            // Needed for retention evaluation, though it remains session-only.
+            result_checked: self.result_checked,
+            resolution: self.resolution,
+            resolved_at: self.resolved_at,
+            status: self.status,
+            started_at: self.started_at,
+            finished_at: self.finished_at,
+            exit_code: self.exit_code,
+            before: self.before.clone(),
+            interrupted: self.interrupted,
+            review: None,
+            worktree_detail: String::new(),
+            detail: String::new(),
+            log: LogBuffer::default(),
+            raw_log: LogBuffer::default(),
+            queue_reason: None,
+        }
+    }
     pub fn unresolved_retained_result(&self) -> bool {
         self.worktree.is_some()
             && !matches!(
@@ -468,6 +507,38 @@ impl Default for AppState {
     }
 }
 impl AppState {
+    /// Exactly the serializable state, plus the in-session ownership check bit
+    /// used by retention. Explicit fields keep new metadata visible at review.
+    pub fn persistence_snapshot(&self) -> Self {
+        Self {
+            version: self.version,
+            next_run: self.next_run,
+            repositories: self.repositories.clone(),
+            repository_validation: self.repository_validation.clone(),
+            groups: self.groups.clone(),
+            templates: self.templates.clone(),
+            draft: self.draft.clone(),
+            draft_provenance: self.draft_provenance.clone(),
+            agent_options: self.agent_options.clone(),
+            runs: self
+                .runs
+                .iter()
+                .map(|r| Run {
+                    id: r.id,
+                    provenance: r.provenance.clone(),
+                    created_at: r.created_at,
+                    task: r.task.clone(),
+                    jobs: r.jobs.iter().map(Job::persistence_snapshot).collect(),
+                })
+                .collect(),
+            global_concurrency: self.global_concurrency,
+            appearance: self.appearance,
+            notifications: self.notifications.clone(),
+            desktop: self.desktop,
+            history_retention: self.history_retention.clone(),
+            worktree_base: self.worktree_base.clone(),
+        }
+    }
     pub fn save_validation(
         &mut self,
         path: PathBuf,

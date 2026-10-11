@@ -104,9 +104,12 @@ impl App {
                             });
                     });
                     ui.separator();
+                    if self.state_write.is_some() {
+                        ui.small("Saving application state. Please wait before choosing cleanup.");
+                    }
                     cleanup = worktree_management::rows(ui, &self.state, snapshot, &mut self.worktree_management,
                         self.storage.status != Status::Measuring && self.result_operation.is_none()
-                        && self.bulk_discard.is_none() && self.history_write.is_none());
+                        && self.bulk_discard.is_none() && self.history_write.is_none() && self.state_write.is_none());
                     ui.separator();
                     ui.strong(format!("{}: {}", if snapshot.total.status == Status::Complete { "Total measured storage" } else { "Partial measured total" }, snapshot.total.label()));
                     ui.small(format!("Last refreshed: {}", super::format::timestamp(snapshot.finished_at)));

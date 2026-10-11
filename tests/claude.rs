@@ -423,7 +423,8 @@ fn version_one_state_preserves_old_backends_and_claude_draft_history_and_restart
         }
         restored.reuse_task(restored.runs[0].task.clone());
         assert_eq!(restored.draft.options, original.options);
-        assert_eq!(restored.next_run, 1);
+        // A lagging legacy counter must not reuse the retained convoy's ID.
+        assert_eq!(restored.next_run, 2);
         assert_eq!(serde_json::to_value(AgentId::Claude).unwrap(), "claude");
     }
 }

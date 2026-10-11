@@ -152,6 +152,7 @@ impl App {
             || self.history_dialog.is_some()
             || self.history_settings.is_some()
             || self.history_write.is_some()
+            || self.state_write.is_some()
             || self.prepared.is_some()
             || self.about_open
             || self.shortcuts_open

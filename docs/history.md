@@ -4,6 +4,11 @@ History is unlimited by default. Automatic retention is disabled, including when
 loading existing 0.8.0 settings. The previous implicit 30-entry cap is removed;
 entries already removed by older versions cannot be restored by this change.
 
+Large histories use visible-row rendering in the convoy selector. Arrow keys and
+Home/End reach off-screen convoys; search never changes the selected convoy merely
+because it is filtered out. Ordering, completion observations and validation records
+still come from retained history. See the [repeatable measurements](history-reliability-validation.md).
+
 ## Settings
 
 Open **Settings → History Retention…**:
@@ -98,3 +103,40 @@ is manual; cleanup never exports automatically. Markdown reuses Copy Summary, an
 JSON uses explicit schema version 1. These are concise reports, not restorable
 backups. Review bounded task/name/validation metadata before sharing. See
 [formats, scopes, privacy and file handling](history-export.md).
+
+## Persistence and recovery
+
+The existing version-1 shared state file remains the storage format. Writes use an
+owner-only temporary file in the same directory, buffered JSON, explicit flush,
+file sync and atomic replacement. Unix also syncs the containing directory.
+Periodic and recovery saves perform disk work on a worker. Their snapshots omit
+only session-only output/diagnostics, not persisted content. A single writer stays
+reserved through acknowledgement, so older saves cannot overwrite a cleanup or
+newer durable intent. New edits stay dirty until their own save. Closing waits for
+an outstanding writer; failed writes remain visible and do not claim success.
+
+Explicit launch, validation/configuration and result intent/outcome transactions
+still wait for their buffered durable save before proceeding. They do not queue
+behind a periodic writer on the UI thread; conflicting actions wait or report busy.
+Those explicit saves and the final exit save can still pause on slow storage.
+
+A missing state file starts an empty application. An empty file, invalid UTF-8,
+truncated JSON, missing core `version`/`next_run`/`runs` fields, invalid records,
+duplicate convoy IDs or unsupported future version is an error. Startup stops;
+the original file is left unchanged and that Store refuses further writes,
+including retention. Back up the file and use a compatible version or restore a
+known-good backup before restarting. Move the preserved file aside only if you
+intend to start fresh. Exports are reports, not backups or import files.
+
+Legacy optional fields still default normally. A lagging run counter advances past
+the highest retained ID; a missing counter is not guessed. Store loading never writes
+automatically, resumes an agent, invents completion times or deletes a worktree.
+The UI subsequently saves explicit recovery observations through its usual worker.
+No partial-entry salvage or automatic destructive migration is attempted.
+
+Write/create/flush/sync/replacement errors preserve the prior destination before
+publication. An error syncing the directory *after* replacement is explicitly an
+uncertain durability result; the previous disk contents cannot be promised then.
+Windows uses the existing tempfile platform replacement, not delete-then-rename;
+sharing violations can fail safely. Native Windows/macOS and power-loss testing
+remain release-candidate checks, not inferred from Linux tests.

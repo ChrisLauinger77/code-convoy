@@ -116,3 +116,14 @@ provide equivalent stable filesystem identity checks there. Windows inspection
 and measurement remain available, and reparse points are rejected. Linux automated
 validation does not imply native macOS or Windows validation. See the
 [validation record](worktree-cleanup-validation.md) for performed checks.
+
+## History stabilization
+
+PR 5 preserves the existing cleanup proof, exclusive lifecycle lease, non-force
+removal and intent/outcome journal paths. Periodic history saves share the Store
+writer reservation and pause admission of a new cleanup transaction while saving;
+an active cleanup prevents a periodic snapshot from overtaking its outcome.
+History pruning still retains physical ownership evidence, including Applied
+copies until verified cleanup. Scan bytes and saved observations never grant
+removal permission. See the [regression audit](history-reliability-validation.md)
+for failure-injection coverage and remaining native platform checks.
