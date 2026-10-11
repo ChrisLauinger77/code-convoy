@@ -480,6 +480,174 @@ fn virtual_history_rows_stay_bounded_and_keyboard_reaches_both_ends() {
     assert_eq!(app.selected_run, Some(4999));
 }
 
+fn reviewed_result(action: crate::persistence::results::Action) -> (tempfile::TempDir, App) {
+    let (temp, mut app) = app();
+    app.state.next_run = 2;
+    app.state.runs = vec![isolated_history(1, JobStatus::Succeeded, Some(true))];
+    let job = &mut app.state.runs[0].jobs[0];
+    job.result_checked = true;
+    job.result_availability = domain::ResultAvailability::Available;
+    job.review = Some(Ok(crate::review::Statistics {
+        files: 1,
+        ..Default::default()
+    }));
+    if action == crate::persistence::results::Action::CleanupApplied {
+        job.resolution = domain::ResultResolution::Applied;
+    }
+    app.state.repositories = vec![job.repository.clone()];
+    app.select_run(Some(1));
+    (temp, app)
+}
+
+#[track_caller]
+fn assert_button_enabled(keys: &Keyboard, label: &str, enabled: bool) {
+    let button = keys
+        .nodes
+        .values()
+        .find(|node| node.label() == Some(label))
+        .unwrap();
+    assert_eq!(!button.is_disabled(), enabled, "{label}");
+}
+
+#[test]
+fn result_controls_wait_for_state_save_without_changing_results() {
+    use crate::persistence::results::Action;
+    for (action, label) in [
+        (Action::Apply, "Apply result"),
+        (Action::Discard, "Discard result"),
+        (Action::CleanupApplied, "Clean up retained copy"),
+    ] {
+        let (_temp, mut app) = reviewed_result(action);
+        let before = serde_json::to_value(&app.state.runs).unwrap();
+        let mut keys = Keyboard::new(|app, ui, ctx| app.review_view(ui, ctx, 1500.0));
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, true);
+        keys.focus(&mut app, label);
+        app.dirty = true;
+        app.save_background();
+        assert!(app.state_write.is_some());
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, false);
+        assert!(keys.nodes.values().any(|node| {
+            keys.label(node) == "Saving application state. Please wait before changing results."
+        }));
+        keys.key(&mut app, egui::Key::Enter);
+        assert!(app.result_operation.is_none() && app.discard_confirmation.is_none());
+        assert_eq!(serde_json::to_value(&app.state.runs).unwrap(), before);
+        finish_state_write(&mut app);
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, true);
+        assert!(app.result_operation.is_none() && app.discard_confirmation.is_none());
+    }
+}
+
+#[test]
+fn result_confirmation_survives_state_save_and_cancel_remains_available() {
+    use crate::persistence::results::Action;
+    for (action, label) in [
+        (Action::Discard, "Discard result"),
+        (Action::CleanupApplied, "Clean up retained copy"),
+    ] {
+        let (_temp, mut app) = reviewed_result(action);
+        let before = serde_json::to_value(&app.state.runs).unwrap();
+        app.discard_confirmation = Some((1, 0, action));
+        app.focus_discard_cancel = true;
+        let mut keys = Keyboard::new(|app, _, ctx| app.discard_window(ctx));
+        keys.focus(&mut app, label);
+        app.dirty = true;
+        app.save_background();
+        assert!(app.state_write.is_some());
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, false);
+        assert_button_enabled(&keys, "Cancel", true);
+        assert!(keys.nodes.values().any(|node| {
+            keys.label(node) == "Saving application state. Please wait before confirming removal."
+        }));
+        keys.key(&mut app, egui::Key::Enter);
+        assert_eq!(app.discard_confirmation, Some((1, 0, action)));
+        assert!(app.result_operation.is_none());
+        finish_state_write(&mut app);
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, label, true);
+        assert_eq!(app.discard_confirmation, Some((1, 0, action)));
+        assert!(app.result_operation.is_none());
+        keys.key(&mut app, egui::Key::Escape);
+        assert!(app.discard_confirmation.is_none());
+        assert_eq!(serde_json::to_value(&app.state.runs).unwrap(), before);
+    }
+}
+
+#[test]
+fn validation_controls_wait_for_state_save_in_review_and_validation_views() {
+    for tab in [Tab::Review, Tab::Validation] {
+        let (_temp, mut app) = reviewed_result(crate::persistence::results::Action::Apply);
+        app.state
+            .save_validation(
+                app.state.repositories[0].path.clone(),
+                Some(crate::validation::Command {
+                    executable: "never-executed".into(),
+                    arguments: vec![],
+                }),
+            )
+            .unwrap();
+        app.tab = tab;
+        let mut keys = Keyboard::new(|app, ui, ctx| match app.tab {
+            Tab::Review => app.review_view(ui, ctx, 1500.0),
+            _ => app.validation_view(ui, ctx, 1500.0),
+        });
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, "Run Validation", true);
+        keys.focus(&mut app, "Run Validation");
+        app.dirty = true;
+        app.save_background();
+        assert!(app.state_write.is_some());
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, "Run Validation", false);
+        assert!(keys.nodes.values().any(|node| {
+            keys.label(node) == "Saving application state. Please wait before starting validation."
+        }));
+        keys.key(&mut app, egui::Key::Enter);
+        assert!(app.validations.is_idle());
+        assert!(app.state.runs[0].jobs[0].validation.is_none());
+        finish_state_write(&mut app);
+        keys.nodes.clear();
+        keys.frame(&mut app, vec![]);
+        assert_button_enabled(&keys, "Run Validation", true);
+        assert!(app.validations.is_idle());
+        assert!(app.state.runs[0].jobs[0].validation.is_none());
+    }
+}
+
+#[test]
+fn history_confirmation_waits_for_state_save_without_losing_the_preview() {
+    let (_temp, mut app) = fixture();
+    app.offer_history_cleanup(CLOCK);
+    let preview = app.history_dialog.as_ref().unwrap().preview.clone();
+    let mut keys = keyboard();
+    keys.focus(&mut app, "Clean Up History");
+    app.dirty = true;
+    app.save_background();
+    assert!(app.state_write.is_some());
+    keys.nodes.clear();
+    keys.frame(&mut app, vec![]);
+    assert_button_enabled(&keys, "Clean Up History", false);
+    keys.key(&mut app, egui::Key::Enter);
+    assert!(app.history_write.is_none());
+    assert_eq!(app.history_dialog.as_ref().unwrap().preview, preview);
+    finish_state_write(&mut app);
+    keys.nodes.clear();
+    keys.frame(&mut app, vec![]);
+    assert_button_enabled(&keys, "Clean Up History", true);
+    assert_eq!(app.history_dialog.as_ref().unwrap().preview, preview);
+    keys.key(&mut app, egui::Key::Escape);
+    assert_eq!(ids(&app), [4, 3, 2, 1]);
+}
+
 #[test]
 fn exhausted_run_counter_cannot_reuse_a_stable_id() {
     let (_temp, mut app) = fixture();

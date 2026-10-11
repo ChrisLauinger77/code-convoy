@@ -218,11 +218,14 @@ impl App {
             }
             ui.small("History removal is permanent and may not be recoverable. Retained worktree ownership stays protected.");
             if dialog.refreshed { ui.colored_label(theme::Palette::of(ui).warning, "History changed. Review this updated preview and confirm again."); }
+            if self.state_write.is_some() {
+                ui.small("Saving application state. Please wait before cleaning history.");
+            }
             ui.horizontal(|ui| {
                 let button = ui.button("Cancel");
                 if dialog.focus_cancel { button.request_focus(); dialog.focus_cancel = false; }
                 cancel = button.clicked();
-                confirm = ui.add_enabled(!p.remove.is_empty(), egui::Button::new("Clean Up History")).clicked();
+                confirm = ui.add_enabled(!p.remove.is_empty() && self.state_write.is_none(), egui::Button::new("Clean Up History")).clicked();
             });
         });
         if cancel || response.should_close() {

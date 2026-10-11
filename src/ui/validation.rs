@@ -182,6 +182,7 @@ impl App {
         };
         let key = (run.id, self.selected_job);
         let command = self.state.repository_validation.get(&job.repository.path);
+        let saving = self.history_write.is_some() || self.state_write.is_some();
         let eligibility = crate::validation::ensure_eligible(job);
         let running = job
             .validation
@@ -202,6 +203,7 @@ impl App {
                 start = ui
                     .add_enabled(
                         eligibility.is_ok()
+                            && !saving
                             && !self.closing
                             && !self.quit_requested
                             && self.review_pending.is_none()
@@ -214,6 +216,9 @@ impl App {
                     .clicked();
             }
         });
+        if saving && command.is_some() && !running {
+            ui.small("Saving application state. Please wait before starting validation.");
+        }
         if let Err(error) = &eligibility {
             ui.small(error.to_string());
         }

@@ -115,6 +115,12 @@ relying on startup recovery to repair a stale snapshot.
 The preflight dialog also disables Start with a visible saving explanation while
 a state writer is pending. Keyboard coverage verifies that review acknowledgement
 survives the save and launch still requires explicit activation after it finishes.
+Result actions, validation launch, history cleanup and managed-worktree cleanup
+also disable conflicting controls with visible saving status. Keyboard regressions
+cover both Review and Validation views, retained-copy removal, and confirmations
+opened before a save begins. Confirmation state survives completion, Cancel stays
+available, and no result operation or validation starts automatically. The existing
+disposable-worktree cleanup test also exercises these controls around a real save.
 
 Key implementation files: `src/persistence.rs`, `src/persistence/history.rs`,
 `src/domain.rs`, `src/ui/persistence.rs`, `src/ui/results.rs`, `src/ui/quit.rs`,
@@ -172,7 +178,7 @@ Final validation on Linux:
 
 - `cargo fmt --check`: passed.
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed.
-- `cargo test --all-features`: 532 passed, zero failed, six intentionally ignored.
+- `cargo test --all-features`: 536 passed, zero failed, six intentionally ignored.
   This includes two manual performance checks and four installed-backend checks.
   Both performance checks were run separately and passed. Counts exclude filtered
   child-process re-executions used by environment-isolation tests.

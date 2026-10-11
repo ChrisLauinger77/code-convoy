@@ -200,6 +200,25 @@ fn managed_cleanup_confirmation_defaults_to_cancel_and_success_refreshes_sizes()
     app.worktree_management
         .selected
         .insert(crate::persistence::worktree_cleanup::identity(&metadata));
+    app.dirty = true;
+    app.save_background();
+    let mut storage_keys = Keyboard::new(|app, _, ctx| app.storage_window(ctx));
+    storage_keys.frame(&mut app, vec![]);
+    assert!(
+        storage_keys
+            .nodes
+            .values()
+            .any(|node| { node.label() == Some("Clean Up Selected…") && node.is_disabled() })
+    );
+    finish_state_write(&mut app);
+    storage_keys.nodes.clear();
+    storage_keys.frame(&mut app, vec![]);
+    assert!(
+        storage_keys
+            .nodes
+            .values()
+            .any(|node| { node.label() == Some("Clean Up Selected…") && !node.is_disabled() })
+    );
     app.offer_worktree_cleanup();
     assert_eq!(
         app.worktree_management
@@ -232,6 +251,30 @@ fn managed_cleanup_confirmation_defaults_to_cancel_and_success_refreshes_sizes()
     assert!(app.worktree_management.confirmation.is_none());
     app.offer_worktree_cleanup();
     keys.frame(&mut app, vec![]);
+    keys.focus(&mut app, "Clean Up 1 Worktrees");
+    app.dirty = true;
+    app.save_background();
+    keys.nodes.clear();
+    keys.frame(&mut app, vec![]);
+    assert!(
+        keys.nodes
+            .values()
+            .any(|node| { node.label() == Some("Clean Up 1 Worktrees") && node.is_disabled() })
+    );
+    keys.key(&mut app, egui::Key::Enter);
+    assert!(app.worktree_management.confirmation.is_some());
+    assert!(app.worktree_management.batch.is_none());
+    assert!(metadata.path.exists());
+    finish_state_write(&mut app);
+    keys.nodes.clear();
+    keys.frame(&mut app, vec![]);
+    assert!(
+        keys.nodes
+            .values()
+            .any(|node| { node.label() == Some("Clean Up 1 Worktrees") && !node.is_disabled() })
+    );
+    assert!(app.worktree_management.confirmation.is_some());
+    assert!(app.worktree_management.batch.is_none());
     keys.activate(&mut app, "Clean Up 1 Worktrees");
     assert!(app.worktree_management.batch.is_some());
     // Starting a second operation while the batch is active is blocked.
