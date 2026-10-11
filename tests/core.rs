@@ -37,8 +37,11 @@ fn git_cmd(path: &Path, args: &[&str]) {
 #[tokio::test]
 async fn direct_diff_observation_covers_clean_unborn_staged_and_untracked_files() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path();
-    repo(path);
+    repo(temp.path());
+    // Inspection takes registered canonical paths, including Windows extended
+    // paths and macOS temporary directories reached through symlink aliases.
+    let registered = git::register(temp.path()).await.unwrap();
+    let path = registered.path.as_path();
     let empty = git::inspect_diff(path).await.unwrap();
     assert_eq!(empty.changed, Some(false));
     assert!(empty.text.contains("--- STAGED CHANGES ---"));

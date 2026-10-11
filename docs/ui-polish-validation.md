@@ -52,6 +52,13 @@ index preservation, unsupported snapshots, rendered empty-versus-unknown diff
 states, and output hints across availability/resolution states. Existing cache,
 navigation, cleanup and applied-result tests use the structured observation.
 
+The initial macOS and Windows CI runs caught a fixture error in the new Direct
+diff regression: it passed the temporary-directory path directly to inspection,
+which requires a registered canonical repository path. The test now registers
+the repository first, matching application behavior. A Linux run with `TMPDIR`
+pointing through a symlink reproduced the same failure before the fix and passed
+afterward. The production path-identity safety check is unchanged.
+
 ## Automated verification
 
 All required checks passed:
