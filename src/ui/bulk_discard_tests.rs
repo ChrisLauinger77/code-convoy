@@ -226,6 +226,7 @@ fn bulk_discard_ui_pump_merges_real_cleanup_and_enables_history_removal() {
             .all(|r| r.jobs[0].resolution == domain::ResultResolution::Discarded)
     );
     app.remove_history(None);
+    finish_history_write(&mut app);
     assert!(app.state.runs.is_empty());
     assert_eq!(app.state.next_run, 3);
     assert!(app.store.load().unwrap().runs.is_empty());

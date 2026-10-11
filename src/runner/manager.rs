@@ -58,6 +58,7 @@ pub struct RunManager {
     controls: BTreeMap<u64, Control>,
     pub join: JoinHandle<()>,
     closing: bool,
+    history_pins: Arc<std::sync::Mutex<BTreeMap<u64, usize>>>,
     stopping: Arc<AtomicBool>,
 }
 impl RunManager {
@@ -92,12 +93,14 @@ impl RunManager {
         });
         let (commands, rx) = mpsc::unbounded_channel();
         let stopping = Arc::new(AtomicBool::new(false));
+        let history_pins = Arc::new(std::sync::Mutex::new(BTreeMap::new()));
         let join = tokio::spawn(manage(
             rx,
             events,
             global_limit.clamp(1, MAX_CONCURRENCY),
             stopping.clone(),
             storage,
+            history_pins.clone(),
         ));
         Self {
             worktree_base: None,
@@ -105,6 +108,7 @@ impl RunManager {
             controls: BTreeMap::new(),
             join,
             closing: false,
+            history_pins,
             stopping,
         }
     }
@@ -199,6 +203,14 @@ impl RunManager {
             .get(&run)
             .is_some_and(|r| !r.done.load(Ordering::Acquire))
     }
+    /// Includes lifecycle leases and unconfirmed process cleanup after terminal status.
+    pub fn history_protected(&self, run: u64) -> bool {
+        self.is_active(run)
+            || self
+                .history_pins
+                .lock()
+                .map_or(true, |pins| pins.contains_key(&run))
+    }
     pub fn active_count(&self) -> usize {
         self.controls
             .values()
@@ -232,7 +244,8 @@ impl Drop for RunManager {
 #[derive(Default)]
 struct Operations {
     next: u64,
-    active: BTreeMap<u64, Cancellation>,
+    active: BTreeMap<u64, (u64, Cancellation)>,
+    history_pins: Arc<std::sync::Mutex<BTreeMap<u64, usize>>>,
     administration: HashMap<std::path::PathBuf, Arc<Administration>>,
     storage: Option<std::path::PathBuf>,
 }
@@ -274,7 +287,10 @@ fn command(
                     "Repository is in use by preparation, execution or another result operation. Wait for it to finish; result was preserved."
                 );
                 let cancellation = cancellation.unwrap_or_default();
-                operations.active.insert(id, cancellation.clone());
+                operations.active.insert(id, (key.0, cancellation.clone()));
+                if let Ok(mut pins) = operations.history_pins.lock() {
+                    *pins.entry(key.0).or_default() += 1;
+                }
                 let admin = operations
                     .administration
                     .entry(common_dir)
@@ -293,7 +309,16 @@ fn command(
             let _ = reply.send(result);
         }
         Command::Release(id, safe) => {
-            operations.active.remove(&id);
+            if let Some((run, _)) = operations.active.remove(&id)
+                && safe
+                && let Ok(mut pins) = operations.history_pins.lock()
+                && let Some(count) = pins.get_mut(&run)
+            {
+                *count -= 1;
+                if *count == 0 {
+                    pins.remove(&run);
+                }
+            }
             schedule.end_maintenance(id, safe);
         }
         Command::Start(id, convoy) => {
@@ -315,7 +340,7 @@ fn command(
         Command::Wake => {}
         Command::Shutdown => {
             *closing = true;
-            for token in operations.active.values() {
+            for (_, token) in operations.active.values() {
                 token.cancel();
             }
             for convoy in runs.values() {
@@ -356,6 +381,7 @@ async fn manage(
     limit: usize,
     stopping: Arc<AtomicBool>,
     storage: Option<std::path::PathBuf>,
+    history_pins: Arc<std::sync::Mutex<BTreeMap<u64, usize>>>,
 ) {
     let mut schedule = Schedule::new(limit);
     let mut runs: BTreeMap<u64, Convoy> = BTreeMap::new();
@@ -363,6 +389,7 @@ async fn manage(
     let mut keys: HashMap<Id, (Key, Arc<AtomicBool>)> = HashMap::new();
     let mut reasons = HashMap::new();
     let mut operations = Operations {
+        history_pins,
         storage: storage.clone(),
         ..Operations::default()
     };
@@ -493,6 +520,9 @@ async fn manage(
                     let repository_safe = safe.load(Ordering::Acquire);
                     let mut outcome = result.unwrap_or_else(|e| (JobStatus::Failed, None, format!("{e:#}")));
                     if !repository_safe {
+                        if let Ok(mut pins) = operations.history_pins.lock() {
+                            *pins.entry(key.0).or_default() += 1;
+                        }
                         outcome.2.push_str(" Repository access and job capacity remain reserved because process cleanup could not be confirmed; inspect remaining processes before restarting CodeConvoy.");
                     }
                     // Notify completion before allowing a replacement start, so
@@ -502,5 +532,66 @@ async fn manage(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod history_tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+    #[tokio::test]
+    async fn history_protection_tracks_lifecycle_release_and_unconfirmed_cleanup() {
+        let temp = tempfile::tempdir().unwrap();
+        let (tx, _) = mpsc::channel(8);
+        let mut manager = RunManager::with_worktree_directory(1, tx, temp.path().join("worktrees"));
+        for safe in [true, false] {
+            let (reply, response) = tokio::sync::oneshot::channel();
+            manager
+                .commands
+                .send(Command::Acquire {
+                    key: (9, 0),
+                    lease: Lease {
+                        path: temp.path().join("repo"),
+                        worktree: None,
+                        common_dir: None,
+                        mode: crate::domain::ExecutionMode::Direct,
+                    },
+                    cleanup: false,
+                    cancellation: None,
+                    reply,
+                    commands: manager.commands.clone(),
+                })
+                .unwrap();
+            let permit = response.await.unwrap().unwrap();
+            assert!(manager.is_idle());
+            assert!(manager.history_protected(9));
+            assert!(!manager.history_protected(10));
+            permit.safe.store(safe, Ordering::Release);
+            drop(permit);
+            // A barrier command confirms Release was processed without polling.
+            let (reply, response) = tokio::sync::oneshot::channel();
+            manager
+                .commands
+                .send(Command::Acquire {
+                    key: (10, 0),
+                    lease: Lease {
+                        path: temp.path().join("other"),
+                        worktree: None,
+                        common_dir: None,
+                        mode: crate::domain::ExecutionMode::Direct,
+                    },
+                    cleanup: false,
+                    cancellation: None,
+                    reply,
+                    commands: manager.commands.clone(),
+                })
+                .unwrap();
+            drop(response.await.unwrap().unwrap());
+            manager.reap();
+            assert_eq!(manager.history_protected(9), !safe);
+        }
+        manager.shutdown();
+        (&mut manager.join).await.unwrap();
+        assert!(manager.history_protected(9));
     }
 }

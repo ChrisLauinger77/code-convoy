@@ -114,3 +114,7 @@ required-features = ["test-support"]
 [[example]]
 name = "v08_validation_presets"
 required-features = ["test-support"]
+
+[[example]]
+name = "v09_history_validation"
+required-features = ["test-support"]

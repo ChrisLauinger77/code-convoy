@@ -12,6 +12,12 @@ impl App {
 
     /// Returns true only when the close request may proceed without a dialog.
     pub(super) fn request_quit(&mut self) -> bool {
+        if self.history_write.is_some() {
+            self.explicit_quit = true;
+            self.notice =
+                "History cleanup is being saved. Quit will continue when it finishes.".into();
+            return false;
+        }
         if self.exit_ready {
             return true;
         }
@@ -79,6 +85,7 @@ impl App {
             && self.validations.finished()
             && self.result_operation.is_none()
             && self.bulk_discard.is_none()
+            && self.history_write.is_none()
         {
             // poll() is bounded. Drain the last lifecycle events before saving,
             // even when the manager finished between frames or its worker failed.

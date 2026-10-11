@@ -5,7 +5,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub const MAX_HISTORY: usize = 30;
 pub const DEFAULT_GLOBAL_CONCURRENCY: usize = 4;
 pub const MAX_CONCURRENCY: usize = 16;
 pub const MAX_REPOSITORIES: usize = 128;
@@ -437,6 +436,12 @@ pub struct AppState {
     pub appearance: Appearance,
     pub notifications: crate::notifications::Preferences,
     pub desktop: crate::desktop::Preferences,
+    #[serde(
+        default,
+        deserialize_with = "crate::history::deserialize_policy",
+        skip_serializing_if = "crate::history::RetentionPolicy::is_default"
+    )]
+    pub history_retention: crate::history::RetentionPolicy,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worktree_base: Option<PathBuf>,
 }
@@ -457,6 +462,7 @@ impl Default for AppState {
             appearance: Appearance::default(),
             notifications: crate::notifications::Preferences::default(),
             desktop: crate::desktop::Preferences::default(),
+            history_retention: crate::history::RetentionPolicy::default(),
             worktree_base: None,
         }
     }
@@ -553,27 +559,11 @@ impl AppState {
     }
     /// History cleanup only touches local run metadata, never execution or Git.
     pub fn remove_from_history(&mut self, id: u64) -> bool {
-        let before = self.runs.len();
-        self.runs
-            .retain(|run| run.id != id || run.history_protected());
-        self.runs.len() != before
+        crate::history::remove(&mut self.runs, &[id].into(), &Default::default()) > 0
     }
     pub fn clear_history(&mut self) -> usize {
-        let before = self.runs.len();
-        self.runs.retain(Run::history_protected);
-        before - self.runs.len()
-    }
-    /// Never evict active convoys or unresolved isolated ownership records.
-    pub fn trim_history(&mut self) {
-        let mut completed = 0;
-        self.runs.retain(|run| {
-            if run.history_protected() {
-                true
-            } else {
-                completed += 1;
-                completed <= MAX_HISTORY
-            }
-        });
+        let ids = self.runs.iter().map(|r| r.id).collect();
+        crate::history::remove(&mut self.runs, &ids, &Default::default())
     }
     pub fn trim_logs(&mut self) {
         let mut total: usize = self
@@ -610,6 +600,8 @@ impl AppState {
                         .into(),
                 );
                 job.interrupted = true;
+                // Restart is not an observed process completion time.
+                job.finished_at = None;
             }
         }
     }

@@ -11,6 +11,7 @@ mod desktop;
 mod diagnostics;
 mod editor;
 mod format;
+mod history;
 mod library;
 mod notifications;
 mod quit;
@@ -79,6 +80,7 @@ enum Message {
         crate::persistence::results::Completion,
     ),
     Orphans(Result<Vec<PathBuf>, String>),
+    HistorySaved(Result<(), String>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
@@ -91,7 +93,7 @@ enum Tab {
 }
 
 pub struct App {
-    store: Store,
+    store: std::sync::Arc<Store>,
     state: AppState,
     // Taken only by Drop, which shuts down without waiting for filesystem workers.
     runtime: Option<Runtime>,
@@ -152,6 +154,10 @@ pub struct App {
     dirty_ack: bool,
     selected_run: Option<u64>,
     history_search: crate::visibility::HistorySearch,
+    history_dialog: Option<history::Dialog>,
+    history_settings: Option<history::Settings>,
+    history_write: Option<std::sync::Arc<crate::persistence::history::HistoryWrite>>,
+    automatic_retention_pending: bool,
     comparison_filter: crate::visibility::RepositoryFilter,
     selected_job: usize,
     tab: Tab,
@@ -238,7 +244,7 @@ impl App {
         };
         let mut app = Self {
             worktree_location,
-            store,
+            store: std::sync::Arc::new(store),
             state,
             runtime: Some(runtime),
             selected: HashSet::new(),
@@ -299,6 +305,10 @@ impl App {
             dirty_ack: false,
             selected_run,
             history_search: crate::visibility::HistorySearch::default(),
+            history_dialog: None,
+            history_settings: None,
+            history_write: None,
+            automatic_retention_pending: true,
             comparison_filter: crate::visibility::RepositoryFilter::default(),
             selected_job: 0,
             tab: Tab::Review,
@@ -414,6 +424,11 @@ impl App {
                                     self.state.appearance = theme::appearance(preference);
                                     self.dirty = true;
                                 }
+                            }
+                            ui.separator();
+                            if ui.button("History Retention…").clicked() {
+                                self.history_settings = Some(history::Settings::new(&self.state.history_retention));
+                                ui.close();
                             }
                             ui.separator();
                             self.notification_settings(ui);
@@ -628,7 +643,7 @@ impl App {
         });
     }
     fn start(&mut self) {
-        if self.closing || self.quit_requested {
+        if self.history_write.is_some() || self.closing || self.quit_requested {
             return;
         }
         let Some(prepared) = self.prepared.take() else {
@@ -695,7 +710,6 @@ impl App {
         }
         self.session_runs.insert(id);
         self.notification_tracker.launched(id);
-        self.state.trim_history();
         self.dirty = true;
         self.select_run(Some(id));
         self.tab = Tab::Activity;
@@ -712,6 +726,7 @@ impl App {
         let mut recovered = false;
         while let Ok(message) = self.rx.try_recv() {
             match message {
+                Message::HistorySaved(result) => self.history_saved(result),
                 Message::Desktop(generation, event) => {
                     if let Some(action) = self.desktop.event(generation, event) {
                         self.desktop_action(action);
@@ -882,10 +897,10 @@ impl App {
         self.state.trim_logs();
         self.manager.reap();
         self.pump_notifications();
-        self.state.trim_history();
         self.session_runs
             .retain(|id| self.state.runs.iter().any(|run| run.id == *id));
         self.reconcile_run_selection();
+        self.apply_startup_retention(domain::now());
     }
     fn apply_resolved_executable(&mut self, resolved: agents::availability::ResolvedExecutable) {
         let options = if resolved.agent == self.state.draft.agent {
@@ -937,28 +952,6 @@ impl App {
                 .or_else(|| self.state.runs.first())
                 .map(|r| r.id);
             self.select_run(next);
-        }
-    }
-    fn remove_history(&mut self, id: Option<u64>) {
-        if self.bulk_discard.is_some() {
-            return;
-        }
-        if self
-            .state
-            .runs
-            .iter()
-            .any(|r| id.is_none_or(|id| r.id == id) && r.unresolved_results())
-        {
-            self.notice = "Convoys with unresolved isolated results stay in history. Use Discard convoy… to resolve them. Applied retained copies need explicit Clean up retained copy before history removal.".into();
-        }
-        let changed = match id {
-            Some(id) => self.state.remove_from_history(id),
-            None => self.state.clear_history() > 0,
-        };
-        if changed {
-            self.reconcile_run_selection();
-            self.dirty = true;
-            self.save();
         }
     }
     fn reuse_convoy(&mut self, id: u64) {
@@ -1087,6 +1080,9 @@ impl App {
         }
     }
     fn save(&mut self) {
+        if self.history_write.is_some() {
+            return;
+        }
         match self.store.save(&self.state) {
             Ok(()) => self.dirty = false,
             Err(error) => self.notice = format!("Could not save state: {error:#}"),
@@ -1119,10 +1115,12 @@ impl App {
             self.validation_settings_window(ctx);
             self.validation_assignment_window(ctx);
             self.shortcuts_window(ctx);
+            self.history_settings_window(ctx);
         }
         self.quit_window(ctx);
         self.discard_window(ctx);
         self.bulk_discard_window(ctx);
+        self.history_window(ctx);
     }
 }
 
@@ -1140,7 +1138,8 @@ impl eframe::App for App {
             self.save();
         }
         ctx.request_repaint_after(Duration::from_millis(
-            if !self.manager.is_idle()
+            if self.history_write.is_some()
+                || !self.manager.is_idle()
                 || !self.validations.is_idle()
                 || self.closing
                 || self.state.runs.iter().any(Run::active)
@@ -1191,7 +1190,9 @@ impl eframe::App for App {
         }
         self.poll_validations();
         self.state.recover_interrupted();
-        self.save();
+        if self.history_write.is_none() {
+            self.save();
+        }
     }
 }
 

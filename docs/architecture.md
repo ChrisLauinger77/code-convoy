@@ -71,7 +71,7 @@ command and holds expiring feedback in egui's temporary widget data. Copy never
 consults live Git caches, current validation configuration or process environments,
 and adds no persisted fields or execution operations.
 
-The compact run selector groups active and terminal runs in a height-bounded scrolling popup. Active means any queued/preparing/running job, including a partially failed convoy that still has work. History cleanup methods in `AppState` guard against removing active runs; the UI offers individual removal only for terminal runs and bulk removal through History cleanup. Removal immediately saves metadata and reconciles selection (prefer an active convoy, then the newest history, then empty), clearing stale job/diff/output views. It never calls Git, the scheduler, cancellation, or agent configuration APIs.
+The compact run selector groups active and terminal runs in a height-bounded scrolling popup. Active means any queued/preparing/running job, including a partially failed convoy that still has work. History deletion shares a protected metadata-only primitive, with additional live worker/lease checks in the UI. A Store transaction stages removal and persists it atomically on a worker before changing visible history. It reconciles selection (prefer an active convoy, then the first remaining history, then empty), clearing stale job/diff/output views only when selection is removed. Deletion never calls Git, changes scheduling, cancels processes or modifies agent configuration.
 
 Reuse copies a run's task/options and selects its still-registered canonical repository paths. It reports skipped registrations, leaves the global limit alone, and requires the normal preflight for any subsequent launch. Reuse is unavailable during preflight/review/shutdown. No historical configuration is mutated or automatically executed.
 
@@ -455,7 +455,7 @@ All changed, unchanged, failed, cancelled and interrupted results are retained.
 No age-based, startup or automatic unchanged-result deletion occurs. Any unresolved
 metadata (including missing/invalid/failed cleanup) pins its whole convoy outside
 the ordinary 30-run cap, Remove and Clear history. A saved Cleaned result is also
-protected until revalidated in this session. Direct history retains its old policy.
+protected until revalidated in this session. Direct history uses the configured retention policy.
 Reuse copies only task/settings/context/repository selection, never resources,
 base commits, observations or process state.
 
@@ -600,7 +600,7 @@ cleanup remains DiscardPending/CleanupFailed and can be retried. Completed clean
 plus saved Discard intent recovers as Discarded after a crash. An ApplyPending
 record after a crash remains uncertain (even if the transfer actually finished);
 it never replays the patch or claims success from a later read. Retained metadata
-cannot vanish through the history cap, Remove or Clear while cleanup is pending.
+cannot vanish through retention, Remove or Clear while cleanup is pending.
 After verified cleanup, history removal again only removes application metadata.
 
 Lifecycle Activity uses `[CodeConvoy]` prefixes; Raw remains unchanged. Native
@@ -700,7 +700,7 @@ contracts and Git/result safety mechanisms do not change.
 
 A saved launch attempt registers its stable run ID with the tracker. After event
 application makes all jobs terminal, the UI consumes that ID before filtering or
-transport work. It takes a minimal result snapshot before history trimming;
+transport work. It takes a minimal result snapshot before history removal;
 prompts, attachments, logs and ownership records are excluded. Failure and
 cancellation classify immediately. Successful isolated results use the runner's
 fixed-base observation, and Direct results use Review statistics if already
@@ -920,3 +920,35 @@ map after success. Target registration and reviewed overwrite values are recheck
 Save failure produces per-target diagnostics and does not leak staged changes into
 later background saves. No new schema, scheduler, lifecycle lease or execution path
 is introduced. See [preset validation](validation-presets-validation.md).
+
+
+## v0.9 history retention
+
+`history` evaluates a pure `RetentionPolicy` into a `CleanupPreview` of stable IDs,
+counts and the reviewed policy. It excludes model protections, runtime-protected
+IDs, duplicate IDs and unreliable completion timestamps; count ordering is descending
+completion time then ID. The same metadata-only removal primitive serves existing
+AppState Remove/Clear helpers and the UI's Store transaction.
+
+`AppState.history_retention` is additive to version-1 state with unlimited/disabled
+defaults. Malformed retention objects fall back as a whole to those defaults;
+a partial invalid policy cannot enable automatic deletion. `Store::load` finishes
+validation and interruption recovery without removing history. The UI consumes one
+startup opportunity after load; settings changes take effect automatically on the
+next launch. No per-frame trimming remains. Recovery no longer fabricates a finish
+time for interrupted jobs.
+
+`persistence/history` stages removal and holds a Store write guard through worker
+serialization, atomic replacement and UI acknowledgement. Ordinary Store saves
+reject conflicting intents; background UI saves defer. Successful acknowledgement
+merges only deleted IDs, keeping newer lifecycle/settings changes for the next save.
+Failure publishes no removals. Unchanged previews do not create a worker or write.
+The guard keeps the existing Store lock alive through shutdown; ordinary quit waits
+for history saving before proceeding. No database or ownership migration is needed.
+
+RunManager exposes runtime history protection for active controls, lifecycle leases
+and unconfirmed process cleanup. This records existing ownership only; admission,
+repository leasing, concurrency and scheduling policy are unchanged. Validation
+also exposes worker ownership independently of visible record status. Existing
+worktree history protection remains authoritative: even resolved copies remain
+pinned until verified physical cleanup. See [history documentation](history.md).

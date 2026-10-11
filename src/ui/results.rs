@@ -391,6 +391,9 @@ impl App {
                 self.show_active_navigation = false;
                 self.notice = "No active convoys.".into();
             }
+            if ui.button("Clean Up History…").clicked() {
+                self.offer_history_cleanup(domain::now());
+            }
             return;
         }
         let active = self.state.runs.iter().filter(|r| r.active()).count();
@@ -516,9 +519,11 @@ impl App {
             navigation.response.scroll_to_me(Some(egui::Align::Min));
         }
         self.select_run(selected);
+        let history_protected = self.history_protections();
         let mut reuse = None;
         let mut remove = None;
         let mut clear = false;
+        let mut cleanup = false;
         let mut discard = None;
         let discard_enabled = !self.closing
             && !self.quit_requested
@@ -537,7 +542,7 @@ impl App {
                         else { "Discard unresolved retained isolated results after confirmation. Direct and already resolved results stay untouched." }).clicked() {
                 discard = Some(crate::persistence::bulk_discard::Scope::Convoy(run.id));
             }
-            if history > 0 {
+            {
                 ui.menu_button("History cleanup", |ui| {
                     if ui.add_enabled(discard_enabled && self.state.runs.iter().any(|r| !r.active() && r.unresolved_results()),
                         egui::Button::new("Discard all unresolved results…"))
@@ -546,14 +551,17 @@ impl App {
                         ui.close();
                     }
                     ui.separator();
+                    if ui.add_enabled(self.history_available(), egui::Button::new("Clean Up History…")).clicked() {
+                        cleanup = true; ui.close();
+                    }
                     ui.label("History removal deletes local metadata and session output only.");
                     ui.weak("Retained copies stay protected until explicit cleanup.");
                     if let Some(run)=self.state.runs.iter().find(|r|Some(r.id)==self.selected_run)
-                        && !run.active() && ui.add_enabled(!run.history_protected() && self.bulk_discard.is_none(), egui::Button::new(format!("Remove convoy #{} from history",run.id))).on_hover_text("Retained isolated results must remain in history. Use Discard convoy… for unresolved results; Applied copies require Clean up retained copy in Review.").clicked() {
+                        && !run.active() && ui.add_enabled(!run.history_protected() && !self.manager.history_protected(run.id) && !self.validations.history_protected(run.id) && self.history_available(), egui::Button::new(format!("Remove convoy #{} from history",run.id))).on_hover_text("Retained isolated results must remain in history. Use Discard convoy… for unresolved results; Applied copies require Clean up retained copy in Review.").clicked() {
                         remove=Some(run.id); ui.close();
                     }
                     ui.separator();
-                    if ui.add_enabled(self.bulk_discard.is_none(), egui::Button::new(format!("Clear removable history ({})", self.state.runs.iter().filter(|r| !r.history_protected()).count()))).clicked() {
+                    if ui.add_enabled(self.history_available(), egui::Button::new(format!("Clear removable history ({})", self.state.runs.iter().filter(|r| crate::history::eligible(r, &history_protected)).count()))).clicked() {
                         clear = true;
                         ui.close();
                     }
@@ -566,9 +574,11 @@ impl App {
             .iter()
             .find(|r| Some(r.id) == self.selected_run)
             && !run.active()
-            && run.history_protected()
+            && (run.history_protected() || history_protected.contains(&run.id))
         {
-            ui.small(if run.jobs.iter().any(|j| j.validation.as_ref().is_some_and(|v| v.status == crate::validation::Status::Running)) {
+            ui.small(if history_protected.contains(&run.id) {
+                "History removal blocked: a worker or lifecycle operation still owns resources, or process cleanup is unconfirmed."
+            } else if run.jobs.iter().any(|j| j.validation.as_ref().is_some_and(|v| v.status == crate::validation::Status::Running)) {
                 "History removal blocked: validation is running."
             } else if run.unresolved_results() {
                 "History removal blocked: retained isolated results still exist. Use Discard convoy… or resolve results in Review."
@@ -581,6 +591,9 @@ impl App {
         }
         if let Some(id) = reuse {
             self.reuse_convoy(id);
+        }
+        if cleanup {
+            self.offer_history_cleanup(domain::now());
         }
         if clear {
             self.remove_history(None);

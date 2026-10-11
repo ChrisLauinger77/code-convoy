@@ -1,3 +1,27 @@
+# CodeConvoy 0.9.0 — History & Reliability (unreleased)
+
+## PR 1: History Retention & Cleanup
+
+- Optional count and age limits in Settings → History Retention. Unlimited history
+  and disabled automatic retention are the defaults, including existing settings.
+  Removes the previous implicit 30-entry cap without changing the state version.
+- Manual Clean Up History preview uses stable IDs and rechecks protection/policy
+  before confirmation. Changed previews require confirmation again.
+- Opt-in automatic retention runs once after startup loading, with no polling,
+  repeated cleanup attempts or writes when no entries qualify.
+- Newest means actual completion time, then convoy ID; both constraints apply.
+  Missing/inconsistent/future dates remain outside retention limits.
+- Remove, Clear and retention share protected deletion and background atomic saves.
+  Failed saves retain live history; successful saves safely update selection.
+- Runtime worker/lifecycle ownership, active validation and retained worktree
+  evidence remain protected even when visible agent status is terminal. History
+  removal never cleans worktrees or changes repository/validation configuration.
+
+See [history usage](history.md) and [validation evidence](history-retention-validation.md).
+Package version remains 0.8.0 pending a separate release preparation request.
+
+---
+
 # CodeConvoy 0.8.0 — Workflow & Productivity
 
 ## Changes since 0.7.0

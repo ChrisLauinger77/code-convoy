@@ -296,6 +296,9 @@ impl Service {
             w.cancellation.cancel();
         }
     }
+    pub fn history_protected(&self, run: u64) -> bool {
+        self.workers.keys().any(|key| key.0 == run)
+    }
     pub fn is_idle(&self) -> bool {
         self.workers.is_empty()
     }
