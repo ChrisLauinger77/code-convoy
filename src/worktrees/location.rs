@@ -9,7 +9,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-const RECORDS: &str = ".locations";
+pub(super) const RECORDS: &str = ".locations";
 
 fn absolute(path: &Path) -> Result<()> {
     anyhow::ensure!(
@@ -99,7 +99,7 @@ fn record_path(root: &Path, m: &WorktreeMetadata) -> Result<PathBuf> {
     Ok(root.join(RECORDS).join(format!("{name}.json")))
 }
 
-fn trusted_records(root: &Path) -> Result<PathBuf> {
+pub(super) fn trusted_records(root: &Path) -> Result<PathBuf> {
     ordinary(root, true)?;
     anyhow::ensure!(
         root.canonicalize()? == root,
@@ -112,6 +112,16 @@ fn trusted_records(root: &Path) -> Result<PathBuf> {
         "Worktree location records now resolve elsewhere."
     );
     Ok(records)
+}
+
+pub(super) fn read_record(root: &Path, path: &Path) -> Result<WorktreeMetadata> {
+    let m: WorktreeMetadata = serde_json::from_slice(&super::recovery::bounded(path)?)?;
+    anyhow::ensure!(
+        record_path(root, &m)? == path,
+        "Worktree location record identity mismatch."
+    );
+    recorded_root(root, &m)?;
+    Ok(m)
 }
 
 /// Durable exact ownership binding, written before Git creates a custom checkout.
@@ -192,13 +202,7 @@ pub(super) fn recorded_attempts(root: &Path) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for entry in fs::read_dir(records)? {
         let path = entry?.path();
-        ordinary(&path, false)?;
-        let m: WorktreeMetadata = serde_json::from_reader(fs::File::open(&path)?.take(64 * 1024))?;
-        anyhow::ensure!(
-            record_path(root, &m)? == path,
-            "Worktree location record identity mismatch."
-        );
-        recorded_root(root, &m)?;
+        let m = read_record(root, &path)?;
         paths.push(
             m.path
                 .parent()

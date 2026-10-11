@@ -12,6 +12,8 @@ mod history;
 mod repository_groups;
 #[path = "shortcut_tests.rs"]
 mod shortcuts;
+#[path = "storage_tests.rs"]
+mod storage_tests;
 #[path = "validation_presets_tests.rs"]
 mod validation_presets;
 

@@ -39,6 +39,25 @@ Package version remains 0.8.0 pending a separate release preparation request.
 See [export formats and privacy](history-export.md) and
 [export validation](history-export-validation.md).
 
+## PR 3: Storage Overview
+
+- **Settings → Storage…** shows persisted historical convoy count, actual shared
+  state-file bytes, managed worktree count/sizes, original locations and current
+  base, unavailable entries, per-category successful times and partial totals.
+- Read-only ownership inventory reuses manifests, saved/live references and exact
+  custom-location bindings, including previous bases and known orphan attempts.
+  Duplicate references are counted once; incomplete ownership stays explicit.
+- Logical regular-file sizes include generated output. Links/reparse targets,
+  external Git administration, exports and unrelated data are excluded. Unix hard
+  links are deduplicated within each checkout; physical allocation is not claimed.
+- Cancellable background scans, coalesced manual refresh, stale-result rejection,
+  bounded diagnostics and a compact, scrollable keyboard-accessible view.
+- No cleanup, retention trigger, Git execution, ownership migration, scheduler,
+  backend, dependency, persistence schema or release-version changes.
+
+See [measurement semantics and PR 4 prerequisites](storage.md) and
+[storage validation](storage-validation.md).
+
 ---
 
 # CodeConvoy 0.8.0 — Workflow & Productivity

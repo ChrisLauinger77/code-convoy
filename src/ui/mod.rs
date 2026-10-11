@@ -27,6 +27,7 @@ mod results;
 mod review;
 mod shortcuts;
 mod snapshot;
+mod storage;
 #[cfg(test)]
 mod tests;
 mod text_view;
@@ -84,6 +85,7 @@ enum Message {
     HistorySaved(Result<(), String>),
     ExportDestination(Result<Option<crate::export::file::Destination>, String>),
     ExportSaved(Result<String, String>),
+    StorageMeasured(u64, Result<Option<crate::storage::Snapshot>, String>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
@@ -160,6 +162,8 @@ pub struct App {
     export: export::Export,
     history_dialog: Option<history::Dialog>,
     history_settings: Option<history::Settings>,
+    storage_open: bool,
+    storage: crate::storage::service::Service,
     history_write: Option<std::sync::Arc<crate::persistence::history::HistoryWrite>>,
     automatic_retention_pending: bool,
     comparison_filter: crate::visibility::RepositoryFilter,
@@ -312,6 +316,8 @@ impl App {
             export: export::Export::default(),
             history_dialog: None,
             history_settings: None,
+            storage_open: false,
+            storage: Default::default(),
             history_write: None,
             automatic_retention_pending: true,
             comparison_filter: crate::visibility::RepositoryFilter::default(),
@@ -433,6 +439,10 @@ impl App {
                             ui.separator();
                             if ui.button("History Retention…").clicked() {
                                 self.history_settings = Some(history::Settings::new(&self.state.history_retention));
+                                ui.close();
+                            }
+                            if ui.button("Storage…").clicked() {
+                                self.open_storage(ctx.clone());
                                 ui.close();
                             }
                             ui.separator();
@@ -843,6 +853,11 @@ impl App {
                     }
                 }
                 Message::FoundCli(request, result) => self.cli_search_completed(request, result),
+                Message::StorageMeasured(generation, result) => {
+                    if let Some(work) = self.storage.finish(generation, result) {
+                        self.dispatch_storage(work);
+                    }
+                }
                 Message::Orphans(result) => {
                     self.orphan_notice = match result {
                         Ok(paths) if paths.is_empty() => String::new(),
@@ -1123,6 +1138,7 @@ impl App {
             self.validation_assignment_window(ctx);
             self.shortcuts_window(ctx);
             self.history_settings_window(ctx);
+            self.storage_window(ctx);
         }
         self.quit_window(ctx);
         self.discard_window(ctx);
@@ -1146,7 +1162,8 @@ impl eframe::App for App {
             self.save();
         }
         ctx.request_repaint_after(Duration::from_millis(
-            if self.export.pending.is_some()
+            if self.storage.running()
+                || self.export.pending.is_some()
                 || self.history_write.is_some()
                 || !self.manager.is_idle()
                 || !self.validations.is_idle()
@@ -1170,6 +1187,7 @@ impl eframe::App for App {
         self.main_ui(ui);
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
+        self.storage.cancel();
         self.cancel_export();
         self.repository_health_cancel.cancel();
         self.notification_service.stop();
@@ -1208,6 +1226,7 @@ impl eframe::App for App {
 
 impl Drop for App {
     fn drop(&mut self) {
+        self.storage.cancel();
         self.cancel_export();
         self.repository_health_cancel.cancel();
         self.notification_service.stop();
