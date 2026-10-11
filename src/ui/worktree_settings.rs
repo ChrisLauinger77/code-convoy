@@ -21,11 +21,18 @@ impl App {
             ),
         });
         ui.add_enabled_ui(!self.worktree_location.pending && !self.closing, |ui| {
-            ui.add(
+            let input = ui.add(
                 egui::TextEdit::singleline(&mut self.worktree_location.input)
                     .hint_text("Absolute base directory")
                     .desired_width(320.0),
             );
+            input.widget_info(|| {
+                egui::WidgetInfo::labeled(
+                    egui::WidgetType::TextEdit,
+                    input.enabled(),
+                    "Worktree base directory",
+                )
+            });
             ui.horizontal(|ui| {
                 if ui.button("Browse…").clicked() {
                     self.worktree_location.pending = true;

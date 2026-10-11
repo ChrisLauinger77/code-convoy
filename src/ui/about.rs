@@ -19,7 +19,7 @@ impl App {
         if !self.about_open {
             return;
         }
-        let response = egui::Modal::new(egui::Id::new("about_codeconvoy")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "about_codeconvoy", |ui, opening| {
             ui.set_width(360.0_f32.min(ctx.content_rect().width() - 64.0));
             ui.heading(APPLICATION_NAME);
             ui.label("One task. Multiple repositories. Your agent.");
@@ -34,7 +34,11 @@ impl App {
             ui.hyperlink_to("Project on GitHub", REPOSITORY_URL);
             ui.weak("About is available offline. Opening the project link uses your browser.");
             ui.add_space(theme::GAP);
-            if ui.button("Close About").clicked() {
+            let button = ui.button("Close About");
+            if opening {
+                button.request_focus();
+            }
+            if button.clicked() {
                 self.about_open = false;
             }
         });

@@ -31,7 +31,7 @@ impl App {
         let mut review = false;
         let mut back = false;
         let mut apply = false;
-        let response = egui::Modal::new(egui::Id::new("validation_assignment")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "validation_assignment", |ui, _opening| {
             ui.set_width(450.0_f32.min(ctx.content_rect().width() - 60.0));
             ui.heading("Assign validation preset");
             ui.small("Configuration only. No validation or agent will run.");

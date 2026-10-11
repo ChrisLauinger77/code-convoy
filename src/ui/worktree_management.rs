@@ -35,13 +35,24 @@ pub(super) fn rows(
                         management::classify(state, &entry.metadata, entry.inspection.as_ref());
                     let mut selected = management.selected.contains(&identity);
                     ui.horizontal_wrapped(|ui| {
-                        if ui
-                            .add_enabled(
-                                ready && (kind == Lifecycle::Candidate || selected),
-                                egui::Checkbox::new(&mut selected, &entry.metadata.repository.name),
+                        let checkbox = ui.add_enabled(
+                            ready && (kind == Lifecycle::Candidate || selected),
+                            egui::Checkbox::new(&mut selected, &entry.metadata.repository.name),
+                        );
+                        checkbox.widget_info(|| {
+                            egui::WidgetInfo::selected(
+                                egui::WidgetType::Checkbox,
+                                checkbox.enabled(),
+                                selected,
+                                format!(
+                                    "{} · Convoy #{} · Job {}",
+                                    entry.metadata.repository.name,
+                                    entry.metadata.run,
+                                    entry.metadata.job + 1
+                                ),
                             )
-                            .changed()
-                        {
+                        });
+                        if checkbox.changed() {
                             if selected {
                                 management.selected.insert(identity.clone());
                             } else {
@@ -210,30 +221,62 @@ impl App {
         };
         let mut cancel = false;
         let mut confirm = false;
-        let response = egui::Modal::new(egui::Id::new("managed_cleanup_confirmation")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "managed_cleanup_confirmation", |ui, _opening| {
             ui.set_width(500.0_f32.min(ctx.content_rect().width() - 64.0));
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             ui.heading("Clean Up Managed Worktrees");
-            ui.label(format!("Selected: {} · Eligible: {} · Protected/skipped: {}", plan.targets.len(), plan.eligible(), plan.targets.len() - plan.eligible()));
-            ui.label(format!("Previously measured logical size: {}", crate::storage::format_bytes(plan.measured_bytes())));
+            ui.label(format!(
+                "Selected: {} · Eligible: {} · Protected/skipped: {}",
+                plan.targets.len(),
+                plan.eligible(),
+                plan.targets.len() - plan.eligible()
+            ));
+            ui.label(format!(
+                "Previously measured logical size: {}",
+                crate::storage::format_bytes(plan.measured_bytes())
+            ));
             ui.small("Known size subtotal; some measurements may be partial or unavailable. This is not guaranteed reclaimed disk space.");
             ui.label("This removes the exact eligible worktrees below from disk after final checks. Modified, active, retained and unverified worktrees are protected. History and validation records are preserved.");
-            egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 360.0).max(80.0)).show(ui, |ui| {
-                for target in &plan.targets {
-                    ui.label(format!("{} · Convoy #{} / Job {} · {}", target.metadata.repository.name, target.metadata.run, target.metadata.job + 1, if target.eligible() { "Eligible" } else { "Skipped" }));
-                    ui.label(target.metadata.path.display().to_string());
-                    ui.small(&target.reason);
-                    ui.separator();
-                }
-            });
+            egui::ScrollArea::vertical()
+                .max_height((ctx.content_rect().height() - 360.0).max(80.0))
+                .show(ui, |ui| {
+                    for target in &plan.targets {
+                        ui.label(format!(
+                            "{} · Convoy #{} / Job {} · {}",
+                            target.metadata.repository.name,
+                            target.metadata.run,
+                            target.metadata.job + 1,
+                            if target.eligible() {
+                                "Eligible"
+                            } else {
+                                "Skipped"
+                            }
+                        ));
+                        ui.label(target.metadata.path.display().to_string());
+                        ui.small(&target.reason);
+                        ui.separator();
+                    }
+                });
             if self.state_write.is_some() {
                 ui.small("Saving application state. Please wait before confirming removal.");
             }
             ui.horizontal_wrapped(|ui| {
                 let button = ui.button("Cancel");
-                if self.worktree_management.focus_cancel { button.request_focus(); self.worktree_management.focus_cancel = false; }
+                if self.worktree_management.focus_cancel {
+                    button.request_focus();
+                    self.worktree_management.focus_cancel = false;
+                }
                 cancel = button.clicked();
-                confirm = ui.add_enabled(plan.eligible() > 0 && self.result_operation.is_none() && self.bulk_discard.is_none() && self.history_write.is_none() && self.state_write.is_none(), theme::destructive(ui, format!("Clean Up {} Worktrees", plan.eligible()))).clicked();
+                confirm = ui
+                    .add_enabled(
+                        plan.eligible() > 0
+                            && self.result_operation.is_none()
+                            && self.bulk_discard.is_none()
+                            && self.history_write.is_none()
+                            && self.state_write.is_none(),
+                        theme::destructive(ui, format!("Clean Up {} Worktrees", plan.eligible())),
+                    )
+                    .clicked();
             });
         });
         if cancel || response.should_close() {

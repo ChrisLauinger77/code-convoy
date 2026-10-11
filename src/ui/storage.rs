@@ -61,12 +61,14 @@ impl App {
         let mut history = false;
         let mut close = false;
         let mut cleanup = false;
-        let response = egui::Modal::new(egui::Id::new("storage_overview")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "storage_overview", |ui, opening| {
             ui.set_width(500.0_f32.min(ctx.content_rect().width() - 64.0));
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             ui.heading("Storage Overview");
             ui.horizontal(|ui| {
-                if self.storage.status == Status::Measuring { ui.spinner(); }
+                if self.storage.status == Status::Measuring {
+                    ui.spinner();
+                }
                 ui.label(self.storage.status.label());
             });
             egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 205.0).max(100.0)).show(ui, |ui| {
@@ -128,9 +130,18 @@ impl App {
             });
             ui.separator();
             ui.horizontal_wrapped(|ui| {
-                refresh = ui.add_enabled(self.worktree_management.batch.is_none(), egui::Button::new("Refresh")).clicked();
+                refresh = ui
+                    .add_enabled(
+                        self.worktree_management.batch.is_none(),
+                        egui::Button::new("Refresh"),
+                    )
+                    .clicked();
                 history = ui.button("Manage History…").clicked();
-                close = ui.button("Close").clicked();
+                let button = ui.button("Close");
+                if opening {
+                    button.request_focus();
+                }
+                close = button.clicked();
             });
         });
         if close || history || response.should_close() {

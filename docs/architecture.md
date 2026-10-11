@@ -63,6 +63,14 @@ identity. See [UniCase's folding API](https://docs.rs/unicase/2.10.0/unicase/str
 
 `ui/library` owns group/template editing and explicit selection actions. `ui/attachments_ui` owns native file selection, optional drops, background inspection/reuse and stale-result rejection. `ui/editor` coordinates the task, scrolling editor, fixed execution controls, and modal preflight review. `ui/agent_config` renders only the selected backend's option specifications; `ui/repositories` handles registration, Git-state presentation and bulk selection. `ui/results` presents run navigation, cleanup, jobs and result tabs; `ui/snapshot` displays declared option labels, repository paths and UTC timestamps. `ui/diagnostics` keeps concise messages separate from expandable, copyable raw details. `ui/about` shows offline application metadata. `ui/theme` centralizes palettes, typography, spacing, focus/selection, primary actions and a painted success mark (the bundled fonts lack check glyphs). `ui/format` formats duration, dates, options and status text; overall status and progress remain domain-derived.
 
+`ui/dialog` wraps the existing egui Modal input barrier with session-only focus
+bookkeeping through egui's pass callbacks. It remembers dialog and menu launchers,
+keeps temporarily hidden parents while a child is open, and restores an enabled
+opener in the surviving scope without overriding an explicit focus change.
+Each dialog chooses its initial safe action or editor; no execution state is
+stored by the focus helper. `ui/shortcuts` also suppresses held or modified button
+activation keys outside text editing, including the pass where Tab leaves an editor.
+
 Copy Results uses pure `export/markdown` helpers over `Run`, `Job`,
 `visibility::summary`/`changes`/`needs_review` and the latest saved validation
 record. It reuses `ui/format` date, duration and convoy-status presentation.

@@ -9,6 +9,7 @@ mod continuation;
 mod copy_results;
 mod desktop;
 mod diagnostics;
+mod dialog;
 mod editor;
 mod export;
 mod format;
@@ -214,6 +215,7 @@ impl App {
     }
     fn with_context(ctx: &egui::Context, store: Store, state: AppState, runtime: Runtime) -> Self {
         theme::install(ctx);
+        dialog::install(ctx);
         ctx.set_theme(theme::preference(state.appearance));
         let (tx, rx) = mpsc::channel();
         let desktop_tx = tx.clone();

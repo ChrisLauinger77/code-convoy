@@ -202,7 +202,7 @@ impl App {
         if let Some(destination) = &self.export.overwrite {
             let mut cancel = false;
             let mut replace = false;
-            let response = egui::Modal::new(egui::Id::new("export_replace")).show(ctx, |ui| {
+            let response = dialog::show(ctx, "export_replace", |ui, _opening| {
                 ui.set_width(400.0_f32.min(ctx.content_rect().width() - 60.0));
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                 ui.heading("Replace existing export file?");
@@ -238,17 +238,28 @@ impl App {
             .is_some_and(|id| self.state.runs.iter().any(|r| r.id == id && !r.active()));
         let mut cancel = false;
         let mut confirm = false;
-        let response = egui::Modal::new(egui::Id::new("history_export")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "history_export", |ui, _opening| {
             ui.set_width(400.0_f32.min(ctx.content_rect().width() - 60.0));
-                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             ui.heading("Export History");
             ui.label("Scope");
             ui.add_enabled_ui(dialog.selected.is_some(), |ui| {
-                ui.radio_value(&mut dialog.choice, Choice::Selected, dialog.selected.map_or_else(|| "Selected convoy".into(), |id| format!("Selected convoy #{id}")));
+                ui.radio_value(
+                    &mut dialog.choice,
+                    Choice::Selected,
+                    dialog.selected.map_or_else(
+                        || "Selected convoy".into(),
+                        |id| format!("Selected convoy #{id}"),
+                    ),
+                );
             });
             ui.radio_value(&mut dialog.choice, Choice::Filtered, "Filtered history");
             ui.radio_value(&mut dialog.choice, Choice::All, "All retained history");
-            let count = match dialog.choice { Choice::Selected => usize::from(selected_exists), Choice::Filtered => matching.len(), Choice::All => self.state.runs.iter().filter(|r| !r.active()).count() };
+            let count = match dialog.choice {
+                Choice::Selected => usize::from(selected_exists),
+                Choice::Filtered => matching.len(),
+                Choice::All => self.state.runs.iter().filter(|r| !r.active()).count(),
+            };
             ui.horizontal(|ui| {
                 ui.label("Format");
                 ui.radio_value(&mut dialog.format, Format::Markdown, "Markdown");
@@ -257,13 +268,22 @@ impl App {
             ui.label(format!("Convoys: {count}"));
             ui.small("Destination: choose a file with Export…");
             ui.small("Saved results, bounded task/name metadata, and validation metadata. No logs, diffs or attachments. Review before sharing.");
-            if dialog.choice == Choice::Selected && !selected_exists { ui.label("The selected convoy is missing or still active."); }
-            if !self.export.feedback.is_empty() { ui.label(&self.export.feedback); }
+            if dialog.choice == Choice::Selected && !selected_exists {
+                ui.label("The selected convoy is missing or still active.");
+            }
+            if !self.export.feedback.is_empty() {
+                ui.label(&self.export.feedback);
+            }
             ui.horizontal(|ui| {
                 let button = ui.button("Cancel");
-                if dialog.focus_cancel { button.request_focus(); dialog.focus_cancel = false; }
+                if dialog.focus_cancel {
+                    button.request_focus();
+                    dialog.focus_cancel = false;
+                }
                 cancel = button.clicked();
-                confirm = ui.add_enabled(count > 0, egui::Button::new("Export…")).clicked();
+                confirm = ui
+                    .add_enabled(count > 0, egui::Button::new("Export…"))
+                    .clicked();
             });
         });
         if cancel || response.should_close() {

@@ -106,7 +106,7 @@ impl App {
         };
         let mut use_selected = false;
         let mut cancel = false;
-        let response = egui::Modal::new(egui::Id::new("find_cli")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "find_cli", |ui, opening| {
             ui.set_width(560.0_f32.min(ctx.content_rect().width() - 64.0));
             ui.heading(format!("Find {}", search.agent.label()));
             match &search.result {
@@ -116,28 +116,47 @@ impl App {
                         ui.label("Searching installed locations…");
                     });
                 }
-                Some(Err(error)) => { ui.label(error); }
+                Some(Err(error)) => {
+                    ui.label(error);
+                }
                 Some(Ok(paths)) if paths.is_empty() => {
-                    ui.label("No executable found in the search path or common installation folders.");
+                    ui.label(
+                        "No executable found in the search path or common installation folders.",
+                    );
                     ui.label("Enter an absolute executable path manually, or install this CLI separately.");
                     #[cfg(windows)]
                     ui.small("Find CLI looks for native .exe files, not .cmd, .bat or PowerShell wrappers.");
                 }
                 Some(Ok(paths)) => {
                     ui.label("Choose an executable to use and check. Your current setting stays unchanged until you apply it.");
-                    egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
-                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-                        for (index, path) in paths.iter().enumerate() {
-                            ui.radio_value(&mut search.selected, Some(index), path.display().to_string());
-                        }
-                    });
+                    egui::ScrollArea::vertical()
+                        .max_height(240.0)
+                        .show(ui, |ui| {
+                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                            for (index, path) in paths.iter().enumerate() {
+                                ui.radio_value(
+                                    &mut search.selected,
+                                    Some(index),
+                                    path.display().to_string(),
+                                );
+                            }
+                        });
                     ui.small("Checks CLI compatibility only. No agent task is started.");
                 }
             }
             ui.add_space(theme::GAP);
             ui.horizontal(|ui| {
-                use_selected = ui.add_enabled(search.selected.is_some(), egui::Button::new("Use and check")).clicked();
-                cancel = ui.button("Cancel").clicked();
+                use_selected = ui
+                    .add_enabled(
+                        search.selected.is_some(),
+                        egui::Button::new("Use and check"),
+                    )
+                    .clicked();
+                let button = ui.button("Cancel");
+                if opening {
+                    button.request_focus();
+                }
+                cancel = button.clicked();
             });
         });
         if use_selected {

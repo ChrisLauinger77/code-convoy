@@ -105,6 +105,9 @@ impl Dispatcher {
         self.frame = Some(frame);
         let mut action = None;
         ctx.input_mut(|input| {
+            // Tab can move from an editor to a button during this very pass.
+            // A held activation key in that same input batch must not follow it.
+            let editing = scope.text_edit && !input.key_pressed(Key::Tab);
             input.events.retain(|event| {
                 let Event::Key {
                     key,
@@ -121,6 +124,12 @@ impl Dispatcher {
                 if *key == Key::Escape && (*repeat || !first_pass) {
                     return false;
                 }
+                // Holding a button's activation key must not activate a later
+                // confirmation or repeat a destructive action. Editors retain
+                // normal key repeat, including multiline Enter and spaces.
+                if matches!(key, Key::Enter | Key::Space) && !editing && (*repeat || !first_pass) {
+                    return false;
+                }
                 if let Some(mapped) = mapping(*key, *modifiers)
                     && scope.allows(mapped)
                 {
@@ -129,11 +138,11 @@ impl Dispatcher {
                     }
                     return false;
                 }
-                // egui buttons activate on Enter regardless of modifiers. Swallow
-                // modified Enter outside editors even when launch is unavailable,
+                // egui buttons activate regardless of modifiers. Swallow modified
+                // Enter/Space outside editors even when launch is unavailable,
                 // especially while a confirmation button has focus. Leave all text
                 // editor events (including native macOS Ctrl shortcuts) untouched.
-                !(*key == Key::Enter && modifiers.any() && !scope.text_edit)
+                !(matches!(key, Key::Enter | Key::Space) && modifiers.any() && !editing)
             });
         });
         action
@@ -239,21 +248,28 @@ impl App {
             return;
         }
         let mut close = false;
-        let response = egui::Modal::new(egui::Id::new("keyboard_shortcuts")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "keyboard_shortcuts", |ui, opening| {
             ui.set_width(420.0_f32.min((ctx.content_rect().width() - 64.0).max(240.0)));
             ui.heading("Keyboard Shortcuts");
-            egui::Grid::new("shortcut_reference").spacing([18.0, 6.0]).show(ui, |ui| {
-                for binding in BINDINGS {
-                    ui.label(binding.display(ctx));
-                    ui.label(binding.label);
-                    ui.end_row();
-                }
-            });
+            egui::Grid::new("shortcut_reference")
+                .spacing([18.0, 6.0])
+                .show(ui, |ui| {
+                    for binding in BINDINGS {
+                        ui.label(binding.display(ctx));
+                        ui.label(binding.label);
+                        ui.end_row();
+                    }
+                });
             ui.separator();
+            ui.small("Tab / Shift+Tab moves focus. Enter or Space activates a focused button. In the convoy list, Up/Down and Home/End navigate history.");
             ui.small("Run and view shortcuts pause while editing text. Run opens the usual review and requires a ready task and selected repositories.");
             ui.small("Search requires the repository filter. Views require a selected convoy. Dialogs and open menus take precedence; Escape cancels safely and keeps the search query.");
             ui.small("Shortcuts work while this window is focused. Your desktop may reserve a key combination.");
-            close = ui.button("Close shortcuts").clicked();
+            let button = ui.button("Close shortcuts");
+            if opening {
+                button.request_focus();
+            }
+            close = button.clicked();
         });
         if close || response.should_close() {
             self.shortcuts_open = false;

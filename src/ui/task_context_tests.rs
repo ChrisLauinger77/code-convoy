@@ -2,6 +2,8 @@
 use super::*;
 use egui::accesskit::{Node, NodeId};
 
+#[path = "accessibility_tests.rs"]
+mod accessibility;
 #[path = "copy_results_tests.rs"]
 mod copy_results;
 #[path = "export_tests.rs"]
@@ -55,6 +57,7 @@ impl Keyboard {
     fn new(surface: fn(&mut App, &mut egui::Ui, &egui::Context)) -> Self {
         let ctx = egui::Context::default();
         theme::install(&ctx);
+        dialog::install(&ctx);
         ctx.enable_accesskit();
         Self {
             ctx,
@@ -168,6 +171,7 @@ fn bulk_discard_history_menu_and_confirmation_are_keyboard_accessible() {
     app.state.runs = vec![isolated_history(1, JobStatus::Succeeded, Some(true))];
     app.selected_run = Some(1);
     let mut keyboard = Keyboard::new(|app, ui, ctx| {
+        app.handle_shortcuts(ctx);
         app.results(ui, ctx);
         app.bulk_discard_window(ctx);
     });
@@ -179,10 +183,15 @@ fn bulk_discard_history_menu_and_confirmation_are_keyboard_accessible() {
     assert_eq!(app.bulk_confirmation.as_ref().unwrap().len(), 1);
     keyboard.key(&mut app, egui::Key::Escape);
     assert!(app.bulk_confirmation.is_none() && app.bulk_discard.is_none());
+    assert_eq!(
+        accessibility::focused_name(&keyboard).as_deref(),
+        Some("History cleanup")
+    );
     app.state.runs[0].jobs[0].resolution = domain::ResultResolution::Discarded;
     app.state.runs[0].jobs[0].result_availability = domain::ResultAvailability::Cleaned;
     app.state.runs[0].jobs[0].result_checked = true;
     keyboard.activate(&mut app, "History cleanup");
+    assert!(egui::Popup::is_any_open(&keyboard.ctx));
     keyboard.activate(&mut app, "Remove convoy #1 from history");
     finish_history_write(&mut app);
     assert!(app.state.runs.is_empty());

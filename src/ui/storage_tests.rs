@@ -186,6 +186,42 @@ fn managed_fixture(app: &mut App, parent: &std::path::Path) -> domain::WorktreeM
 
 #[cfg(unix)]
 #[test]
+fn managed_worktree_keyboard_selection_cancel_and_parent_focus_are_safe() {
+    let (temp, mut app) = app();
+    let metadata = managed_fixture(&mut app, temp.path());
+    let before = serde_json::to_value(&app.state).unwrap();
+    app.open_storage(egui::Context::default());
+    finish(&mut app);
+    let mut keys = Keyboard::new(|app, _, ctx| {
+        app.handle_shortcuts(ctx);
+        app.storage_window(ctx);
+        app.worktree_cleanup_window(ctx);
+    });
+    keys.frame(&mut app, vec![]);
+    keys.activate(
+        &mut app,
+        &format!("{} · Convoy #77 · Job 1", metadata.repository.name),
+    );
+    assert_eq!(app.worktree_management.selected.len(), 1);
+    keys.activate(&mut app, "Clean Up Selected…");
+    assert!(app.worktree_management.confirmation.is_some());
+    assert_eq!(
+        super::accessibility::focused_name(&keys).as_deref(),
+        Some("Cancel")
+    );
+    keys.key(&mut app, egui::Key::Escape);
+    assert!(app.worktree_management.confirmation.is_none() && app.storage_open);
+    assert_eq!(
+        super::accessibility::focused_name(&keys).as_deref(),
+        Some("Clean Up Selected…")
+    );
+    assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
+    assert!(metadata.path.is_dir());
+    assert!(app.result_operation.is_none() && app.worktree_management.batch.is_none());
+}
+
+#[cfg(unix)]
+#[test]
 fn managed_cleanup_confirmation_defaults_to_cancel_and_success_refreshes_sizes() {
     let (temp, mut app) = app();
     let metadata = managed_fixture(&mut app, temp.path());

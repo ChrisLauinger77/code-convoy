@@ -51,18 +51,20 @@ impl App {
     }
 
     fn task_section(&mut self, ui: &mut egui::Ui) {
-        theme::section(ui, "Task");
+        let label = theme::section(ui, "Task");
         self.template_menu(ui);
         ui.weak("One instruction, applied to each repository.");
         if !self.draft_message.is_empty() {
             ui.small(&self.draft_message);
         }
-        let response = ui.add(
-            egui::TextEdit::multiline(&mut self.state.draft.prompt)
-                .desired_rows(5)
-                .desired_width(f32::INFINITY)
-                .hint_text("Describe the change or review…"),
-        );
+        let response = ui
+            .add(
+                egui::TextEdit::multiline(&mut self.state.draft.prompt)
+                    .desired_rows(5)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("Describe the change or review…"),
+            )
+            .labelled_by(label.id);
         self.dirty |= response.changed();
         if self.focus_draft {
             response.request_focus();
@@ -72,7 +74,7 @@ impl App {
 
     pub(super) fn execution_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.separator();
-        ui.strong("Execution");
+        let label = ui.strong("Execution");
         let previous = self.state.draft.execution_mode;
         egui::ComboBox::from_id_salt("execution_mode")
             .selected_text(previous.label())
@@ -83,7 +85,9 @@ impl App {
                 ] {
                     ui.selectable_value(&mut self.state.draft.execution_mode, mode, mode.label());
                 }
-            });
+            })
+            .response
+            .labelled_by(label.id);
         self.dirty |= previous != self.state.draft.execution_mode;
         if self.state.draft.execution_mode == domain::ExecutionMode::IsolatedWorktree {
             ui.small("Starts from committed HEAD; excludes local changes. Results are retained.");
@@ -142,10 +146,12 @@ impl App {
         let saving = self.history_write.is_some() || self.state_write.is_some();
         let mut start = false;
         let mut cancel = false;
-        let response = egui::Modal::new(egui::Id::new("review_convoy")).show(ctx, |ui| {
+        let response = dialog::show(ctx, "review_convoy", |ui, opening| {
             ui.set_width(540.0_f32.min((ctx.content_rect().width() - 64.0).max(240.0)));
             ui.heading("Review convoy");
-            if let Some(origin) = &self.prepared_provenance { ui.small(origin.label()); }
+            if let Some(origin) = &self.prepared_provenance {
+                ui.small(origin.label());
+            }
             egui::ScrollArea::vertical()
                 .max_height((ctx.content_rect().height() - 230.0).max(160.0))
                 .show(ui, |ui| {
@@ -209,9 +215,17 @@ impl App {
             if saving {
                 ui.small("Saving application state. Please wait before starting.");
             }
-            start =
-                theme::primary(ui, !saving && (!prepared.dirty() || self.dirty_ack), "Start convoy").clicked();
-            cancel = ui.add(theme::quiet("Back to task")).clicked();
+            start = theme::primary(
+                ui,
+                !saving && (!prepared.dirty() || self.dirty_ack),
+                "Start convoy",
+            )
+            .clicked();
+            let button = ui.add(theme::quiet("Back to task"));
+            if opening {
+                button.request_focus();
+            }
+            cancel = button.clicked();
         });
         cancel |= response.should_close();
         if start {
