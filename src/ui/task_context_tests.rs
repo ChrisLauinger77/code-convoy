@@ -4,6 +4,8 @@ use egui::accesskit::{Node, NodeId};
 
 #[path = "copy_results_tests.rs"]
 mod copy_results;
+#[path = "export_tests.rs"]
+mod export_tests;
 #[path = "history_tests.rs"]
 mod history;
 #[path = "repository_groups_tests.rs"]

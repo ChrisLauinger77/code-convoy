@@ -146,7 +146,9 @@ pub(super) fn repository_filter_id() -> egui::Id {
 
 impl App {
     fn shortcut_modal_open(&self) -> bool {
-        self.history_dialog.is_some()
+        self.export.dialog.is_some()
+            || self.export.pending.is_some()
+            || self.history_dialog.is_some()
             || self.history_settings.is_some()
             || self.history_write.is_some()
             || self.prepared.is_some()

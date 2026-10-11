@@ -20,6 +20,25 @@
 See [history usage](history.md) and [validation evidence](history-retention-validation.md).
 Package version remains 0.8.0 pending a separate release preparation request.
 
+## PR 2: History Export
+
+- Export one terminal convoy or selected/filtered/all retained history to one
+  Markdown or JSON file. Existing single-convoy selection and history filters are
+  reused; active convoys are excluded.
+- Shared Copy Summary Markdown formatter and independent JSON schema version 1.
+  Saved completion observations, unknown values, validation and review resolution
+  remain distinct; current Git and live Review are never consulted.
+- Metadata-only confirmation snapshots survive later history/filter changes and
+  cleanup. No logs, diffs, attachments, environment or internal ownership metadata.
+  Bounded task/name/command fields follow the existing Copy Results privacy policy.
+- Native save dialog, explicit overwrite review, cancellable background formatting
+  and temporary-file publication, with concise completion/error feedback.
+- Deterministic model, file-failure, privacy and headless egui interaction tests.
+  No dependencies, persistence schema, backend, scheduler or release-version changes.
+
+See [export formats and privacy](history-export.md) and
+[export validation](history-export-validation.md).
+
 ---
 
 # CodeConvoy 0.8.0 — Workflow & Productivity

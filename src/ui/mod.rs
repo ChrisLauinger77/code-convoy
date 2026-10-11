@@ -10,6 +10,7 @@ mod copy_results;
 mod desktop;
 mod diagnostics;
 mod editor;
+mod export;
 mod format;
 mod history;
 mod library;
@@ -19,7 +20,7 @@ mod quit;
 mod quit_macos;
 mod repositories;
 mod repository_sections;
-mod result_markdown;
+use crate::export::markdown as result_markdown;
 #[cfg(target_os = "macos")]
 pub use quit_macos::init_native_application;
 mod results;
@@ -81,6 +82,8 @@ enum Message {
     ),
     Orphans(Result<Vec<PathBuf>, String>),
     HistorySaved(Result<(), String>),
+    ExportDestination(Result<Option<crate::export::file::Destination>, String>),
+    ExportSaved(Result<String, String>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
@@ -154,6 +157,7 @@ pub struct App {
     dirty_ack: bool,
     selected_run: Option<u64>,
     history_search: crate::visibility::HistorySearch,
+    export: export::Export,
     history_dialog: Option<history::Dialog>,
     history_settings: Option<history::Settings>,
     history_write: Option<std::sync::Arc<crate::persistence::history::HistoryWrite>>,
@@ -305,6 +309,7 @@ impl App {
             dirty_ack: false,
             selected_run,
             history_search: crate::visibility::HistorySearch::default(),
+            export: export::Export::default(),
             history_dialog: None,
             history_settings: None,
             history_write: None,
@@ -727,6 +732,8 @@ impl App {
         while let Ok(message) = self.rx.try_recv() {
             match message {
                 Message::HistorySaved(result) => self.history_saved(result),
+                Message::ExportDestination(result) => self.export_destination(result),
+                Message::ExportSaved(result) => self.export_saved(result),
                 Message::Desktop(generation, event) => {
                     if let Some(action) = self.desktop.event(generation, event) {
                         self.desktop_action(action);
@@ -1121,6 +1128,7 @@ impl App {
         self.discard_window(ctx);
         self.bulk_discard_window(ctx);
         self.history_window(ctx);
+        self.export_window(ctx);
     }
 }
 
@@ -1138,7 +1146,8 @@ impl eframe::App for App {
             self.save();
         }
         ctx.request_repaint_after(Duration::from_millis(
-            if self.history_write.is_some()
+            if self.export.pending.is_some()
+                || self.history_write.is_some()
                 || !self.manager.is_idle()
                 || !self.validations.is_idle()
                 || self.closing
@@ -1161,6 +1170,7 @@ impl eframe::App for App {
         self.main_ui(ui);
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
+        self.cancel_export();
         self.repository_health_cancel.cancel();
         self.notification_service.stop();
         self.desktop.stop();
@@ -1198,6 +1208,7 @@ impl eframe::App for App {
 
 impl Drop for App {
     fn drop(&mut self) {
+        self.cancel_export();
         self.repository_health_cancel.cancel();
         self.notification_service.stop();
         self.desktop.stop();
