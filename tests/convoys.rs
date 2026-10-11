@@ -815,12 +815,12 @@ fn persistence_recovers_multiple_runs_retains_snapshots_and_defaults_old_prefere
 #[test]
 fn history_never_evicts_active_convoys_and_mixed_results_are_truthful() {
     let mut state = AppState::default();
-    for id in 0..(MAX_HISTORY + 5) as u64 {
+    for id in 0..35 {
         let mut job = Job::queued(Repository {
             name: "repo".into(),
             path: "/repo".into(),
         });
-        if id < MAX_HISTORY as u64 + 3 {
+        if id < 33 {
             job.finish(JobStatus::Succeeded, Some(0), String::new());
         }
         state.runs.push(Run {
@@ -831,8 +831,13 @@ fn history_never_evicts_active_convoys_and_mixed_results_are_truthful() {
             jobs: vec![job],
         });
     }
-    state.trim_history();
-    assert_eq!(state.runs.len(), MAX_HISTORY + 2);
+    let policy = codeconvoy::history::RetentionPolicy {
+        max_entries: std::num::NonZeroUsize::new(30),
+        ..Default::default()
+    };
+    let preview = codeconvoy::history::evaluate(&state.runs, &policy, &Default::default(), now());
+    codeconvoy::history::remove(&mut state.runs, &preview.remove, &Default::default());
+    assert_eq!(state.runs.len(), 30 + 2);
     assert_eq!(state.runs.iter().filter(|r| r.active()).count(), 2);
     let mut run = state.runs[0].clone();
     let mut failed = run.jobs[0].clone();

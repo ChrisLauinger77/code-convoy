@@ -567,11 +567,16 @@ async fn history_cap_pins_results_and_preserves_direct_history_policy() {
             },
         );
     }
-    f.state.trim_history();
-    assert_eq!(f.state.runs.len(), MAX_HISTORY + 1);
+    let policy = codeconvoy::history::RetentionPolicy {
+        max_entries: std::num::NonZeroUsize::new(30),
+        ..Default::default()
+    };
+    let preview = codeconvoy::history::evaluate(&f.state.runs, &policy, &Default::default(), now());
+    codeconvoy::history::remove(&mut f.state.runs, &preview.remove, &Default::default());
+    assert_eq!(f.state.runs.len(), 30 + 1);
     assert!(!f.state.remove_from_history(1));
     assert!(f.state.remove_from_history(41));
-    assert_eq!(f.state.clear_history(), MAX_HISTORY - 1);
+    assert_eq!(f.state.clear_history(), 30 - 1);
     assert_eq!(f.state.runs[0].id, 1);
     assert!(f.metadata().path.exists());
 }

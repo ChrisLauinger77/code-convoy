@@ -1,4 +1,5 @@
 pub mod bulk_discard;
+pub mod history;
 pub mod results;
 mod validation;
 use crate::domain::{AppState, MAX_CONCURRENCY, MAX_REPOSITORIES};
@@ -21,6 +22,7 @@ pub fn data_directory() -> Result<PathBuf> {
 pub struct Store {
     directory: PathBuf,
     _lock: File,
+    history_write: std::sync::Mutex<bool>,
 }
 impl Store {
     pub fn open_default() -> Result<Self> {
@@ -45,6 +47,7 @@ impl Store {
         Ok(Self {
             directory: directory.canonicalize()?,
             _lock: lock,
+            history_write: std::sync::Mutex::new(false),
         })
     }
     pub fn directory(&self) -> &Path {
@@ -75,7 +78,6 @@ impl Store {
             command.validate()?;
         }
         state.recover_interrupted();
-        state.trim_history();
         state.global_concurrency = state.global_concurrency.clamp(1, MAX_CONCURRENCY);
         state.draft.concurrency = state.draft.concurrency.clamp(1, 16);
         Ok(state)
@@ -105,6 +107,17 @@ impl Store {
     }
 
     pub fn save(&self, state: &AppState) -> Result<()> {
+        let pending = self
+            .history_write
+            .lock()
+            .map_err(|_| anyhow::anyhow!("History save lock failed."))?;
+        anyhow::ensure!(
+            !*pending,
+            "History cleanup is being saved; try again when it finishes."
+        );
+        self.save_atomic(state)
+    }
+    fn save_atomic(&self, state: &AppState) -> Result<()> {
         let mut file = tempfile::NamedTempFile::new_in(&self.directory)
             .context("Cannot create temporary state file.")?;
         serde_json::to_writer_pretty(&mut file, state)

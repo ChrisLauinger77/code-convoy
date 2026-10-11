@@ -4,6 +4,7 @@ pub mod continuation;
 pub mod desktop;
 pub mod domain;
 pub mod git;
+pub mod history;
 pub mod notifications;
 pub mod persistence;
 pub mod process;

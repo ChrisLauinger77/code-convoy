@@ -19,6 +19,19 @@ mod validation;
 #[path = "visibility_tests.rs"]
 mod visibility;
 
+fn finish_history_write(app: &mut App) {
+    for _ in 0..300 {
+        if app.history_write.is_none() {
+            return;
+        }
+        app.runtime().block_on(async {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        });
+        app.poll();
+    }
+    panic!("history save did not finish");
+}
+
 fn app() -> (tempfile::TempDir, App) {
     app_with_state(AppState::default())
 }
@@ -1388,8 +1401,10 @@ fn history_cleanup_is_terminal_only_and_resets_selection_without_touching_reposi
     app.diff = Some(Ok("old diff".into()));
     app.diff_target = Some(repo_path.clone());
     app.remove_history(Some(7)); // Even partially failed convoys remain active.
+    finish_history_write(&mut app);
     assert_eq!(app.state.runs.len(), 5);
     app.remove_history(Some(8));
+    finish_history_write(&mut app);
     assert_eq!(app.selected_run, Some(7));
     assert_eq!(app.selected_job, 0);
     assert!(app.diff.is_none() && app.diff_target.is_none());
@@ -1399,6 +1414,7 @@ fn history_cleanup_is_terminal_only_and_resets_selection_without_touching_reposi
     app.poll();
     assert!(app.diff.is_none());
     app.remove_history(None);
+    finish_history_write(&mut app);
     assert_eq!(
         app.state.runs.iter().map(|r| r.id).collect::<Vec<_>>(),
         vec![7, 5]
@@ -1426,12 +1442,15 @@ fn history_cleanup_is_terminal_only_and_resets_selection_without_touching_reposi
     // After the jobs become terminal, removing the last histories has an empty fallback.
     app.state.recover_interrupted();
     app.remove_history(Some(7));
+    finish_history_write(&mut app);
     assert_eq!(app.selected_run, Some(5));
     app.remove_history(None);
+    finish_history_write(&mut app);
     assert!(app.selected_run.is_none());
     assert!(app.state.runs.is_empty());
     assert!(app.store.load().unwrap().runs.is_empty());
     app.remove_history(Some(999));
+    finish_history_write(&mut app);
 }
 
 #[test]
@@ -1858,9 +1877,11 @@ fn history_actions_preserve_unresolved_results_with_an_explanation() {
         run(2, &[JobStatus::Succeeded]),
     ];
     app.remove_history(Some(1));
+    finish_history_write(&mut app);
     assert_eq!(app.state.runs.len(), 2);
     assert!(app.notice.contains("unresolved isolated results"));
     app.remove_history(None);
+    finish_history_write(&mut app);
     assert_eq!(app.state.runs.len(), 1);
     assert_eq!(app.state.runs[0].id, 1);
 }

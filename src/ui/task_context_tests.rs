@@ -4,6 +4,8 @@ use egui::accesskit::{Node, NodeId};
 
 #[path = "copy_results_tests.rs"]
 mod copy_results;
+#[path = "history_tests.rs"]
+mod history;
 #[path = "repository_groups_tests.rs"]
 mod repository_groups;
 #[path = "shortcut_tests.rs"]
@@ -178,6 +180,7 @@ fn bulk_discard_history_menu_and_confirmation_are_keyboard_accessible() {
     app.state.runs[0].jobs[0].result_checked = true;
     keyboard.activate(&mut app, "History cleanup");
     keyboard.activate(&mut app, "Remove convoy #1 from history");
+    finish_history_write(&mut app);
     assert!(app.state.runs.is_empty());
 }
 
