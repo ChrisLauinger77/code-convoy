@@ -189,7 +189,7 @@ fn navigation_reuses_tabs_and_retains_run_job_diff_filters_and_focus() {
     app.selected_run = Some(42);
     app.selected_job = 1;
     app.diff_target = Some(repository("cached").path);
-    app.diff = Some(Ok("cached diff".into()));
+    app.diff = Some(Ok(diff_observation("cached diff")));
     app.history_search.query = "outside selected history".into();
     app.comparison_filter = crate::visibility::RepositoryFilter::Changed;
     let before = serde_json::to_value(&app.state).unwrap();
@@ -210,7 +210,7 @@ fn navigation_reuses_tabs_and_retains_run_job_diff_filters_and_focus() {
         assert_eq!(keys.ctx.memory(|m| m.focused()), focus);
         assert_eq!(app.selected_run, Some(42));
         assert_eq!(app.selected_job, 1);
-        assert_eq!(app.diff, Some(Ok("cached diff".into())));
+        assert_eq!(app.diff, Some(Ok(diff_observation("cached diff"))));
         assert_eq!(app.diff_target, Some(repository("cached").path));
         assert_eq!(
             app.comparison_filter,

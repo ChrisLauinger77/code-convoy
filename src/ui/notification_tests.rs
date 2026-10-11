@@ -138,7 +138,7 @@ fn activation_selects_stable_ids_review_and_handles_removed_or_unavailable_resul
     app.selected_run = Some(700);
     app.tab = Tab::Raw;
     app.selected_job = 20;
-    app.diff = Some(Ok("stale".into()));
+    app.diff = Some(Ok(diff_observation("stale")));
     app.notification_event(NotificationEvent::Activated(9));
     assert_eq!(app.selected_run, Some(9));
     assert!(matches!(app.tab, Tab::Review));

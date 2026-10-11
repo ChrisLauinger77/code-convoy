@@ -87,7 +87,7 @@ fn selection_and_comparison_are_reconciled_only_when_removed() {
         let (_temp, mut app) = fixture();
         app.select_run(Some(selected));
         app.tab = Tab::Validation;
-        app.diff = Some(Ok("cached".into()));
+        app.diff = Some(Ok(diff_observation("cached")));
         app.diff_target = Some("/old-target".into());
         app.review_selected.insert(0);
         app.history_search.query = "Task".into();

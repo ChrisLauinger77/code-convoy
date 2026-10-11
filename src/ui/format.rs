@@ -62,21 +62,43 @@ pub fn output_empty(job: &Job, this_session: bool) -> String {
         }
         JobStatus::Cancelled => {
             if job.execution_mode == domain::ExecutionMode::IsolatedWorktree {
-                "Stopped without textual output. Any partial edits remain in the retained isolated worktree."
+                format!(
+                    "Stopped without textual output. {}",
+                    isolated_output_hint(job)
+                )
             } else {
-                "Stopped without textual output. Any partial edits remain in the repository."
-            }.into()
+                "Stopped without textual output. Any partial edits remain in the repository.".into()
+            }
         }
         JobStatus::Failed => {
             "No textual output was captured. Inspect the job diagnostics above.".into()
         }
         JobStatus::Succeeded => {
             if job.execution_mode == domain::ExecutionMode::IsolatedWorktree {
-                "Completed without textual output. Inspect the retained worktree diff against its saved base."
+                format!(
+                    "Completed without textual output. {}",
+                    isolated_output_hint(job)
+                )
             } else {
-                "Completed without textual output. Inspect the current working-tree diff."
-            }.into()
+                "Completed without textual output. Inspect the current working-tree diff.".into()
+            }
         }
+    }
+}
+
+fn isolated_output_hint(job: &Job) -> &'static str {
+    use domain::{ResultAvailability as A, ResultResolution as R};
+    if job.resolution == R::Discarded || job.result_availability == A::Cleaned {
+        return "The isolated worktree was removed; its Diff is no longer available.";
+    }
+    if job.result_checked
+        && job.result_availability == A::Available
+        && job.worktree.is_some()
+        && matches!(job.resolution, R::Unresolved | R::Applied)
+    {
+        "Inspect the retained isolated worktree diff against its saved base."
+    } else {
+        "Inspect Review for isolated result availability and diagnostics."
     }
 }
 

@@ -70,7 +70,7 @@ enum Message {
     Prepared(Result<PreparedRun, String>),
     RetryPrepared(Result<(PreparedRun, crate::continuation::Provenance), String>),
     FollowUp(Box<crate::continuation::FollowUp>),
-    Diff(PathBuf, Result<String, String>),
+    Diff(PathBuf, Result<git::Diff, String>),
     Reconciled(
         u64,
         usize,
@@ -186,7 +186,7 @@ pub struct App {
     )>,
     focus_bulk_cancel: bool,
     diff_target: Option<PathBuf>,
-    diff: Option<Result<String, String>>,
+    diff: Option<Result<git::Diff, String>>,
     dirty: bool,
     last_save: Instant,
     closing: bool,

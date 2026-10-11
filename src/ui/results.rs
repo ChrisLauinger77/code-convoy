@@ -349,20 +349,20 @@ impl App {
                     if let Some(Ok(diff)) = &self.diff
                         && ui.add(theme::quiet("Copy diff")).clicked()
                     {
-                        ctx.copy_text(diff.clone());
+                        ctx.copy_text(diff.text.clone());
                     }
                     if loading {
                         ui.spinner();
                     }
                 });
                 match &self.diff {
-                    Some(Ok(diff)) if diff.is_empty() => {
+                    Some(Ok(diff)) if diff.changed == Some(false) => {
                         ui.weak(format::diff_empty(job.execution_mode));
                     }
                     Some(Ok(diff)) => self.diff_view.show(
                         ui,
                         ("diff", run.id, self.selected_job),
-                        diff,
+                        &diff.text,
                         true,
                         bottom - ui.cursor().top() - 26.0,
                     ),
@@ -402,11 +402,19 @@ impl App {
             self.diff = None;
             let lifecycle = self.manager.lifecycle();
             self.dispatch(ctx.clone(), async move {
-                if let Some(metadata) = job.worktree.clone() {
+                if job.execution_mode == domain::ExecutionMode::IsolatedWorktree {
+                    let Some(metadata) = job.worktree.clone() else {
+                        return Message::Diff(
+                            path,
+                            Err("The isolated worktree has not been prepared.".into()),
+                        );
+                    };
                     let report = lifecycle.inspect(run_id, job_index, &job, true).await;
                     return Message::Reconciled(run_id, job_index, metadata, report, true);
                 }
-                let result = git::diff_job(&job).await.map_err(|e| format!("{e:#}"));
+                let result = git::inspect_diff(&job.repository.path)
+                    .await
+                    .map_err(|e| format!("{e:#}"));
                 Message::Diff(path, result)
             });
         }

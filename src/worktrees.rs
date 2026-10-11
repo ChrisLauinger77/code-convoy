@@ -395,13 +395,17 @@ pub(crate) async fn inspect_owned(
     })
 }
 pub async fn diff(metadata: &WorktreeMetadata) -> Result<String> {
-    diff_owned(metadata, &Cancellation::default(), &AtomicBool::new(true)).await
+    Ok(
+        diff_owned(metadata, &Cancellation::default(), &AtomicBool::new(true))
+            .await?
+            .text,
+    )
 }
 async fn diff_owned(
     metadata: &WorktreeMetadata,
     cancellation: &Cancellation,
     safe: &AtomicBool,
-) -> Result<String> {
+) -> Result<git::Diff> {
     let inspection = git::Inspection { cancellation, safe };
     verify(metadata, &inspection).await?;
     let snapshot =
@@ -414,6 +418,17 @@ async fn diff_owned(
     )
     .await?;
     let index_patch = patch(metadata, &inspection, true, None).await?;
+    // A base-relative working snapshot includes nonignored untracked files.
+    // Keep staged alternatives visible even when working files equal the base.
+    // If snapshotting is unsupported, an empty fallback patch proves nothing.
+    let changed = if !worktree_patch.stdout.is_empty() || !index_patch.stdout.is_empty() {
+        Some(true)
+    } else {
+        snapshot
+            .as_ref()
+            .ok()
+            .map(|s| s.statistics.files > 0 || s.statistics.index_alternatives > 0)
+    };
     let state = inspection.status(&metadata.path).await?;
     let text = format!(
         "Isolated worktree: {}\nBase commit: {}\n\n{}\n--- CHANGES FROM SNAPSHOTTED BASE ---\n{}{}\n--- INDEX CHANGES FROM SNAPSHOTTED BASE ---\n{}{}\n--- GIT STATUS (may use cached file timestamps) ---\n{}",
@@ -451,5 +466,5 @@ async fn diff_owned(
             state.entries.join("\n")
         }
     );
-    Ok(text)
+    Ok(git::Diff { text, changed })
 }

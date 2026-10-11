@@ -17,7 +17,7 @@ operations or scheduling rules changed.
 | --- | --- | --- |
 | High | Settings with notification/tray diagnostics measured 954 pixels tall in a 780×560 window; lower actions were outside the window | Bound menu width and height; scroll its existing contents vertically |
 | High | A long selected group name expanded the group dialog beyond 3,000 pixels wide at 780×560 | Truncate group choices and member rows; retain complete names/paths in tooltips |
-| Medium | A loaded empty diff looked like an empty panel, while isolated output referred to a current working-tree diff | Explain empty diffs and distinguish Direct observations from comparisons with the saved isolated base |
+| Medium | Unchanged diffs showed only boilerplate, while isolated output could point to an unavailable retained result | Detect empty diffs from Git observations and distinguish Direct observations from available comparisons with the saved isolated base |
 | Medium | Running validation with no output displayed a restart-oriented message | Show that validation is running and awaiting output; failed/unavailable records direct users to diagnostics |
 | Medium | Review statistics errors were visible only after opening Diagnostics | Show an explicit unavailable/retry explanation above the original diagnostic details |
 | Low | Review indicators used “Review needed” while filters used “Needs Review” | Use “Needs Review” in result indicators and notification settings; execution outcome stays independent of Git changes |
@@ -31,13 +31,34 @@ vertical scrolling, backend-specific forms, repository selection semantics,
 history filtering, validation configuration and cleanup eligibility are retained.
 Horizontal scrolling inside verbatim output/diff viewers remains intentional.
 
+### Review corrections
+
+The diff cache carries the change observation produced by the same background
+inspection as its text. Direct inspection includes staged, unstaged and untracked
+entries, including unborn repositories. Isolated inspection uses the existing
+fixed-base snapshot and patches, including staged alternatives and empty new
+files. An unsupported snapshot without a detected patch remains unknown and
+keeps its diagnostic text; it cannot be presented as unchanged. Copy preserves
+the complete original text.
+No additional Git subprocesses or persisted fields are introduced.
+
+Empty output recommends the retained diff only when result availability has been
+verified in this session. Discarded and cleaned results report that Diff is no
+longer available; missing, unchecked, pending or otherwise unavailable results
+direct users to Review. Agent status remains unchanged.
+
+Five additional regressions exercise actual Direct and isolated Git inspections,
+index preservation, unsupported snapshots, rendered empty-versus-unknown diff
+states, and output hints across availability/resolution states. Existing cache,
+navigation, cleanup and applied-result tests use the structured observation.
+
 ## Automated verification
 
 All required checks passed:
 
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo test --all-features`: **540 passed, 0 failed, 6 ignored**. Ignored tests
+- `cargo test --all-features`: **545 passed, 0 failed, 6 ignored**. Ignored tests
   are four installed-provider probes and two manual performance measurements.
   Totals exclude filtered fixture subprocess re-executions.
 - `cargo build --release`

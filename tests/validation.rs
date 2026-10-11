@@ -407,7 +407,7 @@ async fn applied_result_rejects_validation_and_preserves_files_diff_and_history(
     let report = f.manager.lifecycle().inspect(1, 0, f.job(), true).await;
     report.apply(&mut f.state.runs[0].jobs[0]);
     let diff = report.diff.unwrap();
-    assert!(diff.contains("applied result"));
+    assert!(diff.text.contains("applied result"));
     let op = f
         .store
         .begin_result_operation(&mut f.state, 1, 0, Action::Apply)
@@ -447,7 +447,7 @@ async fn applied_result_rejects_validation_and_preserves_files_diff_and_history(
                 "applied result\n"
             );
         }
-        assert_eq!(git::diff_job(f.job()).await.unwrap(), diff);
+        assert_eq!(git::diff_job(f.job()).await.unwrap(), diff.text);
     }
 }
 #[tokio::test]

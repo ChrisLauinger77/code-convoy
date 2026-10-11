@@ -25,13 +25,124 @@ fn empty_output_distinguishes_running_validation_and_fixed_base_results() {
     assert!(
         format::diff_empty(domain::ExecutionMode::IsolatedWorktree).contains("saved base commit")
     );
-    let mut job = domain::Job::queued(repository("example"));
-    job.execution_mode = domain::ExecutionMode::IsolatedWorktree;
-    job.status = JobStatus::Succeeded;
+    let mut job = isolated_history(1, JobStatus::Succeeded, Some(false))
+        .jobs
+        .remove(0);
+    job.result_checked = true;
+    job.result_availability = domain::ResultAvailability::Available;
     assert!(format::output_empty(&job, true).contains("saved base"));
     job.status = JobStatus::Cancelled;
     job.started_at = Some(1);
     assert!(format::output_empty(&job, true).contains("retained isolated worktree"));
+}
+
+#[test]
+fn isolated_output_hints_follow_verified_availability_and_resolution() {
+    use domain::{ResultAvailability as A, ResultResolution as R};
+    for status in [JobStatus::Succeeded, JobStatus::Cancelled] {
+        let mut job = isolated_history(1, status, Some(true)).jobs.remove(0);
+        job.started_at = Some(1);
+        for resolution in [
+            R::Unresolved,
+            R::Applied,
+            R::ApplyPending,
+            R::DiscardPending,
+            R::Discarded,
+        ] {
+            job.resolution = resolution;
+            for availability in [
+                A::Unchecked,
+                A::Available,
+                A::Missing,
+                A::Stale,
+                A::Invalid,
+                A::CleanupPending,
+                A::CleanupFailed,
+                A::Cleaned,
+            ] {
+                job.result_availability = availability;
+                for checked in [false, true] {
+                    job.result_checked = checked;
+                    let text = format::output_empty(&job, true);
+                    if resolution == R::Discarded || availability == A::Cleaned {
+                        assert!(text.contains("Diff is no longer available"), "{text}");
+                    } else if checked
+                        && availability == A::Available
+                        && matches!(resolution, R::Unresolved | R::Applied)
+                    {
+                        assert!(
+                            text.contains("retained isolated worktree diff against its saved base"),
+                            "{text}"
+                        );
+                    } else {
+                        assert!(text.contains("Inspect Review"), "{text}");
+                        assert!(!text.contains("retained"), "{text}");
+                    }
+                }
+            }
+        }
+        job.resolution = R::Unresolved;
+        job.result_availability = A::Available;
+        job.result_checked = true;
+        job.worktree = None;
+        assert!(format::output_empty(&job, true).contains("Inspect Review"));
+        assert!(format::output_empty(&job, false).contains("Logs are session-only"));
+    }
+}
+
+#[test]
+fn diff_empty_state_uses_the_loaded_observation_not_headers_or_job_status() {
+    for mode in [
+        domain::ExecutionMode::Direct,
+        domain::ExecutionMode::IsolatedWorktree,
+    ] {
+        for changed in [Some(false), Some(true), None] {
+            let (_temp, mut app) = app();
+            app.state.runs = vec![if mode == domain::ExecutionMode::Direct {
+                run(1, &[JobStatus::Failed])
+            } else {
+                // A stale completion observation must not override the loaded diff.
+                isolated_history(1, JobStatus::Failed, Some(true))
+            }];
+            app.select_run(Some(1));
+            app.tab = Tab::Diff;
+            app.diff = Some(Ok(git::Diff {
+                text: "Diff headers and diagnostic details".into(),
+                changed,
+            }));
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 820.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| app.results(ui, &ctx));
+                },
+            );
+            output.textures_delta.clear();
+            let nodes = output.platform_output.accesskit_update.unwrap().nodes;
+            assert_eq!(
+                nodes
+                    .iter()
+                    .any(|(_, n)| n.value() == Some(format::diff_empty(mode))),
+                changed == Some(false),
+                "{mode:?} {changed:?}"
+            );
+            assert_eq!(
+                nodes
+                    .iter()
+                    .any(|(_, n)| n.value() == Some("Diff headers and diagnostic details")),
+                changed != Some(false)
+            );
+            assert!(nodes.iter().any(|(_, n)| n.label() == Some("Copy diff")));
+            assert_eq!(app.state.runs[0].jobs[0].status, JobStatus::Failed);
+        }
+    }
 }
 
 #[test]

@@ -111,7 +111,7 @@ fn validation_controls_disable_resolved_and_pending_results_without_replacing_hi
         job.validation = Some(record);
         let diff_target = job.worktree.as_ref().unwrap().path.clone();
         app.diff_target = Some(diff_target.clone());
-        app.diff = Some(Ok("saved applied diff".into()));
+        app.diff = Some(Ok(diff_observation("saved applied diff")));
         let before = serde_json::to_value(&app.state).unwrap();
         let review = app.state.runs[0].jobs[0].review.clone();
         let ctx = egui::Context::default();
@@ -143,7 +143,7 @@ fn validation_controls_disable_resolved_and_pending_results_without_replacing_hi
         );
         assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
         assert_eq!(app.state.runs[0].jobs[0].review, review);
-        assert_eq!(app.diff, Some(Ok("saved applied diff".into())));
+        assert_eq!(app.diff, Some(Ok(diff_observation("saved applied diff"))));
         assert_eq!(app.diff_target, Some(diff_target));
     }
 }
