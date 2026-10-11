@@ -1,4 +1,4 @@
-# History retention and cleanup
+# History management
 
 History is unlimited by default. Automatic retention is disabled, including when
 loading existing 0.8.0 settings. The previous implicit 30-entry cap is removed;
@@ -82,5 +82,19 @@ existing meaning: remove eligible terminal history regardless of retention polic
 They share the same protected deletion and atomic save path. Selection alone does
 not protect an otherwise removable convoy.
 
-Deleted history may not be recoverable. There is no new backup, restore, export,
-storage overview or automatic worktree cleanup feature.
+Deleted history may not be recoverable. There is no backup, restore, storage
+overview or automatic worktree cleanup feature.
+
+## Export before cleanup
+
+**Export…** beside Copy Summary exports the selected terminal convoy; **Export
+History…** exports the selected convoy, currently filtered history or all retained
+terminal history as one Markdown or JSON file. A missing selected entry is an error.
+The report snapshots current recorded metadata at confirmation and never inspects
+Git. Export and file writing do not modify history or trigger retention.
+
+Exported files remain independent after Remove, Clear or retention cleanup. Export
+is manual; cleanup never exports automatically. Markdown reuses Copy Summary, and
+JSON uses explicit schema version 1. These are concise reports, not restorable
+backups. Review bounded task/name/validation metadata before sharing. See
+[formats, scopes, privacy and file handling](history-export.md).

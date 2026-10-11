@@ -12,6 +12,14 @@ impl App {
 
     /// Returns true only when the close request may proceed without a dialog.
     pub(super) fn request_quit(&mut self) -> bool {
+        if self.export.pending.is_some() {
+            self.cancel_export();
+            if self.export.pending.is_some() {
+                self.explicit_quit = true;
+                self.notice = "Waiting for export cancellation before quitting.".into();
+                return false;
+            }
+        }
         if self.history_write.is_some() {
             self.explicit_quit = true;
             self.notice =

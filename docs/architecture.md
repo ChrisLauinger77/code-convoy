@@ -63,7 +63,7 @@ identity. See [UniCase's folding API](https://docs.rs/unicase/2.10.0/unicase/str
 
 `ui/library` owns group/template editing and explicit selection actions. `ui/attachments_ui` owns native file selection, optional drops, background inspection/reuse and stale-result rejection. `ui/editor` coordinates the task, scrolling editor, fixed execution controls, and modal preflight review. `ui/agent_config` renders only the selected backend's option specifications; `ui/repositories` handles registration, Git-state presentation and bulk selection. `ui/results` presents run navigation, cleanup, jobs and result tabs; `ui/snapshot` displays declared option labels, repository paths and UTC timestamps. `ui/diagnostics` keeps concise messages separate from expandable, copyable raw details. `ui/about` shows offline application metadata. `ui/theme` centralizes palettes, typography, spacing, focus/selection, primary actions and a painted success mark (the bundled fonts lack check glyphs). `ui/format` formats duration, dates, options and status text; overall status and progress remain domain-derived.
 
-Copy Results uses pure `ui/result_markdown` helpers over `Run`, `Job`,
+Copy Results uses pure `export/markdown` helpers over `Run`, `Job`,
 `visibility::summary`/`changes`/`needs_review` and the latest saved validation
 record. It reuses `ui/format` date, duration and convoy-status presentation.
 `ui/copy_results` generates text on activation only, sends egui's clipboard output
@@ -952,3 +952,31 @@ repository leasing, concurrency and scheduling policy are unchanged. Validation
 also exposes worker ownership independently of visible record status. Existing
 worktree history protection remains authoritative: even resolved copies remain
 pinned until verified physical cleanup. See [history documentation](history.md).
+
+
+## v0.9 history export
+
+`export` resolves stable selected IDs or the existing HistorySearch's matching IDs
+against current terminal history, preserving order and deduplicating. At Export
+confirmation the UI captures an explicit metadata-only report, without copying Run,
+Job, logs, diffs or attachment contents. Report structs have their own version-1
+JSON contract and never serialize the internal persistence structs. Shared saved
+visibility summaries/changes/review rules supply the values; optional measurements
+stay unknown. `export/markdown` is the extracted Copy Results formatter, now reading
+the same report for clipboard convoy summaries and files. UTC/duration helpers
+also moved into the pure report module and are re-exported by `ui/format`.
+
+`ui/export` owns only dialog, snapshot and worker state. It constructs the existing
+parented rfd async save future on the UI thread and receives destination/completion
+messages through the usual channel. `export/file` performs destination inspection,
+formatting, cancellation-aware writing, flush/sync and exact-file publication off
+the UI thread. A second, safe-default replacement modal covers native platforms
+without overwrite confirmation. Changed targets are rejected; new files publish
+without clobbering. The Store's atomic-save helper is Store-specific, so export
+uses the same existing tempfile dependency without changing Store transactions.
+
+Export owns no repository/scheduler leases, triggers no Git/validation/retention,
+and never saves history. Ordinary saves and cleanup can proceed after capture;
+only the report snapshot is used by the worker. Busy state prevents duplicate
+exports. Quit requests cancel and await an in-flight export; Drop also signals
+cancellation. No persistence schema, dependency, agent or scheduler changes.

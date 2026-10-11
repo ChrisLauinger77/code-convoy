@@ -1,46 +1,57 @@
 //! Clipboard reports read saved metadata only: no Git, live review cache, or logs.
-use super::format;
+use super::time as format;
 use crate::{
-    domain::{Job, ResultResolution, Run},
+    domain::{Job, Run},
     validation::{Command, Status},
     visibility,
 };
 use std::fmt::Write;
 
-pub(super) fn convoy(run: &Run) -> String {
+pub(crate) fn convoy(run: &Run) -> String {
+    convoy_snapshot(&super::Convoy::capture(run))
+}
+
+pub(super) fn convoy_snapshot(run: &super::Convoy) -> String {
     let mut text = format!(
         "# Convoy #{} — {}\n\nBackend: {}\n",
         run.id,
-        format::run_state(run),
-        run.task.agent.label()
+        super::status_label(run.status),
+        run.backend_label
     );
-    if let Some(task) = run.task.prompt.lines().find(|line| !line.trim().is_empty()) {
-        let _ = writeln!(text, "\nTask summary: {}", field(task, 160));
+    if let Some(task) = &run.task_summary {
+        let _ = writeln!(text, "\nTask summary: {}", display_field(task));
     }
-    if let Some(start) = run.jobs.iter().filter_map(|job| job.started_at).min() {
-        let _ = writeln!(text, "\nFirst recorded start: {}", format::timestamp(start));
+    if let Some(start) = run.started_at.as_deref() {
+        let _ = writeln!(text, "\nFirst recorded start: {}", format::display(start));
     }
-    let end = completion(run);
+    let end = run.completed_at.as_deref();
     let _ = write!(
         text,
         "\nCreated: {}\n\nCompleted: {}\n\nDuration: {}\n\nRepository jobs: {} recorded\n",
-        format::timestamp(run.created_at),
-        end.map_or_else(|| "Unavailable".into(), format::timestamp),
-        elapsed(Some(run.created_at), end),
-        run.jobs.len()
+        format::optional(run.created_at.as_deref()),
+        format::optional(end),
+        run.duration_ms
+            .map_or_else(|| "Unavailable".into(), |ms| format::duration(ms / 1000)),
+        run.repositories.len()
     );
-    if run.jobs.is_empty() {
+    if run.repositories.is_empty() {
         text.push_str("\nNo repository results recorded.\n");
         return text;
     }
-    let s = visibility::summary(run);
-    let known = if s.unknown > 0 { " known" } else { "" };
+    let s = &run.summary;
+    let known = if s.unknown_changes > 0 { " known" } else { "" };
     let _ = write!(
         text,
         "\n## Summary\n\n- Succeeded: {}\n- Failed: {}\n- Cancelled: {}\n- Changed: {}{known}\n- Unchanged: {}{known}\n- Unknown changes: {}\n- Needs review: {}\n",
-        s.succeeded, s.failed, s.cancelled, s.changed, s.unchanged, s.unknown, s.review
+        s.succeeded,
+        s.failed,
+        s.cancelled,
+        s.changed,
+        s.unchanged,
+        s.unknown_changes,
+        s.needs_review
     );
-    let interrupted = run.jobs.iter().filter(|job| job.interrupted).count();
+    let interrupted = s.interrupted;
     if interrupted > 0 {
         let _ = writeln!(text, "- Interrupted (included in cancelled): {interrupted}");
     }
@@ -53,16 +64,20 @@ pub(super) fn convoy(run: &Run) -> String {
         Status::Running,
     ] {
         let count = run
-            .jobs
+            .repositories
             .iter()
-            .filter(|job| job.validation.as_ref().is_some_and(|v| v.status == status))
+            .filter(|job| {
+                job.validation
+                    .as_ref()
+                    .is_some_and(|v| v.status == super::validation_status(status))
+            })
             .count();
         if count > 0 {
             let _ = writeln!(text, "- {}: {count}", status.label());
         }
     }
     let missing = run
-        .jobs
+        .repositories
         .iter()
         .filter(|job| job.validation.is_none())
         .count();
@@ -72,15 +87,15 @@ pub(super) fn convoy(run: &Run) -> String {
     text.push_str(
         "\n## Repository Results\n\n| Repository | Result | Changes | Review | Validation |\n|---|---|---|---|---|\n",
     );
-    for job in &run.jobs {
+    for job in &run.repositories {
         let _ = writeln!(
             text,
             "| {} | {} | {} | {} | {} |",
-            repository_name(job),
-            outcome(job),
-            visibility::changes(job).label(),
-            review(job),
-            validation(job)
+            display_field(&job.name),
+            super::repository_status_label(job),
+            job.changes.label(),
+            super::review_label(job.review),
+            super::validation_label(job.validation.as_ref())
         );
     }
     text.push_str(
@@ -89,7 +104,7 @@ pub(super) fn convoy(run: &Run) -> String {
     text
 }
 
-pub(super) fn repository(run: &Run, job: &Job) -> String {
+pub(crate) fn repository(run: &Run, job: &Job) -> String {
     let changes = visibility::changes(job);
     let mut text = format!(
         "# CodeConvoy — Repository Result\n\nConvoy: #{}\n\nRepository: {}\n\nBackend: {}\n\nResult: {}\n\nDuration: {}\n\n## Changes\n\nCompletion observation: {}\n",
@@ -126,13 +141,6 @@ pub(super) fn repository(run: &Run, job: &Job) -> String {
     text
 }
 
-fn completion(run: &Run) -> Option<u64> {
-    if run.jobs.is_empty() || run.active() || run.jobs.iter().any(|j| j.finished_at.is_none()) {
-        return None;
-    }
-    run.jobs.iter().filter_map(|j| j.finished_at).max()
-}
-
 fn elapsed(start: Option<u64>, end: Option<u64>) -> String {
     start
         .zip(end)
@@ -149,15 +157,7 @@ fn outcome(job: &Job) -> &'static str {
 }
 
 fn review(job: &Job) -> &'static str {
-    match job.resolution {
-        ResultResolution::Applied => "Applied",
-        ResultResolution::Discarded => "Discarded",
-        ResultResolution::ApplyPending => "Apply pending / uncertain",
-        ResultResolution::DiscardPending => "Discard pending",
-        ResultResolution::Unresolved if visibility::needs_review(job) => "Required",
-        ResultResolution::Unresolved if job.status.is_terminal() => "Not required",
-        ResultResolution::Unresolved => "Unavailable",
-    }
+    super::review_label(super::review_status(job))
 }
 
 fn validation(job: &Job) -> &'static str {
@@ -177,6 +177,10 @@ fn repository_name(job: &Job) -> String {
 }
 
 fn command(saved: &Command) -> String {
+    markdown(&command_text(saved))
+}
+
+pub(super) fn command_text(saved: &Command) -> String {
     // Display-only quoting retains argument boundaries. No directory is included.
     let executable = if local_path(&saved.executable) {
         saved.executable.rsplit(['/', '\\']).next().unwrap_or("")
@@ -202,7 +206,7 @@ fn command(saved: &Command) -> String {
     if saved.arguments.len() > display.arguments.len() {
         label.push_str(" …");
     }
-    markdown(&bounded(&label, 320))
+    bounded(&label, 320)
 }
 
 /// Conservative omission of a field containing an absolute or home-relative path.
@@ -309,10 +313,22 @@ fn path_boundary(previous: Option<char>) -> bool {
 }
 
 fn field(value: &str, limit: usize) -> String {
+    display_field(&plain_field(value, limit))
+}
+
+fn display_field(value: &str) -> String {
+    if value == "[local path omitted]" {
+        value.into()
+    } else {
+        markdown(value)
+    }
+}
+
+pub(super) fn plain_field(value: &str, limit: usize) -> String {
     if local_path(value) {
         return "[local path omitted]".into();
     }
-    markdown(&bounded(value, limit))
+    bounded(value, limit)
 }
 
 fn bounded(value: &str, limit: usize) -> String {

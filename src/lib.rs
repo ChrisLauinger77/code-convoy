@@ -3,6 +3,7 @@ pub mod attachments;
 pub mod continuation;
 pub mod desktop;
 pub mod domain;
+pub mod export;
 pub mod git;
 pub mod history;
 pub mod notifications;

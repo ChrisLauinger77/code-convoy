@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::{
-    domain::{AgentId, JobStatus, Repository, TaskConfig, WorktreeResult},
+    domain::{AgentId, JobStatus, Repository, ResultResolution, TaskConfig, WorktreeResult},
     validation::Record,
     visibility::Changes,
 };

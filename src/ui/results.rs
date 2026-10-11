@@ -13,6 +13,7 @@ impl App {
     fn results_content(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, bottom: f32) {
         theme::eyebrow(ui, "RUNS / RESULTS");
         self.run_navigation(ui);
+        self.export_status(ui);
         self.bulk_discard_status(ui);
         self.continuation_controls(ui, ctx);
         if self.state.runs.is_empty() {
@@ -46,6 +47,7 @@ impl App {
             .truncate(),
         )
         .on_hover_text(&run.task.prompt);
+        let mut export_id = None;
         ui.horizontal_wrapped(|ui| {
             ui.small(format!(
                 "{} / {} finished · {} elapsed · per-convoy limit {}",
@@ -55,6 +57,13 @@ impl App {
                 run.task.concurrency
             ));
             copy_results::summary(ui, run);
+            if !run.active()
+                && ui
+                    .add_enabled(self.export_available(), theme::quiet("Export…").small())
+                    .clicked()
+            {
+                export_id = Some(run.id);
+            }
             if run.active()
                 && ui
                     .button("Stop Convoy")
@@ -66,6 +75,17 @@ impl App {
                 self.manager.cancel_run(run.id);
             }
         });
+        if let Some(id) = export_id {
+            self.offer_export(Some(id));
+        }
+        let Some(run) = self
+            .state
+            .runs
+            .iter()
+            .find(|r| Some(r.id) == self.selected_run)
+        else {
+            return;
+        };
         ui.add_space(theme::GAP);
         ui.horizontal_wrapped(|ui| {
             ui.selectable_value(&mut self.tab, Tab::Review, "Review");
@@ -386,6 +406,15 @@ impl App {
     }
 
     fn run_navigation(&mut self, ui: &mut egui::Ui) {
+        if ui
+            .add_enabled(
+                self.export_available() && self.state.runs.iter().any(|r| !r.active()),
+                theme::quiet("Export History…").small(),
+            )
+            .clicked()
+        {
+            self.offer_export(None);
+        }
         if self.state.runs.is_empty() {
             if self.show_active_navigation {
                 self.show_active_navigation = false;

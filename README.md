@@ -404,6 +404,16 @@ History retains completed convoys indefinitely by default. **Settings → Histor
 
 **History cleanup → Clean Up History…** previews counts and convoy IDs and requires confirmation. If history changes, the preview refreshes for confirmation again. **Remove convoy #… from history** and **Clear removable history** still remove eligible terminal history regardless of the policy. All three share protected, atomic persistence, report save failures and reconcile selection. Deleted history may not be recoverable. History deletion never deletes worktrees, changes Git, removes registrations or changes validation configuration. Logs remain session-only. See [history settings and cleanup](docs/history.md).
 
+**Export…** beside Copy Summary saves one completed convoy as Markdown or JSON.
+**Export History…** offers the selected convoy, currently filtered history or all
+retained terminal history in one file. Markdown shares the Copy Summary formatter;
+JSON uses a stable schema-version-1 envelope. Exports snapshot recorded metadata,
+never inspect current Git, and remain independent of later history cleanup. Logs,
+diffs, attachments and internal paths/ownership are excluded. Bounded task/name and
+validation metadata may still be sensitive: review before sharing. Native save
+selection, explicit replacement confirmation and background atomic writing keep
+export responsive and predictable. See [history export](docs/history-export.md).
+
 **Retry** appears for the selected failed, cancelled or interrupted job. It opens normal launch review for a new one-repository convoy with the original task, backend/options, context, execution mode and per-convoy limit. The current draft stays intact. Current registration, Git state, attachments and CLI compatibility are checked again; missing or changed original context blocks Retry. Direct retries use the current working tree and dirty-tree acknowledgment. Isolated retries create a fresh worktree from the committed HEAD captured by the new review. Old files, output and result resolution remain independent; no old result is automatically Applied or Discarded. Retries use the same scheduler, locks and Stop/quit controls. History and Task & settings identify the attempt and source convoy.
 
 In **Review**, use the **Follow-up** checkboxes to select one or more repositories, then **New convoy from selected**. This replaces NEW CONVOY with explicit registered repository selections and copies the original backend/options, execution mode and per-convoy limit. The task and attachments start empty; the global limit and groups/templates stay unchanged. Missing/unregistered repositories are omitted with a message. Load a template or enter a new task, optionally attach context, and explicitly use Run Convoy. Selection does not depend on success, Apply/Discard or the old worktree's availability.
