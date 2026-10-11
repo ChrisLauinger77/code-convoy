@@ -175,7 +175,7 @@ impl Batch {
     ) {
         let error = match &completion {
             Completion::Cleanup(Ok(r)) if r.availability == ResultAvailability::Cleaned => None,
-            Completion::Cleanup(Err(e)) => Some(e.clone()),
+            Completion::Cleanup(Err(e)) | Completion::ManagedCleanupBlocked(e) => Some(e.clone()),
             _ => Some("Cleanup did not confirm physical removal.".into()),
         };
         let saved = store.finish_result_operation(state, operation, completion);

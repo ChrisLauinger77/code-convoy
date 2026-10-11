@@ -5,7 +5,7 @@ use codeconvoy::{
     persistence::worktree_cleanup::Plan,
     storage::{
         self,
-        management::{Lifecycle, classify},
+        management::{Lifecycle, classify, protection},
     },
     validation,
 };
@@ -48,6 +48,23 @@ async fn execute(f: &mut Fixture, plan: Plan) -> Summary {
         }
     }
     batch.summary
+}
+#[cfg(unix)]
+fn assert_prewrite_rejection(f: &Fixture) {
+    let job = &f.state.runs[0].jobs[0];
+    assert_eq!(job.result_availability, ResultAvailability::Available);
+    assert!(!job.result_checked);
+    assert!(job.worktree_detail.contains("Cleanup not started"));
+    assert!(f.metadata().path.exists());
+    assert!(f.admin().join("locked").exists());
+    assert!(
+        !f.metadata()
+            .path
+            .parent()
+            .unwrap()
+            .join("cleanup.json")
+            .exists()
+    );
 }
 fn validation_record(job: &Job) -> validation::Record {
     validation::Record::pending(
@@ -143,10 +160,18 @@ async fn ordinary_cleanup_classifies_active_retained_missing_and_unknown_without
     let m = f.metadata();
     let e = entry(&f, &m).await;
     // A completed, clean result is still retained until explicitly resolved.
-    assert_eq!(
-        classify(&f.state, &m, e.inspection.as_ref()).0,
-        Lifecycle::Retained
-    );
+    assert_eq!(protection(&f.state, &m).unwrap().0, Lifecycle::Retained);
+    let (kind, detail) = classify(&f.state, &m, e.inspection.as_ref());
+    if cfg!(unix) {
+        assert_eq!(kind, Lifecycle::Retained, "{detail}");
+    } else {
+        assert_eq!(kind, Lifecycle::Unknown, "{detail}");
+        assert!(detail.contains("disabled on this platform"), "{detail}");
+        let inspection = e.inspection.as_ref().unwrap();
+        assert_eq!(inspection.exists, Some(true));
+        assert_eq!(inspection.registered, Some(true));
+        assert!(inspection.proof.is_none());
+    }
     for status in [JobStatus::Queued, JobStatus::Running, JobStatus::Preparing] {
         f.state.runs[0].jobs[0].status = status;
         assert_eq!(
@@ -382,7 +407,7 @@ async fn ordinary_cleanup_supports_old_custom_bases_and_does_not_discover_user_w
             "worktree".as_ref(),
             "add".as_ref(),
             "--detach".as_ref(),
-            foreign.as_os_str(),
+            &git::path_argument(&foreign),
             original.base_commit.as_ref(),
         ],
     );
@@ -464,8 +489,16 @@ async fn ordinary_cleanup_rechecks_active_process_lease_and_shutdown() {
     let summary = execute(&mut f, selected).await;
     assert_eq!(summary.count(Outcome::Failed), 1);
     assert!(summary.entries[0].detail.contains("in use"));
-    assert!(f.metadata().path.exists());
+    assert_prewrite_rejection(&f);
     f.stop_peer().await;
+    f.state = f.store.load().unwrap();
+    assert_eq!(
+        f.inspect(false).await.availability,
+        ResultAvailability::Available
+    );
+    let retry = plan(&f).await;
+    assert_eq!(retry.eligible(), 1);
+    assert_eq!(execute(&mut f, retry).await.count(Outcome::Removed), 1);
 
     let mut f = Fixture::new().await;
     resolved(&mut f).await;
@@ -516,7 +549,7 @@ async fn ordinary_cleanup_blocks_live_validation_even_when_ui_record_is_stale() 
     let summary = execute(&mut f, selected).await;
     assert_eq!(summary.count(Outcome::Failed), 1);
     assert!(summary.entries[0].detail.contains("in use"));
-    assert!(f.metadata().path.exists());
+    assert_prewrite_rejection(&f);
     service.shutdown();
     tokio::time::timeout(Duration::from_secs(10), async {
         while !service.is_idle() {
@@ -526,6 +559,154 @@ async fn ordinary_cleanup_blocks_live_validation_even_when_ui_record_is_stale() 
     })
     .await
     .unwrap();
+    assert_eq!(
+        f.inspect(false).await.availability,
+        ResultAvailability::Available
+    );
+    let retry = plan(&f).await;
+    assert_eq!(retry.eligible(), 1);
+    assert_eq!(execute(&mut f, retry).await.count(Outcome::Removed), 1);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ordinary_cleanup_stale_preview_can_be_reviewed_and_retried_after_restart() {
+    let mut f = Fixture::new().await;
+    resolved(&mut f).await;
+    let selected = plan(&f).await;
+    let m = f.metadata();
+    let before = serde_json::to_value(&f.state.runs[0].jobs[0]).unwrap();
+    let index = fs::read(f.admin().join("index")).unwrap();
+    fs::write(m.path.join("late-file"), "keep").unwrap();
+    let summary = execute(&mut f, selected).await;
+    assert_eq!(summary.count(Outcome::Failed), 1);
+    assert!(
+        summary.entries[0]
+            .detail
+            .contains("changed since confirmation")
+    );
+    assert_prewrite_rejection(&f);
+    assert_eq!(fs::read(f.admin().join("index")).unwrap(), index);
+    assert_eq!(plan(&f).await.eligible(), 0);
+    for key in [
+        "resolution",
+        "worktree",
+        "worktree_result",
+        "validation",
+        "completion_changes",
+    ] {
+        assert_eq!(
+            serde_json::to_value(&f.state.runs[0].jobs[0]).unwrap()[key],
+            before[key]
+        );
+    }
+
+    f.state = f.store.load().unwrap();
+    assert_eq!(
+        f.state.runs[0].jobs[0].result_availability,
+        ResultAvailability::Available
+    );
+    assert!(!f.state.runs[0].jobs[0].result_checked);
+    assert_eq!(
+        f.inspect(false).await.availability,
+        ResultAvailability::Available
+    );
+    assert_eq!(plan(&f).await.eligible(), 0); // The late file still needs review.
+    assert_eq!(
+        fs::read_to_string(m.path.join("late-file")).unwrap(),
+        "keep"
+    );
+    fs::remove_file(m.path.join("late-file")).unwrap();
+    let retry = plan(&f).await;
+    assert_eq!(retry.eligible(), 1);
+    assert_eq!(execute(&mut f, retry).await.count(Outcome::Removed), 1);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ordinary_cleanup_rejected_outcome_save_failure_retains_durable_pending_intent() {
+    let mut f = Fixture::new().await;
+    resolved(&mut f).await;
+    let mut batch = Batch::new(plan(&f).await);
+    let op = batch.begin_next(&f.store, &mut f.state).unwrap();
+    fs::write(f.metadata().path.join("late-file"), "keep").unwrap();
+    let completion = op.execute(&f.manager.lifecycle()).await;
+    assert!(matches!(
+        completion,
+        codeconvoy::persistence::results::Completion::ManagedCleanupBlocked(_)
+    ));
+    // Fail the outcome save after the known pre-write rejection. Only durable
+    // pending intent survives restart, so absence of a journal cannot allow retry.
+    let history = f.store.history_path();
+    let saved = history.with_extension("saved");
+    fs::rename(&history, &saved).unwrap();
+    fs::create_dir(&history).unwrap();
+    batch.finish(&f.store, &mut f.state, &op, completion);
+    assert_eq!(batch.summary.count(Outcome::Failed), 1);
+    assert!(
+        batch.summary.entries[0]
+            .detail
+            .contains("outcome could not be saved")
+    );
+    assert_eq!(
+        f.state.runs[0].jobs[0].result_availability,
+        ResultAvailability::CleanupPending
+    );
+    fs::remove_dir(&history).unwrap();
+    fs::rename(&saved, &history).unwrap();
+    f.state = f.store.load().unwrap();
+    assert_eq!(
+        f.inspect(false).await.availability,
+        ResultAvailability::CleanupFailed
+    );
+    assert_eq!(plan(&f).await.eligible(), 0);
+    assert!(f.metadata().path.join("late-file").exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ordinary_cleanup_does_not_block_on_unrelated_jobs_in_the_same_convoy() {
+    let mut f = Fixture::new().await;
+    resolved(&mut f).await;
+    let other = Fixture::new().await;
+    let m = f.metadata();
+    let inspected = entry(&f, &m).await;
+    let mut peer = Job::queued(other.state.repositories[0].clone());
+    peer.before = Some(git::status(&other.source()).await.unwrap().summary);
+    f.state.runs[0].jobs.push(peer.clone());
+    for status in [JobStatus::Queued, JobStatus::Preparing, JobStatus::Running] {
+        peer.status = status;
+        f.state.runs[0].jobs[1] = peer.clone();
+        assert!(f.state.runs[0].active());
+        assert_eq!(
+            classify(&f.state, &m, inspected.inspection.as_ref()).0,
+            Lifecycle::Candidate
+        );
+        // Same, nested and shared-common-directory work still blocks cleanup.
+        for path in [
+            &m.repository.path,
+            &m.repository.path.join("nested"),
+            m.repository.path.parent().unwrap(),
+        ] {
+            f.state.runs[0].jobs[1].repository.path = path.to_owned();
+            assert_eq!(
+                classify(&f.state, &m, inspected.inspection.as_ref()).0,
+                Lifecycle::Active
+            );
+        }
+        f.state.runs[0].jobs[1] = peer.clone();
+        f.state.runs[0].jobs[1].before.as_mut().unwrap().common_dir = Some(m.common_dir.clone());
+        assert_eq!(
+            classify(&f.state, &m, inspected.inspection.as_ref()).0,
+            Lifecycle::Active
+        );
+    }
+    f.state.runs[0].jobs[1] = peer;
+    let selected = plan(&f).await;
+    assert_eq!(selected.eligible(), 1);
+    assert_eq!(execute(&mut f, selected).await.count(Outcome::Removed), 1);
+    assert_eq!(f.state.runs[0].jobs[1].status, JobStatus::Running);
+    assert!(other.source().join("tracked.txt").exists());
 }
 
 #[cfg(unix)]
@@ -579,7 +760,7 @@ async fn ordinary_cleanup_rejects_missing_records_repository_roots_and_unregiste
                         "worktree".as_ref(),
                         "add".as_ref(),
                         "--detach".as_ref(),
-                        foreign.as_os_str(),
+                        &git::path_argument(&foreign),
                         m.base_commit.as_ref(),
                     ],
                 );

@@ -51,10 +51,10 @@ pub fn protection(state: &AppState, m: &WorktreeMetadata) -> Option<(Lifecycle, 
             "Lifecycle identity does not match the ownership record.",
         );
     }
-    if run.active() || crate::validation::blocks_result_operation(state, job) {
+    if !job.status.is_terminal() || crate::validation::blocks_result_operation(state, job) {
         return blocked(
             Lifecycle::Active,
-            "Convoy execution or validation is active.",
+            "The affected job or validation is active.",
         );
     }
     if state.runs.iter().flat_map(|r| &r.jobs).any(|j| {

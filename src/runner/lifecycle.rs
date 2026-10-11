@@ -297,10 +297,12 @@ impl LifecycleClient {
         &self,
         m: &WorktreeMetadata,
         proof: &crate::worktrees::cleanup::Proof,
-    ) -> Result<Report> {
-        let permit = self.permit(m, true).await?;
+    ) -> Result<Report, crate::worktrees::cleanup::Failure> {
+        use crate::worktrees::cleanup::Failure;
+        let permit = self.permit(m, true).await.map_err(Failure::Blocked)?;
         let _guard = permit.admin.mutex.lock().await;
-        let _health = AdministrationHealth::protect(&permit.admin, &permit.safe)?;
+        let _health = AdministrationHealth::protect(&permit.admin, &permit.safe)
+            .map_err(Failure::Uncertain)?;
         crate::worktrees::cleanup::remove(
             &permit.root,
             m,

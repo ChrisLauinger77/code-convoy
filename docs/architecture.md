@@ -1015,6 +1015,8 @@ original metadata into a subsequent cancellable background Git inspection throug
 current modifications are independent of retention. Unresolved copies stay retained;
 only resolved Applied copies with reliable current evidence can be candidates.
 Orphans, missing locations, pending/uncertain operations and conflicts are protected.
+Active work blocks cleanup only for the affected job, overlapping repositories or
+the same common Git directory; unrelated jobs in its convoy may continue.
 
 `worktrees/cleanup` reuses recovery's trust-boundary, manifest, canonical Git,
 detached ownership-lock and backlink checks. It adds full ancestor link checks,
@@ -1030,7 +1032,14 @@ A batch begins each target through the existing Store result transaction with
 Its operation retains the selected proof and revalidates after the existing
 exclusive manager lease and administration mutex are acquired. No scheduler or
 concurrency policy changes are needed. Validation, Direct jobs, isolated jobs and
-other lifecycle operations conflict through the same lease boundary.
+other lifecycle operations conflict through the same lease boundary. A typed
+pre-write rejection (for example a busy lease or changed preview) restores the
+previous availability through the Store outcome transaction and invalidates current
+Review authority. A new Review and cleanup confirmation can retry it. This outcome
+is permitted only before a journal write is attempted and with confirmed process
+cleanup; all later errors remain sticky. If saving the rejection fails, durable
+pending intent stays protected. Recovery never infers retry safety from a missing
+journal alone.
 
 The non-force primitive writes the sibling cleanup journal, verifies the locked
 registration, unlocks it, verifies the now-unlocked registration/backlink and

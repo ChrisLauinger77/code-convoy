@@ -54,7 +54,10 @@ then goes through the existing Store intent/outcome transaction and an exclusive
 manager lifecycle lease plus the common-repository administration lock. Other
 CodeConvoy execution, validation and result operations cannot use the affected
 repository while removal is in progress. Busy or stale targets are reported;
-other safe targets continue.
+other safe targets continue. Unrelated jobs in the same convoy do not block cleanup.
+If a target becomes busy or its preview changes before any cleanup journal write
+is attempted, the saved rejection leaves it retryable after a fresh result Review
+and cleanup confirmation. Nothing is retried automatically.
 
 The worker re-reads original bindings/manifests, canonical source/common Git
 identity, base object, detached registration, CodeConvoy ownership lock and both
@@ -74,8 +77,9 @@ reset, clean, stash, commit or object-writing snapshot step.
 After durable intent, the worker rechecks, unlocks **only** the verified CodeConvoy
 registration, rechecks again and runs `git worktree remove -- <exact path>` with
 no force flags. There is no recursive filesystem fallback. Failure attempts to
-restore the ownership lock only when the same target is still verifiable. Failure
-and crash journals remain for diagnosis, and ordinary cleanup cannot retry them
+restore the ownership lock only when the same target is still verifiable. Failures
+after a journal write attempt and unconfirmed process cleanup stay protected;
+failure and crash journals remain for diagnosis, and ordinary cleanup cannot retry them
 without a separate resolution flow. Success requires verified absence of both the
 checkout and its Git registration, a completed journal and a saved Store outcome.
 Small ownership/journal tombstones outside the checkout remain.

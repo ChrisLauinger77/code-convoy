@@ -6,7 +6,7 @@ Linux checks:
 
 - `cargo fmt --check` — passed.
 - `cargo clippy --all-targets --all-features -- -D warnings` — passed.
-- `TMPDIR=/var/tmp cargo test --all-features` — 512 top-level tests passed,
+- `TMPDIR=/var/tmp cargo test --all-features` — 516 top-level tests passed,
   4 existing optional provider probes ignored; 3 subprocess self-tests also passed.
 - `cargo build --release` — passed.
 - `git diff HEAD --check` — passed.
@@ -17,7 +17,7 @@ the tests were then run outside that restriction, in disposable temporary Git
 repositories. No ownership checks were weakened. No user repository was used as
 a cleanup target and no provider CLI was invoked.
 
-The 17 new tests live in `tests/support/managed_cleanup.rs`,
+The 21 new tests live in `tests/support/managed_cleanup.rs`,
 `src/worktrees/cleanup_tests.rs` and `src/ui/storage_tests.rs`:
 
 - Managed detached registration and ownership lock, old custom location bindings,
@@ -27,6 +27,11 @@ The 17 new tests live in `tests/support/managed_cleanup.rs`,
 - Completed clean results remain Retained. Queued/running/preparing jobs, validation,
   uncertain Apply and unknown/orphan lifecycle records stay protected. Live process
   and validation leases block deletion even when UI metadata is stale.
+- Busy leases and changed previews rejected before any journal write can be reviewed
+  and retried, including after restart. Failed outcome saves retain pending intent;
+  unconfirmed process cleanup and failures after unlocking retain sticky protection.
+  Unrelated queued/preparing/running jobs in the same convoy do not block cleanup;
+  same-repository, nested-repository and shared-common-directory work still does.
 - Modified tracked files, index changes, untracked files, ignored content, unmerged
   index entries, agent commits, sparse/assume-unchanged flags, nested repositories,
   in-progress Git evidence and same-size edits hidden by the live Git stat cache.
@@ -67,12 +72,16 @@ contents and Git backlink were preserved. The X11 window remained unmapped to th
 capture tools, so native dialog layout and interaction were **not** verified.
 Headless egui tests provide the interaction coverage described above.
 
-No native macOS or Windows run or cross-compilation was available. Ordinary cleanup
+No local native macOS or Windows run or cross-compilation was available. Ordinary cleanup
 is intentionally disabled on Windows because the implementation lacks a stable
 filesystem identity proof there. Unix device/inode proof is used on Linux/macOS;
 macOS support is implemented but untested natively here. Source and worktree paths
 with spaces/non-ASCII text are covered on Linux. Existing permission-failure tests
 run where permissions can be enforced; root-capable hosts may bypass those checks.
+
+The Windows fixtures assert the platform's explicit cleanup-disabled diagnostic
+while still checking retention and active-work protection. Worktree paths passed
+to Git use the existing native-path adapter, including canonical Windows paths.
 
 Before release, manually verify native Storage selection, protected-state details,
 confirmation, mixed bulk outcomes and normal quit during removal on GNOME/Wayland

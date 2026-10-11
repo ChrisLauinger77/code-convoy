@@ -25,6 +25,7 @@ pub struct Operation {
 pub enum Completion {
     Apply(Outcome),
     Cleanup(Result<Report, String>),
+    ManagedCleanupBlocked(String),
 }
 impl Operation {
     pub async fn execute(&self, client: &LifecycleClient) -> Completion {
@@ -33,13 +34,19 @@ impl Operation {
                 Completion::Apply(client.apply_result(self.run, self.index, &self.job).await)
             }
             Action::ManagedCleanup => {
-                Completion::Cleanup(match (&self.job.worktree, &self.cleanup_proof) {
-                    (Some(m), Some(proof)) => client
-                        .clean_managed(m, proof)
-                        .await
-                        .map_err(|e| format!("{e:#}")),
-                    _ => Err("No confirmed cleanup identity was recorded.".into()),
-                })
+                use crate::worktrees::cleanup::Failure;
+                match (&self.job.worktree, &self.cleanup_proof) {
+                    (Some(m), Some(proof)) => match client.clean_managed(m, proof).await {
+                        Ok(report) => Completion::Cleanup(Ok(report)),
+                        Err(Failure::Blocked(e)) => {
+                            Completion::ManagedCleanupBlocked(format!("{e:#}"))
+                        }
+                        Err(Failure::Uncertain(e)) => Completion::Cleanup(Err(format!("{e:#}"))),
+                    },
+                    _ => Completion::ManagedCleanupBlocked(
+                        "No confirmed cleanup identity was recorded.".into(),
+                    ),
+                }
             }
             _ => Completion::Cleanup(match &self.job.worktree {
                 Some(m) => client.cleanup(m).await.map_err(|e| format!("{e:#}")),
@@ -166,6 +173,20 @@ impl Store {
         );
         let pending = j.clone();
         match completion {
+            Completion::ManagedCleanupBlocked(detail) => {
+                anyhow::ensure!(
+                    op.action == Action::ManagedCleanup,
+                    "Only managed cleanup can report a pre-write rejection."
+                );
+                j.result_availability = op.job.result_availability;
+                // Restore retryability, not stale inspection authority. A new
+                // Review and cleanup proof are required before another attempt.
+                j.result_checked = false;
+                j.worktree_detail =
+                    format!("Cleanup not started: {detail} Refresh result Review before retrying.");
+                j.log
+                    .append(&format!("\n[CodeConvoy] {}\n", j.worktree_detail));
+            }
             Completion::Apply(Outcome::Applied(stats)) => {
                 j.resolution = ResultResolution::Applied;
                 j.resolved_at = Some(now());

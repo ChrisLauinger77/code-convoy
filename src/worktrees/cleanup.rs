@@ -6,7 +6,7 @@ use anyhow::{Context, Result, ensure};
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::atomic::AtomicBool,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -14,6 +14,13 @@ pub struct Proof {
     // Session-only filesystem identity; never authorize a replacement directory
     // using just the recorded pathname or a persisted observation.
     stamps: Vec<(PathBuf, u64, u64)>,
+}
+#[derive(Debug)]
+pub(crate) enum Failure {
+    /// This attempt did not reach the journal write and its processes stopped.
+    Blocked(anyhow::Error),
+    /// A journal write was attempted, or process cleanup was not confirmed.
+    Uncertain(anyhow::Error),
 }
 #[derive(Clone, Debug, Default)]
 pub struct Inspection {
@@ -270,7 +277,7 @@ pub(crate) async fn remove(
     proof: &Proof,
     cancellation: &Cancellation,
     safe: &AtomicBool,
-) -> Result<recovery::Report> {
+) -> Result<recovery::Report, Failure> {
     remove_checked(root, m, proof, cancellation, safe, |_| {}).await
 }
 
@@ -288,21 +295,46 @@ async fn remove_checked(
     proof: &Proof,
     cancellation: &Cancellation,
     safe: &AtomicBool,
+    at: impl FnMut(RemovalStep),
+) -> Result<recovery::Report, Failure> {
+    let preflight = async {
+        ensure!(cfg!(unix), "Ordinary cleanup is disabled on this platform.");
+        let i = git::Inspection { cancellation, safe };
+        let current = inspect(root, m, &i).await;
+        ensure!(
+            current.proof.as_ref() == Some(proof),
+            "Worktree changed since confirmation; preserved. {} {}",
+            current.detail,
+            current.changes.join("; ")
+        );
+        ensure!(
+            !cancellation.is_cancelled(),
+            "Cleanup cancelled before removal."
+        );
+        Ok(())
+    }
+    .await;
+    if let Err(error) = preflight {
+        return Err(if safe.load(Ordering::Acquire) {
+            Failure::Blocked(error)
+        } else {
+            Failure::Uncertain(error)
+        });
+    }
+    // Never infer retry safety later from a missing journal: even its atomic
+    // write can fail after replacement. All errors past this boundary are sticky.
+    remove_journaled(root, m, proof, safe, at)
+        .await
+        .map_err(Failure::Uncertain)
+}
+
+async fn remove_journaled(
+    root: &Path,
+    m: &WorktreeMetadata,
+    proof: &Proof,
+    safe: &AtomicBool,
     mut at: impl FnMut(RemovalStep),
 ) -> Result<recovery::Report> {
-    ensure!(cfg!(unix), "Ordinary cleanup is disabled on this platform.");
-    let i = git::Inspection { cancellation, safe };
-    let current = inspect(root, m, &i).await;
-    ensure!(
-        current.proof.as_ref() == Some(proof),
-        "Worktree changed since confirmation; preserved. {} {}",
-        current.detail,
-        current.changes.join("; ")
-    );
-    ensure!(
-        !cancellation.is_cancelled(),
-        "Cleanup cancelled before removal."
-    );
     recovery::write_journal(root, m, false)?;
     // From unlocking until relocking/removal is verified, shutdown must await
     // this critical section. Every child still has the ordinary 20-second bound.

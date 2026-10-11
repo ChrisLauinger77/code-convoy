@@ -88,7 +88,7 @@ async fn failed_nonforce_git_removal_restores_lock_and_keeps_all_evidence() {
     let f = Fixture::new().await;
     let proof = f.proof().await;
     let admin = f.admin();
-    let error = remove_checked(
+    let Failure::Uncertain(error) = remove_checked(
         &f.root,
         &f.m,
         &proof,
@@ -101,7 +101,9 @@ async fn failed_nonforce_git_removal_restores_lock_and_keeps_all_evidence() {
         },
     )
     .await
-    .unwrap_err();
+    .unwrap_err() else {
+        panic!("Failure after unlock must retain uncertain cleanup state");
+    };
     assert!(error.to_string().contains("lock restored"), "{error:#}");
     assert_eq!(
         fs::read_to_string(f.m.path.join("late-untracked")).unwrap(),
@@ -142,7 +144,7 @@ async fn ignored_data_created_after_unlock_is_preserved_and_registration_relocke
         },
     )
     .await;
-    assert!(result.is_err());
+    assert!(matches!(result, Err(Failure::Uncertain(_))));
     assert_eq!(
         fs::read_to_string(f.m.path.join("valuable")).unwrap(),
         "keep"
@@ -185,7 +187,7 @@ async fn substitution_after_unlock_never_removes_external_data_or_repairs_foreig
         },
     )
     .await;
-    assert!(result.is_err());
+    assert!(matches!(result, Err(Failure::Uncertain(_))));
     assert_eq!(
         fs::read_to_string(f.m.repository.path.join("tracked")).unwrap(),
         "keep\n"
@@ -218,4 +220,27 @@ async fn unsupported_filters_are_rejected_before_status_can_execute_them() {
     assert!(report.proof.is_none());
     assert!(report.detail.contains("conversion"));
     assert!(!f.m.path.join("filter-executed").exists());
+}
+
+#[tokio::test]
+async fn cancelled_preflight_is_retryable_only_after_confirmed_process_cleanup() {
+    let f = Fixture::new().await;
+    let proof = f.proof().await;
+    for stopped in [true, false] {
+        let cancel = Cancellation::default();
+        cancel.cancel();
+        let failure = remove_checked(
+            &f.root,
+            &f.m,
+            &proof,
+            &cancel,
+            &AtomicBool::new(stopped),
+            |_| panic!("Cancelled preflight must not reach mutation"),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(matches!(failure, Failure::Blocked(_)), stopped);
+        assert!(f.admin().join("locked").exists());
+        assert!(!f.m.path.parent().unwrap().join("cleanup.json").exists());
+    }
 }
