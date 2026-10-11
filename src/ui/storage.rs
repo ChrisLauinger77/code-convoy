@@ -70,7 +70,10 @@ impl App {
                 ui.label(self.storage.status.label());
             });
             egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 205.0).max(100.0)).show(ui, |ui| {
-                if let Some(error) = &self.storage.error { ui.label(error); }
+                if let Some(error) = &self.storage.error {
+                    ui.colored_label(theme::Palette::of(ui).error, "Storage measurement failed. Check file access in Diagnostics, then refresh.");
+                    diagnostics::details(ui, "storage_diagnostics", error);
+                }
                 if self.storage.snapshot.is_some() && matches!(self.storage.status, Status::Measuring | Status::Error) {
                     ui.small("Previous snapshot shown below.");
                 }

@@ -61,14 +61,39 @@ pub fn output_empty(job: &Job, this_session: bool) -> String {
             "Cancelled before execution; no agent output.".into()
         }
         JobStatus::Cancelled => {
-            "Stopped without textual output. Any partial edits remain in the repository.".into()
+            if job.execution_mode == domain::ExecutionMode::IsolatedWorktree {
+                "Stopped without textual output. Any partial edits remain in the retained isolated worktree."
+            } else {
+                "Stopped without textual output. Any partial edits remain in the repository."
+            }.into()
         }
         JobStatus::Failed => {
             "No textual output was captured. Inspect the job diagnostics above.".into()
         }
         JobStatus::Succeeded => {
-            "Completed without textual output. Inspect the current working-tree diff.".into()
+            if job.execution_mode == domain::ExecutionMode::IsolatedWorktree {
+                "Completed without textual output. Inspect the retained worktree diff against its saved base."
+            } else {
+                "Completed without textual output. Inspect the current working-tree diff."
+            }.into()
         }
+    }
+}
+
+pub(super) fn diff_empty(mode: domain::ExecutionMode) -> &'static str {
+    match mode {
+        domain::ExecutionMode::Direct => "No changes in the current Git diff.",
+        domain::ExecutionMode::IsolatedWorktree => "No changes relative to the saved base commit.",
+    }
+}
+
+pub(super) fn validation_output_empty(status: crate::validation::Status) -> &'static str {
+    match status {
+        crate::validation::Status::Running => "Validation running; no output received yet.",
+        crate::validation::Status::Failed | crate::validation::Status::Unavailable => {
+            "No captured validation output. Inspect Diagnostics above when available. Output is session-only and is not restored after restart."
+        }
+        _ => "No captured validation output in this session. Output is not restored after restart.",
     }
 }
 

@@ -14,6 +14,8 @@ mod desktop;
 mod history_performance;
 #[path = "notification_tests.rs"]
 mod notifications;
+#[path = "polish_tests.rs"]
+mod polish;
 #[path = "task_context_tests.rs"]
 mod task_context;
 #[path = "validation_tests.rs"]

@@ -162,11 +162,13 @@ impl App {
                     ui.heading("Repository groups");
                     let previous = *index;
                     let group = ui.label("Group");
-                    egui::ComboBox::from_id_salt("edit_group").width(ui.available_width())
+                    egui::ComboBox::from_id_salt("edit_group").width(ui.available_width()).truncate()
                         .selected_text(index.and_then(|i| self.state.groups.get(i)).map_or("New group", |g| g.name.as_str()))
                         .show_ui(ui, |ui| {
                             ui.selectable_value(index, None, "New group");
-                            for (i, group) in self.state.groups.iter().enumerate() { ui.selectable_value(index, Some(i), &group.name); }
+                            for (i, group) in self.state.groups.iter().enumerate() {
+                                if ui.add(egui::Button::selectable(*index == Some(i), &group.name).truncate()).on_hover_text(&group.name).clicked() { *index = Some(i); }
+                            }
                         }).response.labelled_by(group.id);
                     if previous != *index {
                         *value = index.and_then(|i| self.state.groups.get(i)).cloned().unwrap_or(RepositoryGroup { name: String::new(), repositories: Vec::new() });
@@ -178,7 +180,10 @@ impl App {
                     egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 320.0).max(100.0)).show(ui, |ui| {
                         for repository in &self.state.repositories {
                             let mut member = value.repositories.contains(&repository.path);
-                            let response = ui.checkbox(&mut member, &repository.name).on_hover_text(repository.path.display().to_string());
+                            let response = ui.scope(|ui| {
+                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                                ui.checkbox(&mut member, &repository.name)
+                            }).inner.on_hover_text(format!("{}\n{}", repository.name, repository.path.display()));
                             if response.changed() {
                                 if member { value.repositories.push(repository.path.clone()); } else { value.repositories.retain(|p| p != &repository.path); }
                             }
@@ -196,13 +201,14 @@ impl App {
                     });
                     if !error.is_empty() { ui.colored_label(theme::Palette::of(ui).error, error.as_str()); }
                     ui.horizontal_wrapped(|ui| {
+                        if ui.button("Cancel").clicked() { close = true; }
                         if ui.button("Save group").clicked() {
                             match self.save_repository_group(*index, value.clone()) {
                                 Ok(()) => { self.dirty = true; close = true; }
                                 Err(e) => *error = e.to_string(),
                             }
                         }
-                        if let Some(i) = *index && ui.button("Delete group").on_hover_text("Remove only this group; registrations, selections and runs stay intact.").clicked() {
+                        if let Some(i) = *index && ui.add(theme::destructive(ui, "Delete group")).on_hover_text("Remove only this group; registrations, selections and runs stay intact.").clicked() {
                             self.state.groups.remove(i);
                             self.repository_sections.sync(&self.state.repositories, &self.state.groups);
                             self.dirty = true; close = true;
@@ -220,17 +226,17 @@ impl App {
                     ui.small("Templates store only name and task text. Load from Templates to populate the draft.");
                     if !error.is_empty() { ui.colored_label(theme::Palette::of(ui).error, error.as_str()); }
                     ui.horizontal_wrapped(|ui| {
+                        if ui.button("Cancel").clicked() { close = true; }
                         if ui.button("Save template").clicked() {
                             match self.state.save_template(*index, value.clone()) {
                                 Ok(()) => { self.dirty = true; close = true; }
                                 Err(e) => *error = e.to_string(),
                             }
                         }
-                        if let Some(i) = *index && ui.button("Delete template").clicked() { self.state.templates.remove(i); self.dirty = true; close = true; }
+                        if let Some(i) = *index && ui.add(theme::destructive(ui, "Delete template")).clicked() { self.state.templates.remove(i); self.dirty = true; close = true; }
                     });
                 }
             }
-            if ui.button("Close").clicked() { close = true; }
         });
         close |= response.should_close();
         if !close {

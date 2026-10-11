@@ -274,7 +274,7 @@ impl App {
                         "Backend events summarized; full details remain in Raw output."
                     });
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui
                         .add_enabled(
                             !log.text.is_empty(),
@@ -332,7 +332,7 @@ impl App {
                     "Current working tree · staged and unstaged changes, including pre-existing edits."
                 } else { "Retained isolated worktree · changes relative to its snapshotted base commit." });
                 let loading = self.diff_target.is_some() && self.diff.is_none();
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui
                         .add_enabled(
                             !loading
@@ -356,6 +356,9 @@ impl App {
                     }
                 });
                 match &self.diff {
+                    Some(Ok(diff)) if diff.is_empty() => {
+                        ui.weak(format::diff_empty(job.execution_mode));
+                    }
                     Some(Ok(diff)) => self.diff_view.show(
                         ui,
                         ("diff", run.id, self.selected_job),
@@ -368,7 +371,11 @@ impl App {
                         diagnostics::details(ui, "diff_error", error);
                     }
                     None if !loading => {
-                        ui.weak("Refresh to inspect this repository's current Git diff.");
+                        ui.weak(if job.execution_mode == domain::ExecutionMode::Direct {
+                            "Refresh to inspect this repository's current Git diff."
+                        } else {
+                            "Refresh to compare the retained worktree with its saved base commit."
+                        });
                     }
                     None => {}
                 }

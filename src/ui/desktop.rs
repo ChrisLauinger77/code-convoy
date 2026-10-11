@@ -23,7 +23,7 @@ impl App {
                     theme::Palette::of(ui).warning,
                     "System tray unavailable. Window close uses Quit.",
                 );
-                ui.small(error);
+                diagnostics::details(ui, "tray_diagnostics", error);
                 ui.small("Re-enable system tray to retry after fixing host support.");
             }
         }

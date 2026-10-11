@@ -23,7 +23,7 @@ impl App {
                 (&mut preferences.success, "Successful completion"),
                 (&mut preferences.failure, "Failure"),
                 (&mut preferences.cancellation, "Cancellation"),
-                (&mut preferences.review, "Review needed"),
+                (&mut preferences.review, "Needs Review"),
                 (
                     &mut preferences.suppress_foreground,
                     "Suppress while foreground",
@@ -35,7 +35,11 @@ impl App {
         ui.small("One per convoy: failure, cancellation, review, then success.");
         ui.small("Failures can notify while focused. System permissions still apply.");
         if !self.notification_error.is_empty() {
-            ui.colored_label(theme::Palette::of(ui).warning, &self.notification_error);
+            ui.colored_label(
+                theme::Palette::of(ui).warning,
+                "Desktop notification unavailable. Check system notification permissions.",
+            );
+            diagnostics::details(ui, "notification_diagnostics", &self.notification_error);
             if ui.button("Dismiss notification diagnostic").clicked() {
                 self.notification_error.clear();
             }

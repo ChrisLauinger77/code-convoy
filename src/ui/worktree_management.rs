@@ -233,7 +233,7 @@ impl App {
                 let button = ui.button("Cancel");
                 if self.worktree_management.focus_cancel { button.request_focus(); self.worktree_management.focus_cancel = false; }
                 cancel = button.clicked();
-                confirm = ui.add_enabled(plan.eligible() > 0 && self.result_operation.is_none() && self.bulk_discard.is_none() && self.history_write.is_none() && self.state_write.is_none(), egui::Button::new(format!("Clean Up {} Worktrees", plan.eligible()))).clicked();
+                confirm = ui.add_enabled(plan.eligible() > 0 && self.result_operation.is_none() && self.bulk_discard.is_none() && self.history_write.is_none() && self.state_write.is_none(), theme::destructive(ui, format!("Clean Up {} Worktrees", plan.eligible()))).clicked();
             });
         });
         if cancel || response.should_close() {

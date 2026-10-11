@@ -1,5 +1,8 @@
 # Second UI/UX pass — v0.1.0
 
+For the later quality-and-polish pass, see
+[0.10.0 PR 1 validation](ui-polish-validation.md). The record below is historical.
+
 Validated on macOS on 2026-10-05. This pass changes presentation and build metadata, not the backend contract or execution machinery.
 
 This records the preceding UI pass. The subsequent
