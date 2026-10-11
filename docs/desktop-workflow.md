@@ -189,3 +189,12 @@ clicks while minimized, and recovery when the tray host/shell disappears. Confir
 settings round-trip, native worktree folder selection on each platform, and no
 replay/resume after restart. No tags or packages have
 been published by this implementation.
+
+### Storage measurements
+
+**Settings → Storage…** shows the current worktree base and known attempts in
+original locations, including older custom bases recorded under `.locations`.
+It never moves, validates through Git, cleans or migrates worktrees. Refresh after
+jobs or explicit history cleanup to update the read-only snapshot. See
+[Storage Overview](storage.md) for logical-size semantics, exclusions and partial
+inventory reporting.

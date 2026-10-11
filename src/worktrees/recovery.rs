@@ -77,7 +77,7 @@ fn absent(path: &Path) -> Result<bool> {
         Err(e) => Err(e.into()),
     }
 }
-fn bounded(path: &Path) -> Result<Vec<u8>> {
+pub(super) fn bounded(path: &Path) -> Result<Vec<u8>> {
     ordinary(path, false)?;
     let mut bytes = Vec::new();
     fs::File::open(path)?
@@ -116,7 +116,7 @@ fn resolve(path: &Path) -> Result<PathBuf> {
 }
 
 /// Custom boundaries require an exact original-location record in the Store.
-fn layout(root: &Path, m: &WorktreeMetadata) -> Result<PathBuf> {
+pub(super) fn layout(root: &Path, m: &WorktreeMetadata) -> Result<PathBuf> {
     let recorded = super::location::recorded_root(root, m)?;
     let root = recorded.as_path();
     anyhow::ensure!(
@@ -153,7 +153,7 @@ fn layout(root: &Path, m: &WorktreeMetadata) -> Result<PathBuf> {
     );
     Ok(attempt.to_owned())
 }
-fn manifest(root: &Path, m: &WorktreeMetadata) -> Result<()> {
+pub(super) fn manifest(root: &Path, m: &WorktreeMetadata) -> Result<()> {
     let attempt = layout(root, m)?;
     let root = attempt.parent().context("Missing original storage root.")?;
     ordinary(root, true)?;
@@ -191,6 +191,11 @@ fn journal(m: &WorktreeMetadata) -> Result<Option<CleanupRecord>> {
     let record: CleanupRecord = serde_json::from_slice(&bounded(&path)?)?;
     anyhow::ensure!(record.metadata == *m, "Cleanup record ownership mismatch.");
     Ok(Some(record))
+}
+
+/// Read-only tombstone observation, never reconciliation or journal repair.
+pub(super) fn physically_cleaned(m: &WorktreeMetadata) -> Result<bool> {
+    Ok(journal(m)?.is_some_and(|r| r.completed) && absent(&m.path)?)
 }
 fn write_journal(root: &Path, m: &WorktreeMetadata, completed: bool) -> Result<()> {
     manifest(root, m)?;

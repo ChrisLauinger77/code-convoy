@@ -1,5 +1,6 @@
 //! Retained detached worktrees and owned result lifecycle.
 pub mod apply;
+pub mod inventory;
 pub mod location;
 pub mod recovery;
 use crate::{

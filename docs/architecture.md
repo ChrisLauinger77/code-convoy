@@ -980,3 +980,29 @@ and never saves history. Ordinary saves and cleanup can proceed after capture;
 only the report snapshot is used by the worker. Busy state prevents duplicate
 exports. Quit requests cancel and await an in-flight export; Drop also signals
 cancellation. No persistence schema, dependency, agent or scheduler changes.
+
+
+## v0.9 storage overview
+
+`Store::history_path` identifies the existing shared state file without changing
+its layout or persistence semantics. `storage/history` measures the actual file
+and reads version-1 Run records off-thread; it never calls Store load/recovery or
+retention. `worktrees/inventory` combines minimal saved/live ownership references,
+immediate default-root manifests and exact `.locations` bindings. It reuses the
+lifecycle module's filesystem-only layout/manifest/journal readers; no Git-backed
+reconciliation or writes are invoked. Completed absent tombstones are excluded.
+Invalid records produce bounded diagnostics without stopping independent entries.
+
+`storage/filesystem` traverses regular entries without following symbolic links or
+Windows reparse points. `storage` aggregates optional logical byte counts and
+explicit completeness states. `storage/service` owns one worker generation and one
+coalesced pending request; cancellation waits for the old worker's completion
+before dispatching another. Dropping or closing cancels without repository leases
+or shutdown waits. `ui/storage` dispatches spawn_blocking on the existing runtime
+and receives results on the existing UI channel. It owns presentation only,
+including category success timestamps, snapshot labels and existing history-settings
+navigation. No persisted fields, dependencies, backend or scheduler changes.
+
+See [storage semantics and cleanup prerequisites](storage.md). This inventory
+must never substitute for the full ownership checks and Store/manager transaction
+required by a future cleanup action.

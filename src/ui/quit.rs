@@ -53,6 +53,7 @@ impl App {
             return;
         }
         self.closing = true;
+        self.storage.cancel();
         self.quit_requested = false;
         self.focus_quit_cancel = false;
         self.cli_checks.stop();

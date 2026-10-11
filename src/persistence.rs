@@ -53,8 +53,13 @@ impl Store {
     pub fn directory(&self) -> &Path {
         &self.directory
     }
+    /// The sole supported history layout is shared application state, including
+    /// version-1 legacy saves. Exports and temporary save files are not history.
+    pub fn history_path(&self) -> PathBuf {
+        self.directory.join("state.json")
+    }
     pub fn load(&self) -> Result<AppState> {
-        let path = self.directory.join("state.json");
+        let path = self.history_path();
         let mut state: AppState = match fs::read(&path) {
             Ok(bytes) => serde_json::from_slice(&bytes)
                 .with_context(|| format!("Invalid state in {}. Back up and move this file aside to start fresh; it has not been overwritten.", path.display()))?,
@@ -124,7 +129,7 @@ impl Store {
             .context("Cannot encode application state.")?;
         file.write_all(b"\n")?;
         file.as_file().sync_all()?;
-        file.persist(self.directory.join("state.json"))
+        file.persist(self.history_path())
             .context("Cannot replace application state; previous state is intact.")?;
         #[cfg(unix)]
         File::open(&self.directory)?.sync_all()?;
