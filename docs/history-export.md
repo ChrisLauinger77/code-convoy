@@ -178,3 +178,9 @@ close an already-open OS dialog; dismiss it to finish cancellation and quit.
 Exports are portable reports, **not full-fidelity backups**. There is no import,
 restore, scheduled export, synchronization, log/diff export or storage management.
 See [validation coverage and remaining native checks](history-export-validation.md).
+
+After publication, Unix also syncs the destination directory. A failure at that
+point reports that the complete file was published but durability is uncertain;
+it does not remove or claim to roll back the completed file. Windows uses
+`tempfile`'s platform replacement, with no delete-then-rename fallback. Native
+sharing/locking and abrupt power-loss behavior still require platform testing.

@@ -10,6 +10,8 @@ mod bulk_discard;
 mod continuation;
 #[path = "desktop_tests.rs"]
 mod desktop;
+#[path = "history_performance_tests.rs"]
+mod history_performance;
 #[path = "notification_tests.rs"]
 mod notifications;
 #[path = "task_context_tests.rs"]
@@ -30,6 +32,17 @@ fn finish_history_write(app: &mut App) {
         app.poll();
     }
     panic!("history save did not finish");
+}
+
+fn finish_state_write(app: &mut App) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.state_write.is_some() {
+        assert!(Instant::now() < deadline);
+        app.runtime().block_on(async {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        });
+        app.poll();
+    }
 }
 
 fn app() -> (tempfile::TempDir, App) {
@@ -1856,6 +1869,7 @@ fn recovered_result_messages_update_history_once_and_do_not_change_raw_output() 
             .unwrap();
         app.poll();
     }
+    finish_state_write(&mut app);
     let job = &app.state.runs[0].jobs[0];
     assert_eq!(job.status, JobStatus::Failed);
     assert_eq!(job.result_availability, A::Missing);

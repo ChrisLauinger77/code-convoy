@@ -4,6 +4,31 @@ use codeconvoy::{domain::*, persistence::Store};
 #[path = "../src/graphics.rs"]
 mod graphics;
 
+/// Optional native smoke run: exercise the ordinary close path without relying
+/// on desktop automation (which compositors may restrict).
+struct SmokeApp {
+    app: codeconvoy::ui::App,
+    close_at: Option<std::time::Instant>,
+}
+impl eframe::App for SmokeApp {
+    fn logic(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
+        self.app.logic(ctx, frame);
+        if self
+            .close_at
+            .is_some_and(|at| std::time::Instant::now() >= at)
+        {
+            self.close_at = None;
+            ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Close);
+        }
+    }
+    fn ui(&mut self, ui: &mut eframe::egui::Ui, frame: &mut eframe::Frame) {
+        self.app.ui(ui, frame);
+    }
+    fn on_exit(&mut self, gl: Option<&eframe::glow::Context>) {
+        self.app.on_exit(gl);
+    }
+}
+
 fn main() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let root = temp.path().canonicalize()?;
@@ -120,9 +145,12 @@ fn main() -> Result<()> {
         "CodeConvoy History",
         options,
         Box::new(move |cc| {
-            Ok(Box::new(codeconvoy::ui::App::new(
-                cc, store, state, runtime,
-            )))
+            Ok(Box::new(SmokeApp {
+                app: codeconvoy::ui::App::new(cc, store, state, runtime),
+                close_at: std::env::args()
+                    .any(|a| a == "--smoke")
+                    .then(|| std::time::Instant::now() + std::time::Duration::from_secs(3)),
+            }))
         }),
     )
     .map_err(graphics::startup_error)?;

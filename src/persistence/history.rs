@@ -11,6 +11,28 @@ pub struct HistoryWrite {
     pub ids: BTreeSet<u64>,
 }
 impl Store {
+    /// Reuse the same single-writer reservation for periodic background saves.
+    /// An empty removal set publishes no history mutation.
+    pub fn begin_save(self: &Arc<Self>, state: &AppState) -> Result<(HistoryWrite, AppState)> {
+        let mut pending = self
+            .history_write
+            .lock()
+            .map_err(|_| anyhow::anyhow!("State save lock failed."))?;
+        anyhow::ensure!(!*pending, "Application state is already being saved.");
+        anyhow::ensure!(
+            !self.load_failed.load(std::sync::atomic::Ordering::Acquire),
+            "Saving is disabled after a failed state load."
+        );
+        let staged = state.persistence_snapshot();
+        *pending = true;
+        Ok((
+            HistoryWrite {
+                store: self.clone(),
+                ids: BTreeSet::new(),
+            },
+            staged,
+        ))
+    }
     pub fn begin_history_write(
         self: &Arc<Self>,
         state: &AppState,
@@ -25,7 +47,11 @@ impl Store {
         if ids.is_empty() {
             return Ok(None);
         }
-        let mut staged = state.clone();
+        anyhow::ensure!(
+            !self.load_failed.load(std::sync::atomic::Ordering::Acquire),
+            "History cleanup is disabled after a failed state load."
+        );
+        let mut staged = state.persistence_snapshot();
         if crate::history::remove(&mut staged.runs, ids, protected) == 0 {
             return Ok(None);
         }
@@ -49,7 +75,7 @@ impl Store {
 impl HistoryWrite {
     /// Run on the application's blocking worker pool, never in rendering code.
     pub fn persist(&self, staged: &AppState) -> Result<()> {
-        self.store.save_atomic(staged).context("Could not confirm saving history cleanup. History remains in memory; the disk outcome may be uncertain after a sync failure.")
+        self.store.save_atomic(staged).context("Could not confirm saving application state. History remains in memory; the disk outcome may be uncertain after a sync failure.")
     }
     pub fn publish(&self, state: &mut AppState) {
         state.runs.retain(|r| !self.ids.contains(&r.id));

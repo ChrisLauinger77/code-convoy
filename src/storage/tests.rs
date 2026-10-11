@@ -110,6 +110,59 @@ fn missing_corrupt_and_legacy_history_are_explicit() {
     assert_eq!(legacy.history.status, Status::Complete);
     assert!(legacy.historical_convoys.is_some());
 }
+
+#[test]
+fn incomplete_history_envelope_is_not_reported_as_empty_complete_history() {
+    let (_temp, store, request) = fixture();
+    for bytes in [b"{}".as_slice(), b"{\"version\":1,\"next_run\":3}", b"\xff"] {
+        fs::write(store.history_path(), bytes).unwrap();
+        let result = scan(request.clone());
+        assert_eq!(result.historical_convoys, None);
+        assert_eq!(result.history.status, Status::Partial);
+        assert_eq!(fs::read(store.history_path()).unwrap(), bytes);
+    }
+}
+
+#[test]
+#[ignore = "repeatable filesystem inventory measurement; no timing threshold"]
+fn inventory_scale_performance() {
+    for count in [100, 1000, 5000] {
+        let (_temp, _, request) = fixture();
+        let mut references = Vec::new();
+        for id in 1..=count {
+            let metadata = attempt(&request.worktree_root, None, id);
+            fs::create_dir_all(metadata.path.join("build")).unwrap();
+            fs::write(metadata.path.join("build/output"), [b'x'; 128]).unwrap();
+            references.push(metadata);
+        }
+        // Duplicate live/saved references exercise the same inventory dedup path.
+        references.extend(references.clone());
+        let mut samples = Vec::new();
+        for _ in 0..5 {
+            let start = std::time::Instant::now();
+            let result = crate::worktrees::inventory::discover(
+                &request.worktree_root,
+                references.clone(),
+                &Cancellation::default(),
+            );
+            assert_eq!(result.entries.len(), count as usize);
+            assert_eq!(result.unknown, 0);
+            samples.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
+        samples.sort_by(f64::total_cmp);
+        let mut measured_request = request;
+        measured_request.references = references;
+        let start = std::time::Instant::now();
+        let snapshot = scan(measured_request);
+        assert_eq!(snapshot.worktrees.bytes, Some(count * 128));
+        assert_eq!(snapshot.worktrees.status, Status::Complete);
+        println!(
+            "inventory {count}: median {:.3} ms; full scan {:.3} ms",
+            samples[2],
+            start.elapsed().as_secs_f64() * 1000.0
+        );
+    }
+}
 #[test]
 fn inventory_includes_old_bases_orphans_deduplicates_and_excludes_unrelated() {
     let (temp, _store, mut request) = fixture();

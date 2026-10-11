@@ -194,7 +194,7 @@ Application state is versioned JSON written to an owner-only temporary file, syn
 
 An additive `agent_options` map preserves preferences independently when switching backends. It defaults to empty when loading old version-1 state; the existing draft remains authoritative for the selected backend, and historical run schemas are unchanged. No migration or rewriting of CLI configuration is necessary.
 
-All active convoys, unresolved isolated results, and the most recent 30 other completed convoys are retained; protected snapshots are never evicted by the history cap. The additive `global_concurrency` preference defaults to 4 for old state; invalid stored values are clamped to 1–16. Relaunch converts unfinished saved jobs to cancelled/interrupted. There is no automatic resume or replay. History records initial Git metadata. Direct diffs query the registered working tree; isolated diffs query the retained checkout against its saved base commit.
+History is unlimited by default; optional count/age retention excludes active convoys, validation and retained ownership metadata. Protected snapshots are never evicted by retention. The additive `global_concurrency` preference defaults to 4 for old state; invalid stored values are clamped to 1–16. Relaunch converts unfinished saved jobs to cancelled/interrupted. There is no automatic resume or replay. History records initial Git metadata. Direct diffs query the registered working tree; isolated diffs query the retained checkout against its saved base commit.
 
 ## Dependencies and scope
 
@@ -1066,3 +1066,31 @@ automatic deletion, ownership migration or metadata-forgetting action is added.
 External same-permission filesystem mutation is outside manager leases; repeated
 checks are not a hostile-process sandbox. See [cleanup usage and limits](worktree-cleanup.md)
 and [validation evidence](worktree-cleanup-validation.md).
+
+## v0.9 history stabilization
+
+`Store::load` validates the required version-1 envelope before allocating the
+full domain state. Missing core fields and duplicate IDs fail closed; additive
+fields retain existing defaults. A failed load permanently disables writes on
+that Store instance. Counter recovery never decreases `next_run`, and launch
+refuses exhausted identifiers. No database or serialized schema change is needed.
+
+Atomic saves buffer serialization before explicit flush/file sync/replacement;
+Unix directory-sync errors distinguish post-publication uncertainty. The existing
+history reservation now also supports one periodic state writer. `ui/persistence`
+captures a metadata-only `AppState::persistence_snapshot`, runs saving on the
+blocking pool and holds the reservation through UI acknowledgement. Edits during
+I/O remain dirty. Result operations suppress background saves; new durable intents
+cannot overtake one. Quit waits before its existing lifecycle/final-save sequence.
+Explicit intent/outcome/configuration and final saves remain synchronous and
+buffered; slow filesystem latency at those boundaries is a remaining limitation.
+
+`ui/results` uses visible egui rows for history with per-frame borrowed Run
+references, stable convoy widget IDs and explicit navigation across off-screen
+rows. There is no summary/validation cache to invalidate. The existing search
+index skips normalization for empty queries and prunes when retained count changes.
+Retention still reevaluates identities/protections before its Store transaction.
+Storage keeps the domain Run parser and a required envelope, without recovery.
+Export keeps its schema/format/worker and adds Unix directory synchronization.
+No scheduler, repository lease, backend, notification or cleanup algorithm changed.
+See [measurement and reliability evidence](history-reliability-validation.md).

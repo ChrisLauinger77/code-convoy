@@ -316,7 +316,8 @@ fn version_one_state_roundtrips_opencode_drafts_preferences_and_history() {
         assert_eq!(state.draft.options, previous.options);
         state.reuse_task(state.runs[0].task.clone());
         assert_eq!(state.draft.options, original.options);
-        assert_eq!(state.next_run, 1);
+        // Loading repairs a counter that would otherwise reuse retained ID 1.
+        assert_eq!(state.next_run, 2);
         assert_eq!(serde_json::to_value(AgentId::OpenCode).unwrap(), "opencode");
         let persisted = std::fs::read_to_string(dir.path().join("state.json")).unwrap();
         assert!(!persisted.contains("API_KEY"));

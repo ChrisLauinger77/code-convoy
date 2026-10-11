@@ -150,6 +150,7 @@ impl App {
             || self.result_operation.is_some()
             || self.bulk_discard.is_some()
             || self.history_write.is_some()
+            || self.state_write.is_some()
             || self.storage.status == crate::storage::Status::Measuring
         {
             return;
@@ -168,6 +169,9 @@ impl App {
         }
     }
     pub(super) fn pump_worktree_cleanup(&mut self, ctx: &egui::Context) {
+        if self.state_write.is_some() {
+            return;
+        }
         if self.result_operation.is_some() {
             return;
         }
@@ -188,7 +192,11 @@ impl App {
             }
             return;
         }
-        if self.quit_requested || self.review_pending.is_some() || self.history_write.is_some() {
+        if self.quit_requested
+            || self.review_pending.is_some()
+            || self.history_write.is_some()
+            || self.state_write.is_some()
+        {
             return;
         }
         if let Some(op) = batch.begin_next(&self.store, &mut self.state) {

@@ -316,7 +316,8 @@ impl App {
         index: usize,
         action: Action,
     ) {
-        if self.result_operation.is_some()
+        if self.state_write.is_some()
+            || self.result_operation.is_some()
             || self.bulk_discard.is_some()
             || self.worktree_management.batch.is_some()
             || self.closing

@@ -1,6 +1,8 @@
 pub mod bulk_discard;
 pub mod history;
 pub mod results;
+#[cfg(test)]
+mod tests;
 mod validation;
 pub mod worktree_cleanup;
 use crate::domain::{AppState, MAX_CONCURRENCY, MAX_REPOSITORIES};
@@ -9,8 +11,9 @@ use directories::ProjectDirs;
 use fs2::FileExt;
 use std::{
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 pub fn data_directory() -> Result<PathBuf> {
@@ -24,6 +27,7 @@ pub struct Store {
     directory: PathBuf,
     _lock: File,
     history_write: std::sync::Mutex<bool>,
+    load_failed: AtomicBool,
 }
 impl Store {
     pub fn open_default() -> Result<Self> {
@@ -49,6 +53,7 @@ impl Store {
             directory: directory.canonicalize()?,
             _lock: lock,
             history_write: std::sync::Mutex::new(false),
+            load_failed: AtomicBool::new(false),
         })
     }
     pub fn directory(&self) -> &Path {
@@ -60,9 +65,18 @@ impl Store {
         self.directory.join("state.json")
     }
     pub fn load(&self) -> Result<AppState> {
+        let result = self.load_state();
+        // A failed read must never become a later empty-state save. Reopening
+        // after the user has preserved/recovered the file is the recovery boundary.
+        if result.is_err() {
+            self.load_failed.store(true, Ordering::Release);
+        }
+        result
+    }
+    fn load_state(&self) -> Result<AppState> {
         let path = self.history_path();
         let mut state: AppState = match fs::read(&path) {
-            Ok(bytes) => serde_json::from_slice(&bytes)
+            Ok(bytes) => decode_state(&bytes)
                 .with_context(|| format!("Invalid state in {}. Back up and move this file aside to start fresh; it has not been overwritten.", path.display()))?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => AppState::default(),
             Err(e) => return Err(e).context("Cannot read CodeConvoy state."),
@@ -119,21 +133,78 @@ impl Store {
             .map_err(|_| anyhow::anyhow!("History save lock failed."))?;
         anyhow::ensure!(
             !*pending,
-            "History cleanup is being saved; try again when it finishes."
+            "Application state is being saved; try again when it finishes."
         );
         self.save_atomic(state)
     }
     fn save_atomic(&self, state: &AppState) -> Result<()> {
+        anyhow::ensure!(
+            !self.load_failed.load(Ordering::Acquire),
+            "Saving is disabled because application state could not be loaded. Preserve state.json and restart after recovery."
+        );
+        self.replace_state(|writer| {
+            serde_json::to_writer_pretty(&mut *writer, state)
+                .context("Cannot encode application state.")?;
+            writer.write_all(b"\n")?;
+            Ok(())
+        })
+    }
+    fn replace_state(&self, encode: impl FnOnce(&mut dyn Write) -> Result<()>) -> Result<()> {
         let mut file = tempfile::NamedTempFile::new_in(&self.directory)
             .context("Cannot create temporary state file.")?;
-        serde_json::to_writer_pretty(&mut file, state)
-            .context("Cannot encode application state.")?;
-        file.write_all(b"\n")?;
-        file.as_file().sync_all()?;
+        {
+            let mut writer = BufWriter::new(file.as_file_mut());
+            encode(&mut writer)?;
+            writer
+                .flush()
+                .context("Cannot finish writing application state.")?;
+        }
+        file.as_file()
+            .sync_all()
+            .context("Cannot sync application state; previous state is intact.")?;
         file.persist(self.history_path())
             .context("Cannot replace application state; previous state is intact.")?;
         #[cfg(unix)]
-        File::open(&self.directory)?.sync_all()?;
+        File::open(&self.directory).and_then(|file| file.sync_all()).context(
+            "Application state was replaced, but directory sync failed; durability is uncertain.",
+        )?;
         Ok(())
     }
+}
+
+/// Require the core envelope that every supported on-disk version wrote.
+/// Optional/additive fields still use AppState's backwards-compatible defaults.
+/// The first pass skips entries without allocating another history tree.
+pub(crate) fn decode_state(bytes: &[u8]) -> Result<AppState> {
+    #[derive(serde::Deserialize)]
+    struct Envelope {
+        version: u32,
+        next_run: u64,
+        runs: serde::de::IgnoredAny,
+    }
+    let envelope: Envelope = serde_json::from_slice(bytes)?;
+    anyhow::ensure!(
+        envelope.version == 1,
+        "Unsupported state version {}; use a compatible CodeConvoy version.",
+        envelope.version
+    );
+    let _ = envelope.runs;
+    let mut state: AppState = serde_json::from_slice(bytes)?;
+    let mut ids = std::collections::HashSet::new();
+    for run in &state.runs {
+        anyhow::ensure!(
+            run.id != 0 && ids.insert(run.id),
+            "Invalid or duplicate convoy ID {}; history identity is ambiguous.",
+            run.id
+        );
+    }
+    // Older saves may have a lagging counter; never recycle a retained ID.
+    let next = ids
+        .into_iter()
+        .max()
+        .unwrap_or(0)
+        .checked_add(1)
+        .context("Convoy ID space is exhausted; history was preserved.")?;
+    state.next_run = envelope.next_run.max(next);
+    Ok(state)
 }

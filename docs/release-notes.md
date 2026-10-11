@@ -79,6 +79,31 @@ See [measurement semantics and PR 4 prerequisites](storage.md) and
 
 See [worktree cleanup](worktree-cleanup.md) and [validation](worktree-cleanup-validation.md).
 
+## PR 5: History Performance & Reliability
+
+- Buffered atomic state writes remove the measured long-save bottleneck. Periodic
+  and recovery saves run on a worker using the existing single-writer reservation;
+  acknowledgement preserves edits and validation events received during saving.
+  Normal quit waits for that writer before its final lifecycle save.
+- Persistence snapshots omit session-only logs, diagnostics and Review caches,
+  while retaining every serialized field and ownership protection. No stored
+  history, validation metadata or task text is truncated.
+- Virtualized history rows preserve order, stable selection, current summaries,
+  keyboard focus and Arrow/Home/End navigation. Empty search avoids allocating
+  lowercase copies of every task; there is no new presentation cache.
+- Failed loads disable writes through that Store. Missing core envelope fields,
+  malformed records, duplicate IDs and unsupported versions preserve the original
+  file and report errors. Legacy optional fields retain their defaults; lagging
+  counters advance past retained IDs and exhausted counters cannot launch.
+- Export publication also syncs its directory on Unix and reports uncertainty
+  if that sync fails. JSON schema, Markdown formatting, cancellation, retention,
+  scan generations and conservative worktree cleanup semantics are unchanged.
+- Deterministic 100/1,000/5,000-convoy fixtures, repeatable performance checks,
+  persistence failure injection and save/selection/shutdown regressions.
+  No new dependencies, state schema, backend, scheduler or package-version changes.
+
+See [measurements, audit and release-candidate checks](history-reliability-validation.md).
+
 ---
 
 # CodeConvoy 0.8.0 — Workflow & Productivity

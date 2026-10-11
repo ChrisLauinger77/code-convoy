@@ -126,3 +126,10 @@ introduced. See [cleanup rules](worktree-cleanup.md) and
 
 The original measurement coverage remains documented in
 [storage validation](storage-validation.md).
+
+PR 5 also requires the core history envelope and rejects ambiguous convoy IDs
+during measurement. It continues parsing historical entries with the domain Run
+model, so malformed entries do not become a complete empty-history measurement.
+The scanner does not run Store recovery or validate a result for deletion. An
+experimental lighter entry parser was dropped to preserve this error behavior.
+See [scale measurements and regression evidence](history-reliability-validation.md).

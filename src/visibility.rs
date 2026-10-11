@@ -115,6 +115,7 @@ pub struct HistorySearch {
     cached_query: String,
     candidates: Vec<u64>,
     matches: Vec<u64>,
+    retained_count: usize,
 }
 impl HistorySearch {
     pub fn clear(&mut self) {
@@ -124,15 +125,24 @@ impl HistorySearch {
     pub fn matching(&mut self, runs: &[Run]) -> Vec<u64> {
         let candidates: Vec<_> = runs.iter().filter(|r| self.filter.matches(r)).collect();
         let ids: Vec<_> = candidates.iter().map(|r| r.id).collect();
-        if self.cached_query == self.query && self.candidates == ids {
+        if self.cached_query == self.query
+            && self.candidates == ids
+            && self.retained_count == runs.len()
+        {
             return self.matches.clone();
         }
         let retained: std::collections::HashSet<_> = runs.iter().map(|r| r.id).collect();
         self.terms.retain(|id, _| retained.contains(id));
+        self.retained_count = runs.len();
         let needle = self.query.trim().to_lowercase();
         self.matches = candidates
             .into_iter()
             .filter(|r| {
+                // Empty queries match everything without allocating normalized
+                // copies of every historical prompt just to open the selector.
+                if needle.is_empty() {
+                    return true;
+                }
                 let terms = self.terms.entry(r.id).or_insert_with(|| {
                     let mut terms =
                         format!("#{}\n{}\n{}", r.id, r.task.prompt, r.task.agent.label());

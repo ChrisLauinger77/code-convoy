@@ -299,6 +299,7 @@ impl App {
     }
     fn start_validation(&mut self, key: (u64, usize)) {
         if self.history_write.is_some()
+            || self.state_write.is_some()
             || self.closing
             || self.quit_requested
             || self.result_operation.is_some()

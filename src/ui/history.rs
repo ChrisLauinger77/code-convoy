@@ -32,7 +32,8 @@ impl App {
     pub(super) fn apply_startup_retention(&mut self, now: u64) {
         // Called only after Store::load has completely validated/recovered state.
         // Consume once even for no-op policies/errors; never retry automatically.
-        if std::mem::take(&mut self.automatic_retention_pending)
+        if self.state_write.is_none()
+            && std::mem::take(&mut self.automatic_retention_pending)
             && self.state.history_retention.automatic
             && !self.closing
         {
@@ -75,6 +76,7 @@ impl App {
         !self.closing
             && !self.quit_requested
             && self.history_write.is_none()
+            && self.state_write.is_none()
             && self.result_operation.is_none()
             && self.bulk_discard.is_none()
             && self.worktree_management.batch.is_none()
@@ -284,7 +286,7 @@ impl App {
                     }
                 }
             }
-            let mut staged = self.state.clone();
+            let mut staged = self.state.persistence_snapshot();
             staged.history_retention = settings.policy.clone();
             match self.store.save(&staged) {
                 Ok(()) => {

@@ -405,6 +405,8 @@ History retains completed convoys indefinitely by default. **Settings → Histor
 **History cleanup → Clean Up History…** previews counts and convoy IDs and requires confirmation. If history changes, the preview refreshes for confirmation again. **Remove convoy #… from history** and **Clear removable history** still remove eligible terminal history regardless of the policy. All three share protected, atomic persistence, report save failures and reconcile selection. Deleted history may not be recoverable. History deletion never deletes worktrees, changes Git, removes registrations or changes validation configuration. Logs remain session-only. See [history settings and cleanup](docs/history.md).
 
 **Export…** beside Copy Summary saves one completed convoy as Markdown or JSON.
+Large histories use virtualized selection rows and background periodic saves. Damaged state files remain untouched and disable saving after load failure. See [history recovery](docs/history.md#persistence-and-recovery) and [0.9 performance and reliability evidence](docs/history-reliability-validation.md).
+
 **Export History…** offers the selected convoy, currently filtered history or all
 retained terminal history in one file. Markdown shares the Copy Summary formatter;
 JSON uses a stable schema-version-1 envelope. Exports snapshot recorded metadata,

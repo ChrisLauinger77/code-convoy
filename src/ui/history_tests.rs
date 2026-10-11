@@ -321,3 +321,101 @@ fn manager_owned_terminal_and_cancelling_convoys_cannot_be_removed() {
         assert!(app.manager.is_active(id));
     }
 }
+
+#[test]
+fn background_save_serializes_writers_preserves_new_edits_and_delays_quit() {
+    let (_temp, mut app) = fixture();
+    app.dirty = true;
+    app.state.draft.prompt = "captured".into();
+    app.save_background();
+    assert!(app.state_write.is_some());
+    assert!(!app.dirty);
+    assert!(app.store.save(&app.state).is_err());
+    assert!(!app.history_available());
+    assert!(!app.request_quit());
+    assert!(!app.closing);
+    // Worker owns an independent metadata snapshot while the UI keeps editing.
+    app.state.draft.prompt = "newer edit".into();
+    app.dirty = true;
+    app.state.runs[0].jobs[0].validation = Some(crate::validation::Record::pending(
+        crate::validation::Command {
+            executable: "never-executed".into(),
+            arguments: vec![],
+        },
+        &app.state.runs[0].jobs[0],
+    ));
+    app.save_background(); // no second writer
+    finish_state_write(&mut app);
+    assert!(app.dirty);
+    assert_eq!(app.state.draft.prompt, "newer edit");
+    assert_eq!(app.store.load().unwrap().draft.prompt, "captured");
+    app.save_background();
+    assert!(
+        app.state_write.is_none(),
+        "a pending quit must not be starved by another save"
+    );
+    assert!(app.request_quit()); // Final save includes newer lifecycle/settings state.
+    assert!(!app.dirty);
+    let saved = app.store.load().unwrap();
+    assert_eq!(saved.draft.prompt, "newer edit");
+    assert!(saved.runs[0].jobs[0].validation.is_some());
+}
+
+#[test]
+fn background_save_failure_retains_dirty_state_and_never_starts_a_launch() {
+    let (_temp, mut app) = fixture();
+    std::fs::create_dir(app.store.history_path()).unwrap();
+    app.dirty = true;
+    app.save_background();
+    prepare(&mut app, AgentId::Codex);
+    app.start();
+    assert!(app.prepared.is_some());
+    assert!(app.manager.is_idle());
+    finish_state_write(&mut app);
+    assert!(app.notice.contains("Could not save state"));
+    assert!(app.dirty);
+    assert_eq!(ids(&app), [4, 3, 2, 1]);
+}
+
+#[test]
+fn virtual_history_rows_stay_bounded_and_keyboard_reaches_both_ends() {
+    let (_temp, mut app) = fixture();
+    app.state.runs = (1..=5000).rev().map(historical).collect();
+    app.select_run(Some(5000));
+    let mut keys = Keyboard::new(|app, ui, _| {
+        app.run_navigation(ui);
+    });
+    app.show_active_navigation = true;
+    for _ in 0..3 {
+        keys.frame(&mut app, vec![]);
+    }
+    // AccessKit sees only the visible widgets, independent of total history.
+    assert!(
+        keys.nodes.len() < 150,
+        "{} widgets created",
+        keys.nodes.len()
+    );
+    keys.key(&mut app, egui::Key::End);
+    assert_eq!(app.selected_run, Some(1));
+    keys.key(&mut app, egui::Key::ArrowUp);
+    assert_eq!(app.selected_run, Some(2));
+    keys.key(&mut app, egui::Key::Home);
+    assert_eq!(app.selected_run, Some(5000));
+    keys.key(&mut app, egui::Key::ArrowDown);
+    assert_eq!(app.selected_run, Some(4999));
+    app.history_search.query = "Task 1".into();
+    keys.frame(&mut app, vec![]);
+    assert_eq!(app.selected_run, Some(4999));
+}
+
+#[test]
+fn exhausted_run_counter_cannot_reuse_a_stable_id() {
+    let (_temp, mut app) = fixture();
+    app.state.next_run = u64::MAX;
+    prepare(&mut app, AgentId::Codex);
+    app.start();
+    assert!(app.manager.is_idle());
+    assert_eq!(ids(&app), [4, 3, 2, 1]);
+    assert_eq!(app.state.next_run, u64::MAX);
+    assert!(app.notice.contains("exhausted"));
+}
