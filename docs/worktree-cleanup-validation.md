@@ -6,7 +6,7 @@ Linux checks:
 
 - `cargo fmt --check` — passed.
 - `cargo clippy --all-targets --all-features -- -D warnings` — passed.
-- `TMPDIR=/var/tmp cargo test --all-features` — 516 top-level tests passed,
+- `TMPDIR=/var/tmp cargo test --all-features` — 517 top-level tests passed,
   4 existing optional provider probes ignored; 3 subprocess self-tests also passed.
 - `cargo build --release` — passed.
 - `git diff HEAD --check` — passed.
@@ -17,7 +17,7 @@ the tests were then run outside that restriction, in disposable temporary Git
 repositories. No ownership checks were weakened. No user repository was used as
 a cleanup target and no provider CLI was invoked.
 
-The 21 new tests live in `tests/support/managed_cleanup.rs`,
+The 22 new tests live in `tests/support/managed_cleanup.rs`,
 `src/worktrees/cleanup_tests.rs` and `src/ui/storage_tests.rs`:
 
 - Managed detached registration and ownership lock, old custom location bindings,
@@ -37,6 +37,12 @@ The 21 new tests live in `tests/support/managed_cleanup.rs`,
   in-progress Git evidence and same-size edits hidden by the live Git stat cache.
   Real indexes remain byte-for-byte unchanged. Unsupported clean filters are
   rejected before status can execute them.
+- Metadata-only tracked-file changes preserve the retained index's bytes and
+  modification time through repeated previews. The same fixture demonstrates that
+  ordinary Git status with optional locking enabled rewrites its index. This test
+  also passed on Git 2.43.0 (a temporary source build) and local Git 2.53 with
+  inherited `GIT_OPTIONAL_LOCKS=1`; inspection overrides that setting to `0`
+  through the shared Git command helper.
 - Checkout and parent symlink substitutions, same-path replacement of a directory,
   changes after preview and after unlock. External/source files remain intact.
 - Single and bulk success, identical selections deduplicated, protected targets

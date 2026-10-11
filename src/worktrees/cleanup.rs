@@ -168,6 +168,8 @@ async fn changes(
     // Status may execute configured clean filters while rehashing files. Reject
     // unsupported conversions before asking Git to inspect any working content.
     super::apply::supported(&m.path, &m.base_commit, i).await?;
+    // `checked` uses GIT_OPTIONAL_LOCKS=0: even a metadata-only file change must
+    // not let status persist a stat-cache refresh to the retained index.
     let bytes = i
         .checked(
             &m.path,

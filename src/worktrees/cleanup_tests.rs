@@ -244,3 +244,40 @@ async fn cancelled_preflight_is_retryable_only_after_confirmed_process_cleanup()
         assert!(!f.m.path.parent().unwrap().join("cleanup.json").exists());
     }
 }
+
+#[tokio::test]
+async fn preview_of_touched_clean_file_preserves_index_bytes_and_mtime() {
+    let f = Fixture::new().await;
+    let index = f.admin().join("index");
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(120);
+    // Change only metadata, leaving the real index's cached stat data stale.
+    for path in [f.m.path.join("tracked"), index.clone()] {
+        fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(old))
+            .unwrap();
+    }
+    let bytes = fs::read(&index).unwrap();
+    let mtime = fs::metadata(&index).unwrap().modified().unwrap();
+    for _ in 0..2 {
+        f.proof().await;
+        assert_eq!(fs::read(&index).unwrap(), bytes);
+        assert_eq!(fs::metadata(&index).unwrap().modified().unwrap(), mtime);
+    }
+    // Positive control: ordinary status really does rewrite this fixture. The
+    // preview assertions therefore depend on the production no-optional-locks
+    // setting, not an already-fresh index or filesystem timestamp granularity.
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&f.m.path)
+        .args(["status", "--porcelain=v1"])
+        .env("GIT_OPTIONAL_LOCKS", "1")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_ne!(fs::read(&index).unwrap(), bytes);
+    assert_ne!(fs::metadata(&index).unwrap().modified().unwrap(), mtime);
+}
