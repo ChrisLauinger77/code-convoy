@@ -348,7 +348,9 @@ Follow this workflow:
 3. Search for current-release version references and update them where needed,
    including README download filenames/install commands and the release version,
    tag and packaging examples in `docs/releasing.md`. Update
-   `docs/release-notes.md` to describe the changes since the previous release.
+   `docs/release-notes.md` to contain only the current release and its changes
+   since the immediately previous version. Remove older release sections when
+   preparing a new version; keep historical release notes in Git history.
    Preserve historical versions in validation records, past-release evidence,
    dependency versions, and CLI compatibility documentation; do not perform a
    repository-wide version replacement.
