@@ -58,6 +58,27 @@ See [export formats and privacy](history-export.md) and
 See [measurement semantics and PR 4 prerequisites](storage.md) and
 [storage validation](storage-validation.md).
 
+
+## PR 4: Stale Worktree Detection & Safe Cleanup
+
+- Storage Overview now inspects managed lifecycle, ownership, Git registration,
+  current changes and cleanup eligibility, including recorded older locations.
+- Explicit selection and exact-path confirmation; active, unresolved/retained,
+  modified, ignored, missing, orphaned and unverified copies remain protected.
+  Completed or clean alone never authorizes removal.
+- Independent final checks per target under existing Store transactions and
+  execution/validation leases. The new ordinary action unlocks only verified
+  ownership and uses non-force Git removal, with no prune or recursive fallback.
+- Bulk progress and Removed/Skipped/Failed outcomes, preserved history and
+  validation evidence, invalidated size measurements and post-batch refresh.
+- Journaled failures preserve evidence; normal quit finishes the in-flight
+  critical operation and skips remaining targets. No automatic cleanup or Force
+  Delete. Windows removal is disabled pending stable filesystem identity support.
+- Disposable-Git safety tests, failure injection and keyboard confirmation tests.
+  Existing result Discard semantics, dependencies and package version are unchanged.
+
+See [worktree cleanup](worktree-cleanup.md) and [validation](worktree-cleanup-validation.md).
+
 ---
 
 # CodeConvoy 0.8.0 — Workflow & Productivity

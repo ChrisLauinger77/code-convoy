@@ -4,7 +4,9 @@ Open **Settings → Storage…** for a read-only snapshot of persisted history a
 known CodeConvoy worktree directories. Opening starts one background measurement;
 **Refresh** measures again. Nothing watches or periodically scans the filesystem.
 **Manage History…** opens the existing retention settings. It does not start cleanup.
-There is no worktree cleanup action in this overview.
+**Manage Worktrees** adds current lifecycle/ownership/Git inspection and explicitly
+confirmed cleanup. Opening and refreshing never remove anything. See
+[managed worktree cleanup](worktree-cleanup.md) for eligibility and platform limits.
 
 The view reports historical convoy count, measured bytes, storage locations,
 category-specific last successful measurement times and expandable diagnostics.
@@ -91,12 +93,17 @@ A single blocking worker uses the existing Tokio runtime and application message
 channel. Traversal is streaming and cancellation is checked between entries and
 history read buffers. Refresh cancels the current request and coalesces pending
 requests; the next worker starts only after the old worker returns. Generation
-checks reject stale completions and failures. Closing the view or quitting signals
-cancellation. A blocked operating-system filesystem call cannot be forcibly
-interrupted; it does not block egui or hold application shutdown open.
+checks reject stale completions and failures. Closing the view or quitting signals cancellation. Git inspection awaits process
+cleanup before releasing its lease. A blocked operating-system filesystem
+measurement call cannot be forcibly interrupted; it does not block egui or hold
+application shutdown open.
 
-Scans acquire no repository leases, execute no Git or agent commands, start no
-validation and modify no application, repository or ownership data. Existing jobs,
+The filesystem measurement phase acquires no repository leases, executes no Git or
+agent commands, starts no validation and modifies no application, repository or
+ownership data. The following management inspection uses cancellable read-only Git
+checks under existing manager lifecycle leases, including a disposable index for
+fresh tracked-content checks. It never starts an agent or validation, repairs
+ownership metadata or triggers deletion. Existing jobs,
 history cleanup and exports continue independently. Files can change or disappear
 while scanning; errors preserve a partial measured subtotal. These are approximate
 point-in-time observations, not a filesystem transaction or an ownership security
@@ -105,16 +112,17 @@ for a more stable observation. Previous successful times remain visible if a lat
 refresh fails; the previous snapshot is explicitly labelled while a scan runs or
 a worker fails.
 
-## Prerequisites for PR 4
+## Cleanup authority
 
-Storage inventory is **not cleanup authority**. A future stale-worktree cleanup
-flow must separately revalidate trusted storage, original bindings, manifests,
-canonical Git identity, ownership locks, backlink, lifecycle conflicts and crash
-journals through the existing Store transaction and manager lease. An absent source,
-unknown ownership, unavailable directory or apparent zero size cannot authorize
-deletion. Applied/pending results and retained evidence remain subject to current
-history/ownership protections. Lost custom-location bindings and malformed orphan
-attempts need an explicit uncertainty policy; this feature neither repairs nor
-removes them. No broad search, prune or deletion fallback is added.
+Storage inventory and logical size are **not cleanup authority**. Management
+separately verifies trusted storage, original bindings, manifests, canonical Git
+identity, ownership locks, backlinks, lifecycle conflicts and crash journals.
+Each selected target must pass the Store transaction and manager lease again at
+execution. Unavailable sources, unknown ownership, missing directories and zero
+sizes never authorize deletion. Missing custom bindings and orphan lifecycle
+records remain inspection-only; no broad search, prune or ownership migration is
+introduced. See [cleanup rules](worktree-cleanup.md) and
+[cleanup validation](worktree-cleanup-validation.md).
 
-See [storage validation](storage-validation.md) for automated and native coverage.
+The original measurement coverage remains documented in
+[storage validation](storage-validation.md).

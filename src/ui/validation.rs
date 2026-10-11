@@ -207,6 +207,7 @@ impl App {
                             && self.review_pending.is_none()
                             && self.result_operation.is_none()
                             && self.bulk_discard.is_none()
+                            && self.worktree_management.batch.is_none()
                             && !(self.diff_target.is_some() && self.diff.is_none()),
                         egui::Button::new("Run Validation"),
                     )
@@ -302,6 +303,7 @@ impl App {
             || self.quit_requested
             || self.result_operation.is_some()
             || self.bulk_discard.is_some()
+            || self.worktree_management.batch.is_some()
             || self.review_pending.is_some()
             || (self.diff_target.is_some() && self.diff.is_none())
         {

@@ -197,7 +197,7 @@ fn journal(m: &WorktreeMetadata) -> Result<Option<CleanupRecord>> {
 pub(super) fn physically_cleaned(m: &WorktreeMetadata) -> Result<bool> {
     Ok(journal(m)?.is_some_and(|r| r.completed) && absent(&m.path)?)
 }
-fn write_journal(root: &Path, m: &WorktreeMetadata, completed: bool) -> Result<()> {
+pub(super) fn write_journal(root: &Path, m: &WorktreeMetadata, completed: bool) -> Result<()> {
     manifest(root, m)?;
     let parent = m.path.parent().context("Missing attempt directory.")?;
     // Never follow a substituted journal. The atomic replacement is only in the
@@ -236,6 +236,15 @@ async fn verify(
     root: &Path,
     m: &WorktreeMetadata,
     i: &git::Inspection<'_>,
+) -> VerifiedResult<Verified> {
+    verify_lock(root, m, i, true).await
+}
+
+async fn verify_lock(
+    root: &Path,
+    m: &WorktreeMetadata,
+    i: &git::Inspection<'_>,
+    locked: bool,
 ) -> VerifiedResult<Verified> {
     let attempt = layout(root, m).map_err(invalid)?;
     let original = attempt
@@ -299,7 +308,11 @@ async fn verify(
             if resolve(&path).is_ok_and(|p| p == m.path) {
                 registered = true;
                 owned_registration = record.contains(&b"detached".as_slice())
-                    && record.contains(&b"locked CodeConvoy retained result".as_slice());
+                    && if locked {
+                        record.contains(&b"locked CodeConvoy retained result".as_slice())
+                    } else {
+                        !record.iter().any(|f| f.starts_with(b"locked"))
+                    };
             }
         }
     }
@@ -315,7 +328,7 @@ async fn verify(
         )));
     }
     if registered {
-        verify_backlink(m, exists).map_err(invalid)?;
+        verify_backlink(m, exists, locked).map_err(invalid)?;
     }
     if exists
         && (i.register(&m.path).await.map_err(stale)?.path != m.path
@@ -328,7 +341,7 @@ async fn verify(
     Ok(Verified { exists, registered })
 }
 
-fn verify_backlink(m: &WorktreeMetadata, exists: bool) -> Result<()> {
+fn verify_backlink(m: &WorktreeMetadata, exists: bool, locked: bool) -> Result<PathBuf> {
     let entries = m.common_dir.join("worktrees");
     ordinary(&entries, true)?;
     anyhow::ensure!(
@@ -359,10 +372,17 @@ fn verify_backlink(m: &WorktreeMetadata, exists: bool) -> Result<()> {
         "Missing or ambiguous Git ownership backlink."
     );
     let admin = &matches[0];
-    anyhow::ensure!(
-        line(&bounded(&admin.join("locked"))?) == b"CodeConvoy retained result",
-        "Git ownership lock changed."
-    );
+    if locked {
+        anyhow::ensure!(
+            line(&bounded(&admin.join("locked"))?) == b"CodeConvoy retained result",
+            "Git ownership lock changed."
+        );
+    } else {
+        anyhow::ensure!(
+            absent(&admin.join("locked"))?,
+            "Git ownership lock changed."
+        );
+    }
     if exists {
         let bytes = bounded(&expected)?;
         let target = native(line(
@@ -380,7 +400,58 @@ fn verify_backlink(m: &WorktreeMetadata, exists: bool) -> Result<()> {
             "Worktree Git link does not match its ownership backlink."
         );
     }
+    Ok(admin.clone())
+}
+
+/// Shared ownership proof for ordinary cleanup. Unlike reconciliation this
+/// never repairs journals or changes historical observations.
+pub(super) async fn cleanup_target(
+    root: &Path,
+    m: &WorktreeMetadata,
+    i: &git::Inspection<'_>,
+    locked: bool,
+) -> Result<PathBuf> {
+    let (exists, registered, admin) = cleanup_observation(root, m, i, locked).await?;
+    anyhow::ensure!(exists && registered, "Worktree is missing or unregistered.");
+    admin.context("Git ownership backlink is unavailable.")
+}
+
+pub(super) async fn cleanup_observation(
+    root: &Path,
+    m: &WorktreeMetadata,
+    i: &git::Inspection<'_>,
+    locked: bool,
+) -> Result<(bool, bool, Option<PathBuf>)> {
+    let v = verify_lock(root, m, i, locked)
+        .await
+        .map_err(|Failure(_, e)| e)?;
+    let admin = if v.registered {
+        Some(verify_backlink(m, v.exists, locked)?)
+    } else {
+        None
+    };
+    Ok((v.exists, v.registered, admin))
+}
+
+pub(super) fn no_cleanup_journal(m: &WorktreeMetadata) -> Result<()> {
+    anyhow::ensure!(
+        journal(m)?.is_none(),
+        "Earlier cleanup evidence requires manual inspection."
+    );
     Ok(())
+}
+
+pub(super) async fn confirm_removed(
+    root: &Path,
+    m: &WorktreeMetadata,
+    i: &git::Inspection<'_>,
+) -> Result<()> {
+    let v = verify(root, m, i).await.map_err(|Failure(_, e)| e)?;
+    anyhow::ensure!(
+        !v.exists && !v.registered,
+        "Cleanup incomplete; ownership evidence retained."
+    );
+    write_journal(root, m, true)
 }
 
 pub(crate) async fn reconcile(

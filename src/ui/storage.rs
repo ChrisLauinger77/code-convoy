@@ -12,7 +12,7 @@ impl App {
         ctx.request_repaint();
     }
     pub(super) fn refresh_storage(&mut self) {
-        if self.closing {
+        if self.closing || self.worktree_management.batch.is_some() {
             return;
         }
         let request = Request {
@@ -32,23 +32,35 @@ impl App {
     }
     pub(super) fn dispatch_storage(&self, work: Work) {
         let tx = self.tx.clone();
+        let lifecycle = self.manager.lifecycle();
         self.runtime().spawn(async move {
             let generation = work.generation;
-            let result = tokio::task::spawn_blocking(move || {
+            let cancel = work.cancel.clone();
+            let mut result = tokio::task::spawn_blocking(move || {
                 crate::storage::measure(work.request, &work.cancel)
             })
             .await
             .map_err(|e| format!("Storage worker failed: {e}"));
+            if let Ok(Some(snapshot)) = &mut result {
+                for entry in &mut snapshot.entries {
+                    if cancel.is_cancelled() {
+                        break;
+                    }
+                    entry.inspection =
+                        Some(lifecycle.inspect_cleanup(&entry.metadata, &cancel).await);
+                }
+            }
             let _ = tx.send(Message::StorageMeasured(generation, result));
         });
     }
     pub(super) fn storage_window(&mut self, ctx: &egui::Context) {
-        if !self.storage_open {
+        if !self.storage_open || self.worktree_management.confirmation.is_some() {
             return;
         }
         let mut refresh = false;
         let mut history = false;
         let mut close = false;
+        let mut cleanup = false;
         let response = egui::Modal::new(egui::Id::new("storage_overview")).show(ctx, |ui| {
             ui.set_width(500.0_f32.min(ctx.content_rect().width() - 64.0));
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
@@ -92,6 +104,10 @@ impl App {
                             });
                     });
                     ui.separator();
+                    cleanup = worktree_management::rows(ui, &self.state, snapshot, &mut self.worktree_management,
+                        self.storage.status != Status::Measuring && self.result_operation.is_none()
+                        && self.bulk_discard.is_none() && self.history_write.is_none());
+                    ui.separator();
                     ui.strong(format!("{}: {}", if snapshot.total.status == Status::Complete { "Total measured storage" } else { "Partial measured total" }, snapshot.total.label()));
                     ui.small(format!("Last refreshed: {}", super::format::timestamp(snapshot.finished_at)));
                 } else {
@@ -102,10 +118,11 @@ impl App {
                 let base = self.state.worktree_base.clone().unwrap_or_else(|| self.store.directory().join("worktrees"));
                 ui.label(format!("Current worktree base: {}", base.display()));
                 ui.small("Logical regular-file sizes, including build output. External links, Git administration and exports are excluded. Snapshots can change while jobs run; this is not allocated disk space.");
+                worktree_management::progress(ui, &self.worktree_management);
             });
             ui.separator();
             ui.horizontal_wrapped(|ui| {
-                refresh = ui.button("Refresh").clicked();
+                refresh = ui.add_enabled(self.worktree_management.batch.is_none(), egui::Button::new("Refresh")).clicked();
                 history = ui.button("Manage History…").clicked();
                 close = ui.button("Close").clicked();
             });
@@ -115,6 +132,9 @@ impl App {
             self.storage.cancel();
         } else if refresh {
             self.refresh_storage();
+        }
+        if cleanup {
+            self.offer_worktree_cleanup();
         }
         if history {
             self.history_settings = Some(history::Settings::new(&self.state.history_retention));

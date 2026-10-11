@@ -200,6 +200,7 @@ fn result_operation_start_and_finish_invalidate_only_overlapping_health() {
             index: 0,
             action,
             job: job.clone(),
+            cleanup_proof: None,
         };
         app.dispatch_result_operation(&egui::Context::default(), operation());
         assert_eq!(app.repository_states.len(), 1);

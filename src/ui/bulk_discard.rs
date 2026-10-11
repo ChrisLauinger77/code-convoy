@@ -7,6 +7,7 @@ impl App {
             || self.quit_requested
             || self.result_operation.is_some()
             || self.bulk_discard.is_some()
+            || self.worktree_management.batch.is_some()
         {
             return;
         }

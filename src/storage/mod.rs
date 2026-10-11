@@ -1,6 +1,7 @@
 //! Read-only storage snapshots. No Git/process execution, retention or writes.
 mod filesystem;
 mod history;
+pub mod management;
 pub mod service;
 #[cfg(test)]
 mod tests;
@@ -75,6 +76,8 @@ pub struct Request {
 #[derive(Debug)]
 pub struct Worktree {
     pub path: PathBuf,
+    pub metadata: WorktreeMetadata,
+    pub inspection: Option<crate::worktrees::cleanup::Inspection>,
     pub measurement: Measurement,
 }
 #[derive(Debug)]
@@ -130,7 +133,9 @@ pub fn measure(mut request: Request, cancel: &Cancellation) -> Option<Snapshot> 
             }
         };
         entries.push(Worktree {
-            path: entry.metadata.path,
+            path: entry.metadata.path.clone(),
+            metadata: entry.metadata,
+            inspection: None,
             measurement,
         });
     }

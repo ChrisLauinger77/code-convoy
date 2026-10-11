@@ -2,6 +2,7 @@ pub mod bulk_discard;
 pub mod history;
 pub mod results;
 mod validation;
+pub mod worktree_cleanup;
 use crate::domain::{AppState, MAX_CONCURRENCY, MAX_REPOSITORIES};
 use anyhow::{Context, Result};
 use directories::ProjectDirs;

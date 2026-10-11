@@ -12,6 +12,7 @@ impl App {
             || self.review_pending.is_some()
             || self.result_operation.is_some()
             || self.bulk_discard.is_some()
+            || self.worktree_management.batch.is_some()
         {
             return;
         }
@@ -92,7 +93,8 @@ impl App {
                 .add_enabled(
                     self.review_pending.is_none()
                         && self.result_operation.is_none()
-                        && self.bulk_discard.is_none(),
+                        && self.bulk_discard.is_none()
+                        && self.worktree_management.batch.is_none(),
                     theme::quiet("Refresh review"),
                 )
                 .on_hover_text(
@@ -236,6 +238,7 @@ impl App {
                     && self.review_pending != Some((id, self.selected_job))
                     && self.result_operation.is_none()
                     && self.bulk_discard.is_none()
+                    && self.worktree_management.batch.is_none()
                     && !crate::validation::blocks_result_operation(&self.state, job);
                 ui.horizontal_wrapped(|ui| {
                     if job.resolution == R::Unresolved {
@@ -315,6 +318,7 @@ impl App {
     ) {
         if self.result_operation.is_some()
             || self.bulk_discard.is_some()
+            || self.worktree_management.batch.is_some()
             || self.closing
             || self.quit_requested
             || self.review_pending == Some((run, index))

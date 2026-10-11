@@ -6,6 +6,7 @@ impl App {
         !self.validations.is_idle()
             || self.result_operation.is_some()
             || self.bulk_discard.is_some()
+            || self.worktree_management.batch.is_some()
             || !self.manager.is_idle()
             || self.state.runs.iter().any(Run::active)
     }
@@ -94,6 +95,7 @@ impl App {
             && self.validations.finished()
             && self.result_operation.is_none()
             && self.bulk_discard.is_none()
+            && self.worktree_management.batch.is_none()
             && self.history_write.is_none()
         {
             // poll() is bounded. Drain the last lifecycle events before saving,
@@ -134,8 +136,8 @@ impl App {
                 "Preparing: {preparing} · Running: {running} · Queued: {queued}"
             ));
             ui.label("Closing CodeConvoy will stop all active jobs and validations.");
-            if self.bulk_discard.is_some() || self.result_operation.is_some() {
-                ui.label("Closing waits for result-operation cleanup; remaining bulk discards will not be attempted.");
+            if self.bulk_discard.is_some() || self.result_operation.is_some() || self.worktree_management.batch.is_some() {
+                ui.label("Closing waits for result-operation cleanup; remaining bulk removals will not be attempted.");
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {

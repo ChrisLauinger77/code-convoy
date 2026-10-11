@@ -34,6 +34,7 @@ mod text_view;
 mod theme;
 mod validation;
 mod validation_assignment;
+mod worktree_management;
 mod worktree_settings;
 
 use crate::{
@@ -164,6 +165,7 @@ pub struct App {
     history_settings: Option<history::Settings>,
     storage_open: bool,
     storage: crate::storage::service::Service,
+    worktree_management: worktree_management::Management,
     history_write: Option<std::sync::Arc<crate::persistence::history::HistoryWrite>>,
     automatic_retention_pending: bool,
     comparison_filter: crate::visibility::RepositoryFilter,
@@ -318,6 +320,7 @@ impl App {
             history_settings: None,
             storage_open: false,
             storage: Default::default(),
+            worktree_management: Default::default(),
             history_write: None,
             automatic_retention_pending: true,
             comparison_filter: crate::visibility::RepositoryFilter::default(),
@@ -832,7 +835,17 @@ impl App {
                 }
                 Message::Resolved(op, completion) => {
                     self.result_operation = None;
-                    if let Some(batch) = &mut self.bulk_discard {
+                    if op.action == crate::persistence::results::Action::ManagedCleanup {
+                        if let Some(batch) = &mut self.worktree_management.batch {
+                            batch.finish(&self.store, &mut self.state, &op, completion);
+                        } else if let Err(e) =
+                            self.store
+                                .finish_result_operation(&mut self.state, &op, completion)
+                        {
+                            self.notice = format!("{e:#}");
+                        }
+                        self.storage.invalidate();
+                    } else if let Some(batch) = &mut self.bulk_discard {
                         batch.finish(&self.store, &mut self.state, &op, completion);
                     } else if let Err(e) =
                         self.store
@@ -1139,6 +1152,7 @@ impl App {
             self.shortcuts_window(ctx);
             self.history_settings_window(ctx);
             self.storage_window(ctx);
+            self.worktree_cleanup_window(ctx);
         }
         self.quit_window(ctx);
         self.discard_window(ctx);
@@ -1156,6 +1170,7 @@ impl eframe::App for App {
         self.poll();
         self.sync_desktop();
         self.pump_bulk_discard(ctx);
+        self.pump_worktree_cleanup(ctx);
         self.pump_review(ctx);
         self.handle_close(ctx);
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
@@ -1163,6 +1178,8 @@ impl eframe::App for App {
         }
         ctx.request_repaint_after(Duration::from_millis(
             if self.storage.running()
+                || self.worktree_management.batch.is_some()
+                || self.result_operation.is_some()
                 || self.export.pending.is_some()
                 || self.history_write.is_some()
                 || !self.manager.is_idle()

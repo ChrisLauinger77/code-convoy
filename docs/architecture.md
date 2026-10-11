@@ -997,12 +997,72 @@ Invalid records produce bounded diagnostics without stopping independent entries
 Windows reparse points. `storage` aggregates optional logical byte counts and
 explicit completeness states. `storage/service` owns one worker generation and one
 coalesced pending request; cancellation waits for the old worker's completion
-before dispatching another. Dropping or closing cancels without repository leases
-or shutdown waits. `ui/storage` dispatches spawn_blocking on the existing runtime
+before dispatching another. Dropping or closing cancels the measurement phase
+without a repository lease. `ui/storage` dispatches spawn_blocking on the existing runtime
 and receives results on the existing UI channel. It owns presentation only,
 including category success timestamps, snapshot labels and existing history-settings
 navigation. No persisted fields, dependencies, backend or scheduler changes.
 
-See [storage semantics and cleanup prerequisites](storage.md). This inventory
-must never substitute for the full ownership checks and Store/manager transaction
-required by a future cleanup action.
+See [storage semantics](storage.md). Inventory never substitutes for the separate
+ownership proof and Store/manager transaction described below.
+
+## v0.9 managed worktree cleanup
+
+`worktrees/inventory` remains the single discovery source. Measured entries carry
+original metadata into a subsequent cancellable background Git inspection through
+`LifecycleClient::inspect_cleanup`. No reconciliation writes occur in that phase.
+`storage/management` owns pure lifecycle protection/classification over live state;
+current modifications are independent of retention. Unresolved copies stay retained;
+only resolved Applied copies with reliable current evidence can be candidates.
+Orphans, missing locations, pending/uncertain operations and conflicts are protected.
+Active work blocks cleanup only for the affected job, overlapping repositories or
+the same common Git directory; unrelated jobs in its convoy may continue.
+
+`worktrees/cleanup` reuses recovery's trust-boundary, manifest, canonical Git,
+detached ownership-lock and backlink checks. It adds full ancestor link checks,
+session device/inode stamps, ignored-inclusive porcelain status, fixed-base HEAD,
+Git-operation evidence, supported index/attribute checks and a disposable index
+refresh that rehashes tracked contents. Real indexes, source files, HEAD and Git
+objects are not written by inspection. Windows ordinary removal is disabled until
+an equivalent stable filesystem identity proof is implemented.
+
+`persistence/worktree_cleanup` freezes and deduplicates exact confirmed selections.
+A batch begins each target through the existing Store result transaction with
+`ManagedCleanup`, which rechecks live lifecycle protection and persists intent.
+Its operation retains the selected proof and revalidates after the existing
+exclusive manager lease and administration mutex are acquired. No scheduler or
+concurrency policy changes are needed. Validation, Direct jobs, isolated jobs and
+other lifecycle operations conflict through the same lease boundary. A typed
+pre-write rejection (for example a busy lease or changed preview) restores the
+previous availability through the Store outcome transaction and invalidates current
+Review authority. A new Review and cleanup confirmation can retry it. This outcome
+is permitted only before a journal write is attempted and with confirmed process
+cleanup; all later errors remain sticky. If saving the rejection fails, durable
+pending intent stays protected. Recovery never infers retry safety from a missing
+journal alone.
+
+The non-force primitive writes the sibling cleanup journal, verifies the locked
+registration, unlocks it, verifies the now-unlocked registration/backlink and
+current contents, and invokes Git removal without force. It restores the ownership
+lock after failure only for the same verified target; uncertain failures remain
+journaled and cannot use ordinary retry. Neither pruning nor recursive deletion
+is available. A separate critical-section token prevents normal shutdown from
+aborting between unlock and outcome/lock restoration; child timeouts and unsafe
+process quarantine still apply. Restart reconciliation retains its existing
+journal recovery semantics.
+
+`ui/worktree_management` supplies selection, inspection, exact-path confirmation,
+safe-default Cancel, progress and per-target outcomes. The existing result message
+and transaction completion preserve history/validation/resolution and update live
+availability. Measurements are invalidated after operations, with one refresh when
+an open overview's batch finishes. Closing waits for the in-flight operation and
+skips remaining targets. Idle gaps between targets still block duplicate result,
+validation and history operations. Existing explicitly confirmed Discard and
+retained-copy disposal semantics are unchanged; ordinary storage cleanup is a
+separate conservative action.
+
+No new persisted schema, backend, dependency, general scheduler, monitoring,
+automatic deletion, ownership migration or metadata-forgetting action is added.
+External same-permission filesystem mutation is outside manager leases; repeated
+checks are not a hostile-process sandbox. See [cleanup usage and limits](worktree-cleanup.md)
+and [validation evidence](worktree-cleanup-validation.md).

@@ -13,22 +13,40 @@ pub enum Action {
     Discard,
     CleanupApplied,
     InternalCleanup,
+    ManagedCleanup,
 }
 pub struct Operation {
     pub run: u64,
     pub index: usize,
     pub action: Action,
     pub job: Job,
+    pub(crate) cleanup_proof: Option<crate::worktrees::cleanup::Proof>,
 }
 pub enum Completion {
     Apply(Outcome),
     Cleanup(Result<Report, String>),
+    ManagedCleanupBlocked(String),
 }
 impl Operation {
     pub async fn execute(&self, client: &LifecycleClient) -> Completion {
         match self.action {
             Action::Apply => {
                 Completion::Apply(client.apply_result(self.run, self.index, &self.job).await)
+            }
+            Action::ManagedCleanup => {
+                use crate::worktrees::cleanup::Failure;
+                match (&self.job.worktree, &self.cleanup_proof) {
+                    (Some(m), Some(proof)) => match client.clean_managed(m, proof).await {
+                        Ok(report) => Completion::Cleanup(Ok(report)),
+                        Err(Failure::Blocked(e)) => {
+                            Completion::ManagedCleanupBlocked(format!("{e:#}"))
+                        }
+                        Err(Failure::Uncertain(e)) => Completion::Cleanup(Err(format!("{e:#}"))),
+                    },
+                    _ => Completion::ManagedCleanupBlocked(
+                        "No confirmed cleanup identity was recorded.".into(),
+                    ),
+                }
             }
             _ => Completion::Cleanup(match &self.job.worktree {
                 Some(m) => client.cleanup(m).await.map_err(|e| format!("{e:#}")),
@@ -82,6 +100,12 @@ impl Store {
             "A registered working tree cannot be a result operation target."
         );
         match action {
+            Action::ManagedCleanup => {
+                if let Some((_, reason)) = crate::storage::management::protection(state, m) {
+                    anyhow::bail!(reason);
+                }
+                job(state, run, index)?.result_availability = ResultAvailability::CleanupPending;
+            }
             Action::Apply => {
                 anyhow::ensure!(
                     state.repositories.contains(&j.repository),
@@ -124,7 +148,7 @@ impl Store {
         job(state, run, index)?.log.append(match action {
             Action::Apply => "\n[CodeConvoy] Reviewing isolated result for Apply\n",
             Action::Discard => "\n[CodeConvoy] Discard requested\n",
-            Action::CleanupApplied | Action::InternalCleanup => {
+            Action::CleanupApplied | Action::InternalCleanup | Action::ManagedCleanup => {
                 "\n[CodeConvoy] Retained result cleanup requested\n"
             }
         });
@@ -133,6 +157,7 @@ impl Store {
             index,
             action,
             job: j,
+            cleanup_proof: None,
         })
     }
     pub fn finish_result_operation(
@@ -148,6 +173,20 @@ impl Store {
         );
         let pending = j.clone();
         match completion {
+            Completion::ManagedCleanupBlocked(detail) => {
+                anyhow::ensure!(
+                    op.action == Action::ManagedCleanup,
+                    "Only managed cleanup can report a pre-write rejection."
+                );
+                j.result_availability = op.job.result_availability;
+                // Restore retryability, not stale inspection authority. A new
+                // Review and cleanup proof are required before another attempt.
+                j.result_checked = false;
+                j.worktree_detail =
+                    format!("Cleanup not started: {detail} Refresh result Review before retrying.");
+                j.log
+                    .append(&format!("\n[CodeConvoy] {}\n", j.worktree_detail));
+            }
             Completion::Apply(Outcome::Applied(stats)) => {
                 j.resolution = ResultResolution::Applied;
                 j.resolved_at = Some(now());
@@ -181,6 +220,11 @@ impl Store {
                 )
                 .apply(j),
             },
+        }
+        if op.action == Action::ManagedCleanup {
+            // Review is a historical observation once the live copy is gone.
+            // Keep it alongside completion and validation evidence.
+            j.review = op.job.review.clone();
         }
         if let Err(e) = self.save(state) {
             // Keep the in-memory history protection aligned with durable intent.
