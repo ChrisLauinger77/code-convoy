@@ -42,43 +42,37 @@ fn isolated_output_hints_follow_verified_availability_and_resolution() {
     for status in [JobStatus::Succeeded, JobStatus::Cancelled] {
         let mut job = isolated_history(1, status, Some(true)).jobs.remove(0);
         job.started_at = Some(1);
-        for resolution in [
-            R::Unresolved,
-            R::Applied,
-            R::ApplyPending,
-            R::DiscardPending,
-            R::Discarded,
+        for (resolution, availability, checked, expected) in [
+            (R::Unresolved, A::Available, true, "saved base"),
+            (R::Applied, A::Available, true, "saved base"),
+            (R::Discarded, A::Available, true, "Inspect Review"),
+            (R::Discarded, A::Cleaned, true, "was removed"),
+            (R::Applied, A::Cleaned, true, "was removed"),
+            (R::Unresolved, A::Cleaned, true, "was removed"),
+            (R::Discarded, A::Cleaned, false, "Inspect Review"),
+            (R::Applied, A::Cleaned, false, "Inspect Review"),
+            (R::Unresolved, A::Available, false, "Inspect Review"),
+            (R::Discarded, A::CleanupFailed, true, "Cleanup failed"),
+            (R::Applied, A::CleanupFailed, true, "Cleanup failed"),
+            (R::DiscardPending, A::CleanupFailed, true, "Cleanup failed"),
+            (R::Discarded, A::CleanupFailed, false, "Inspect Review"),
+            (R::Discarded, A::Unchecked, true, "Inspect Review"),
+            (R::Discarded, A::Missing, true, "Inspect Review"),
+            (R::Discarded, A::Stale, true, "Inspect Review"),
+            (R::Discarded, A::Invalid, true, "Inspect Review"),
+            (R::DiscardPending, A::CleanupPending, true, "Inspect Review"),
+            (R::ApplyPending, A::Available, true, "Inspect Review"),
         ] {
             job.resolution = resolution;
-            for availability in [
-                A::Unchecked,
-                A::Available,
-                A::Missing,
-                A::Stale,
-                A::Invalid,
-                A::CleanupPending,
-                A::CleanupFailed,
-                A::Cleaned,
-            ] {
-                job.result_availability = availability;
-                for checked in [false, true] {
-                    job.result_checked = checked;
-                    let text = format::output_empty(&job, true);
-                    if resolution == R::Discarded || availability == A::Cleaned {
-                        assert!(text.contains("Diff is no longer available"), "{text}");
-                    } else if checked
-                        && availability == A::Available
-                        && matches!(resolution, R::Unresolved | R::Applied)
-                    {
-                        assert!(
-                            text.contains("retained isolated worktree diff against its saved base"),
-                            "{text}"
-                        );
-                    } else {
-                        assert!(text.contains("Inspect Review"), "{text}");
-                        assert!(!text.contains("retained"), "{text}");
-                    }
-                }
+            job.result_availability = availability;
+            job.result_checked = checked;
+            let text = format::output_empty(&job, true);
+            assert!(
+                text.contains(expected),
+                "{resolution:?} {availability:?} {checked}: {text}"
+            );
+            if expected != "was removed" {
+                assert!(!text.contains("was removed"), "{text}");
             }
         }
         job.resolution = R::Unresolved;
@@ -87,6 +81,30 @@ fn isolated_output_hints_follow_verified_availability_and_resolution() {
         job.worktree = None;
         assert!(format::output_empty(&job, true).contains("Inspect Review"));
         assert!(format::output_empty(&job, false).contains("Logs are session-only"));
+    }
+}
+
+#[test]
+fn discarded_empty_output_follows_reconciled_cleanup_failures() {
+    use crate::worktrees::recovery::Report;
+    use domain::{ResultAvailability as A, ResultResolution as R};
+    for status in [JobStatus::Succeeded, JobStatus::Cancelled] {
+        let mut job = isolated_history(1, status, Some(true)).jobs.remove(0);
+        job.started_at = Some(1);
+        job.resolution = R::DiscardPending;
+        Report::unavailable(A::Cleaned, "Cleanup completed").apply(&mut job);
+        assert_eq!(job.resolution, R::Discarded);
+        assert!(format::output_empty(&job, true).contains("was removed"));
+
+        Report::unavailable(A::CleanupFailed, "The resource reappeared").apply(&mut job);
+        assert!(job.result_checked);
+        assert_eq!(job.resolution, R::Discarded);
+        assert_eq!(job.status, status);
+        let text = format::output_empty(&job, true);
+        assert!(text.contains("Cleanup failed"), "{text}");
+        assert!(text.contains("Review"), "{text}");
+        assert!(!text.contains("was removed"), "{text}");
+        assert!(!text.contains("Diff is no longer available"), "{text}");
     }
 }
 

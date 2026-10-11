@@ -1386,6 +1386,54 @@ async fn discard_changed_result_preserves_source_peer_history_and_restart_state(
 }
 
 #[tokio::test]
+async fn discarded_result_reappearance_reports_cleanup_failure_without_rewriting_resolution() {
+    let mut f = Fixture::new().await;
+    let m = f.metadata();
+    f.resolve(Action::Discard).await;
+    assert_eq!(f.resolution(), ResultResolution::Discarded);
+    assert_eq!(
+        f.state.runs[0].jobs[0].result_availability,
+        ResultAvailability::Cleaned
+    );
+    let journal = m.path.parent().unwrap().join("cleanup.json");
+    let evidence = fs::read(&journal).unwrap();
+
+    // Simulate external restoration of the checkout and its owned registration.
+    git_cmd(
+        &f.source(),
+        &[
+            "worktree".as_ref(),
+            "add".as_ref(),
+            "--detach".as_ref(),
+            "--lock".as_ref(),
+            "--reason".as_ref(),
+            "CodeConvoy retained result".as_ref(),
+            "--".as_ref(),
+            &git::path_argument(&m.path),
+            m.base_commit.as_ref(),
+        ],
+    );
+    f.edit();
+    let report = f.inspect(false).await;
+    assert_eq!(
+        report.availability,
+        ResultAvailability::CleanupFailed,
+        "{}",
+        report.detail
+    );
+    assert!(report.detail.contains("reappeared"));
+    assert!(f.state.runs[0].jobs[0].result_checked);
+    assert_eq!(f.resolution(), ResultResolution::Discarded);
+    assert_eq!(f.state.runs[0].jobs[0].status, JobStatus::Succeeded);
+    assert_eq!(
+        fs::read_to_string(m.path.join("tracked.txt")).unwrap(),
+        "retained work\n"
+    );
+    assert_eq!(fs::read(&journal).unwrap(), evidence);
+    assert!(!f.state.remove_from_history(1));
+}
+
+#[tokio::test]
 async fn discard_failure_remains_retryable_and_never_marks_discarded() {
     let mut f = Fixture::new().await;
     f.edit();

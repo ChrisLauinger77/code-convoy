@@ -88,18 +88,26 @@ pub fn output_empty(job: &Job, this_session: bool) -> String {
 
 fn isolated_output_hint(job: &Job) -> &'static str {
     use domain::{ResultAvailability as A, ResultResolution as R};
-    if job.resolution == R::Discarded || job.result_availability == A::Cleaned {
-        return "The isolated worktree was removed; its Diff is no longer available.";
+    // Resolution records an earlier action; only a checked physical observation
+    // can confirm removal or report a resource that has since reappeared.
+    if job.result_checked {
+        match job.result_availability {
+            A::Cleaned => {
+                return "The isolated worktree was removed; its Diff is no longer available.";
+            }
+            A::CleanupFailed => {
+                return "Cleanup failed or the isolated result reappeared. Inspect Review for diagnostics.";
+            }
+            A::Available
+                if job.worktree.is_some()
+                    && matches!(job.resolution, R::Unresolved | R::Applied) =>
+            {
+                return "Inspect the retained isolated worktree diff against its saved base.";
+            }
+            _ => {}
+        }
     }
-    if job.result_checked
-        && job.result_availability == A::Available
-        && job.worktree.is_some()
-        && matches!(job.resolution, R::Unresolved | R::Applied)
-    {
-        "Inspect the retained isolated worktree diff against its saved base."
-    } else {
-        "Inspect Review for isolated result availability and diagnostics."
-    }
+    "Inspect Review for isolated result availability and diagnostics."
 }
 
 pub(super) fn diff_empty(mode: domain::ExecutionMode) -> &'static str {

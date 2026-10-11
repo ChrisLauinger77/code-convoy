@@ -43,14 +43,20 @@ the complete original text.
 No additional Git subprocesses or persisted fields are introduced.
 
 Empty output recommends the retained diff only when result availability has been
-verified in this session. Discarded and cleaned results report that Diff is no
-longer available; missing, unchecked, pending or otherwise unavailable results
-direct users to Review. Agent status remains unchanged.
+verified in this session. Verified cleanup reports that Diff is no longer
+available. A previous Discarded resolution alone cannot establish physical
+removal: if a checkout or registration reappears, the latest checked cleanup
+failure takes precedence and directs users to Review. Missing, unchecked,
+pending or otherwise unavailable results also direct users to Review. Agent
+status and resolution remain unchanged.
 
-Five additional regressions exercise actual Direct and isolated Git inspections,
+Seven additional regressions exercise actual Direct and isolated Git inspections,
 index preservation, unsupported snapshots, rendered empty-versus-unknown diff
-states, and output hints across availability/resolution states. Existing cache,
-navigation, cleanup and applied-result tests use the structured observation.
+states, output hints across availability/resolution states, and cleanup failure
+after external restoration of a discarded worktree. The latter preserves files,
+cleanup evidence and protected history. The empty-output regression reproduced
+the incorrect removal message before the fix. Existing cache, navigation,
+cleanup and applied-result tests use the structured observation.
 
 The initial macOS and Windows CI runs caught a fixture error in the new Direct
 diff regression: it passed the temporary-directory path directly to inspection,
@@ -65,7 +71,7 @@ All required checks passed:
 
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo test --all-features`: **545 passed, 0 failed, 6 ignored**. Ignored tests
+- `cargo test --all-features`: **547 passed, 0 failed, 6 ignored**. Ignored tests
   are four installed-provider probes and two manual performance measurements.
   Totals exclude filtered fixture subprocess re-executions.
 - `cargo build --release`
