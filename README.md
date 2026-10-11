@@ -417,8 +417,13 @@ export responsive and predictable. See [history export](docs/history-export.md).
 **Settings → Storage…** measures the shared history/state file and known managed
 worktree directories, including recorded older storage locations. Counts, logical
 file sizes, unavailable entries, locations and partial totals are explicit.
-Measurement runs in the background on opening or **Refresh**, without invoking Git,
-retention or cleanup. See [storage overview and limits](docs/storage.md).
+Measurement and current ownership/Git inspection run in the background on opening
+or **Refresh**. **Manage Worktrees** shows lifecycle, change status and cleanup
+eligibility. Select eligible resolved copies and use **Clean Up Selected…** to
+review exact paths and confirm non-force removal. Active, unresolved, modified,
+ignored, missing and unverified data stay protected. History remains intact;
+Windows ordinary cleanup is currently disabled. See [storage overview](docs/storage.md)
+and [worktree cleanup safety and limitations](docs/worktree-cleanup.md).
 
 **Retry** appears for the selected failed, cancelled or interrupted job. It opens normal launch review for a new one-repository convoy with the original task, backend/options, context, execution mode and per-convoy limit. The current draft stays intact. Current registration, Git state, attachments and CLI compatibility are checked again; missing or changed original context blocks Retry. Direct retries use the current working tree and dirty-tree acknowledgment. Isolated retries create a fresh worktree from the committed HEAD captured by the new review. Old files, output and result resolution remain independent; no old result is automatically Applied or Discarded. Retries use the same scheduler, locks and Stop/quit controls. History and Task & settings identify the attempt and source convoy.
 

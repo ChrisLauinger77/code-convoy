@@ -261,6 +261,55 @@ impl LifecycleClient {
         let _health = AdministrationHealth::protect(&permit.admin, &permit.safe)?;
         recovery::cleanup(&permit.root, m, &permit.cancellation, &permit.safe).await
     }
+
+    pub async fn inspect_cleanup(
+        &self,
+        m: &WorktreeMetadata,
+        cancellation: &Cancellation,
+    ) -> crate::worktrees::cleanup::Inspection {
+        let result = async {
+            let permit = self
+                .acquire(
+                    (m.run, m.job),
+                    super::schedule::Lease {
+                        path: m.repository.path.clone(),
+                        worktree: Some(m.path.clone()),
+                        common_dir: Some(m.common_dir.clone()),
+                        mode: crate::domain::ExecutionMode::Direct,
+                    },
+                    true,
+                    Some(cancellation.clone()),
+                )
+                .await?;
+            let _guard = permit.admin.mutex.lock().await;
+            let _health = AdministrationHealth::protect(&permit.admin, &permit.safe)?;
+            let i = crate::git::Inspection {
+                cancellation: &permit.cancellation,
+                safe: &permit.safe,
+            };
+            Ok::<_, anyhow::Error>(crate::worktrees::cleanup::inspect(&permit.root, m, &i).await)
+        }
+        .await;
+        result.unwrap_or_else(|e| crate::worktrees::cleanup::Inspection::unknown(format!("{e:#}")))
+    }
+
+    pub(crate) async fn clean_managed(
+        &self,
+        m: &WorktreeMetadata,
+        proof: &crate::worktrees::cleanup::Proof,
+    ) -> Result<Report> {
+        let permit = self.permit(m, true).await?;
+        let _guard = permit.admin.mutex.lock().await;
+        let _health = AdministrationHealth::protect(&permit.admin, &permit.safe)?;
+        crate::worktrees::cleanup::remove(
+            &permit.root,
+            m,
+            proof,
+            &permit.cancellation,
+            &permit.safe,
+        )
+        .await
+    }
 }
 
 #[cfg(test)]

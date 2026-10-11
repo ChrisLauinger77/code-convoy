@@ -13,12 +13,14 @@ pub enum Action {
     Discard,
     CleanupApplied,
     InternalCleanup,
+    ManagedCleanup,
 }
 pub struct Operation {
     pub run: u64,
     pub index: usize,
     pub action: Action,
     pub job: Job,
+    pub(crate) cleanup_proof: Option<crate::worktrees::cleanup::Proof>,
 }
 pub enum Completion {
     Apply(Outcome),
@@ -29,6 +31,15 @@ impl Operation {
         match self.action {
             Action::Apply => {
                 Completion::Apply(client.apply_result(self.run, self.index, &self.job).await)
+            }
+            Action::ManagedCleanup => {
+                Completion::Cleanup(match (&self.job.worktree, &self.cleanup_proof) {
+                    (Some(m), Some(proof)) => client
+                        .clean_managed(m, proof)
+                        .await
+                        .map_err(|e| format!("{e:#}")),
+                    _ => Err("No confirmed cleanup identity was recorded.".into()),
+                })
             }
             _ => Completion::Cleanup(match &self.job.worktree {
                 Some(m) => client.cleanup(m).await.map_err(|e| format!("{e:#}")),
@@ -82,6 +93,12 @@ impl Store {
             "A registered working tree cannot be a result operation target."
         );
         match action {
+            Action::ManagedCleanup => {
+                if let Some((_, reason)) = crate::storage::management::protection(state, m) {
+                    anyhow::bail!(reason);
+                }
+                job(state, run, index)?.result_availability = ResultAvailability::CleanupPending;
+            }
             Action::Apply => {
                 anyhow::ensure!(
                     state.repositories.contains(&j.repository),
@@ -124,7 +141,7 @@ impl Store {
         job(state, run, index)?.log.append(match action {
             Action::Apply => "\n[CodeConvoy] Reviewing isolated result for Apply\n",
             Action::Discard => "\n[CodeConvoy] Discard requested\n",
-            Action::CleanupApplied | Action::InternalCleanup => {
+            Action::CleanupApplied | Action::InternalCleanup | Action::ManagedCleanup => {
                 "\n[CodeConvoy] Retained result cleanup requested\n"
             }
         });
@@ -133,6 +150,7 @@ impl Store {
             index,
             action,
             job: j,
+            cleanup_proof: None,
         })
     }
     pub fn finish_result_operation(
@@ -181,6 +199,11 @@ impl Store {
                 )
                 .apply(j),
             },
+        }
+        if op.action == Action::ManagedCleanup {
+            // Review is a historical observation once the live copy is gone.
+            // Keep it alongside completion and validation evidence.
+            j.review = op.job.review.clone();
         }
         if let Err(e) = self.save(state) {
             // Keep the in-memory history protection aligned with durable intent.

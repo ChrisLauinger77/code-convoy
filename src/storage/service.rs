@@ -90,6 +90,13 @@ impl Service {
             .as_ref()
             .map_or(Status::NotMeasured, |s| s.total.status);
     }
+    pub fn invalidate(&mut self) {
+        self.cancel();
+        self.snapshot = None;
+        self.history_success = None;
+        self.worktrees_success = None;
+        self.status = Status::NotMeasured;
+    }
     pub fn running(&self) -> bool {
         self.active.is_some()
     }

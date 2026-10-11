@@ -77,6 +77,7 @@ impl App {
             && self.history_write.is_none()
             && self.result_operation.is_none()
             && self.bulk_discard.is_none()
+            && self.worktree_management.batch.is_none()
     }
     pub(super) fn confirm_history_cleanup(&mut self, now: u64) {
         if !self.history_available() {
