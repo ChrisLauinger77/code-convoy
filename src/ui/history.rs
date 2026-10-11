@@ -225,7 +225,7 @@ impl App {
                 let button = ui.button("Cancel");
                 if dialog.focus_cancel { button.request_focus(); dialog.focus_cancel = false; }
                 cancel = button.clicked();
-                confirm = ui.add_enabled(!p.remove.is_empty() && self.state_write.is_none(), egui::Button::new("Clean Up History")).clicked();
+                confirm = ui.add_enabled(!p.remove.is_empty() && self.state_write.is_none(), theme::destructive(ui, "Clean Up History")).clicked();
             });
         });
         if cancel || response.should_close() {

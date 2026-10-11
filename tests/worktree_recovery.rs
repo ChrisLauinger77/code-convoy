@@ -53,6 +53,57 @@ struct Fixture {
     manager: RunManager,
     rx: mpsc::Receiver<Event>,
 }
+
+#[tokio::test]
+async fn isolated_diff_observation_covers_clean_untracked_and_staged_alternatives() {
+    let mut f = Fixture::new().await;
+    let path = f.metadata().path;
+    let clean = f.inspect(true).await.diff.unwrap();
+    assert_eq!(clean.changed, Some(false));
+    assert!(clean.text.contains("Base commit:"));
+    fs::write(path.join("new.txt"), "").unwrap();
+    let untracked = f.inspect(true).await.diff.unwrap();
+    assert_eq!(untracked.changed, Some(true));
+    assert!(untracked.text.contains("new file mode"));
+    fs::remove_file(path.join("new.txt")).unwrap();
+    f.edit();
+    git_args(&path, &["add", "tracked.txt"]);
+    fs::write(path.join("tracked.txt"), "base\n").unwrap();
+    let index = fs::read(f.admin().join("index")).unwrap();
+    let staged = f.inspect(true).await.diff.unwrap();
+    assert_eq!(staged.changed, Some(true));
+    assert!(staged.text.contains("+retained work"));
+    assert_eq!(fs::read(f.admin().join("index")).unwrap(), index);
+    // A clean status after committing still differs from the saved base.
+    f.edit();
+    git_args(
+        &path,
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "result",
+        ],
+    );
+    assert!(git::status(&path).await.unwrap().entries.is_empty());
+    assert_eq!(f.inspect(true).await.diff.unwrap().changed, Some(true));
+}
+
+#[tokio::test]
+async fn isolated_diff_observation_keeps_unsupported_snapshots_unknown() {
+    let mut f = Fixture::new().await;
+    git_args(
+        &f.metadata().path,
+        &["update-index", "--assume-unchanged", "tracked.txt"],
+    );
+    let diff = f.inspect(true).await.diff.unwrap();
+    assert_eq!(diff.changed, None);
+    assert!(diff.text.contains("snapshot unavailable"));
+}
+
 impl Fixture {
     async fn new() -> Self {
         let temp = tempfile::Builder::new()
@@ -225,7 +276,7 @@ async fn changed_result_roundtrip_and_restart_recovers_available() {
         "{}",
         report.detail
     );
-    assert!(report.diff.unwrap().contains("+retained work"));
+    assert!(report.diff.unwrap().text.contains("+retained work"));
     assert_eq!(
         fs::read_to_string(f.source().join("tracked.txt")).unwrap(),
         "base\n"
@@ -250,7 +301,7 @@ async fn recovered_diff_uses_original_base_after_source_commit_and_external_edit
             "later",
         ],
     );
-    let diff = f.inspect(true).await.diff.unwrap();
+    let diff = f.inspect(true).await.diff.unwrap().text;
     assert!(
         diff.contains("-base") && diff.contains("+retained work") && !diff.contains("later source")
     );
@@ -264,6 +315,7 @@ async fn recovered_diff_uses_original_base_after_source_commit_and_external_edit
             .await
             .diff
             .unwrap()
+            .text
             .contains("+external retained edit")
     );
 }
@@ -492,7 +544,7 @@ async fn active_job_and_peer_are_protected_and_cleanup_lock_releases_after_refus
     f.reload();
     let report = f.inspect(true).await;
     assert_eq!(report.availability, ResultAvailability::CleanupFailed);
-    assert!(report.diff.unwrap().contains("+retained work"));
+    assert!(report.diff.unwrap().text.contains("+retained work"));
     f.cleanup().await.unwrap();
     assert_eq!(git_args(&f.source(), &["status", "--porcelain"]), "");
 }
@@ -1334,6 +1386,54 @@ async fn discard_changed_result_preserves_source_peer_history_and_restart_state(
 }
 
 #[tokio::test]
+async fn discarded_result_reappearance_reports_cleanup_failure_without_rewriting_resolution() {
+    let mut f = Fixture::new().await;
+    let m = f.metadata();
+    f.resolve(Action::Discard).await;
+    assert_eq!(f.resolution(), ResultResolution::Discarded);
+    assert_eq!(
+        f.state.runs[0].jobs[0].result_availability,
+        ResultAvailability::Cleaned
+    );
+    let journal = m.path.parent().unwrap().join("cleanup.json");
+    let evidence = fs::read(&journal).unwrap();
+
+    // Simulate external restoration of the checkout and its owned registration.
+    git_cmd(
+        &f.source(),
+        &[
+            "worktree".as_ref(),
+            "add".as_ref(),
+            "--detach".as_ref(),
+            "--lock".as_ref(),
+            "--reason".as_ref(),
+            "CodeConvoy retained result".as_ref(),
+            "--".as_ref(),
+            &git::path_argument(&m.path),
+            m.base_commit.as_ref(),
+        ],
+    );
+    f.edit();
+    let report = f.inspect(false).await;
+    assert_eq!(
+        report.availability,
+        ResultAvailability::CleanupFailed,
+        "{}",
+        report.detail
+    );
+    assert!(report.detail.contains("reappeared"));
+    assert!(f.state.runs[0].jobs[0].result_checked);
+    assert_eq!(f.resolution(), ResultResolution::Discarded);
+    assert_eq!(f.state.runs[0].jobs[0].status, JobStatus::Succeeded);
+    assert_eq!(
+        fs::read_to_string(m.path.join("tracked.txt")).unwrap(),
+        "retained work\n"
+    );
+    assert_eq!(fs::read(&journal).unwrap(), evidence);
+    assert!(!f.state.remove_from_history(1));
+}
+
+#[tokio::test]
 async fn discard_failure_remains_retryable_and_never_marks_discarded() {
     let mut f = Fixture::new().await;
     f.edit();
@@ -1536,7 +1636,7 @@ async fn snapshots_read_same_size_edits_even_when_git_stat_cache_matches() {
         if target == "result" {
             let report = f.inspect(true).await;
             assert_eq!(report.result.unwrap().changed, Some(true));
-            assert!(report.diff.unwrap().contains("+next"));
+            assert!(report.diff.unwrap().text.contains("+next"));
             let s = report.statistics.unwrap().unwrap();
             assert_eq!((s.files, s.additions, s.deletions), (1, 1, 1));
             f.resolve(Action::Apply).await;

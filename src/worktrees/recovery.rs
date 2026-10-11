@@ -22,7 +22,7 @@ pub struct Report {
     pub availability: Availability,
     pub result: Option<WorktreeResult>,
     pub detail: String,
-    pub diff: Option<String>,
+    pub diff: Option<git::Diff>,
     pub statistics: Option<Result<crate::review::Statistics, String>>,
 }
 impl Report {

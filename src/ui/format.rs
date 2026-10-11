@@ -61,14 +61,69 @@ pub fn output_empty(job: &Job, this_session: bool) -> String {
             "Cancelled before execution; no agent output.".into()
         }
         JobStatus::Cancelled => {
-            "Stopped without textual output. Any partial edits remain in the repository.".into()
+            if job.execution_mode == domain::ExecutionMode::IsolatedWorktree {
+                format!(
+                    "Stopped without textual output. {}",
+                    isolated_output_hint(job)
+                )
+            } else {
+                "Stopped without textual output. Any partial edits remain in the repository.".into()
+            }
         }
         JobStatus::Failed => {
             "No textual output was captured. Inspect the job diagnostics above.".into()
         }
         JobStatus::Succeeded => {
-            "Completed without textual output. Inspect the current working-tree diff.".into()
+            if job.execution_mode == domain::ExecutionMode::IsolatedWorktree {
+                format!(
+                    "Completed without textual output. {}",
+                    isolated_output_hint(job)
+                )
+            } else {
+                "Completed without textual output. Inspect the current working-tree diff.".into()
+            }
         }
+    }
+}
+
+fn isolated_output_hint(job: &Job) -> &'static str {
+    use domain::{ResultAvailability as A, ResultResolution as R};
+    // Resolution records an earlier action; only a checked physical observation
+    // can confirm removal or report a resource that has since reappeared.
+    if job.result_checked {
+        match job.result_availability {
+            A::Cleaned => {
+                return "The isolated worktree was removed; its Diff is no longer available.";
+            }
+            A::CleanupFailed => {
+                return "Cleanup failed or the isolated result reappeared. Inspect Review for diagnostics.";
+            }
+            A::Available
+                if job.worktree.is_some()
+                    && matches!(job.resolution, R::Unresolved | R::Applied) =>
+            {
+                return "Inspect the retained isolated worktree diff against its saved base.";
+            }
+            _ => {}
+        }
+    }
+    "Inspect Review for isolated result availability and diagnostics."
+}
+
+pub(super) fn diff_empty(mode: domain::ExecutionMode) -> &'static str {
+    match mode {
+        domain::ExecutionMode::Direct => "No changes in the current Git diff.",
+        domain::ExecutionMode::IsolatedWorktree => "No changes relative to the saved base commit.",
+    }
+}
+
+pub(super) fn validation_output_empty(status: crate::validation::Status) -> &'static str {
+    match status {
+        crate::validation::Status::Running => "Validation running; no output received yet.",
+        crate::validation::Status::Failed | crate::validation::Status::Unavailable => {
+            "No captured validation output. Inspect Diagnostics above when available. Output is session-only and is not restored after restart."
+        }
+        _ => "No captured validation output in this session. Output is not restored after restart.",
     }
 }
 

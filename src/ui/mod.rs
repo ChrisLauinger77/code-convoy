@@ -70,7 +70,7 @@ enum Message {
     Prepared(Result<PreparedRun, String>),
     RetryPrepared(Result<(PreparedRun, crate::continuation::Provenance), String>),
     FollowUp(Box<crate::continuation::FollowUp>),
-    Diff(PathBuf, Result<String, String>),
+    Diff(PathBuf, Result<git::Diff, String>),
     Reconciled(
         u64,
         usize,
@@ -186,7 +186,7 @@ pub struct App {
     )>,
     focus_bulk_cancel: bool,
     diff_target: Option<PathBuf>,
-    diff: Option<Result<String, String>>,
+    diff: Option<Result<git::Diff, String>>,
     dirty: bool,
     last_save: Instant,
     closing: bool,
@@ -430,6 +430,12 @@ impl App {
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.menu_button(if self.notification_error.is_empty() { "Settings" } else { "Settings (!)" }, |ui| {
+                            ui.set_width(320.0_f32.min(ctx.content_rect().width() - 64.0));
+                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                            egui::ScrollArea::vertical()
+                                .id_salt("settings_scroll")
+                                .max_height((ctx.content_rect().height() - 100.0).max(100.0))
+                                .show(ui, |ui| {
                             ui.strong("Appearance");
                             let mut preference = ctx.options(|o| o.theme_preference);
                             for (value, name) in [
@@ -463,6 +469,7 @@ impl App {
                                 self.shortcuts_open = true;
                                 ui.close();
                             }
+                            });
                         });
                         if !self.manager.is_idle() {
                             ui.menu_button("All convoys", |ui| {
@@ -508,7 +515,9 @@ impl App {
                 }
                 if !self.notice.is_empty() {
                     ui.horizontal_wrapped(|ui| {
-                        ui.colored_label(theme::Palette::of(ui).error, diagnostics::summary(&self.notice));
+                        // Notices also carry successful saves and selection feedback.
+                        // Failures have their own status labels and diagnostic details.
+                        ui.label(diagnostics::summary(&self.notice));
                         if ui.add(theme::quiet("Dismiss").small()).clicked() { self.notice.clear(); }
                     });
                     if !self.notice.is_empty() { diagnostics::details(ui, "notice_diagnostics", &self.notice); }

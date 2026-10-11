@@ -33,6 +33,50 @@ fn git_cmd(path: &Path, args: &[&str]) {
         String::from_utf8_lossy(&result.stderr)
     );
 }
+
+#[tokio::test]
+async fn direct_diff_observation_covers_clean_unborn_staged_and_untracked_files() {
+    let temp = tempfile::tempdir().unwrap();
+    repo(temp.path());
+    // Inspection takes registered canonical paths, including Windows extended
+    // paths and macOS temporary directories reached through symlink aliases.
+    let registered = git::register(temp.path()).await.unwrap();
+    let path = registered.path.as_path();
+    let empty = git::inspect_diff(path).await.unwrap();
+    assert_eq!(empty.changed, Some(false));
+    assert!(empty.text.contains("--- STAGED CHANGES ---"));
+    fs::write(path.join("tracked.txt"), "base\n").unwrap();
+    git_cmd(path, &["add", "tracked.txt"]);
+    assert_eq!(git::inspect_diff(path).await.unwrap().changed, Some(true));
+    git_cmd(
+        path,
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "base",
+        ],
+    );
+    assert_eq!(git::inspect_diff(path).await.unwrap().changed, Some(false));
+    fs::write(path.join("new.txt"), "").unwrap();
+    let untracked = git::inspect_diff(path).await.unwrap();
+    assert_eq!(untracked.changed, Some(true));
+    assert!(untracked.text.contains("?? new.txt"));
+    fs::remove_file(path.join("new.txt")).unwrap();
+    fs::write(path.join("tracked.txt"), "staged alternative\n").unwrap();
+    assert_eq!(git::inspect_diff(path).await.unwrap().changed, Some(true));
+    git_cmd(path, &["add", "tracked.txt"]);
+    fs::write(path.join("tracked.txt"), "base\n").unwrap();
+    let index = fs::read(path.join(".git/index")).unwrap();
+    let alternative = git::inspect_diff(path).await.unwrap();
+    assert_eq!(alternative.changed, Some(true));
+    assert!(alternative.text.contains("+staged alternative"));
+    assert_eq!(fs::read(path.join(".git/index")).unwrap(), index);
+}
+
 #[test]
 fn codex_arguments_are_separate_and_options_are_backend_owned() {
     let task = TaskConfig {

@@ -256,7 +256,8 @@ impl App {
                 });
             }
             if !record.detail.is_empty() {
-                ui.label(&record.detail);
+                ui.label(diagnostics::summary(&record.detail));
+                diagnostics::details(ui, ("validation_diagnostics", key), &record.detail);
             }
         }
         if start {
@@ -291,7 +292,7 @@ impl App {
             ctx.copy_text(record.output.clone());
         }
         if record.output.is_empty() {
-            ui.weak("No captured output in this session. Output is not restored after restart.");
+            ui.weak(format::validation_output_empty(record.status));
         } else {
             self.output_view.show(
                 ui,

@@ -343,7 +343,20 @@ pub fn parse_status(bytes: &[u8]) -> Result<Vec<String>> {
 }
 /// Always a live working-tree inspection, not a historical patch snapshot.
 pub async fn diff(path: &Path) -> Result<String> {
+    Ok(inspect_diff(path).await?.text)
+}
+
+/// Presentation text and the Git change observation from the same inspection.
+/// `None` means the inspection cannot establish whether the result is unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Diff {
+    pub text: String,
+    pub changed: Option<bool>,
+}
+
+pub async fn inspect_diff(path: &Path) -> Result<Diff> {
     let state = status(path).await?;
+    let mut changed = !state.entries.is_empty();
     let mut text = format!(
         "Current working tree: {}\nBranch: {}\n\n",
         path.display(),
@@ -372,6 +385,7 @@ pub async fn diff(path: &Path) -> Result<String> {
             "Cannot read diff: {}",
             String::from_utf8_lossy(&output.stderr)
         );
+        changed |= !output.stdout.is_empty();
         text.push_str(&format!("--- {title} ---\n"));
         text.push_str(&String::from_utf8_lossy(&output.stdout));
         if output.stdout.is_empty() {
@@ -388,7 +402,10 @@ pub async fn diff(path: &Path) -> Result<String> {
     if state.entries.is_empty() {
         text.push_str("Clean working tree");
     }
-    Ok(text)
+    Ok(Diff {
+        text,
+        changed: Some(changed),
+    })
 }
 
 pub async fn diff_job(job: &crate::domain::Job) -> Result<String> {

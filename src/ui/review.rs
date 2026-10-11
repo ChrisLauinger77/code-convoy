@@ -217,6 +217,10 @@ impl App {
             if job.result_availability != A::Cleaned
                 && let Some(Err(e)) = &job.review
             {
+                ui.colored_label(
+                    theme::Palette::of(ui).warning,
+                    "Live Git review unavailable. Check Diagnostics, then refresh review.",
+                );
                 diagnostics::details(ui, ("review_stats_error", id, self.selected_job), e);
             }
             ui.horizontal_wrapped(|ui| {
@@ -368,17 +372,17 @@ impl App {
         let mut cancel = false;
         let mut confirm = false;
         let response = egui::Modal::new(egui::Id::new("discard_result")).show(ctx, |ui| {
-            ui.set_max_width(430.0);
+            ui.set_width(430.0_f32.min(ctx.content_rect().width() - 64.0));
             ui.heading(if action == Action::Discard { "Discard isolated changes?" } else { "Remove retained isolated copy?" });
             ui.label("This removes the retained CodeConvoy worktree and its historical Diff. The registered repository will not be changed.");
             if saving {
                 ui.small("Saving application state. Please wait before confirming removal.");
             }
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 let button = ui.button("Cancel");
                 if self.focus_discard_cancel { button.request_focus(); self.focus_discard_cancel = false; }
                 cancel = button.clicked();
-                confirm = ui.add_enabled(!saving, egui::Button::new(if action == Action::Discard { "Discard result" } else { "Clean up retained copy" })).clicked();
+                confirm = ui.add_enabled(!saving, theme::destructive(ui, if action == Action::Discard { "Discard result" } else { "Clean up retained copy" })).clicked();
             });
         });
         if cancel || response.should_close() {

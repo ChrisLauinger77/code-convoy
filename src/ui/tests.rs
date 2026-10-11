@@ -14,12 +14,21 @@ mod desktop;
 mod history_performance;
 #[path = "notification_tests.rs"]
 mod notifications;
+#[path = "polish_tests.rs"]
+mod polish;
 #[path = "task_context_tests.rs"]
 mod task_context;
 #[path = "validation_tests.rs"]
 mod validation;
 #[path = "visibility_tests.rs"]
 mod visibility;
+
+fn diff_observation(text: &str) -> git::Diff {
+    git::Diff {
+        text: text.into(),
+        changed: None,
+    }
+}
 
 fn finish_history_write(app: &mut App) {
     for _ in 0..300 {
@@ -1411,7 +1420,7 @@ fn history_cleanup_is_terminal_only_and_resets_selection_without_touching_reposi
     app.state.runs[2].jobs[0].interrupted = true;
     app.selected_run = Some(8);
     app.selected_job = 1;
-    app.diff = Some(Ok("old diff".into()));
+    app.diff = Some(Ok(diff_observation("old diff")));
     app.diff_target = Some(repo_path.clone());
     app.remove_history(Some(7)); // Even partially failed convoys remain active.
     finish_history_write(&mut app);
@@ -1422,7 +1431,10 @@ fn history_cleanup_is_terminal_only_and_resets_selection_without_touching_reposi
     assert_eq!(app.selected_job, 0);
     assert!(app.diff.is_none() && app.diff_target.is_none());
     app.tx
-        .send(Message::Diff(repo_path.clone(), Ok("late diff".into())))
+        .send(Message::Diff(
+            repo_path.clone(),
+            Ok(diff_observation("late diff")),
+        ))
         .unwrap();
     app.poll();
     assert!(app.diff.is_none());
@@ -1856,7 +1868,7 @@ fn recovered_result_messages_update_history_once_and_do_not_change_raw_output() 
         .append("original backend output");
     app.selected_run = Some(1);
     app.diff_target = Some(metadata.path.clone());
-    app.diff = Some(Ok("old diff".into()));
+    app.diff = Some(Ok(diff_observation("old diff")));
     for _ in 0..2 {
         app.tx
             .send(Message::Reconciled(
