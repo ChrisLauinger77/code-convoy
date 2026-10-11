@@ -112,6 +112,9 @@ periodic writer before the final save, including when its UI acknowledgement was
 never polled. Queued, completed and failed writes are exercised; direct file reads
 verify that newer edits and interrupted job/validation states were saved without
 relying on startup recovery to repair a stale snapshot.
+The preflight dialog also disables Start with a visible saving explanation while
+a state writer is pending. Keyboard coverage verifies that review acknowledgement
+survives the save and launch still requires explicit activation after it finishes.
 
 Key implementation files: `src/persistence.rs`, `src/persistence/history.rs`,
 `src/domain.rs`, `src/ui/persistence.rs`, `src/ui/results.rs`, `src/ui/quit.rs`,
@@ -169,7 +172,7 @@ Final validation on Linux:
 
 - `cargo fmt --check`: passed.
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed.
-- `cargo test --all-features`: 531 passed, zero failed, six intentionally ignored.
+- `cargo test --all-features`: 532 passed, zero failed, six intentionally ignored.
   This includes two manual performance checks and four installed-backend checks.
   Both performance checks were run separately and passed. Counts exclude filtered
   child-process re-executions used by environment-isolation tests.
