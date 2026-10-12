@@ -50,14 +50,6 @@ ARM Linux/Windows packages are not currently published. The macOS disk image con
 
 The Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app bundle is ad-hoc signed but has no Developer ID signature or notarization, and Gatekeeper may block its first launch. Verify every downloaded file against the accompanying SHA-256 checksum.
 
-## 0.10.0 preparation
-
-This branch prepares the Quality & Polish release: compact layouts, safer keyboard
-focus, accessible control names, lower idle CPU use, platform regression coverage
-and stronger packaging checks. See the [0.10.0 notes](docs/release-notes.md) and
-[validation and remaining release checks](docs/quality-release-validation.md).
-The latest published download may still be 0.9.0 until the candidate is approved.
-
 ## Installation
 
 ### Linux
@@ -466,15 +458,15 @@ Keyboard navigation uses egui's Tab / Shift+Tab focus traversal, with task, back
 Application shortcuts use **Command (⌘) on macOS** and **Ctrl on Linux/Windows**.
 Open **Settings → Keyboard Shortcuts…** for the in-app reference.
 
-| Shortcut | Action and availability |
-| --- | --- |
-| Ctrl/Cmd+Enter | Run Convoy: opens the same preflight review as the button when the draft is ready. Requires explicit confirmation to start. |
-| Ctrl/Cmd+F | Focus and select text in the existing repository filter, when present and enabled in NEW CONVOY. Never targets history search. |
-| Ctrl/Cmd+1 | Activity for the selected convoy |
-| Ctrl/Cmd+2 | Diff for the selected convoy |
-| Ctrl/Cmd+3 | Raw Output for the selected convoy |
-| Ctrl/Cmd+4 | Task & Settings for the selected convoy |
-| Escape | Close the topmost dialog through its safe Cancel/Close action, or leave repository search focus while preserving the query and selection. Open menus take precedence. |
+| Shortcut       | Action and availability                                                                                                                                               |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ctrl/Cmd+Enter | Run Convoy: opens the same preflight review as the button when the draft is ready. Requires explicit confirmation to start.                                           |
+| Ctrl/Cmd+F     | Focus and select text in the existing repository filter, when present and enabled in NEW CONVOY. Never targets history search.                                        |
+| Ctrl/Cmd+1     | Activity for the selected convoy                                                                                                                                      |
+| Ctrl/Cmd+2     | Diff for the selected convoy                                                                                                                                          |
+| Ctrl/Cmd+3     | Raw Output for the selected convoy                                                                                                                                    |
+| Ctrl/Cmd+4     | Task & Settings for the selected convoy                                                                                                                               |
+| Escape         | Close the topmost dialog through its safe Cancel/Close action, or leave repository search focus while preserving the query and selection. Open menus take precedence. |
 
 Run and view shortcuts are inactive while editing text, including the multiline
 task and search fields. Use Tab or Escape to leave the editor first. Ctrl/Cmd+F
