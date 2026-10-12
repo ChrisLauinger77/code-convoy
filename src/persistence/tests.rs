@@ -142,6 +142,8 @@ fn windows_locked_state_preserves_history_and_can_be_saved_after_unlock() {
         .unwrap();
     state.draft.prompt = "new draft".into();
     let error = store.save(&state).unwrap_err();
+    // This message is part of the user-facing failure contract: failed atomic
+    // replacement must say the previous state is intact, also verified below.
     assert!(error.to_string().contains("previous state is intact"));
     drop(error);
     assert_eq!(fs::read(store.history_path()).unwrap(), original);

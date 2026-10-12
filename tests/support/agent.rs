@@ -47,6 +47,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .truncate(false)
             .open(control.join("filter.lock"))?;
         fs2::FileExt::lock_exclusive(&lock)?;
+        // Keep readiness after lock acquisition: cancellation tests use it to
+        // know the descendant holds an OS lock before cancelling or aborting.
         std::fs::write(control.join("filter.ready"), "ready")?;
         let deadline = std::time::Instant::now() + Duration::from_secs(60);
         while !control.join("filter.release").exists() {
