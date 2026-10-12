@@ -7,6 +7,9 @@ $installed = Join-Path $env:LOCALAPPDATA 'CodeConvoy'
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CodeConvoy'
 if (Test-Path $installed) { throw 'Refusing to overwrite a previous installation during smoke test' }
 Expand-Archive "dist/CodeConvoy-$version-windows-x86_64.zip" $portable
+if ((Get-FileHash "$portable/LICENSE.txt").Hash -ne (Get-FileHash 'LICENSE').Hash) {
+    throw 'Portable archive license is missing or incorrect'
+}
 $info = (Get-Item "$portable/CodeConvoy.exe").VersionInfo
 if ($info.ProductName -ne 'CodeConvoy' -or $info.ProductVersion -ne $version) {
     throw "Unexpected executable identity: $($info.ProductName) $($info.ProductVersion)"
@@ -26,6 +29,9 @@ try {
     if ((Get-FileHash "$installed/CodeConvoy.exe").Hash -ne (Get-FileHash "$portable/CodeConvoy.exe").Hash) {
         throw 'Installed and portable executables differ'
     }
+    if ((Get-FileHash "$installed/LICENSE.txt").Hash -ne (Get-FileHash 'LICENSE').Hash) {
+        throw 'Installed license is missing or incorrect'
+    }
     # User data shares this per-user parent directory; uninstall must leave it.
     New-Item -ItemType Directory -Path "$installed/data" | Out-Null
     Set-Content "$installed/data/preservation-fixture.txt" 'keep user state'
@@ -37,6 +43,7 @@ try {
     }
 }
 if (Test-Path "$installed/CodeConvoy.exe") { throw 'Uninstall left the application executable' }
+if (Test-Path "$installed/LICENSE.txt") { throw 'Uninstall left the packaged license' }
 if (Test-Path $uninstallKey) { throw 'Uninstall left its registration' }
 if ((Get-Content "$installed/data/preservation-fixture.txt") -ne 'keep user state') {
     throw 'Uninstall did not preserve the user-data directory'

@@ -47,7 +47,7 @@ def checksum(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def aggregate(directory):
+def release_assets(directory):
     expected = set(artifact_names(version()))
     actual = {p.name for p in directory.iterdir() if p.name != "SHA256SUMS"}
     if actual != expected:
@@ -56,8 +56,33 @@ def aggregate(directory):
         path = directory / name
         if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
             raise ValueError(f"Release asset is not a nonempty regular file: {name}")
+    return sorted(expected)
+
+
+def verify_checksums(directory):
+    expected = release_assets(directory)
+    manifest = directory / "SHA256SUMS"
+    if manifest.is_symlink() or not manifest.is_file():
+        raise ValueError("SHA256SUMS must be a regular file")
+    entries = {}
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
+        if not match or match[2] in entries:
+            raise ValueError("Malformed or duplicate SHA256SUMS entry")
+        entries[match[2]] = match[1]
+    if sorted(entries) != expected:
+        raise ValueError("SHA256SUMS must cover every release asset exactly once")
+    for name in expected:
+        if entries[name] != checksum(directory / name):
+            raise ValueError(f"Candidate checksum mismatch: {name}")
+
+
+def aggregate(directory):
+    expected = release_assets(directory)
+    if (directory / "SHA256SUMS").is_symlink():
+        raise ValueError("Refusing to replace a symlinked SHA256SUMS")
     (directory / "SHA256SUMS").write_text(
-        "".join(f"{checksum(directory / name)}  {name}\n" for name in sorted(expected)), encoding="utf-8")
+        "".join(f"{checksum(directory / name)}  {name}\n" for name in expected), encoding="utf-8")
 
 
 def run(*args, **kwargs):
@@ -74,8 +99,17 @@ def fresh_work(platform):
     return work
 
 
-def package(work, binary_dir, binary, format_name):
+def package(work, binary_dir, binary, format_name, *, glibc=None):
     config = json.loads((ROOT / "packaging/packager.json").read_text())
+    if format_name == "deb":
+        if not glibc or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", glibc):
+            raise ValueError("DEB packaging requires the executable's measured glibc minimum")
+        config["deb"]["depends"] = [
+            f"libc6 (>= {glibc})" if dependency == "libc6" else dependency
+            for dependency in config["deb"]["depends"]]
+    if format_name in ("app", "nsis"):
+        # licenseFile displays installer terms; resources actually ship the text.
+        config["resources"] = [{"src": "LICENSE", "target": "LICENSE.txt"}]
     config.update(version=version(), description=metadata()["description"], homepage=metadata()["homepage"],
                   binaries=[{"path": binary, "main": True}], binariesDir=str(binary_dir),
                   outDir=str(work / "packages"))
@@ -101,9 +135,16 @@ def verify_mac_app(app):
     with (app / "Contents/Info.plist").open("rb") as source:
         info = plistlib.load(source)
     for key, expected in {"CFBundleIdentifier": IDENTIFIER, "CFBundleName": "CodeConvoy",
-                          "CFBundleShortVersionString": version(), "CFBundleVersion": version()}.items():
+                          "CFBundleShortVersionString": version(), "CFBundleVersion": version(),
+                          "LSMinimumSystemVersion": "11.0"}.items():
         if info.get(key) != expected:
             raise ValueError(f"Invalid bundle {key}: {info.get(key)!r}")
+    resources = app / "Contents/Resources"
+    if (resources / "LICENSE.txt").read_bytes() != (ROOT / "LICENSE").read_bytes():
+        raise ValueError("Application bundle license is missing or differs from LICENSE")
+    icon = resources / info["CFBundleIconFile"]
+    if not icon.is_file() or icon.stat().st_size == 0:
+        raise ValueError("Application bundle icon is missing or empty")
     binary = app / "Contents/MacOS" / info["CFBundleExecutable"]
     verify_architectures(run("/usr/bin/lipo", "-archs", binary, capture_output=True, text=True).stdout)
     run("/usr/bin/codesign", "--verify", "--deep", "--strict", "--all-architectures", "--verbose=2", app)
@@ -179,8 +220,16 @@ def windows():
     archive = DIST / f"CodeConvoy-{version()}-windows-x86_64.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zipped:
         zipped.write(exe, "CodeConvoy.exe")
+        zipped.write(ROOT / "LICENSE", "LICENSE.txt")
+    verify_windows_zip(archive, exe)
+
+
+def verify_windows_zip(archive, exe):
     with zipfile.ZipFile(archive) as zipped:
-        if zipped.namelist() != ["CodeConvoy.exe"] or zipped.testzip() is not None:
+        if (sorted(zipped.namelist()) != ["CodeConvoy.exe", "LICENSE.txt"]
+                or zipped.testzip() is not None
+                or zipped.read("CodeConvoy.exe") != exe.read_bytes()
+                or zipped.read("LICENSE.txt") != (ROOT / "LICENSE").read_bytes()):
             raise ValueError("Portable ZIP failed verification")
 
 

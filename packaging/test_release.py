@@ -1,13 +1,84 @@
 """Tests for gates that must fail before any public release is created."""
 import hashlib
+import json
 from pathlib import Path
 import tempfile
+import tomllib
 import unittest
+from unittest.mock import patch
+import zipfile
 
+import linux
 import release
 
 
 class ReleaseGates(unittest.TestCase):
+    def test_cargo_lock_and_release_notes_match_package_version(self):
+        with (release.ROOT / "Cargo.lock").open("rb") as source:
+            packages = tomllib.load(source)["package"]
+        versions = [p["version"] for p in packages if p["name"] == "codeconvoy"]
+        self.assertEqual(versions, [release.version()])
+        notes = (release.ROOT / "docs/release-notes.md").read_text(encoding="utf-8")
+        self.assertTrue(notes.startswith(f"# CodeConvoy {release.version()} — "))
+
+    def test_glibc_reads_requirements_not_exported_definitions(self):
+        output = """Version definition section '.gnu.version_d':
+          Name: GLIBC_2.99
+        Version needs section '.gnu.version_r':
+          Name: GLIBC_2.9 Flags: none
+          Name: GLIBC_2.43 Flags: none
+          Name: GLIBC_2.3.4 Flags: none
+          Name: GCC_3.0 Flags: none
+        """
+        self.assertEqual(linux.required_glibc(output), (2, 43))
+        self.assertIsNone(linux.required_glibc("No version information found"))
+        self.assertIsNone(linux.required_glibc("Version definition section: Name: GLIBC_2.99"))
+        with self.assertRaisesRegex(ValueError, "Unrecognized glibc ABI"):
+            linux.required_glibc("Version needs section: Name: GLIBC_PRIVATE Flags: none")
+
+    def test_deb_uses_measured_requirement_and_refuses_missing_measurement(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"):
+            work = Path(temporary)
+            with self.assertRaisesRegex(ValueError, "measured glibc"):
+                release.package(work, work, "codeconvoy", "deb")
+            release.package(work, work, "codeconvoy", "deb", glibc="2.43")
+            dependencies = json.loads((work / "packager.json").read_text())["deb"]["depends"]
+            self.assertIn("libc6 (>= 2.43)", dependencies)
+            self.assertNotIn("libc6", dependencies)
+            self.assertIn("libxkbcommon-x11-0", dependencies)
+
+    def test_portable_zip_requires_exact_binary_license_and_inventory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            exe = directory / "CodeConvoy.exe"
+            exe.write_bytes(b"fixture executable")
+            archive = directory / "portable.zip"
+            license_text = (release.ROOT / "LICENSE").read_bytes()
+            for contents in (
+                {"CodeConvoy.exe": exe.read_bytes()},
+                {"CodeConvoy.exe": b"wrong binary", "LICENSE.txt": license_text},
+                {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": b"wrong license"},
+                {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": license_text, "debug.log": b"log"},
+                {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": license_text},
+            ):
+                with self.subTest(files=list(contents)):
+                    with zipfile.ZipFile(archive, "w") as zipped:
+                        for name, data in contents.items():
+                            zipped.writestr(name, data)
+                    if contents == {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": license_text}:
+                        release.verify_windows_zip(archive, exe)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "ZIP failed"):
+                            release.verify_windows_zip(archive, exe)
+
+    def test_installer_and_app_ship_license_as_resource(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"):
+            work = Path(temporary)
+            for format_name in ("app", "nsis"):
+                release.package(work, work, "codeconvoy", format_name)
+                config = json.loads((work / "packager.json").read_text())
+                self.assertIn({"src": "LICENSE", "target": "LICENSE.txt"}, config["resources"])
+
     def test_tag_must_match_cargo_exactly(self):
         release.check_tag("v" + release.version())
         for tag in (None, release.version(), "v999.0.0", "v" + release.version() + "-alpha"):
@@ -32,6 +103,29 @@ class ReleaseGates(unittest.TestCase):
                 digest, name = line.split("  ")
                 self.assertEqual(digest, hashlib.sha256(name.encode()).hexdigest())
             release.aggregate(directory)  # A previous checksum file is not an extra asset.
+            release.verify_checksums(directory)
+
+    def test_checksum_manifest_cannot_omit_duplicate_or_rehash_corrupt_assets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            for name in release.artifact_names(release.version()):
+                (directory / name).write_bytes(name.encode())
+            release.aggregate(directory)
+            manifest = directory / "SHA256SUMS"
+            original = manifest.read_text()
+            lines = original.splitlines(keepends=True)
+            for invalid in ("", "".join(lines[1:]), original + lines[0],
+                            original.replace(lines[0][:64], "0" * 64),
+                            original + "0" * 64 + "  extra.zip\n"):
+                manifest.write_text(invalid)
+                with self.assertRaises(ValueError):
+                    release.verify_checksums(directory)
+                self.assertEqual(manifest.read_text(), invalid)
+            manifest.write_text(original)
+            (directory / release.artifact_names(release.version())[-1]).write_bytes(b"corrupted")
+            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+                release.verify_checksums(directory)
+            self.assertEqual(manifest.read_text(), original)
 
     def test_missing_empty_and_extra_assets_fail_closed(self):
         names = release.artifact_names(release.version())
