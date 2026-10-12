@@ -33,6 +33,8 @@ unicase = "2.10"
 notify-rust = "4.18.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# eframe disables winit defaults; enable its Adwaita title bar on Wayland.
+winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
 # Direct async SNI: runs on our existing Tokio runtime; observes tray-host loss.
 ksni = "0.3.6"
 # Required for dual-runtime selection shared with accessibility/notifications.
