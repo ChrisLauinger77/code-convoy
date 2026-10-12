@@ -197,6 +197,9 @@ impl App {
     }
 
     pub(super) fn grouped_repositories(&mut self, ui: &mut egui::Ui) {
+        // Inspect history once, not once per row (or repeated group membership).
+        // This frame-local projection cannot become stale after a worker event.
+        let in_use = self.repository_usage();
         // Move out temporarily so rendering can mutate selection without cloning
         // the cached membership lists on every frame.
         let mut sections = std::mem::take(&mut self.repository_sections);
@@ -270,7 +273,8 @@ impl App {
                         ui.weak("No registered repositories");
                     }
                     for &index in &section.repositories {
-                        if sections.matches(index) && self.repository_row(ui, index) {
+                        if sections.matches(index) && self.repository_row(ui, index, in_use[index])
+                        {
                             remove = Some(index);
                         }
                     }
@@ -320,11 +324,22 @@ impl App {
         }
     }
 
-    fn repository_row(&mut self, ui: &mut egui::Ui, index: usize) -> bool {
+    pub(super) fn repository_usage(&self) -> Vec<bool> {
+        let busy: Vec<_> = self.busy_repository_paths().collect();
+        self.state
+            .repositories
+            .iter()
+            .map(|repo| {
+                busy.iter()
+                    .any(|path| repo.path.starts_with(path) || path.starts_with(&repo.path))
+            })
+            .collect()
+    }
+
+    fn repository_row(&mut self, ui: &mut egui::Ui, index: usize, in_use: bool) -> bool {
         let p = theme::Palette::of(ui);
         let mut remove = false;
         let repository = &self.state.repositories[index];
-        let in_use = self.repository_in_use(&repository.path);
         ui.push_id(&repository.path, |ui| {
             ui.separator();
             ui.horizontal(|ui| {

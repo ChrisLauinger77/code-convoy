@@ -158,8 +158,7 @@ impl App {
         }
         let request = self.attachment_work.begin();
         let attachments = self.state.draft.attachments.clone();
-        // Reuse is triggered outside rendering as well, so request a repaint via
-        // the existing channel polling instead of relying on a picker context.
+        // The sender wakes the UI even when reuse starts outside rendering.
         let tx = self.tx.clone();
         self.runtime().spawn(async move {
             let (files, errors) =

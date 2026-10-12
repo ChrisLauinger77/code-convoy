@@ -7,7 +7,7 @@ use objc2_foundation::{MainThreadMarker, NSObjectProtocol};
 use std::cell::RefCell;
 
 thread_local! {
-    static CONTEXT: RefCell<Option<(egui::Context, std::sync::mpsc::Sender<super::Message>)>> = const { RefCell::new(None) };
+    static CONTEXT: RefCell<Option<(egui::Context, super::messages::Sender)>> = const { RefCell::new(None) };
 }
 
 define_class!(
@@ -50,6 +50,6 @@ pub fn init_native_application() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn connect(ctx: &egui::Context, tx: std::sync::mpsc::Sender<super::Message>) {
+pub(super) fn connect(ctx: &egui::Context, tx: super::messages::Sender) {
     CONTEXT.with(|slot| *slot.borrow_mut() = Some((ctx.clone(), tx)));
 }

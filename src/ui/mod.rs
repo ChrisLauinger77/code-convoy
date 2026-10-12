@@ -15,11 +15,13 @@ mod export;
 mod format;
 mod history;
 mod library;
+mod messages;
 mod notifications;
 mod persistence;
 mod quit;
 #[cfg(target_os = "macos")]
 mod quit_macos;
+mod repaint;
 mod repositories;
 mod repository_sections;
 use crate::export::markdown as result_markdown;
@@ -149,7 +151,7 @@ pub struct App {
     orphan_notice: String,
     output_view: text_view::TextView,
     diff_view: text_view::TextView,
-    tx: mpsc::Sender<Message>,
+    tx: messages::Sender,
     rx: mpsc::Receiver<Message>,
     events_rx: async_mpsc::Receiver<Event>,
     manager: RunManager,
@@ -217,20 +219,16 @@ impl App {
         theme::install(ctx);
         dialog::install(ctx);
         ctx.set_theme(theme::preference(state.appearance));
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = messages::channel(ctx);
         let desktop_tx = tx.clone();
-        let desktop_ctx = ctx.clone();
         let desktop =
             crate::desktop::Service::new(crate::desktop::Events::new(move |generation, event| {
                 let _ = desktop_tx.send(Message::Desktop(generation, event));
-                desktop_ctx.request_repaint();
             }));
         let notification_tx = tx.clone();
-        let notification_ctx = ctx.clone();
         let notification_service = crate::notifications::Service::native(
             crate::notifications::Events::new(move |event| {
                 let _ = notification_tx.send(Message::Notification(event));
-                notification_ctx.request_repaint();
             }),
         );
         let (events_tx, events_rx) = async_mpsc::channel(256);
@@ -579,20 +577,35 @@ impl App {
         }
     }
     fn repository_in_use(&self, path: &std::path::Path) -> bool {
-        let overlaps = |job: &domain::Job| {
-            path.starts_with(&job.repository.path) || job.repository.path.starts_with(path)
-        };
+        self.busy_repository_paths()
+            .any(|busy| path.starts_with(busy) || busy.starts_with(path))
+    }
+    fn busy_repository_paths(&self) -> impl Iterator<Item = &std::path::Path> {
         self.state
             .runs
             .iter()
             .flat_map(|r| &r.jobs)
-            .any(|job| (!job.status.is_terminal() || job.validation.as_ref().is_some_and(|v| v.status == crate::validation::Status::Running)) && overlaps(job))
+            .filter(|job| {
+                !job.status.is_terminal()
+                    || job
+                        .validation
+                        .as_ref()
+                        .is_some_and(|v| v.status == crate::validation::Status::Running)
+            })
+            .map(|job| job.repository.path.as_path())
             // Bulk discard also dispatches one result_operation at a time.
-            || self.result_operation
-                .and_then(|(run, index)| {
-                    self.state.runs.iter().find(|r| r.id == run)?.jobs.get(index)
-                })
-                .is_some_and(overlaps)
+            .chain(
+                self.result_operation
+                    .and_then(|(run, index)| {
+                        self.state
+                            .runs
+                            .iter()
+                            .find(|r| r.id == run)?
+                            .jobs
+                            .get(index)
+                    })
+                    .map(|job| job.repository.path.as_path()),
+            )
     }
     fn invalidate_repository_health(&mut self, source: &std::path::Path) {
         let overlaps = |path: &PathBuf| path.starts_with(source) || source.starts_with(path);
@@ -1202,33 +1215,12 @@ impl eframe::App for App {
         if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
             self.save_background();
         }
-        ctx.request_repaint_after(Duration::from_millis(
-            if self.storage.running()
-                || self.worktree_management.batch.is_some()
-                || self.result_operation.is_some()
-                || self.export.pending.is_some()
-                || self.history_write.is_some()
-                || self.state_write.is_some()
-                || !self.manager.is_idle()
-                || !self.validations.is_idle()
-                || self.closing
-                || self.state.runs.iter().any(Run::active)
-                || self.busy
-                || self.attachment_work.pending
-                || self.cli_checks.any_checking()
-                || self
-                    .cli_search
-                    .as_ref()
-                    .is_some_and(|search| search.result.is_none())
-            {
-                100
-            } else {
-                1000
-            },
-        ));
+        self.schedule_repaint(ctx);
     }
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
         self.main_ui(ui);
+        // UI edits happen after logic: arm their save deadline in this pass too.
+        self.schedule_repaint(ui.ctx());
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
         self.storage.cancel();

@@ -14,6 +14,8 @@ mod desktop;
 mod history_performance;
 #[path = "notification_tests.rs"]
 mod notifications;
+#[path = "performance_tests.rs"]
+mod performance;
 #[path = "polish_tests.rs"]
 mod polish;
 #[path = "task_context_tests.rs"]
@@ -43,7 +45,7 @@ fn finish_history_write(app: &mut App) {
     panic!("history save did not finish");
 }
 
-fn finish_state_write(app: &mut App) {
+pub(super) fn finish_state_write(app: &mut App) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while app.state_write.is_some() {
         assert!(Instant::now() < deadline);
@@ -54,7 +56,7 @@ fn finish_state_write(app: &mut App) {
     }
 }
 
-fn app() -> (tempfile::TempDir, App) {
+pub(super) fn app() -> (tempfile::TempDir, App) {
     app_with_state(AppState::default())
 }
 
@@ -1233,7 +1235,7 @@ fn repository(name: &str) -> Repository {
     }
 }
 
-fn run(id: u64, statuses: &[JobStatus]) -> Run {
+pub(super) fn run(id: u64, statuses: &[JobStatus]) -> Run {
     Run {
         provenance: None,
         id,

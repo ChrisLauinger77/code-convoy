@@ -232,4 +232,12 @@ fn session_memory_budget_includes_both_activity_and_raw_output() {
     );
     assert!(state.runs[0].jobs[0].log.truncated);
     assert!(state.runs[0].jobs[0].raw_log.truncated);
+    let evicted = &mut state.runs[0].jobs[0];
+    assert_eq!(evicted.log.text.capacity(), 0);
+    assert_eq!(evicted.raw_log.text.capacity(), 0);
+    evicted.log.append("More activity 日本語\n");
+    evicted.raw_log.append("More raw output 日本語\n");
+    assert_eq!(evicted.log.text, "More activity 日本語\n");
+    assert_eq!(evicted.raw_log.text, "More raw output 日本語\n");
+    assert!(evicted.log.truncated && evicted.raw_log.truncated);
 }

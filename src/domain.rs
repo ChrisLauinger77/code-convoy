@@ -649,11 +649,13 @@ impl AppState {
             }
             total -= job.log.text.len() + job.raw_log.text.len();
             if !job.log.text.is_empty() {
-                job.log.text.clear();
+                // Eviction must release the allocation as well as its contents;
+                // otherwise every historical job can retain a full log buffer.
+                job.log.text = String::new();
                 job.log.truncated = true;
             }
             if !job.raw_log.text.is_empty() {
-                job.raw_log.text.clear();
+                job.raw_log.text = String::new();
                 job.raw_log.truncated = true;
             }
         }
