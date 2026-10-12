@@ -282,6 +282,32 @@ fn git_status_counts_renames_as_one_entry_and_escapes_filenames() {
 }
 
 #[test]
+#[cfg(windows)]
+fn git_arguments_preserve_drive_unc_unicode_and_spaces_without_changing_identity() {
+    for (native, expected) in [
+        (r"\\?\C:\work tree\日本語", r"C:\work tree\日本語"),
+        (r"\\?\C:\", r"C:\"),
+        (
+            r"\\?\UNC\server\share\work tree\ü",
+            r"\\server\share\work tree\ü",
+        ),
+        (r"\\?\UNC\server\share\", r"\\server\share\"),
+        (r"C:\ordinary path\ü", r"C:\ordinary path\ü"),
+        (
+            r"\\server\share\ordinary path",
+            r"\\server\share\ordinary path",
+        ),
+    ] {
+        let path = std::path::PathBuf::from(native);
+        assert_eq!(
+            git::path_argument(&path),
+            std::ffi::OsString::from(expected)
+        );
+        assert_eq!(path.as_os_str(), native);
+    }
+}
+
+#[test]
 fn overlapping_repositories_and_relative_executables_are_rejected() {
     let task = TaskConfig {
         prompt: "Review".into(),

@@ -47,6 +47,8 @@ impl eframe::App for Probe {
     }
 }
 fn main() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    codeconvoy::ui::init_native_application()?;
     let args: Vec<_> = std::env::args().collect();
     let count = args.get(1).map(|s| s.parse()).transpose()?.unwrap_or(0);
     let seconds = args.get(2).map(|s| s.parse()).transpose()?.unwrap_or(20);

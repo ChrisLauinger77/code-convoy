@@ -142,6 +142,9 @@ describes why a watcher alone is insufficient without a registered host.
 
 ## Validation
 
+See the [v0.10 platform audit and smoke checklist](platform-validation.md) for
+current cross-platform regression coverage and the native checks still required.
+
 2026-10-10, macOS Apple Silicon, Homebrew Rust/Cargo 1.99:
 
 - `cargo fmt --check`, strict Clippy, `cargo test --all-features` and

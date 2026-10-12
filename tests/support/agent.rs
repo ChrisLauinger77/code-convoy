@@ -14,6 +14,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::io::copy(&mut std::io::stdin(), &mut std::io::stdout())?;
         return Ok(());
     }
+    if args.get(1).is_some_and(|a| a == "invocation-probe") {
+        let mut input = String::new();
+        std::io::stdin().read_to_string(&mut input)?;
+        serde_json::to_writer(
+            std::io::stdout(),
+            &serde_json::json!({
+                "arguments": &args[2..],
+                "directory": std::env::current_dir()?,
+                "input": input,
+            }),
+        )?;
+        return Ok(());
+    }
     if args.get(1).is_some_and(|a| a == "smudge-gate") {
         let mut input = Vec::new();
         std::io::stdin().read_to_end(&mut input)?;
@@ -34,6 +47,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .truncate(false)
             .open(control.join("filter.lock"))?;
         fs2::FileExt::lock_exclusive(&lock)?;
+        // Keep readiness after lock acquisition: cancellation tests use it to
+        // know the descendant holds an OS lock before cancelling or aborting.
         std::fs::write(control.join("filter.ready"), "ready")?;
         let deadline = std::time::Instant::now() + Duration::from_secs(60);
         while !control.join("filter.release").exists() {

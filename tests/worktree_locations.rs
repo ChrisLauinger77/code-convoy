@@ -402,3 +402,75 @@ async fn links_permissions_and_replaced_base_fail_closed() {
     manager.shutdown();
     (&mut manager.join).await.unwrap();
 }
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_junction_base_and_replaced_owned_location_fail_closed() {
+    // Directory junctions need no developer mode or symlink privilege. Keep the
+    // script constant and pass both disposable paths as environment values.
+    fn junction(link: &Path, target: &Path) {
+        let result = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command",
+                "$ErrorActionPreference = 'Stop'; New-Item -ItemType Junction -Path $env:CONVOY_TEST_LINK -Target $env:CONVOY_TEST_TARGET | Out-Null"])
+            .env("CONVOY_TEST_LINK", git::path_argument(link))
+            .env("CONVOY_TEST_TARGET", git::path_argument(target))
+            .output().unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let repo = repository(&root, "source ü 日本語").await;
+    let store = Store::open(&root.join("state")).unwrap();
+    let storage = store.directory().join("worktrees");
+    let base = root.join("custom ü 日本語");
+    let m = reserve(&storage, Some(&base), &repo, 1).await;
+    worktrees::create(&m, &Cancellation::default(), &AtomicBool::new(true))
+        .await
+        .unwrap();
+    let alias = root.join("junction");
+    junction(&alias, &base);
+    assert!(worktrees::location::validate_base(&alias).is_err());
+    fs::remove_dir(&alias).unwrap();
+
+    let mut state = state(repo, m.clone(), Some(base.clone()));
+    let (tx, _rx) = tokio::sync::mpsc::channel(256);
+    let mut manager = RunManager::with_worktree_directory(2, tx, storage.clone());
+    assert_eq!(
+        manager
+            .lifecycle()
+            .inspect(1, 0, &state.runs[0].jobs[0], false)
+            .await
+            .availability,
+        ResultAvailability::Available
+    );
+
+    let moved = root.join("retained original");
+    fs::rename(&base, &moved).unwrap();
+    junction(&base, &moved);
+    let report = manager
+        .lifecycle()
+        .inspect(1, 0, &state.runs[0].jobs[0], false)
+        .await;
+    assert_ne!(report.availability, ResultAvailability::Available);
+    assert!(
+        store
+            .cleanup_result(&mut state, &manager, 1, 0)
+            .await
+            .is_err()
+    );
+    assert!(worktrees::location::validate_base(&base).is_err());
+    assert_eq!(
+        fs::read_to_string(m.path.join("tracked")).unwrap(),
+        "base\n"
+    );
+    assert!(record(&storage, &m).exists());
+    fs::remove_dir(&base).unwrap();
+    assert!(moved.exists());
+    assert!(m.repository.path.join("tracked").exists());
+    manager.shutdown();
+    (&mut manager.join).await.unwrap();
+}
