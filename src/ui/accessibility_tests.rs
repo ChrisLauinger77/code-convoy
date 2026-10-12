@@ -80,7 +80,7 @@ fn draft_fields_have_accessible_names_after_typing() {
     app.worktree_location.input = "/some/worktrees".into();
     let mut keys = Keyboard::new(|app, ui, ctx| {
         app.editor(ui, ctx);
-        app.execution_section(ui, ctx);
+        app.execution_section(ui);
         app.worktree_settings(ui);
     });
     keys.frame(&mut app, vec![]);

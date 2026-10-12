@@ -45,7 +45,7 @@ impl App {
             return;
         }
         if let Some(op) = batch.begin_next(&self.store, &mut self.state) {
-            self.dispatch_result_operation(ctx, op);
+            self.dispatch_result_operation(op);
         }
         ctx.request_repaint();
     }

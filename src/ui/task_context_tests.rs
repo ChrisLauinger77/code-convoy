@@ -546,7 +546,7 @@ fn keyboard_can_select_followup_rows_create_a_draft_and_reach_retry() {
         .collect();
     app.selected_run = Some(41);
     let mut keyboard = Keyboard::new(|app, ui, ctx| {
-        app.continuation_controls(ui, ctx);
+        app.continuation_controls(ui);
         app.review_view(ui, ctx, 1500.0);
     });
     keyboard.frame(&mut app, vec![]);
@@ -561,7 +561,7 @@ fn keyboard_can_select_followup_rows_create_a_draft_and_reach_retry() {
     // Deliver the worker completion without touching real repositories.
     let draft =
         crate::continuation::FollowUp::from_state(&app.state, 41, &app.review_selected).unwrap();
-    app.tx.send(Message::FollowUp(Box::new(draft))).unwrap();
+    assert!(app.tx.send(Message::FollowUp(Box::new(draft))));
     app.poll();
     assert_eq!(app.selected.len(), 2);
     assert!(app.state.draft.prompt.is_empty());
@@ -577,7 +577,7 @@ fn validation_configuration_and_run_controls_are_keyboard_accessible() {
     let (_temp, mut app) = app();
     app.state.repositories = vec![repository("alpha")];
     let path = app.state.repositories[0].path.clone();
-    let mut keys = Keyboard::new(|app, ui, ctx| app.repositories_section(ui, ctx));
+    let mut keys = Keyboard::new(|app, ui, _| app.repositories_section(ui));
     keys.frame(&mut app, vec![]);
     keys.activate(&mut app, "Configure validation…");
     keys.replace_text(

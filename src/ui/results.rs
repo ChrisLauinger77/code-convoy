@@ -15,7 +15,7 @@ impl App {
         self.run_navigation(ui);
         self.export_status(ui);
         self.bulk_discard_status(ui);
-        self.continuation_controls(ui, ctx);
+        self.continuation_controls(ui);
         if self.state.runs.is_empty() {
             ui.add_space(theme::SECTION_GAP);
             ui.strong("No convoys yet");
@@ -401,7 +401,7 @@ impl App {
             self.diff_target = Some(path.clone());
             self.diff = None;
             let lifecycle = self.manager.lifecycle();
-            self.dispatch(ctx.clone(), async move {
+            self.dispatch(async move {
                 if job.execution_mode == domain::ExecutionMode::IsolatedWorktree {
                     let Some(metadata) = job.worktree.clone() else {
                         return Message::Diff(

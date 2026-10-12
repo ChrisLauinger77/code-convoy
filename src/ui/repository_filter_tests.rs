@@ -319,7 +319,7 @@ fn filter_and_matching_groups_fit_target_sizes_and_themes() {
                             .show(ui, |ui| {
                                 let available = ui.available_width();
                                 let response = egui::ScrollArea::vertical()
-                                    .show(ui, |ui| app.repositories_section(ui, &ctx));
+                                    .show(ui, |ui| app.repositories_section(ui));
                                 assert!(
                                     response.content_size.x <= available + 1.0,
                                     "{appearance:?} {width}x{height} {query}"

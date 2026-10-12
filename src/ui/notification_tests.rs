@@ -54,7 +54,7 @@ fn receive_assessment(app: &mut App) {
         .unwrap()
     });
     for message in messages {
-        app.tx.send(message).unwrap();
+        assert!(app.tx.send(message));
     }
     app.poll();
 }
@@ -223,13 +223,11 @@ fn saved_changes_deliver_review_notification_with_success_filter_disabled() {
     });
     complete(&mut app, 29, 0, JobStatus::Succeeded);
     // Live Review now sees no changes, as after a successful agent commit.
-    app.tx
-        .send(Message::ReviewStats(
-            29,
-            0,
-            Ok(crate::review::Statistics::default()),
-        ))
-        .unwrap();
+    assert!(app.tx.send(Message::ReviewStats(
+        29,
+        0,
+        Ok(crate::review::Statistics::default()),
+    )));
     app.poll();
     app.pump_notifications();
     receive_assessment(&mut app);

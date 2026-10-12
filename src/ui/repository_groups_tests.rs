@@ -23,7 +23,7 @@ fn grouped_app() -> (tempfile::TempDir, App) {
 }
 
 fn picker() -> Keyboard {
-    let keys = Keyboard::new(|app, ui, ctx| app.repositories_section(ui, ctx));
+    let keys = Keyboard::new(|app, ui, _| app.repositories_section(ui));
     keys.ctx.all_styles_mut(|s| s.animation_time = 0.0);
     keys
 }
@@ -202,7 +202,7 @@ fn expansion_is_independent_and_survives_navigation_counts_and_group_reordering(
     keys.frame(&mut app, vec![]);
     app.select_repositories(true);
     app.state.groups.swap(0, 1);
-    keys.surface = |app, ui, ctx| app.repositories_section(ui, ctx);
+    keys.surface = |app, ui, _| app.repositories_section(ui);
     keys.frame(&mut app, vec![]);
     assert_eq!(app.repository_sections.sections[1].id, overlap_id);
     assert_eq!(app.repository_sections.sections[2].id, first_id);

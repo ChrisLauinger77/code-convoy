@@ -183,3 +183,9 @@ command, scheduling policy, version, release tag or package publication changes.
 The full filesystem/process suite used `TMPDIR=/var/tmp` outside the Codex
 sandbox, which otherwise injects a protected `/tmp/.git` boundary into disposable
 Git fixtures. Production repository and storage safety checks were not relaxed.
+
+PR review follow-up removes the redundant dispatch repaint and the context
+arguments that only forwarded it, uses an inclusive save deadline, and shares
+the path-overlap predicate between single-repository checks and the per-frame
+projection. The message sender reports delivery as a boolean; its ordering test
+also verifies that a closed receiver returns false without requesting repaint.

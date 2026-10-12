@@ -69,12 +69,12 @@ impl App {
             .map(|error| error.to_string())
     }
 
-    fn add_attachment_paths(&mut self, paths: Vec<PathBuf>, ctx: egui::Context) {
+    fn add_attachment_paths(&mut self, paths: Vec<PathBuf>) {
         if self.attachment_work.pending || paths.is_empty() {
             return;
         }
         let request = self.attachment_work.begin();
-        self.dispatch(ctx, async move {
+        self.dispatch(async move {
             match tokio::task::spawn_blocking(move || inspect_files(paths)).await {
                 Ok((files, errors)) => Message::Attachments(request, files, errors),
                 Err(error) => Message::Attachments(
@@ -86,7 +86,7 @@ impl App {
         });
     }
 
-    fn browse_attachments(&mut self, ctx: egui::Context) {
+    fn browse_attachments(&mut self) {
         if self.attachment_work.pending {
             return;
         }
@@ -98,7 +98,7 @@ impl App {
             .set_title("Add task attachments")
             .add_filter("Task context and images", attachments::EXTENSIONS)
             .pick_files();
-        self.dispatch(ctx, async move {
+        self.dispatch(async move {
             let paths = selection
                 .await
                 .unwrap_or_default()
@@ -222,7 +222,7 @@ impl App {
                         self.attachment_work.focus_add = false;
                     }
                     if response.clicked() {
-                        self.browse_attachments(ctx.clone());
+                        self.browse_attachments();
                     }
                     if self.attachment_work.pending {
                         ui.spinner();
@@ -315,7 +315,7 @@ impl App {
                 .iter()
                 .map(|file| file.path().to_owned())
                 .collect::<Vec<_>>();
-            self.add_attachment_paths(paths, ctx.clone());
+            self.add_attachment_paths(paths);
         }
     }
 }

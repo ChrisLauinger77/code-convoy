@@ -171,7 +171,7 @@ fn reused_attachment_validation_is_async_visible_and_stale_results_cannot_replac
     std::fs::remove_file(&missing_path).unwrap();
     app.reuse_convoy(20);
     assert!(app.attachment_work.pending);
-    app.preflight(egui::Context::default());
+    app.preflight();
     assert!(!app.busy && app.prepared.is_none());
     let messages = app.runtime.as_ref().unwrap().block_on(async {
         tokio::time::timeout(Duration::from_secs(5), async {
@@ -192,7 +192,7 @@ fn reused_attachment_validation_is_async_visible_and_stale_results_cannot_replac
         .unwrap()
     });
     for message in messages {
-        app.tx.send(message).unwrap();
+        assert!(app.tx.send(message));
     }
     app.poll();
     assert!(!app.attachment_work.pending);
@@ -203,7 +203,7 @@ fn reused_attachment_validation_is_async_visible_and_stale_results_cannot_replac
     app.attachments_added(0, vec![files[1].clone()], vec![]);
     app.attachments_reused(0, vec![], vec![]);
     assert_eq!(app.state.draft.attachments, files);
-    app.preflight(egui::Context::default());
+    app.preflight();
     assert!(!app.busy && app.prepared.is_none());
     assert!(app.attachment_error().unwrap().contains("missing.txt"));
     assert!(app.manager.is_idle());
@@ -428,7 +428,7 @@ fn folder_results_only_fill_the_draft_and_do_not_release_git_work() {
 
     for selection in [Some(PathBuf::from("/chosen/repo with spaces")), None] {
         app.browsing_repository = true;
-        app.tx.send(Message::RepositoryFolder(selection)).unwrap();
+        assert!(app.tx.send(Message::RepositoryFolder(selection)));
         app.poll();
         assert_eq!(app.repository_input, "/chosen/repo with spaces");
         assert!(!app.browsing_repository);
@@ -444,7 +444,7 @@ fn folder_results_only_fill_the_draft_and_do_not_release_git_work() {
 
     // Keep edits made while a portal is open, including whitespace, on cancel.
     app.repository_input = "  another manual path  ".into();
-    app.tx.send(Message::RepositoryFolder(None)).unwrap();
+    assert!(app.tx.send(Message::RepositoryFolder(None)));
     app.poll();
     assert_eq!(app.repository_input, "  another manual path  ");
 }
@@ -477,9 +477,7 @@ fn unrepresentable_folder_path_does_not_silently_select_a_different_directory() 
     app.repository_input = "keep this path".into();
     app.browsing_repository = true;
     let path = std::ffi::OsString::from_vec(b"/tmp/invalid-\xff".to_vec());
-    app.tx
-        .send(Message::RepositoryFolder(Some(path.into())))
-        .unwrap();
+    assert!(app.tx.send(Message::RepositoryFolder(Some(path.into()))));
     app.poll();
     assert_eq!(app.repository_input, "keep this path");
     assert!(!app.browsing_repository);
@@ -488,7 +486,7 @@ fn unrepresentable_folder_path_does_not_silently_select_a_different_directory() 
 }
 
 fn add_repository_and_wait(app: &mut App) {
-    app.register(egui::Context::default());
+    app.register();
     assert!(app.busy);
     let message = app.runtime.as_ref().unwrap().block_on(async {
         tokio::time::timeout(Duration::from_secs(10), async {
@@ -505,7 +503,7 @@ fn add_repository_and_wait(app: &mut App) {
         .unwrap()
     });
     assert!(matches!(message, Message::Registered(_)));
-    app.tx.send(message).unwrap();
+    assert!(app.tx.send(message));
     app.poll();
     assert!(!app.busy);
 }
@@ -530,9 +528,7 @@ fn selected_and_manual_paths_share_explicit_registration_and_git_validation() {
     let nested = valid.join("subdirectory");
     std::fs::create_dir(&nested).unwrap();
 
-    app.tx
-        .send(Message::RepositoryFolder(Some(valid.clone())))
-        .unwrap();
+    assert!(app.tx.send(Message::RepositoryFolder(Some(valid.clone()))));
     app.poll();
     assert!(app.state.repositories.is_empty());
     assert!(!app.busy);
@@ -546,9 +542,7 @@ fn selected_and_manual_paths_share_explicit_registration_and_git_validation() {
     assert!(app.notice.is_empty());
 
     for path in [&valid, &non_git, &nested] {
-        app.tx
-            .send(Message::RepositoryFolder(Some(path.clone())))
-            .unwrap();
+        assert!(app.tx.send(Message::RepositoryFolder(Some(path.clone()))));
         app.poll();
         add_repository_and_wait(&mut app);
         assert_eq!(app.state.repositories.len(), 1);
@@ -600,9 +594,7 @@ fn picked_paths_with_trailing_whitespace_are_not_trimmed_to_another_repository()
                 .success()
         );
     }
-    app.tx
-        .send(Message::RepositoryFolder(Some(picked.clone())))
-        .unwrap();
+    assert!(app.tx.send(Message::RepositoryFolder(Some(picked.clone()))));
     app.poll();
     add_repository_and_wait(&mut app);
     assert_eq!(
@@ -612,9 +604,7 @@ fn picked_paths_with_trailing_whitespace_are_not_trimmed_to_another_repository()
     assert!(app.picked_repository_path.is_none());
 
     // Editing the field after a pick must use the edited value, not a stale pick.
-    app.tx
-        .send(Message::RepositoryFolder(Some(picked)))
-        .unwrap();
+    assert!(app.tx.send(Message::RepositoryFolder(Some(picked))));
     app.poll();
     app.repository_input = other.display().to_string();
     add_repository_and_wait(&mut app);
@@ -693,7 +683,7 @@ fn complete_cli_checks(app: &mut App) {
 fn preflight_reconciles_executable_changes_before_snapshotting() {
     let (temp, mut app) = app();
     app.state.draft.prompt = "Review the repository".into();
-    app.preflight(egui::Context::default());
+    app.preflight();
     assert!(app.current_cli_check());
     assert!(!app.busy && app.prepared.is_none());
 
@@ -703,7 +693,7 @@ fn preflight_reconciles_executable_changes_before_snapshotting() {
         temp.path().join("new-codex").display().to_string(),
     );
     // An edit must gate preflight even before the next poll/render cycle.
-    app.preflight(egui::Context::default());
+    app.preflight();
     assert!(app.current_cli_check());
     assert!(!app.busy && app.prepared.is_none());
     assert_eq!(app.state.draft.prompt, "Review the repository");
@@ -711,7 +701,7 @@ fn preflight_reconciles_executable_changes_before_snapshotting() {
 
     complete_cli_checks(&mut app);
     app.check_cli(egui::Context::default());
-    app.preflight(egui::Context::default());
+    app.preflight();
     assert!(app.current_cli_check());
     assert!(!app.busy && app.prepared.is_none());
 }
@@ -802,7 +792,7 @@ fn preflight_waits_for_discovered_cli_before_snapshotting() {
     }
     assert!(app.current_cli_check());
     assert!(!app.state.draft.options.contains_key("executable"));
-    app.preflight(ctx.clone());
+    app.preflight();
     assert!(!app.busy && app.prepared.is_none());
     assert!(app.selected.contains(&repository.path));
     assert_eq!(app.state.draft.prompt, "Review the repository");
@@ -816,7 +806,7 @@ fn preflight_waits_for_discovered_cli_before_snapshotting() {
     // A different backend's refresh must not prevent the selected CLI's review.
     app.cli_checks.recheck(AgentId::Copilot);
     assert!(app.cli_checks.checking(AgentId::Copilot));
-    app.preflight(ctx);
+    app.preflight();
     assert!(app.busy);
     let deadline = Instant::now() + Duration::from_secs(5);
     while app.busy {
@@ -997,7 +987,7 @@ fn cli_discovery_requires_explicit_selection_and_preserves_custom_paths_and_canc
         ] {
             app.dirty = false;
             pending_cli_search(&mut app, 1);
-            app.tx.send(Message::FoundCli(1, result)).unwrap();
+            assert!(app.tx.send(Message::FoundCli(1, result)));
             app.poll();
             assert_eq!(serde_json::to_value(&app.state).unwrap(), before);
             assert!(!app.dirty);
@@ -1366,9 +1356,10 @@ fn failed_preflight_save_or_admission_preserves_draft_and_selection() {
         match failure {
             "preflight" => {
                 app.prepared = None;
-                app.tx
-                    .send(Message::Prepared(Err("preflight failed".into())))
-                    .unwrap();
+                assert!(
+                    app.tx
+                        .send(Message::Prepared(Err("preflight failed".into())))
+                );
                 app.poll();
             }
             "save" => {
@@ -1432,12 +1423,10 @@ fn history_cleanup_is_terminal_only_and_resets_selection_without_touching_reposi
     assert_eq!(app.selected_run, Some(7));
     assert_eq!(app.selected_job, 0);
     assert!(app.diff.is_none() && app.diff_target.is_none());
-    app.tx
-        .send(Message::Diff(
-            repo_path.clone(),
-            Ok(diff_observation("late diff")),
-        ))
-        .unwrap();
+    assert!(app.tx.send(Message::Diff(
+        repo_path.clone(),
+        Ok(diff_observation("late diff")),
+    )));
     app.poll();
     assert!(app.diff.is_none());
     app.remove_history(None);
@@ -1872,15 +1861,13 @@ fn recovered_result_messages_update_history_once_and_do_not_change_raw_output() 
     app.diff_target = Some(metadata.path.clone());
     app.diff = Some(Ok(diff_observation("old diff")));
     for _ in 0..2 {
-        app.tx
-            .send(Message::Reconciled(
-                1,
-                0,
-                metadata.clone(),
-                report.clone(),
-                false,
-            ))
-            .unwrap();
+        assert!(app.tx.send(Message::Reconciled(
+            1,
+            0,
+            metadata.clone(),
+            report.clone(),
+            false,
+        )));
         app.poll();
     }
     finish_state_write(&mut app);

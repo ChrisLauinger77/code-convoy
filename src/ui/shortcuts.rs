@@ -194,9 +194,9 @@ impl App {
     }
 
     /// Both the button and shortcut enter the unchanged asynchronous preflight.
-    pub(super) fn run_convoy(&mut self, ctx: &egui::Context) {
+    pub(super) fn run_convoy(&mut self) {
         if self.can_run_convoy() {
-            self.preflight(ctx.clone());
+            self.preflight();
         }
     }
 
@@ -217,7 +217,7 @@ impl App {
                 .any(|r| Some(r.id) == self.selected_run),
         };
         match self.shortcuts.take(ctx, scope) {
-            Some(Action::Run) => self.run_convoy(ctx),
+            Some(Action::Run) => self.run_convoy(),
             Some(Action::FocusRepositories) => {
                 self.focus_draft = false;
                 self.focus_repository_input = false;

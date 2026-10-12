@@ -21,11 +21,13 @@ pub(super) fn channel(ctx: &egui::Context) -> (Sender, mpsc::Receiver<Message>) 
 }
 
 impl Sender {
-    pub fn send(&self, message: Message) -> Result<(), mpsc::SendError<()>> {
-        // Shutdown is the only send failure; these UI messages are never retried.
-        self.tx.send(message).map_err(|_| mpsc::SendError(()))?;
+    /// Returns false when the UI has closed. Messages are never retried.
+    pub fn send(&self, message: Message) -> bool {
+        if self.tx.send(message).is_err() {
+            return false;
+        }
         self.ctx.request_repaint();
-        Ok(())
+        true
     }
 }
 
@@ -53,9 +55,12 @@ mod tests {
             *callback_received.lock().unwrap() = true;
         });
         let worker = tx.clone();
-        std::thread::spawn(move || worker.send(Message::StateSaved(Ok(()))).unwrap())
+        std::thread::spawn(move || assert!(worker.send(Message::StateSaved(Ok(())))))
             .join()
             .unwrap();
         assert!(*received.lock().unwrap());
+        // Replacing the callback drops its receiver; failed sends must not wake.
+        ctx.set_request_repaint_callback(|_| panic!("Closed UI must not be woken"));
+        assert!(!tx.send(Message::StateSaved(Ok(()))));
     }
 }

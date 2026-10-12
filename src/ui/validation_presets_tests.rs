@@ -29,7 +29,7 @@ fn fixture() -> (tempfile::TempDir, App, Keyboard) {
     ];
     app.state.runs = vec![run(7, &[JobStatus::Succeeded])];
     app.selected.insert(app.state.repositories[0].path.clone());
-    let keys = Keyboard::new(|app, ui, ctx| app.repositories_section(ui, ctx));
+    let keys = Keyboard::new(|app, ui, _| app.repositories_section(ui));
     (temp, app, keys)
 }
 

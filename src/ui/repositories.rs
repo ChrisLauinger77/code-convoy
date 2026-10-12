@@ -1,7 +1,7 @@
 use super::*;
 
 impl App {
-    fn browse_repository(&mut self, ctx: egui::Context) {
+    fn browse_repository(&mut self) {
         if self.browsing_repository || self.busy {
             return;
         }
@@ -13,7 +13,7 @@ impl App {
             .clone()
             .set_directory(self.repository_input.trim())
             .pick_folder();
-        self.dispatch(ctx, async move {
+        self.dispatch(async move {
             Message::RepositoryFolder(selection.await.map(|folder| folder.path().to_owned()))
         });
     }
@@ -44,7 +44,7 @@ impl App {
         }
     }
 
-    pub(super) fn repositories_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    pub(super) fn repositories_section(&mut self, ui: &mut egui::Ui) {
         ui.add_space(theme::SECTION_GAP);
         ui.horizontal_wrapped(|ui| {
             ui.label(egui::RichText::new("Repositories").strong().size(14.0));
@@ -83,7 +83,7 @@ impl App {
                 .on_hover_text("Choose a folder, then use Add repository to register it")
                 .clicked()
             {
-                self.browse_repository(ctx.clone());
+                self.browse_repository();
             }
             if ui
                 .add_enabled(
@@ -94,13 +94,13 @@ impl App {
                 )
                 .clicked()
             {
-                self.register(ctx.clone());
+                self.register();
             }
             if ui
                 .add_enabled(!self.busy, theme::quiet("Refresh state"))
                 .clicked()
             {
-                self.refresh(ctx.clone());
+                self.refresh();
             }
         });
         if self.browsing_repository {
@@ -329,10 +329,7 @@ impl App {
         self.state
             .repositories
             .iter()
-            .map(|repo| {
-                busy.iter()
-                    .any(|path| repo.path.starts_with(path) || path.starts_with(&repo.path))
-            })
+            .map(|repo| busy.iter().any(|path| paths_overlap(&repo.path, path)))
             .collect()
     }
 

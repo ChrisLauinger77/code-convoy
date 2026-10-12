@@ -116,7 +116,7 @@ impl App {
                 }
                 self.sync_cli_checks();
                 if find_cli {
-                    self.find_cli(ctx.clone());
+                    self.find_cli();
                 }
                 ui.horizontal_wrapped(|ui| {
                     if ui

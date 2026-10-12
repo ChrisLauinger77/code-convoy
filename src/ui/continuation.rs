@@ -1,7 +1,7 @@
 use super::*;
 
 impl App {
-    pub(super) fn continuation_controls(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    pub(super) fn continuation_controls(&mut self, ui: &mut egui::Ui) {
         let Some(run) = self
             .state
             .runs
@@ -32,13 +32,13 @@ impl App {
                 theme::quiet("Retry").small()).on_hover_text("Review a new one-repository attempt with the original task and settings. The original result and current draft stay intact.").clicked();
         }
         if retry {
-            self.retry(ctx, id, self.selected_job);
+            self.retry(id, self.selected_job);
         }
         if let Some(source) = source {
             self.select_run(Some(source));
         }
     }
-    pub(super) fn retry(&mut self, ctx: &egui::Context, run: u64, index: usize) {
+    pub(super) fn retry(&mut self, run: u64, index: usize) {
         if self.busy || self.prepared.is_some() || self.closing || self.quit_requested {
             return;
         }
@@ -51,11 +51,11 @@ impl App {
         };
         self.busy = true;
         self.notice.clear();
-        self.dispatch(ctx.clone(), async move {
+        self.dispatch(async move {
             Message::RetryPrepared(request.prepare().await.map_err(|e| format!("{e:#}")))
         });
     }
-    pub(super) fn followup(&mut self, ctx: &egui::Context, run: u64) {
+    pub(super) fn followup(&mut self, run: u64) {
         if self.busy || self.prepared.is_some() || self.closing || self.quit_requested {
             return;
         }
@@ -72,9 +72,7 @@ impl App {
         };
         self.busy = true;
         self.followup_pending = true;
-        self.dispatch(ctx.clone(), async move {
-            Message::FollowUp(Box::new(request.check().await))
-        });
+        self.dispatch(async move { Message::FollowUp(Box::new(request.check().await)) });
     }
     pub(super) fn apply_followup(&mut self, draft: crate::continuation::FollowUp) {
         let (selected, message) = draft.populate(&mut self.state);

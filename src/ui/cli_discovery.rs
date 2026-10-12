@@ -10,7 +10,7 @@ pub(super) struct CliSearch {
 }
 
 impl App {
-    pub(super) fn find_cli(&mut self, ctx: egui::Context) {
+    pub(super) fn find_cli(&mut self) {
         if self.cli_search.is_some() {
             return;
         }
@@ -35,7 +35,7 @@ impl App {
             result: None,
             selected: None,
         });
-        self.dispatch(ctx, async move {
+        self.dispatch(async move {
             let result =
                 tokio::task::spawn_blocking(move || agents::discovery::find(agent, &configured))
                     .await

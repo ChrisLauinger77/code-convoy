@@ -41,9 +41,8 @@ fn desktop_layout_performance() {
             .map(|i| repository(&format!("service-{i}")))
             .collect();
         measure(&format!("repositories {count}"), &mut app, |app, ui| {
-            let ctx = ui.ctx().clone();
             egui::CentralPanel::default().show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| app.repositories_section(ui, &ctx));
+                egui::ScrollArea::vertical().show(ui, |ui| app.repositories_section(ui));
             });
         });
     }

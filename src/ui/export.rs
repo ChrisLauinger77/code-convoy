@@ -62,7 +62,7 @@ impl App {
         };
         Snapshot::capture(&self.state.runs, &scope)
     }
-    fn choose_export_file(&mut self, ctx: &egui::Context) {
+    fn choose_export_file(&mut self) {
         if !self.export_available() {
             return;
         }
@@ -90,7 +90,7 @@ impl App {
             cancel: Default::default(),
         });
         let storage = self.store.directory().to_path_buf();
-        self.dispatch(ctx.clone(), async move {
+        self.dispatch(async move {
             let Some(file) = selection.await else {
                 return Message::ExportDestination(Ok(None));
             };
@@ -289,7 +289,7 @@ impl App {
         if cancel || response.should_close() {
             self.export.dialog = None;
         } else if confirm {
-            self.choose_export_file(ctx);
+            self.choose_export_file();
         }
     }
 }
