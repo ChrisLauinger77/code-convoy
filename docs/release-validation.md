@@ -1,5 +1,8 @@
 # v0.1.0 release audit and validation
 
+This is a historical record. See [0.10.0 quality-release validation](quality-release-validation.md)
+for current packaging checks and remaining release gates.
+
 ## Audit before implementation
 
 Reviewed Cargo metadata/lockfile, build script, all source areas, tests, CI,

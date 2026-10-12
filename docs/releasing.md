@@ -4,7 +4,7 @@
 
 `Cargo.toml` is the version authority. About, Windows resources, package
 metadata, bundle versions and final filenames derive from it. For this release
-it is `0.9.0`, with tag `v0.9.0`, without a prerelease suffix.
+it is `0.10.0`, with tag `v0.10.0`, without a prerelease suffix.
 
 `docs/release-notes.md` contains only the current release and its changes since
 the immediately previous version. Replace the previous release's content during
@@ -13,11 +13,12 @@ remain in Git history; preserve separate historical validation records.
 
 1. Review [release-notes.md](release-notes.md) and commit the release changes.
    Confirm applicable normal CI checks are green; Markdown-only changes skip CI.
-2. Run **Native release packages → Run workflow** on the reviewed branch. This
+2. Run **Release → Run workflow** on the reviewed branch. This
    builds and verifies packages and uploads the complete `release-assets`
    workflow artifact, including checksums. It never publishes a release.
 3. Download those packages and complete the outstanding desktop checks in
-   [release-validation.md](release-validation.md), particularly Linux and Windows.
+   [quality-release-validation.md](quality-release-validation.md) and the native
+   [platform checklist](platform-validation.md), particularly Linux and Windows.
 4. When satisfied with the packages, copy the exact `git tag` and `git push`
    commands from the candidate run's summary or **Print the exact commands to
    publish this candidate** step. The annotated tag includes `Candidate-Run:`
@@ -47,8 +48,10 @@ can build a candidate but still cannot publish.
 Only the final publishing job has `contents: write`; it also has `actions: read`
 to inspect and download the selected candidate. All six packages must be
 nonempty and have exactly the expected final filenames before checksums are
-generated. The publisher checks the downloaded candidate checksums before
-publication. A single publisher creates a **draft**, uploads all seven assets,
+generated. The publisher requires exactly one original checksum for each of the
+six assets and verifies every digest before publication. A partial, duplicate or
+malformed manifest is rejected without regenerating it or creating a draft.
+A single publisher creates a **draft**, uploads all seven assets,
 resolves the draft's numeric release ID with `gh release view`, checks its
 names/sizes and GitHub-provided digests through the release-ID API, then publishes
 that same ID. The REST tag endpoint only returns published releases and cannot
@@ -94,10 +97,22 @@ and [Scoop workflow](https://github.com/ChrisLauinger77/scoop-bucket/blob/main/.
 when diagnosing delayed updates. They currently commit successful updates directly
 to their package repositories' `main` branches.
 
+## WinGet compatibility
+
+No CodeConvoy manifest is maintained in this repository. The inspected WinGet
+publisher directory contains other projects, not CodeConvoy. A future external
+submission should use the existing x86-64 NSIS `setup.exe`, per-user scope,
+`/S` silent installation, Cargo-derived DisplayVersion and the final asset's
+SHA-256. Validate that exact installer with WinGet before claiming availability.
+The portable ZIP remains compatible with the inspected Scoop manifest; adding
+`LICENSE.txt` leaves its `CodeConvoy.exe` shortcut target unchanged. Homebrew's
+Universal DMG name and `CodeConvoy.app` path are unchanged. This PR adds no
+package-manager submission or automatic publication.
+
 ## CI and Renovate
 
-[Normal CI](../.github/workflows/ci.yml) runs on pushes to `main` and pull
-requests targeting `main`, excluding changes consisting entirely of `**/*.md`
+[Normal CI](../.github/workflows/ci.yml) runs on pull requests targeting `main`
+and manual dispatch, excluding changes consisting entirely of `**/*.md`
 files. Mixed Markdown/code/configuration changes still run CI. Its matrix uses
 `ubuntu-latest`, `macos-latest`, and `windows-latest`, stable Rust, and Python
 3.15. Packaging unit tests, formatting, strict Clippy, all non-ignored Rust tests
@@ -170,8 +185,8 @@ The common bundle/installer identifier is
 
 The Windows setup is per-user (`currentUser`), requests no elevation, supplies
 Start Menu integration and an uninstaller, and does not remove user state.
-The ZIP contains only `CodeConvoy.exe`; the release build statically links the
-MSVC CRT. Both use the same normal per-user state location. Release GUI builds
+The ZIP contains `CodeConvoy.exe` and `LICENSE.txt`; the release build statically
+links the MSVC CRT. Both use the same normal per-user state location. Release GUI builds
 hide their console; debug builds keep it. A native startup error dialog preserves
 visibility when state loading or application startup fails. Child processes use
 `CreationFlags(CREATE_NO_WINDOW)` together with JobObject, preserving the wrapper's
@@ -181,8 +196,11 @@ macOS builds `aarch64-apple-darwin` and `x86_64-apple-darwin` independently with
 deployment target 11.0. Packaging merges them, requires exactly `arm64 x86_64`,
 assembles the app, sets both bundle version strings from Cargo, then signs the
 **final** bundle with identity `-`. It verifies `--deep --strict
---all-architectures` and checks ad-hoc signature metadata. The DMG contains the
-app and `/Applications` link; the mounted copy is verified again. Future
+--all-architectures` and checks ad-hoc signature metadata. The app includes its license in
+`Contents/Resources/LICENSE.txt` before signing; it is checked with the signed
+app and again in the mounted image. Its icon and minimum-system metadata are
+also checked. The DMG contains the app and `/Applications` link; the mounted copy
+is verified again. Future
 Developer ID signing, notarization and stapling belong at `sign_mac_app`, between
 assembly and DMG creation. They are intentionally not implemented now.
 
@@ -209,13 +227,13 @@ not change global environment settings. Package assembly expects the repository'
 normal `target/` directory; do not override `CARGO_TARGET_DIR` for these commands.
 
 On Linux, install the README's source prerequisites plus packaging/test-only
-packages: `rpm desktop-file-utils file patchelf squashfs-tools xvfb xauth`.
+packages: `binutils rpm desktop-file-utils file patchelf squashfs-tools xvfb xauth`.
 
 ```sh
 python3 packaging/build.py
 python3 packaging/build.py --probe
 python3 packaging/release.py linux
-xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.9.0-x86_64.AppImage
+xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.10.0-x86_64.AppImage
 ```
 
 On Windows, from a development shell with Python, Rust MSVC and Windows SDK:
@@ -252,12 +270,15 @@ desktop's portal/backend. The Debian dependency list and RPM requirements use
 their respective distribution names; RPM also derives ELF requirements.
 The DEB is user-verified to install and run on Debian Forky; AppImage startup is
 also user-verified there.
-The release runner now uses Ubuntu 26.04, so the previous Ubuntu 22.04 / glibc
-2.35 compatibility claim needs revalidation. `packaging/packager.json` still
-declares `libc6 (>= 2.35)` for DEB; that declaration does not establish the
-binary's actual minimum. Before publishing, inspect the final executable and
-bundled libraries' required GLIBC symbol versions, align the DEB dependency
-with those requirements, and test the oldest intended distribution. AppImage
+The release runner uses Ubuntu 26.04. Packaging reads the executable's required
+GLIBC symbol versions with `readelf` and sets the DEB's `libc6` minimum from that
+measurement; it verifies the generated control field. RPM derives its own ELF
+requirements. After dependency deployment, every ELF file in the AppImage payload
+is inspected; `target/packaging/linux/glibc-requirements.txt` and the candidate run
+summary record each requirement and the maximum. Exported symbol definitions do
+not raise the minimum. Unrecognized GLIBC ABI names fail packaging for inspection.
+This measures symbol requirements, not full distribution compatibility: verify
+the oldest intended desktop using the exact candidate before publishing. AppImage
 still uses the host graphics/session services and portal; it is not an entire
 Linux distribution.
 

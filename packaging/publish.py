@@ -3,15 +3,15 @@ import json
 import os
 import subprocess
 
-from release import DIST, ROOT, aggregate, artifact_names, check_tag, checksum, run, version
+from release import DIST, ROOT, artifact_names, check_tag, checksum, run, verify_checksums, version
 
 def main():
     tag = os.environ["RELEASE_TAG"]
     repository = os.environ["GH_REPO"]
     check_tag(tag)
-    # Verify downloaded checksums before regenerating/validating the inventory.
-    subprocess.run(["sha256sum", "--check", "SHA256SUMS"], cwd=DIST, check=True)
-    aggregate(DIST)
+    # Require all six recorded digests. Never repair or regenerate a downloaded
+    # manifest before publication: an incomplete one must reject the candidate.
+    verify_checksums(DIST)
     names = artifact_names(version()) + ["SHA256SUMS"]
     run("gh", "release", "create", tag, "--verify-tag", "--draft", "--title", f"CodeConvoy {tag}",
         "--notes-file", ROOT / "docs/release-notes.md", *[DIST / name for name in names])

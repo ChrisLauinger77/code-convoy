@@ -50,6 +50,14 @@ ARM Linux/Windows packages are not currently published. The macOS disk image con
 
 The Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app bundle is ad-hoc signed but has no Developer ID signature or notarization, and Gatekeeper may block its first launch. Verify every downloaded file against the accompanying SHA-256 checksum.
 
+## 0.10.0 preparation
+
+This branch prepares the Quality & Polish release: compact layouts, safer keyboard
+focus, accessible control names, lower idle CPU use, platform regression coverage
+and stronger packaging checks. See the [0.10.0 notes](docs/release-notes.md) and
+[validation and remaining release checks](docs/quality-release-validation.md).
+The latest published download may still be 0.9.0 until the candidate is approved.
+
 ## Installation
 
 ### Linux
@@ -129,17 +137,33 @@ Both methods use the existing release downloads. Package definitions can lag a
 new GitHub release until their repository updaters finish. Install Git and the
 agent CLIs separately; Homebrew and Scoop manage CodeConvoy updates externally.
 
+### Removing or upgrading CodeConvoy
+
+Quit CodeConvoy and let active work finish or confirm cancellation before replacing
+an installation. Back up the application data directory listed under
+[Repository safety and data](#repository-safety-and-data), including its ownership
+records; retained worktrees can also live in a separately configured location.
+Keep those checkouts when upgrading. Existing state format 1 remains supported.
+
+Use `sudo apt remove code-convoy`, `sudo dnf remove code-convoy`,
+`brew uninstall --cask ChrisLauinger77/cask/code-convoy`, or
+`scoop uninstall code-convoy` for the corresponding package. On Windows, the
+installer also registers CodeConvoy in Installed apps. Delete an AppImage or
+manually copied macOS app to remove that application copy. Application removal
+must leave user state and retained repositories alone; it is not worktree cleanup.
+
 ### Package requirements and first launch
 
 Linux packages are built on Ubuntu 26.04. The DEB is user-verified to install
-and run on Debian Forky; AppImage startup is also user-verified there. The minimum
-glibc version and compatibility with older distributions need verification after
-the runner update.
+and run on Debian Forky; AppImage startup is also user-verified there. Packaging derives the DEB’s minimum glibc version from the built executable and
+records AppImage payload requirements in the candidate run summary. Check those
+requirements for the exact download; an AppImage does not supply glibc. Older
+distributions still need native candidate testing.
 A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
-`./CodeConvoy-0.9.0-x86_64.AppImage --appimage-extract-and-run`.
+`./CodeConvoy-0.10.0-x86_64.AppImage --appimage-extract-and-run`.
 
 X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
 `libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,
@@ -647,8 +671,8 @@ A lock prevents two instances sharing the same state directory. On Unix the dire
 
 ## Development
 
-The [CI workflow](.github/workflows/ci.yml) runs on pushes to `main` and pull
-requests targeting `main`. Changes consisting entirely of `**/*.md` files skip
+The [CI workflow](.github/workflows/ci.yml) runs on pull requests targeting `main`
+and manual dispatch. Changes consisting entirely of `**/*.md` files skip
 CI; changes that also include other files still run it. CI uses stable Rust and
 Python 3.15 on `ubuntu-latest`, `macos-latest`, and `windows-latest`, runs the
 packaging tests and checks below, and additionally checks software graphics

@@ -39,9 +39,6 @@ class PublisherGates(unittest.TestCase):
         command_patcher = patch.object(publish, "run", side_effect=self.github)
         self.commands = command_patcher.start()
         self.addCleanup(command_patcher.stop)
-        checksum_patcher = patch.object(publish.subprocess, "run")
-        self.checksum_command = checksum_patcher.start()
-        self.addCleanup(checksum_patcher.stop)
 
     def github(self, *args, **kwargs):
         if args[:3] == ("gh", "release", "create"):
@@ -64,8 +61,15 @@ class PublisherGates(unittest.TestCase):
     def test_complete_draft_is_verified_and_published_by_id(self):
         publish.main()
         self.assertTrue(self.published)
-        self.checksum_command.assert_called_once_with(
-            ["sha256sum", "--check", "SHA256SUMS"], cwd=self.directory, check=True)
+
+    def test_incomplete_checksum_manifest_never_creates_a_draft(self):
+        manifest = self.directory / "SHA256SUMS"
+        incomplete = manifest.read_text().splitlines()[0] + "\n"
+        manifest.write_text(incomplete)
+        with self.assertRaisesRegex(ValueError, "every release asset"):
+            publish.main()
+        self.commands.assert_not_called()
+        self.assertEqual(manifest.read_text(), incomplete)
 
     def test_wrong_release_or_non_draft_is_never_published(self):
         for key, value in (("id", 99), ("tag_name", "v999.0.0"), ("draft", False)):
@@ -93,11 +97,13 @@ class PublisherGates(unittest.TestCase):
                 self.assertFalse(self.published)
 
     def test_failed_checksum_or_upload_prevents_publication(self):
-        self.checksum_command.side_effect = subprocess.CalledProcessError(1, ["sha256sum"])
-        with self.assertRaises(subprocess.CalledProcessError):
+        asset = self.directory / release.artifact_names(release.version())[0]
+        original = asset.read_bytes()
+        asset.write_bytes(b"damaged candidate")
+        with self.assertRaisesRegex(ValueError, "checksum mismatch"):
             publish.main()
         self.commands.assert_not_called()
-        self.checksum_command.side_effect = None
+        asset.write_bytes(original)
         self.commands.side_effect = subprocess.CalledProcessError(1, ["gh", "release", "create"])
         with self.assertRaises(subprocess.CalledProcessError):
             publish.main()

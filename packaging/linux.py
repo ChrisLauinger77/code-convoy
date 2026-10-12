@@ -1,10 +1,65 @@
 """Linux package assembly; invoked by release.py after the locked native build."""
 import json
 import os
+import re
 import shutil
 import urllib.request
 
 from release import ROOT, DIST, checksum, fresh_work, one_file, package, run, version
+
+
+def required_glibc(output):
+    # Definitions exported by a bundled library are not its runtime requirements.
+    needs = output.partition("Version needs section")[2]
+    names = set(re.findall(r"Name: (GLIBC_\S+)", needs))
+    if any(not re.fullmatch(r"GLIBC_[0-9]+(?:\.[0-9]+)+", name) for name in names):
+        raise ValueError(f"Unrecognized glibc ABI requirement; inspect before packaging: {sorted(names)}")
+    versions = [tuple(map(int, name.removeprefix("GLIBC_").split("."))) for name in names]
+    return max(versions) if versions else None
+
+
+def inspect_glibc(path):
+    output = run("readelf", "--version-info", "--wide", path, capture_output=True,
+                 text=True, env=dict(os.environ, LC_ALL="C")).stdout
+    return required_glibc(output)
+
+
+def glibc_label(value):
+    return ".".join(map(str, value))
+
+
+def verify_linux_payload(appdir):
+    for target, source in {
+        "usr/bin/codeconvoy": "target/release/codeconvoy",
+        "usr/share/applications/codeconvoy.desktop": "packaging/codeconvoy.desktop",
+        "usr/share/icons/hicolor/256x256/apps/codeconvoy.png": "assets/codeconvoy-256.png",
+        "usr/share/doc/code-convoy/copyright": "LICENSE",
+    }.items():
+        if (appdir / target).read_bytes() != (ROOT / source).read_bytes():
+            raise ValueError(f"Unexpected package payload: {target}")
+
+
+def report_appimage_glibc(appdir, work):
+    requirements = []
+    for path in sorted(appdir.rglob("*")):
+        if path.is_symlink() or not path.is_file():
+            continue
+        with path.open("rb") as source:
+            if source.read(4) != b"\x7fELF":
+                continue
+        required = inspect_glibc(path)
+        if required:
+            requirements.append((required, path.relative_to(appdir)))
+    if not requirements:
+        raise ValueError("No glibc requirements found in the deployed AppImage payload")
+    minimum = max(value for value, _ in requirements)
+    report = f"AppImage payload requires glibc >= {glibc_label(minimum)}\n"
+    report += "".join(f"{glibc_label(value)}  {path}\n" for value, path in requirements)
+    (work / "glibc-requirements.txt").write_text(report, encoding="utf-8")
+    print(report, flush=True)
+    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(summary, "a", encoding="utf-8") as output:
+            output.write(f"\n### Linux runtime ABI inspection\n\n```text\n{report}```\n")
 
 
 def download_tools(work):
@@ -22,7 +77,10 @@ def download_tools(work):
 
 def package_linux():
     work = fresh_work("linux")
-    output = package(work, ROOT / "target/release", "codeconvoy", "deb")
+    minimum = inspect_glibc(ROOT / "target/release/codeconvoy")
+    if minimum is None:
+        raise ValueError("No glibc requirements found in the Linux executable")
+    output = package(work, ROOT / "target/release", "codeconvoy", "deb", glibc=glibc_label(minimum))
     deb = DIST / f"code-convoy_{version()}_amd64.deb"
     shutil.copy2(one_file(output, "*.deb"), deb)
     control = run("dpkg-deb", "--field", deb, "Package", "Version", "Architecture",
@@ -30,8 +88,12 @@ def package_linux():
     if control.splitlines() != ["Package: code-convoy", f"Version: {version()}", "Architecture: amd64"]:
         raise ValueError(f"Unexpected Debian identity: {control}")
     run("dpkg-deb", "--contents", deb)
+    depends = run("dpkg-deb", "--field", deb, "Depends", capture_output=True, text=True).stdout
+    if f"libc6 (>= {glibc_label(minimum)})" not in [d.strip() for d in depends.split(",")]:
+        raise ValueError(f"DEB omits its measured glibc requirement: {depends}")
     appdir = work / "CodeConvoy.AppDir"
     run("dpkg-deb", "--extract", deb, appdir)
+    verify_linux_payload(appdir)
     desktop = appdir / "usr/share/applications/codeconvoy.desktop"
     run("desktop-file-validate", desktop)
     run("rpmbuild", "-bb", ROOT / "packaging/code-convoy.spec",
@@ -48,6 +110,7 @@ def package_linux():
     tools = download_tools(work)
     run(tools["linuxdeploy"], "--appimage-extract-and-run", "--appdir", appdir,
         "--desktop-file", desktop, "--icon-file", appdir / "usr/share/icons/hicolor/256x256/apps/codeconvoy.png")
+    report_appimage_glibc(appdir, work)
     # Replace any generated AppRun, including a symlink, after dependency deployment.
     launcher = appdir / "AppRun"
     launcher.unlink(missing_ok=True)
