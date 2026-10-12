@@ -60,6 +60,36 @@ dialogs, screen readers, notifications or GPU rendering. The separate normal-qui
 and retained-worktree probes from PR 4 remain recorded in
 [platform-validation.md](platform-validation.md).
 
+## Release preparation recheck, 2026-10-12
+
+Rechecked the merged release source at `a8621dbb4f62` on Linux x86-64 with
+Rust/Cargo 1.96.1 and Python 3.14.8. Cargo.toml, the codeconvoy lockfile entry,
+README examples, releasing instructions and current-only release notes already
+use 0.10.0. The notes were reviewed against changes since `v0.9.0`; dependency
+versions and historical validation records were preserved. Neither a local nor
+remote `v0.10.0` tag nor a GitHub release for that version existed at this check.
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features` | 569 passed, zero failures, nine optional tests ignored; excludes three filtered subprocess reruns. |
+| `cargo build --release` | Passed |
+| `python3 -m unittest discover -s packaging -p 'test_*.py'` | 23 passed |
+| `python3 packaging/release.py check-tag v0.10.0` | Passed |
+
+The first sandboxed Rust test run could not use its temporary worktree fixtures:
+the sandbox exposed `/tmp/.git`, so the existing storage-location safety checks
+rejected them. It also denied a Unix socket bind. The complete suite passed when
+rerun outside that sandbox, without changing application code or tests.
+
+[PR #55 CI](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38286780101)
+passed on Linux, macOS and Windows before merge. This preparation did not rebuild
+native release packages or repeat interactive desktop checks. The exact-candidate
+package and desktop gates below remain outstanding. Preparation ends with the
+local release commit; it does not create or push a tag, dispatch a candidate
+workflow or publish a release.
+
 ## Upgrade compatibility
 
 The fixture preserves repository paths and missing group members, templates,
