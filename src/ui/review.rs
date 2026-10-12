@@ -7,7 +7,7 @@ use crate::{
 impl App {
     /// One bounded background request at a time; completed/cache/error values stop
     /// automatic refresh until job completion or the user explicitly requests it.
-    pub(super) fn pump_review(&mut self, ctx: &egui::Context) {
+    pub(super) fn pump_review(&mut self) {
         if self.closing
             || self.review_pending.is_some()
             || self.result_operation.is_some()
@@ -37,7 +37,7 @@ impl App {
         let job = job.clone();
         self.review_pending = Some((run, index));
         let lifecycle = self.manager.lifecycle();
-        self.dispatch(ctx.clone(), async move {
+        self.dispatch(async move {
             if let Some(m) = job.worktree.clone() {
                 let report = lifecycle.inspect(run, index, &job, false).await;
                 Message::Reconciled(run, index, m, report, false)
@@ -307,24 +307,18 @@ impl App {
         }
         if let Some(action) = action {
             if action == Action::Apply {
-                self.start_result_operation(ctx, id, self.selected_job, action);
+                self.start_result_operation(id, self.selected_job, action);
             } else {
                 self.discard_confirmation = Some((id, self.selected_job, action));
                 self.focus_discard_cancel = true;
             }
         }
         if followup {
-            self.followup(ctx, id);
+            self.followup(id);
         }
         self.validation_controls(ui, ctx);
     }
-    fn start_result_operation(
-        &mut self,
-        ctx: &egui::Context,
-        run: u64,
-        index: usize,
-        action: Action,
-    ) {
+    fn start_result_operation(&mut self, run: u64, index: usize, action: Action) {
         if self.history_write.is_some()
             || self.state_write.is_some()
             || self.result_operation.is_some()
@@ -346,17 +340,13 @@ impl App {
                 return;
             }
         };
-        self.dispatch_result_operation(ctx, op);
+        self.dispatch_result_operation(op);
     }
-    pub(super) fn dispatch_result_operation(
-        &mut self,
-        ctx: &egui::Context,
-        op: crate::persistence::results::Operation,
-    ) {
+    pub(super) fn dispatch_result_operation(&mut self, op: crate::persistence::results::Operation) {
         self.result_operation = Some((op.run, op.index));
         self.invalidate_repository_health(&op.job.repository.path);
         let lifecycle = self.manager.lifecycle();
-        self.dispatch(ctx.clone(), async move {
+        self.dispatch(async move {
             let completion = op.execute(&lifecycle).await;
             Message::Resolved(Box::new(op), completion)
         });
@@ -408,7 +398,7 @@ impl App {
             self.discard_confirmation = None;
         } else if confirm {
             self.discard_confirmation = None;
-            self.start_result_operation(ctx, run, index, action);
+            self.start_result_operation(run, index, action);
         }
     }
 }

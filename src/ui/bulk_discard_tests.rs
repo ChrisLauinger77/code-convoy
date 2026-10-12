@@ -68,7 +68,7 @@ fn bulk_discard_keyboard_confirmation_freezes_targets_and_waits_for_review() {
     app.review_pending = Some((1, 0));
     app.pump_bulk_discard(&ctx);
     assert!(app.result_operation.is_none());
-    app.pump_review(&ctx);
+    app.pump_review();
     assert_eq!(app.review_pending, Some((1, 0)));
     assert!(
         app.state.runs[0].jobs[0]

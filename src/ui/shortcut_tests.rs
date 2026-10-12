@@ -31,7 +31,7 @@ fn ready(app: &mut App) {
 fn execution() -> Keyboard {
     Keyboard::new(|app, ui, ctx| {
         app.handle_shortcuts(ctx);
-        app.execution_section(ui, ctx);
+        app.execution_section(ui);
         app.preflight_window(ctx);
         app.shortcuts_window(ctx);
         app.quit_window(ctx);
@@ -121,7 +121,7 @@ fn repository_shortcut_selects_existing_query_and_escape_preserves_selection_and
     let selection = app.selected.clone();
     let mut keys = Keyboard::new(|app, ui, ctx| {
         app.handle_shortcuts(ctx);
-        app.repositories_section(ui, ctx);
+        app.repositories_section(ui);
     });
     keys.frame(&mut app, vec![]);
     let group = app.repository_sections.sections[1].id;
@@ -239,7 +239,7 @@ fn text_focus_blocks_run_and_views_and_preserves_copy_paste_select_all() {
             edit.request_focus();
             app.focus_draft = false;
         }
-        app.repositories_section(ui, ctx);
+        app.repositories_section(ui);
     });
     app.focus_draft = true;
     keys.frame(&mut app, vec![]);
@@ -299,7 +299,7 @@ fn every_dialog_and_native_picker_blocks_background_shortcuts() {
             0 => prepare(&mut app, AgentId::Codex),
             1 => app.about_open = true,
             2 => app.shortcuts_open = true,
-            3 => app.find_cli(egui::Context::default()),
+            3 => app.find_cli(),
             4 => {
                 app.library_editor = Some(library::LibraryEditor::Template {
                     index: None,

@@ -108,9 +108,8 @@ fn every_launch_rechecks_registration_independently_of_provenance() {
         assert_eq!(serde_json::to_value(&app.state.draft).unwrap(), draft);
         assert_eq!(app.selected, selection);
         app.closing = true;
-        let ctx = egui::Context::default();
-        app.retry(&ctx, 41, 0);
-        app.followup(&ctx, 41);
+        app.retry(41, 0);
+        app.followup(41);
         assert!(!app.busy && !app.followup_pending);
     }
 }
@@ -146,7 +145,7 @@ fn review_selection_and_retry_have_accessible_controls_and_followup_remains_sepa
                     ..Default::default()
                 },
                 |ui| {
-                    app.continuation_controls(ui, &ctx);
+                    app.continuation_controls(ui);
                     app.review_view(ui, &ctx, 900.0);
                 },
             );

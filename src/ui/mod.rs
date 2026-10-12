@@ -15,11 +15,13 @@ mod export;
 mod format;
 mod history;
 mod library;
+mod messages;
 mod notifications;
 mod persistence;
 mod quit;
 #[cfg(target_os = "macos")]
 mod quit_macos;
+mod repaint;
 mod repositories;
 mod repository_sections;
 use crate::export::markdown as result_markdown;
@@ -149,7 +151,7 @@ pub struct App {
     orphan_notice: String,
     output_view: text_view::TextView,
     diff_view: text_view::TextView,
-    tx: mpsc::Sender<Message>,
+    tx: messages::Sender,
     rx: mpsc::Receiver<Message>,
     events_rx: async_mpsc::Receiver<Event>,
     manager: RunManager,
@@ -195,6 +197,10 @@ pub struct App {
     focus_quit_cancel: bool,
     exit_ready: bool,
 }
+fn paths_overlap(a: &std::path::Path, b: &std::path::Path) -> bool {
+    a.starts_with(b) || b.starts_with(a)
+}
+
 impl App {
     pub fn new(
         cc: &eframe::CreationContext<'_>,
@@ -217,20 +223,16 @@ impl App {
         theme::install(ctx);
         dialog::install(ctx);
         ctx.set_theme(theme::preference(state.appearance));
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = messages::channel(ctx);
         let desktop_tx = tx.clone();
-        let desktop_ctx = ctx.clone();
         let desktop =
             crate::desktop::Service::new(crate::desktop::Events::new(move |generation, event| {
                 let _ = desktop_tx.send(Message::Desktop(generation, event));
-                desktop_ctx.request_repaint();
             }));
         let notification_tx = tx.clone();
-        let notification_ctx = ctx.clone();
         let notification_service = crate::notifications::Service::native(
             crate::notifications::Events::new(move |event| {
                 let _ = notification_tx.send(Message::Notification(event));
-                notification_ctx.request_repaint();
             }),
         );
         let (events_tx, events_rx) = async_mpsc::channel(256);
@@ -350,13 +352,13 @@ impl App {
             exit_ready: false,
         };
         if !app.state.repositories.is_empty() {
-            app.refresh(ctx.clone());
+            app.refresh();
         }
         app.sync_cli_checks();
-        app.reconcile_results(ctx.clone());
+        app.reconcile_results();
         app
     }
-    fn reconcile_results(&self, ctx: egui::Context) {
+    fn reconcile_results(&self) {
         let referenced: HashSet<_> = self
             .state
             .runs
@@ -365,7 +367,7 @@ impl App {
             .filter_map(|j| j.worktree.as_ref().map(|m| m.path.clone()))
             .collect();
         let root = self.store.directory().join("worktrees");
-        self.dispatch(ctx, async move {
+        self.dispatch(async move {
             let orphans = tokio::task::spawn_blocking(move || {
                 crate::worktrees::recovery::orphans(&root, &referenced)
             })
@@ -534,14 +536,13 @@ impl App {
             });
     }
 
-    fn dispatch(&self, ctx: egui::Context, future: impl Future<Output = Message> + Send + 'static) {
+    fn dispatch(&self, future: impl Future<Output = Message> + Send + 'static) {
         let tx = self.tx.clone();
         self.runtime().spawn(async move {
             let _ = tx.send(future.await);
-            ctx.request_repaint();
         });
     }
-    fn refresh(&mut self, ctx: egui::Context) {
+    fn refresh(&mut self) {
         self.repository_health_cancel.cancel();
         self.repository_health_cancel = crate::process::Cancellation::default();
         self.repository_refresh += 1;
@@ -556,7 +557,7 @@ impl App {
                 .insert(repository.path.clone(), request);
             let slots = self.repository_health_slots.clone();
             let cancellation = self.repository_health_cancel.clone();
-            self.dispatch(ctx.clone(), async move {
+            self.dispatch(async move {
                 let result = async {
                     let _permit = tokio::select! {
                         biased;
@@ -579,20 +580,35 @@ impl App {
         }
     }
     fn repository_in_use(&self, path: &std::path::Path) -> bool {
-        let overlaps = |job: &domain::Job| {
-            path.starts_with(&job.repository.path) || job.repository.path.starts_with(path)
-        };
+        self.busy_repository_paths()
+            .any(|busy| paths_overlap(path, busy))
+    }
+    fn busy_repository_paths(&self) -> impl Iterator<Item = &std::path::Path> {
         self.state
             .runs
             .iter()
             .flat_map(|r| &r.jobs)
-            .any(|job| (!job.status.is_terminal() || job.validation.as_ref().is_some_and(|v| v.status == crate::validation::Status::Running)) && overlaps(job))
+            .filter(|job| {
+                !job.status.is_terminal()
+                    || job
+                        .validation
+                        .as_ref()
+                        .is_some_and(|v| v.status == crate::validation::Status::Running)
+            })
+            .map(|job| job.repository.path.as_path())
             // Bulk discard also dispatches one result_operation at a time.
-            || self.result_operation
-                .and_then(|(run, index)| {
-                    self.state.runs.iter().find(|r| r.id == run)?.jobs.get(index)
-                })
-                .is_some_and(overlaps)
+            .chain(
+                self.result_operation
+                    .and_then(|(run, index)| {
+                        self.state
+                            .runs
+                            .iter()
+                            .find(|r| r.id == run)?
+                            .jobs
+                            .get(index)
+                    })
+                    .map(|job| job.repository.path.as_path()),
+            )
     }
     fn invalidate_repository_health(&mut self, source: &std::path::Path) {
         let overlaps = |path: &PathBuf| path.starts_with(source) || source.starts_with(path);
@@ -614,7 +630,7 @@ impl App {
             self.repository_states.insert(path, state);
         }
     }
-    fn register(&mut self, ctx: egui::Context) {
+    fn register(&mut self) {
         if self.state.repositories.len() >= MAX_REPOSITORIES {
             self.notice = format!("At most {MAX_REPOSITORIES} repositories can be registered.");
             return;
@@ -628,7 +644,7 @@ impl App {
             .cloned()
             .unwrap_or_else(|| PathBuf::from(self.repository_input.trim()));
         self.busy = true;
-        self.dispatch(ctx, async move {
+        self.dispatch(async move {
             let result = async {
                 let repository = git::register(&path).await?;
                 let state = git::status(&repository.path).await?;
@@ -639,7 +655,7 @@ impl App {
             Message::Registered(result)
         });
     }
-    fn preflight(&mut self, ctx: egui::Context) {
+    fn preflight(&mut self) {
         if self.closing || self.quit_requested || self.busy || self.prepared.is_some() {
             return;
         }
@@ -667,7 +683,7 @@ impl App {
             .collect();
         self.busy = true;
         self.notice.clear();
-        self.dispatch(ctx, async move {
+        self.dispatch(async move {
             Message::Prepared(
                 runner::prepare(task, repositories)
                     .await
@@ -1197,38 +1213,17 @@ impl eframe::App for App {
         self.sync_desktop();
         self.pump_bulk_discard(ctx);
         self.pump_worktree_cleanup(ctx);
-        self.pump_review(ctx);
+        self.pump_review();
         self.handle_close(ctx);
-        if self.dirty && self.last_save.elapsed() > Duration::from_secs(2) {
+        if self.dirty && self.last_save.elapsed() >= Duration::from_secs(2) {
             self.save_background();
         }
-        ctx.request_repaint_after(Duration::from_millis(
-            if self.storage.running()
-                || self.worktree_management.batch.is_some()
-                || self.result_operation.is_some()
-                || self.export.pending.is_some()
-                || self.history_write.is_some()
-                || self.state_write.is_some()
-                || !self.manager.is_idle()
-                || !self.validations.is_idle()
-                || self.closing
-                || self.state.runs.iter().any(Run::active)
-                || self.busy
-                || self.attachment_work.pending
-                || self.cli_checks.any_checking()
-                || self
-                    .cli_search
-                    .as_ref()
-                    .is_some_and(|search| search.result.is_none())
-            {
-                100
-            } else {
-                1000
-            },
-        ));
+        self.schedule_repaint(ctx);
     }
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
         self.main_ui(ui);
+        // UI edits happen after logic: arm their save deadline in this pass too.
+        self.schedule_repaint(ui.ctx());
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
         self.storage.cancel();

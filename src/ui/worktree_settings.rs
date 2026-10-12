@@ -45,7 +45,7 @@ impl App {
                         dialog = dialog.set_directory(&self.worktree_location.input);
                     }
                     let selection = dialog.pick_folder();
-                    self.dispatch(ui.ctx().clone(), async move {
+                    self.dispatch(async move {
                         Message::WorktreeFolder(selection.await.map(|f| f.path().to_owned()))
                     });
                 }
@@ -56,10 +56,7 @@ impl App {
                     )
                     .clicked()
                 {
-                    self.validate_worktree_location(
-                        ui.ctx().clone(),
-                        PathBuf::from(&self.worktree_location.input),
-                    );
+                    self.validate_worktree_location(PathBuf::from(&self.worktree_location.input));
                 }
                 if ui
                     .add_enabled(
@@ -98,10 +95,10 @@ impl App {
         }
     }
 
-    fn validate_worktree_location(&mut self, ctx: egui::Context, path: PathBuf) {
+    fn validate_worktree_location(&mut self, path: PathBuf) {
         self.worktree_location.pending = true;
         let storage = self.store.directory().join("worktrees");
-        self.dispatch(ctx, async move {
+        self.dispatch(async move {
             let result = tokio::task::spawn_blocking(move || {
                 crate::worktrees::location::resolve_base(&storage, Some(&path))
             })

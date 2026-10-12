@@ -54,7 +54,7 @@ fn validation_views_fit_required_sizes_and_all_themes() {
                         egui::Panel::left("editor")
                             .exact_size(310.0)
                             .show(ui, |ui| {
-                                app.repositories_section(ui, &ctx);
+                                app.repositories_section(ui);
                             });
                         egui::CentralPanel::default().show(ui, |ui| {
                             let right = ui.available_rect_before_wrap().right();

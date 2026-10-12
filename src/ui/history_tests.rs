@@ -286,9 +286,10 @@ fn late_read_only_review_does_not_pin_history_or_restore_removed_results() {
     );
     app.confirm_history_cleanup(CLOCK);
     finish_history_write(&mut app);
-    app.tx
-        .send(Message::ReviewStats(1, 0, Err("late read".into())))
-        .unwrap();
+    assert!(
+        app.tx
+            .send(Message::ReviewStats(1, 0, Err("late read".into())))
+    );
     app.poll();
     assert!(app.review_pending.is_none());
     assert_eq!(ids(&app), [4, 3]);
@@ -418,7 +419,7 @@ fn fallback_exit_waits_for_background_save_and_persists_interruption() {
             });
             assert_eq!(result.is_err(), fail_background);
             // Leave acknowledgement queued, as when native teardown precedes poll().
-            app.tx.send(Message::StateSaved(result)).unwrap();
+            assert!(app.tx.send(Message::StateSaved(result)));
             if fail_background {
                 std::fs::remove_dir(app.store.history_path()).unwrap();
             }

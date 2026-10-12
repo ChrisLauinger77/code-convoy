@@ -15,9 +15,8 @@ fn repeated_health_refreshes_wait_for_prior_cleanup_and_cancel_queued_checks() {
         .clone()
         .try_acquire_many_owned(4)
         .unwrap();
-    let ctx = egui::Context::default();
     for _ in 0..3 {
-        app.refresh(ctx.clone());
+        app.refresh();
     }
     let latest = app.repository_refresh;
     app.runtime().block_on(async {
@@ -36,7 +35,7 @@ fn repeated_health_refreshes_wait_for_prior_cleanup_and_cancel_queued_checks() {
             assert!(result.as_ref().unwrap_err().contains("cancelled"));
             cancelled += 1;
         }
-        app.tx.send(message).unwrap();
+        assert!(app.tx.send(message));
     }
     assert_eq!(
         cancelled, 12,
@@ -68,7 +67,7 @@ fn repeated_health_refreshes_wait_for_prior_cleanup_and_cancel_queued_checks() {
         .unwrap()
     });
     for message in messages {
-        app.tx.send(message).unwrap();
+        assert!(app.tx.send(message));
     }
     app.poll();
     assert!(app.repository_pending.is_empty());
@@ -86,12 +85,11 @@ fn health_refresh_is_independent_and_superseded_removed_and_active_replies_are_r
     let (_temp, mut app) = app();
     app.state.repositories = vec![repository("alpha")];
     let path = app.state.repositories[0].path.clone();
-    let ctx = egui::Context::default();
     app.busy = true;
-    app.refresh(ctx.clone());
+    app.refresh();
     let first = app.repository_refresh;
     let cancellation = app.repository_health_cancel.clone();
-    app.refresh(ctx);
+    app.refresh();
     let second = app.repository_refresh;
     assert!(cancellation.is_cancelled());
     app.repository_refreshed(first, path.clone(), Err("obsolete".into()));
@@ -139,8 +137,7 @@ fn health_refresh_during_result_operations_only_suppresses_overlapping_repositor
                 path: path.clone(),
             })
             .collect();
-        let ctx = egui::Context::default();
-        app.refresh(ctx.clone());
+        app.refresh();
         let request = app.repository_refresh;
         if bulk {
             let plan = Plan::new(&app.state, Scope::All);
@@ -159,12 +156,12 @@ fn health_refresh_during_result_operations_only_suppresses_overlapping_repositor
             app.repository_states[&paths[3]].as_ref().unwrap_err(),
             "independent result"
         );
-        app.refresh(ctx.clone());
+        app.refresh();
         assert_eq!(app.repository_pending.len(), 1);
         assert!(app.repository_pending.contains_key(&paths[3]));
         app.result_operation = None;
         // A bulk batch between operations has no Git work in flight.
-        app.refresh(ctx);
+        app.refresh();
         assert_eq!(app.repository_pending.len(), paths.len());
     }
 }
@@ -202,7 +199,7 @@ fn result_operation_start_and_finish_invalidate_only_overlapping_health() {
             job: job.clone(),
             cleanup_proof: None,
         };
-        app.dispatch_result_operation(&egui::Context::default(), operation());
+        app.dispatch_result_operation(operation());
         assert_eq!(app.repository_states.len(), 1);
         assert_eq!(app.repository_pending.len(), 1);
         assert!(app.repository_states.contains_key(&paths[3]));
@@ -217,9 +214,10 @@ fn result_operation_start_and_finish_invalidate_only_overlapping_health() {
             }
             _ => Completion::Cleanup(Err("fixture".into())),
         };
-        app.tx
-            .send(Message::Resolved(Box::new(operation()), completion))
-            .unwrap();
+        assert!(
+            app.tx
+                .send(Message::Resolved(Box::new(operation()), completion))
+        );
         app.poll();
         assert!(app.result_operation.is_none());
         for path in &paths[..3] {
@@ -250,13 +248,11 @@ fn comparison_filters_preserve_detail_selection_and_snapshots_survive_live_revie
         job: 1,
         changes,
     });
-    app.tx
-        .send(Message::ReviewStats(
-            12,
-            1,
-            Ok(crate::review::Statistics::default()),
-        ))
-        .unwrap();
+    assert!(app.tx.send(Message::ReviewStats(
+        12,
+        1,
+        Ok(crate::review::Statistics::default()),
+    )));
     app.poll();
     app.history_search.query = "no match".into();
     assert!(app.history_search.matching(&app.state.runs).is_empty());
@@ -312,7 +308,7 @@ fn visibility_controls_fit_supported_sizes_and_themes() {
                         .exact_size(width * 0.43)
                         .show(ui, |ui| {
                             let right = ui.available_rect_before_wrap().right();
-                            let response = ui.scope(|ui| app.repositories_section(ui, &ctx));
+                            let response = ui.scope(|ui| app.repositories_section(ui));
                             assert!(response.response.rect.right() <= right + 1.0);
                         });
                     egui::CentralPanel::default().show(ui, |ui| {

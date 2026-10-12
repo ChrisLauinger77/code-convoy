@@ -343,6 +343,7 @@ fn session_log_budget_evicts_oldest_logs() {
     assert!(size <= TOTAL_LOG_LIMIT);
     assert!(!state.runs[0].jobs[0].log.text.is_empty());
     assert!(state.runs[1].jobs[0].log.text.is_empty());
+    assert_eq!(state.runs[1].jobs[0].log.text.capacity(), 0);
     assert!(state.runs[1].jobs[0].log.truncated);
 }
 

@@ -9,19 +9,22 @@ pub(super) struct StateWrite {
 }
 
 impl App {
-    pub(super) fn save_background(&mut self) {
+    pub(super) fn can_save_background(&self) -> bool {
         // Lifecycle intent/outcome transactions retain priority and cannot be
         // overtaken by an older background snapshot.
-        if !self.dirty
-            || self.state_write.is_some()
-            || self.history_write.is_some()
-            || self.result_operation.is_some()
-            || self.bulk_discard.is_some()
-            || self.worktree_management.batch.is_some()
-            || self.closing
-            || self.quit_requested
-            || self.explicit_quit
-        {
+        self.dirty
+            && self.state_write.is_none()
+            && self.history_write.is_none()
+            && self.result_operation.is_none()
+            && self.bulk_discard.is_none()
+            && self.worktree_management.batch.is_none()
+            && !self.closing
+            && !self.quit_requested
+            && !self.explicit_quit
+    }
+
+    pub(super) fn save_background(&mut self) {
+        if !self.can_save_background() {
             return;
         }
         self.last_save = Instant::now();

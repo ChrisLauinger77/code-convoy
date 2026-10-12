@@ -29,6 +29,21 @@ Backend status: Codex and Copilot are implemented and user-verified end-to-end o
 
 ## Presentation
 
+The idle UI does not request periodic repaints. Background UI messages enqueue
+their result before waking egui, including saves, exports, attachment checks and
+storage scans. Dirty edits arm the existing two-second save deadline after both
+logic and rendering; blocked saves wait for their completion message. Active
+runner/validation/result operations and shutdown retain their 100 ms lifecycle
+polling, independently of widget animations and clipboard feedback deadlines.
+The repository picker derives busy paths once per render from current jobs,
+validations and result operations. No busy-state cache survives the frame, and
+execution still uses the manager's authoritative repository leases.
+
+Session log eviction releases the old String allocation as well as its contents,
+so completed historical jobs cannot retain full buffers after budget eviction.
+Retention order, output limits and truncation indicators are unchanged. See
+[performance measurements and validation](performance-validation.md).
+
 `ui/repository_sections` caches the flat group-to-registration mapping for the
 repository picker, rebuilding only after registration or group definition changes.
 Ungrouped contains registrations with no memberships. Cached sections hold indices

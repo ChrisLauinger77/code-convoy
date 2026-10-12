@@ -26,7 +26,7 @@ impl App {
         let response = ui.scope_builder(egui::UiBuilder::new().max_rect(execution_rect), |ui| {
             ui.add_enabled_ui(
                 self.prepared.is_none() && !self.closing && !self.followup_pending,
-                |ui| self.execution_section(ui, ctx),
+                |ui| self.execution_section(ui),
             );
         });
         let height = response.response.rect.height();
@@ -47,7 +47,7 @@ impl App {
         self.task_section(ui);
         self.attachments_section(ui, ctx);
         self.agent_section(ui, ctx);
-        self.repositories_section(ui, ctx);
+        self.repositories_section(ui);
     }
 
     fn task_section(&mut self, ui: &mut egui::Ui) {
@@ -72,7 +72,7 @@ impl App {
         }
     }
 
-    pub(super) fn execution_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    pub(super) fn execution_section(&mut self, ui: &mut egui::Ui) {
         ui.separator();
         let label = ui.strong("Execution");
         let previous = self.state.draft.execution_mode;
@@ -119,7 +119,7 @@ impl App {
             .on_hover_text("Review repository state before starting jobs")
             .clicked()
         {
-            self.run_convoy(ctx);
+            self.run_convoy();
         }
         let hint = if self.busy {
             "Checking repository state…"

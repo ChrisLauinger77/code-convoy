@@ -1,7 +1,7 @@
 use super::*;
 
 impl App {
-    fn browse_repository(&mut self, ctx: egui::Context) {
+    fn browse_repository(&mut self) {
         if self.browsing_repository || self.busy {
             return;
         }
@@ -13,7 +13,7 @@ impl App {
             .clone()
             .set_directory(self.repository_input.trim())
             .pick_folder();
-        self.dispatch(ctx, async move {
+        self.dispatch(async move {
             Message::RepositoryFolder(selection.await.map(|folder| folder.path().to_owned()))
         });
     }
@@ -44,7 +44,7 @@ impl App {
         }
     }
 
-    pub(super) fn repositories_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    pub(super) fn repositories_section(&mut self, ui: &mut egui::Ui) {
         ui.add_space(theme::SECTION_GAP);
         ui.horizontal_wrapped(|ui| {
             ui.label(egui::RichText::new("Repositories").strong().size(14.0));
@@ -83,7 +83,7 @@ impl App {
                 .on_hover_text("Choose a folder, then use Add repository to register it")
                 .clicked()
             {
-                self.browse_repository(ctx.clone());
+                self.browse_repository();
             }
             if ui
                 .add_enabled(
@@ -94,13 +94,13 @@ impl App {
                 )
                 .clicked()
             {
-                self.register(ctx.clone());
+                self.register();
             }
             if ui
                 .add_enabled(!self.busy, theme::quiet("Refresh state"))
                 .clicked()
             {
-                self.refresh(ctx.clone());
+                self.refresh();
             }
         });
         if self.browsing_repository {
@@ -197,6 +197,9 @@ impl App {
     }
 
     pub(super) fn grouped_repositories(&mut self, ui: &mut egui::Ui) {
+        // Inspect history once, not once per row (or repeated group membership).
+        // This frame-local projection cannot become stale after a worker event.
+        let in_use = self.repository_usage();
         // Move out temporarily so rendering can mutate selection without cloning
         // the cached membership lists on every frame.
         let mut sections = std::mem::take(&mut self.repository_sections);
@@ -270,7 +273,8 @@ impl App {
                         ui.weak("No registered repositories");
                     }
                     for &index in &section.repositories {
-                        if sections.matches(index) && self.repository_row(ui, index) {
+                        if sections.matches(index) && self.repository_row(ui, index, in_use[index])
+                        {
                             remove = Some(index);
                         }
                     }
@@ -320,11 +324,19 @@ impl App {
         }
     }
 
-    fn repository_row(&mut self, ui: &mut egui::Ui, index: usize) -> bool {
+    pub(super) fn repository_usage(&self) -> Vec<bool> {
+        let busy: Vec<_> = self.busy_repository_paths().collect();
+        self.state
+            .repositories
+            .iter()
+            .map(|repo| busy.iter().any(|path| paths_overlap(&repo.path, path)))
+            .collect()
+    }
+
+    fn repository_row(&mut self, ui: &mut egui::Ui, index: usize, in_use: bool) -> bool {
         let p = theme::Palette::of(ui);
         let mut remove = false;
         let repository = &self.state.repositories[index];
-        let in_use = self.repository_in_use(&repository.path);
         ui.push_id(&repository.path, |ui| {
             ui.separator();
             ui.horizontal(|ui| {
