@@ -34,7 +34,7 @@ explicit confirmation; assignment never runs validation. See
 | Codex CLI          | Supported | User-verified on Linux (two concurrent repositories) and macOS                                       |
 | GitHub Copilot CLI | Supported | User-verified on Linux (two concurrent repositories) and macOS                                       |
 | OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally      |
-| Claude Code        | Supported | Unverified; official documentation/source and deterministic fixtures tested, CLI unavailable locally |
+| Claude Code        | Supported | User-verified on macOS (five-repository README summarization convoy)                                 |
 
 ## Downloads and platform support
 
@@ -311,7 +311,7 @@ summarizes actual backend events; Raw output preserves CLI details. Both are
 bounded session-only views. See [task context and backend evidence](docs/task-context.md)
 for selection semantics, attachment limits, privacy and validation coverage.
 [Codex session investigation](docs/codex-sessions.md) explains why ephemeral jobs
-have no Resume/Open buttons. See the [Part 2.3 completion report](docs/v0.2-completion.md)
+have no Resume/Open buttons. See the [Part 2.3 completion report](docs/task-context-validation.md#combined-workflows-and-completion)
 for workflow evidence, native UI checks and remaining platform/provider limits.
 
 For recurring maintenance, register your existing repositories, create a group
@@ -348,9 +348,9 @@ The executable is `target/release/codeconvoy` (`codeconvoy.exe` on Windows).
 Windows source builds need the MSVC C++ build tools and Windows SDK; macOS needs
 Xcode Command Line Tools. Packaging additionally needs the tools listed in the
 [release procedure](docs/releasing.md); those are not application runtime
-requirements. Native macOS UI and Universal DMG checks have passed, and Codex
-and Copilot execution is user-verified on macOS. Windows interactive runtime
-verification and authenticated OpenCode/Claude execution remain outstanding.
+requirements. Native macOS UI and Universal DMG checks have passed, and Codex,
+Copilot and Claude execution is user-verified on macOS. Windows interactive runtime
+verification and authenticated OpenCode execution remain outstanding.
 
 ### Windows VMs and graphics
 
@@ -599,7 +599,7 @@ cargo test --all-features --test opencode installed_opencode_accepts_generated_a
 
 ## Claude Code contract
 
-Claude is the fourth independent backend. It uses the documented [print interface](https://code.claude.com/docs/en/headless) and [CLI flags](https://code.claude.com/docs/en/cli-reference). No Claude installation or authenticated execution was available on the development Mac. See [validation evidence and limitations](docs/claude-validation.md).
+Claude is the fourth independent backend. It uses the documented [print interface](https://code.claude.com/docs/en/headless) and [CLI flags](https://code.claude.com/docs/en/cli-reference). Authenticated execution is user-verified on macOS as of 2026-10-12 (a five-repository README summarization convoy). See [validation evidence and limitations](docs/claude-validation.md).
 
 Default invocation:
 
@@ -688,7 +688,7 @@ The `test-support` feature builds a deterministic local test executable. It is n
 cargo test --all-features --test copilot installed_copilot_accepts_the_exact_command_flags -- --ignored --nocapture
 ```
 
-Read [the architecture](docs/architecture.md) for module boundaries and implementation tradeoffs. Claude is the fourth and final backend for the v0.1.0 cycle. The v0.2 task-context changes add only backend-owned attachment validation/transport and optional Activity summaries; no additional backend is added. Authenticated Claude/OpenCode E2E and Windows runtime verification remain outstanding.
+Read [the architecture](docs/architecture.md) for module boundaries and implementation tradeoffs. Claude is the fourth and final backend for the v0.1.0 cycle. The v0.2 task-context changes add only backend-owned attachment validation/transport and optional Activity summaries; no additional backend is added. Authenticated OpenCode E2E and Windows runtime verification remain outstanding; Claude execution is user-verified on macOS.
 
 ## License
 

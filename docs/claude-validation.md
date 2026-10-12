@@ -1,6 +1,21 @@
 # Claude Code validation
 
-Recorded 2026-10-05 on macOS. Claude is CodeConvoy's fourth and final backend for the v0.1.0 cycle. **Authenticated Claude E2E is unverified.** `claude` was not found on PATH; no CLI was installed, no login was attempted, and no credential/configuration file was inspected or edited.
+Recorded 2026-10-05 on macOS. Claude is CodeConvoy's fourth and final backend for the v0.1.0 cycle. At that time, authenticated Claude E2E was unverified. `claude` was not found on PATH; no CLI was installed, no login was attempted, and no credential/configuration file was inspected or edited.
+
+## User confirmation — 2026-10-12
+
+The maintainer confirmed Claude Code is working on macOS. The supplied screenshot
+shows convoy #8 running the task `read readme.md and summarize it` across five
+repositories in Current working tree mode, with both concurrency limits set to 5.
+Model and effort use Claude defaults; permissions are Accept edits / file commands.
+Claude is marked Available, and Activity shows initialization, a Bash command,
+and a Read tool event for a repository README.
+
+This records user-confirmed authenticated execution. The screenshot itself shows
+0/5 finished and does not establish terminal success for every job. The installed
+CLI version, file-editing behavior, attachments and real-CLI cancellation were not
+provided as part of this confirmation. The original fixture and contract evidence
+below remains a historical record of the 2026-10-05 checks.
 
 ## Contract evidence
 
@@ -38,7 +53,7 @@ Claude owns result interpretation. Required success fields and conservative fail
 | Cancellation | Fixture descendants terminated; peer job completes; queued cancellation and baseline-change prevention tested using the shared runner |
 | State/UI logic | Old version-1 states, all backend preferences, restart recovery, accepted-launch clearing, immutable history and Claude reuse without launch tested; generic terminal-history cleanup regression retained |
 | Native macOS UI | Actual egui App with isolated disposable state and synthetic history: selector, all four backend switches, missing CLI, Claude controls, Tab/Enter navigation, history/settings/reuse, 780×560 and expanded layouts, dark/light/system themes checked |
-| Installed Claude / authentication | Unavailable / unverified; help-only test intentionally ignored |
+| Installed Claude / authentication | User-confirmed working on macOS, 2026-10-12; five-repository README summarization convoy (see above) |
 | Other platforms | No native Linux/Windows Claude run performed; CI must validate platform builds/tests |
 
 The temporary UI launcher and app wrapper were removed after inspection. Its history was visibly labelled synthetic and never represented a Claude execution. Native UI checks used a separate temporary store, not the user's saved CodeConvoy state.
@@ -47,6 +62,6 @@ Local checks all passed: `cargo fmt --check`, `cargo clippy --all-targets --all-
 
 ## Outstanding validation
 
-Use the [safe two-repository E2E procedure](../README.md#safe-manual-claude-e2e-test) on a machine with Claude already configured. Verify real final-result shape, configured hooks/permissions, independent edits/diffs and cancellation with the installed release. Native Windows executable resolution and Job Object behavior, Linux desktop behavior, and authenticated macOS behavior still need real-CLI checks. On Windows use native `claude.exe`; explicit `.cmd`/`.bat` wrappers are rejected. The existing process-group limitation for deliberately detached descendants remains.
+Use the [safe two-repository E2E procedure](../README.md#safe-manual-claude-e2e-test) on a machine with Claude already configured. Verify real final-result shape, configured hooks/permissions, independent edits/diffs and cancellation with the installed release. Native Windows executable resolution and Job Object behavior, Linux desktop behavior, and the remaining macOS editing/cancellation behaviors still need real-CLI checks. On Windows use native `claude.exe`; explicit `.cmd`/`.bat` wrappers are rejected. The existing process-group limitation for deliberately detached descendants remains.
 
 No backend abstraction change was necessary. Codex, Copilot and OpenCode implementations are unchanged; the backend abstraction is now feature-frozen for v0.1.0 except for bug fixes.

@@ -134,7 +134,7 @@ attachment tests for all four remain outstanding. Part 2.3 adds a deliberate,
 ignored Codex provider probe and verifies text/image receipt with fixture
 processes for all four transports. Its native macOS picker, combined workflows,
 history reuse and result checks are recorded in the
-[completion report](v0.2-completion.md). Windows native-picker runtime checks
+[completion report](task-context-validation.md#combined-workflows-and-completion). Windows native-picker runtime checks
 and Linux desktop drag-and-drop checks remain outstanding.
 
 - Codex documents exec image input and ephemeral/session behavior in the
