@@ -22,7 +22,7 @@ jobs:
           components: rustfmt, clippy
       - name: Linux native dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev dbus
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.15"
@@ -30,6 +30,11 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - run: cargo test --locked --all-features
+      - name: Linux desktop services unavailable
+        if: runner.os == 'Linux'
+        env:
+          CODECONVOY_PRIVATE_BUS_TEST: "1"
+        run: dbus-run-session -- cargo test --locked --all-features --test linux_desktop -- --ignored --nocapture
       - name: Windows software graphics startup
         if: runner.os == 'Windows'
         run: cargo test --locked --bin codeconvoy software_adapter_initializes_egui_renderer -- --ignored --nocapture

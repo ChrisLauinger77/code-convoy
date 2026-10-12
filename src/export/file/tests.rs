@@ -118,3 +118,28 @@ fn permission_failure_preserves_target_and_leaves_no_temp() {
         assert!(contents(&parent).is_empty());
     }
 }
+
+#[test]
+#[cfg(windows)]
+fn windows_locked_export_preserves_reviewed_file_until_explicit_retry() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("report ü 日本語.md");
+    fs::write(&path, "reviewed export").unwrap();
+    let destination = Destination::inspect(&path).unwrap();
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0x1 | 0x2)
+        .open(&path)
+        .unwrap();
+    let write = |writer: &mut dyn Write| -> Result<()> {
+        writer.write_all(b"replacement")?;
+        Ok(())
+    };
+    assert!(atomic_write(&destination, true, &Default::default(), write).is_err());
+    assert_eq!(fs::read_to_string(&path).unwrap(), "reviewed export");
+    assert_eq!(contents(dir.path()), std::slice::from_ref(&path));
+    drop(lock);
+    atomic_write(&destination, true, &Default::default(), write).unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), "replacement");
+}

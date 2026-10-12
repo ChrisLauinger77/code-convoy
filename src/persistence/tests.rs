@@ -122,3 +122,31 @@ fn read_only_directory_preserves_original_state() {
     }
     assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
 }
+
+#[test]
+#[cfg(windows)]
+fn windows_locked_state_preserves_history_and_can_be_saved_after_unlock() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(&dir.path().join("state ü 日本語")).unwrap();
+    let mut state = AppState::default();
+    state.draft.prompt = "original".into();
+    store.save(&state).unwrap();
+    let original = fs::read(store.history_path()).unwrap();
+    // Permit reads/writes, but refuse FILE_SHARE_DELETE: another application's
+    // open handle prevents atomic replacement even though the file is writable.
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0x1 | 0x2)
+        .open(store.history_path())
+        .unwrap();
+    state.draft.prompt = "new draft".into();
+    let error = store.save(&state).unwrap_err();
+    assert!(error.to_string().contains("previous state is intact"));
+    drop(error);
+    assert_eq!(fs::read(store.history_path()).unwrap(), original);
+    assert_eq!(fs::read_dir(store.directory()).unwrap().count(), 2);
+    drop(lock);
+    store.save(&state).unwrap();
+    assert_eq!(store.load().unwrap().draft.prompt, "new draft");
+}

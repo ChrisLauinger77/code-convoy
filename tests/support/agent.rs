@@ -14,6 +14,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::io::copy(&mut std::io::stdin(), &mut std::io::stdout())?;
         return Ok(());
     }
+    if args.get(1).is_some_and(|a| a == "invocation-probe") {
+        let mut input = String::new();
+        std::io::stdin().read_to_string(&mut input)?;
+        serde_json::to_writer(
+            std::io::stdout(),
+            &serde_json::json!({
+                "arguments": &args[2..],
+                "directory": std::env::current_dir()?,
+                "input": input,
+            }),
+        )?;
+        return Ok(());
+    }
     if args.get(1).is_some_and(|a| a == "smudge-gate") {
         let mut input = Vec::new();
         std::io::stdin().read_to_end(&mut input)?;
