@@ -192,3 +192,125 @@ sandbox's transient `/tmp/.git` protection marker. Production ancestor checks we
 not weakened. This environment override is unnecessary on ordinary developer/CI
 hosts without that marker. No authenticated backend runs or native macOS/Windows
 checks are implied by these test results.
+
+## Stable readiness PR 1 — compatibility and data integrity
+
+Audit date: 2026-10-13. Scope is the first of the five planned stable-readiness
+PRs. Application version stays 0.10.0; this work neither tags nor publishes 1.0.0.
+
+### Persistence inventory
+
+| Data | Current format and compatibility behavior |
+| --- | --- |
+| Settings, backend configuration, registrations | Platform-local `state.json`, internal `version: 1`; `draft`, `agent_options`, `repositories`, concurrency and appearance. Backend options stay separate; no provider credentials are stored. |
+| Groups, task templates, attachments | Additive state fields since 0.2. Group membership includes missing/unregistered references; templates contain task text; attachments retain metadata/references only. Draft and historical snapshots remain independent. |
+| Notifications, tray and close preferences | Additive `notifications` and `desktop` objects. Missing objects use established defaults. Window visibility, tray availability and notification delivery bookkeeping are session-only; there is no separate window-geometry persistence format. |
+| Worktree location and ownership | Optional `worktree_base` preference plus per-job `WorktreeMetadata`; sibling `owner.json` uses `codeconvoy.worktree.v1`. Custom locations also have exact bindings in the original Store's `worktrees/.locations`. Changing the preference does not migrate old records or checkouts. |
+| Results and cleanup evidence | Saved availability/observations, resolution and pending intents in history; sibling `cleanup.json` contains exact metadata and `completed`. Persisted observations never replace fresh recovery verification. Pending Apply/Discard and physical-cleanup evidence remain protected. |
+| Convoy history | Immutable task/job snapshots, stable IDs and `next_run`; missing optional fields default. Core envelope, unknown enum values and ambiguous IDs fail closed. Interrupted work becomes cancelled/interrupted, without fabricated finish times or execution resumption. |
+| Validation and presets | Per-repository executable/argument objects and latest per-job command/result snapshots. Presets are built-in command templates introduced in 0.8, not a separately persisted library or workflow. Commands reject unknown fields; launch validation remains separate from agent outcomes. |
+| Retention and storage management | Optional positive count/age limits and automatic flag since 0.9; older saves default to unlimited/manual. Storage Overview scans existing state/ownership files; it has no separate persisted inventory/database. |
+| Public export | Separate explicit JSON report model with `schema_version: 1`; unchanged. Neither JSON nor Markdown reports are full-fidelity backups. |
+
+Tagged types at 0.1, 0.2, 0.3, 0.6, 0.7, 0.8, 0.9 and 0.10 were inspected.
+Changes relevant here are additive; no new migration or persistence architecture
+is needed. Historical implicit retention caps cannot restore entries already
+removed by an older application. See the [data-format policy](history.md#data-format-compatibility).
+
+### Confirmed defect and focused fix
+
+The retention deserializer converted any malformed object to default settings.
+The next ordinary save could erase the original policy without reporting the
+load failure. Parsing through a generic JSON value also collapsed duplicate keys.
+The replacement requires an object and propagates invalid limits, types and
+duplicate fields through Store's existing failed-load guard. Startup reports
+`Invalid history_retention`, retains the complete original state file and blocks
+all saves until explicit recovery and reopening. Missing policies still default;
+valid existing policies and the public export schema are unchanged.
+
+This supersedes the malformed-policy fallback described in the historical
+0.9 retention validation record. No unrelated backend, scheduler or cleanup
+implementation changes are included.
+
+### Atomic-write and corruption audit
+
+- State writes already use an owner-only temporary file in the same directory,
+  buffered serialization, explicit flush/file sync, atomic replacement and Unix
+  parent-directory sync. The application-data lock and single-writer reservations
+  remain intact. Normal failed writes clean up their temporary file. Replacement
+  failure preserves the previous state; a directory-sync failure after replacement
+  explicitly reports uncertain durability.
+- Ownership manifests and custom-location bindings are immutable `create_new`
+  writes, synced before Git creation is allowed. Failed/partial initialization
+  retains the reservation and evidence; it does not overwrite an old record or
+  start Git. Cleanup journals already use synced temporary-file replacement.
+  Existing transaction/recovery tests cover missing/mismatched records, partial
+  attempts, pending intents and failed outcome saves. No automatic salvage,
+  ownership rewriting, cleanup or broad pruning was added.
+- Tests cover empty/truncated JSON, invalid UTF-8, missing core fields, missing
+  additive fields, future schema numbers, unknown additive fields and enum values,
+  malformed validation commands, malformed/duplicate retention values, real Unix
+  permission failures, injected StorageFull/PermissionDenied writes, failed
+  replacement and an incomplete temporary file left beside valid history.
+- A failed load keeps its write guard even after a subsequent successful read;
+  explicit recovery requires reopening the Store. Loading never promotes or
+  deletes an orphan temporary file. Unknown additive fields follow the documented
+  existing policy: known settings survive, but unknown extensions are not saved.
+
+### Upgrade evidence and changed files
+
+`tests/upgrade.rs` checks every supplied field from disposable 0.1, 0.2, 0.3, 0.6,
+0.7 and 0.9 fixtures through load, save and reopen. It checks that initial loading
+leaves the file byte-for-byte unchanged, that only interrupted-job/validation
+recovery changes expected fields, and that session logs remain absent. Fixtures
+cover missing group members, custom locations, validation commands/results,
+retention, backend preferences and unresolved/pending ownership. The serialized
+state shapes did not change in 0.8 or 0.10, so separate duplicate fixtures were not
+added. These are synthetic fixtures checked against tagged types, not executions
+of historical application binaries.
+
+`tests/worktree_locations.rs` rebinds historical 0.3/default and 0.6/custom ownership
+records to disposable Git repositories. It checks fresh reconciliation after
+save/reopen and a worktree preference change, unchanged owner/binding bytes,
+retained edited contents and unchanged source contents. Saved availability alone
+does not count as verification.
+
+Production fix: `src/history.rs`. Regression coverage: `src/persistence/tests.rs`,
+`tests/history.rs`, `tests/upgrade.rs`, `tests/worktree_locations.rs` and four new
+intermediate JSON fixtures. Policy/provenance documentation: `docs/history.md`,
+this record and `tests/fixtures/README.md`.
+
+### Validation and remaining risks
+
+Linux x86-64, kernel 7.2.9+deb14-amd64, Rust/Cargo 1.96.1:
+
+- `cargo fmt --check`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `TMPDIR=/var/tmp cargo test --all-features`: 576 passed, zero failed,
+  nine intentionally ignored; counts exclude child-process re-executions.
+  Ignored checks comprise four manual performance measurements, three installed
+  backend help/version checks, one authenticated backend probe and one isolated
+  D-Bus test. They were not enabled for this persistence PR.
+- `cargo build --release`: passed.
+- `python3 -m unittest discover -s packaging -p 'test_*.py'`: 23 passed.
+- `git diff --check`: passed.
+
+As in the prior reliability run, the complete filesystem/process suite ran outside
+the Codex sandbox with `/var/tmp`; its `/tmp/.git` marker rejects otherwise valid
+disposable worktree bases. The first parallel runs also exposed transient inherited
+Unix locks during immediate Store close/reopen checks. Those new checks now run
+apart from unrelated child-process launches, without retries or weakened locking.
+The final full run passed with the ordinary test runner's parallelism.
+
+Native macOS/Windows filesystem behavior, startup error presentation from desktop
+launchers, real disk-full/power-cut behavior and release-package upgrade smoke
+tests are not certified by this Linux run. Existing platform-specific checks stay
+in place for CI and the later planned platform PR. No native UI or old binary was
+run for this audit. Ordinary interrupted writes are covered; hardware/filesystem
+crash durability is not guaranteed. No new backup/recovery feature is introduced.
+
+Internal unknown fields are not round-tripped, and downgrades are not promised.
+Missing `state.json` still starts a fresh application; this PR does not reconstruct
+lost history from ownership files. Synchronous startup and explicit durable
+intent/outcome saves remain a known latency limitation on slow filesystems.
+These limitations do not justify a persistence redesign in PR 1.
