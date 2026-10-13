@@ -160,7 +160,7 @@ Audited from merged PR 1 (`67ca0e2`) on Linux using disposable repositories and
 fixture CLIs. This is execution/worktree stabilization only. The package remains
 0.10.0; no release was prepared or published. The initial handoff identified a Unix
 descendant-exit blocker. The maintainer-authorized follow-up implements the scoped
-fix described below. PR #58 remains draft; this audit does not declare 1.0 ready.
+fix described below. This audit does not declare 1.0 ready.
 
 ### Execution paths and existing regression coverage
 
@@ -201,6 +201,16 @@ cleanliness checks through that operation. No cleanup policy was relaxed.
    sensitive, original names are removed, and unrelated environment is preserved.
    Shared matching tests cover both rules; actual Windows execution remains for
    platform verification.
+4. **Cancel a pending worktree binding without waiting for Activity.** The manager
+   can be blocked sending a queue notification while a worker waits for its
+   `BindWorktree` reply under the administration guard. That reply wait now selects
+   cancellation, with cancellation/shutdown checks before enqueueing and after
+   acknowledgement. The manager rejects abandoned, cancelled and stale requests.
+   A late acknowledgement cannot authorize Git creation; cancellation drops the
+   administration guard before Activity drains. Existing lifecycle-event delivery
+   and scheduler completion ordering remain unchanged. Three deterministic tests
+   cover backpressure, Stop/shutdown races and rejected manager requests; the
+   backpressure regression failed before the fix.
 
 New tests also cover late lease conflicts, quarantine protecting the actual
 checkout, continued admission of an unrelated job, one completion after repeated
@@ -280,7 +290,7 @@ On Linux 7.2.9 with Rust 1.96.1:
 
 - `cargo fmt --check` — passed.
 - `cargo clippy --all-targets --all-features -- -D warnings` — passed.
-- `cargo test --all-features` — 587 top-level tests passed; 9 existing optional
+- `cargo test --all-features` — 590 top-level tests passed; 9 existing optional
   tests ignored. Subprocess environment probes also passed.
 - `cargo build --release` — passed.
 - `python3 -m unittest discover -s packaging -p 'test_*.py'` — 23 passed.

@@ -62,7 +62,16 @@ impl Drop for AdministrationHealth<'_> {
 }
 
 impl LifecycleClient {
-    pub(super) async fn bind_worktree(&self, metadata: &WorktreeMetadata) -> Result<()> {
+    pub(super) async fn bind_worktree(
+        &self,
+        metadata: &WorktreeMetadata,
+        cancellation: &Cancellation,
+        stopping: &AtomicBool,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            !stopping.load(Ordering::Acquire) && !cancellation.is_cancelled(),
+            "Cancelled during worktree preparation."
+        );
         let (reply, response) = oneshot::channel();
         self.commands
             .send(Command::BindWorktree {
@@ -71,9 +80,20 @@ impl LifecycleClient {
                 reply,
             })
             .context("The run manager stopped before worktree creation.")?;
-        response
-            .await
-            .context("Worktree lease registration was interrupted.")?
+        // The manager may be blocked delivering Activity. Shutdown sets stopping
+        // before cancelling this token; neither path may depend on its reply.
+        tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => anyhow::bail!("Cancelled during worktree preparation."),
+            result = response => result.context("Worktree lease registration was interrupted.")??,
+        }
+        // An acknowledgement racing Stop/quit is not permission to create Git
+        // state. Dropping the receiver also invalidates a still-queued request.
+        anyhow::ensure!(
+            !stopping.load(Ordering::Acquire) && !cancellation.is_cancelled(),
+            "Cancelled during worktree preparation."
+        );
+        Ok(())
     }
     async fn permit(&self, metadata: &WorktreeMetadata, cleanup: bool) -> Result<Permit> {
         self.acquire(
@@ -329,8 +349,121 @@ impl LifecycleClient {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::domain::{ExecutionMode, JobStatus, Repository, ResultResolution};
+
+    fn metadata() -> WorktreeMetadata {
+        WorktreeMetadata {
+            owner: "fixture".into(),
+            run: 1,
+            job: 0,
+            repository: Repository {
+                name: "source".into(),
+                path: "source".into(),
+            },
+            common_dir: "source/.git".into(),
+            path: "reserved/checkout".into(),
+            base_commit: "fixed-base".into(),
+            execution_mode: ExecutionMode::IsolatedWorktree,
+        }
+    }
+
+    #[tokio::test]
+    async fn worktree_binding_cancellation_releases_administration_without_activity_drain() {
+        for shutdown in [false, true] {
+            let (commands, mut requests) = mpsc::unbounded_channel();
+            let client = LifecycleClient { commands };
+            let cancellation = Cancellation::default();
+            let stopping = AtomicBool::new(false);
+            let admin = super::super::Administration::default();
+            let m = metadata();
+            let (events, mut activity) = mpsc::channel(1);
+            let queued = || super::super::Event::Queued {
+                run: 2,
+                job: 0,
+                reason: crate::domain::QueueReason::GlobalLimit,
+            };
+            events.send(queued()).await.unwrap();
+            // The manager cannot consume requests while this send is pending.
+            let notification = events.send(queued());
+            tokio::pin!(notification);
+            tokio::select! {
+                biased;
+                _ = &mut notification => panic!("Activity must be full"),
+                _ = std::future::ready(()) => {}
+            }
+            let work = async {
+                let _guard = admin.mutex.lock().await;
+                client.bind_worktree(&m, &cancellation, &stopping).await
+            };
+            tokio::pin!(work);
+            tokio::select! {
+                biased;
+                _ = &mut work => panic!("Binding must wait for the manager"),
+                _ = std::future::ready(()) => {}
+            }
+            assert_eq!(requests.len(), 1);
+            assert!(admin.mutex.try_lock().is_err());
+            // Match RunManager::shutdown's ordering: flag, then job token.
+            stopping.store(shutdown, Ordering::Release);
+            cancellation.cancel();
+            let result = tokio::time::timeout(std::time::Duration::from_secs(1), &mut work)
+                .await
+                .expect("cancellation must not need Activity to drain");
+            assert!(
+                result.is_err(),
+                "cancelled binding must never authorize Git creation"
+            );
+            assert!(admin.mutex.try_lock().is_ok());
+            assert_eq!(events.capacity(), 0);
+            // A late queued acknowledgement cannot revive the abandoned wait.
+            activity.recv().await.unwrap();
+            notification.await.unwrap();
+            let Some(Command::BindWorktree { reply, .. }) = requests.recv().await else {
+                panic!("expected queued binding");
+            };
+            assert!(reply.is_closed());
+            assert!(reply.send(Ok(())).is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn worktree_binding_rechecks_cancellation_and_stopping_at_acknowledgement() {
+        for shutdown in [false, true] {
+            for already_stopped in [false, true] {
+                let (commands, mut requests) = mpsc::unbounded_channel();
+                let client = LifecycleClient { commands };
+                let cancellation = Cancellation::default();
+                let stopping = AtomicBool::new(false);
+                let stop = || {
+                    if shutdown {
+                        // Exercise the flag check before shutdown signals tokens.
+                        stopping.store(true, Ordering::Release);
+                    } else {
+                        cancellation.cancel();
+                    }
+                };
+                let m = metadata();
+                let binding = client.bind_worktree(&m, &cancellation, &stopping);
+                tokio::pin!(binding);
+                if !already_stopped {
+                    tokio::select! {
+                        biased;
+                        _ = &mut binding => panic!("binding needs a reply"),
+                        _ = std::future::ready(()) => {}
+                    }
+                    let Some(Command::BindWorktree { reply, .. }) = requests.recv().await else {
+                        panic!("expected queued binding");
+                    };
+                    reply.send(Ok(())).unwrap();
+                }
+                stop();
+                assert!(binding.await.unwrap_err().to_string().contains("Cancelled"));
+                assert!(requests.is_empty());
+            }
+        }
+    }
 
     #[tokio::test]
     async fn validation_rejects_resolved_and_pending_results_before_acquiring_a_lease() {
