@@ -1,6 +1,8 @@
 //! Shell-free process execution with bounded output and process-tree cancellation.
 use anyhow::{Context, Result};
-use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
+use process_wrap::tokio::{ChildWrapper, CommandWrap};
+#[cfg(unix)]
+mod unix;
 use std::{
     ffi::OsString,
     path::PathBuf,
@@ -11,6 +13,17 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     sync::watch,
 };
+
+/// Windows environment names ignore ASCII case. Repository overrides must be
+/// removed with the same rule before Git or an agent enters a selected checkout.
+pub(crate) fn git_environment_override(key: &str, windows: bool) -> bool {
+    if windows {
+        key.get(..4)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("GIT_"))
+    } else {
+        key.starts_with("GIT_")
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct CommandSpec {
@@ -63,16 +76,59 @@ impl Cancellation {
 }
 pub struct ManagedChild {
     child: Box<dyn ChildWrapper>,
+    #[cfg(unix)]
+    group: std::io::Result<unix::Group>,
+    #[cfg(not(unix))]
     reaped: bool,
 }
 impl Drop for ManagedChild {
     fn drop(&mut self) {
+        #[cfg(unix)]
+        if let Ok(group) = &mut self.group {
+            let _ = group.terminate();
+        }
+        #[cfg(not(unix))]
         if !self.reaped {
             let _ = self.child.start_kill();
         }
     }
 }
+impl ManagedChild {
+    async fn wait(&mut self) -> Result<ExitStatus> {
+        #[cfg(unix)]
+        {
+            let group = self
+                .group
+                .as_mut()
+                .map_err(|error| std::io::Error::new(error.kind(), error.to_string()))
+                .context("Cannot supervise the Unix process group.")?;
+            let deadline = group
+                .before_reap()
+                .await
+                .context("Cannot supervise the Unix process group.")?;
+            tokio::time::timeout_at(deadline, async {
+                // Reap only our direct child. The wrapper's group-wide waitpid
+                // could reap an unrelated child if the old PGID were reused.
+                // Unix spawn installs only ProcessGroup; its inner is the native
+                // child. Our identity guard owns the group lifecycle instead.
+                let status = self.child.inner_mut().wait().await?;
+                group.after_reap().await?;
+                Ok(status)
+            })
+            .await
+            .context(
+                "Process group cleanup timed out; repository protection must remain reserved.",
+            )?
+        }
+        #[cfg(not(unix))]
+        {
+            Ok(self.child.wait().await?)
+        }
+    }
+}
 pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
+    #[cfg(unix)]
+    unix::check_reaping()?;
     let mut command = CommandWrap::with_new(&spec.program, |c| {
         c.args(&spec.args)
             .current_dir(&spec.directory)
@@ -90,7 +146,10 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
             c.env(key, value);
         }
     });
-    command.wrap(KillOnDrop);
+    // Unix Drop uses the unreaped identity guard, never a cached group ID or
+    // Tokio's independent kill-on-drop after supervision has lost identity.
+    #[cfg(not(unix))]
+    command.wrap(process_wrap::tokio::KillOnDrop);
     #[cfg(unix)]
     command.wrap(process_wrap::tokio::ProcessGroup::leader());
     #[cfg(windows)]
@@ -110,11 +169,24 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
         )
     })?;
     Ok(ManagedChild {
+        // Retain any identity error in the child: returning a spawn error after
+        // launch would bypass the caller's unsafe-until-supervised protection.
+        // wait/cancel report it and Drop cannot signal an unconfirmed identity.
+        #[cfg(unix)]
+        group: unix::Group::new(child.id()),
         child,
+        #[cfg(not(unix))]
         reaped: false,
     })
 }
 pub fn cancel(child: &mut ManagedChild) -> std::io::Result<()> {
+    #[cfg(unix)]
+    return child
+        .group
+        .as_mut()
+        .map_err(|error| std::io::Error::new(error.kind(), error.to_string()))?
+        .terminate();
+    #[cfg(not(unix))]
     child.child.start_kill()
 }
 
@@ -150,18 +222,20 @@ pub async fn execute(
                 if let Err(e) = stdin.write_all(&input).await
                     && e.kind() != std::io::ErrorKind::BrokenPipe
                 {
-                    return Err(e);
+                    return Err(e.into());
                 }
             }
-            Ok::<_, std::io::Error>(())
+            Ok::<_, anyhow::Error>(())
         };
-        let (status, out, err, written) = tokio::join!(
-            child.child.wait(),
+        // Propagate supervision errors even if an unconfirmed descendant still
+        // holds an output pipe. The owner must quarantine, not wait for EOF.
+        let (status, _, _, _) = tokio::try_join!(
+            child.wait(),
             pump(stdout, Stream::Stdout, &output),
             pump(stderr, Stream::Stderr, &output),
             writer
-        );
-        Ok::<_, anyhow::Error>((status?, out?, err?, written?).0)
+        )?;
+        Ok::<_, anyhow::Error>(status)
     };
     let result = tokio::select! {
         biased;
@@ -171,7 +245,10 @@ pub async fn execute(
     match result {
         Some(result) => {
             let status = result?;
-            child.reaped = true;
+            #[cfg(not(unix))]
+            {
+                child.reaped = true;
+            }
             Ok(ProcessResult {
                 status: Some(status),
                 cancelled: false,
@@ -179,10 +256,13 @@ pub async fn execute(
         }
         None => {
             cancel_process(&mut child).context("Could not terminate the agent process tree.")?;
-            let status = tokio::time::timeout(Duration::from_secs(5), child.child.wait())
+            let status = tokio::time::timeout(Duration::from_secs(5), child.wait())
                 .await
                 .context("Agent termination timed out; inspect remaining processes.")??;
-            child.reaped = true;
+            #[cfg(not(unix))]
+            {
+                child.reaped = true;
+            }
             Ok(ProcessResult {
                 status: Some(status),
                 cancelled: true,
@@ -194,7 +274,7 @@ async fn pump(
     mut reader: impl AsyncRead + Unpin,
     stream: Stream,
     output: &impl Fn(Stream, &[u8]),
-) -> std::io::Result<()> {
+) -> Result<()> {
     let mut bytes = [0; 8192];
     loop {
         let count = reader.read(&mut bytes).await?;

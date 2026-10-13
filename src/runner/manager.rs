@@ -36,6 +36,11 @@ pub(super) struct Convoy {
     remaining: usize,
 }
 pub(super) enum Command {
+    BindWorktree {
+        key: Key,
+        path: std::path::PathBuf,
+        reply: tokio::sync::oneshot::Sender<Result<()>>,
+    },
     Acquire {
         key: Key,
         lease: Lease,
@@ -96,6 +101,7 @@ impl RunManager {
         let history_pins = Arc::new(std::sync::Mutex::new(BTreeMap::new()));
         let join = tokio::spawn(manage(
             rx,
+            commands.clone(),
             events,
             global_limit.clamp(1, MAX_CONCURRENCY),
             stopping.clone(),
@@ -257,6 +263,29 @@ fn command(
     operations: &mut Operations,
 ) {
     match command {
+        Command::BindWorktree { key, path, reply } => {
+            if reply.is_closed() {
+                return;
+            }
+            let result = (|| {
+                anyhow::ensure!(
+                    !*closing,
+                    "The application is closing; worktree preparation stopped."
+                );
+                anyhow::ensure!(
+                    runs.get(&key.0)
+                        .and_then(|run| run.cancellations.get(key.1))
+                        .is_some_and(|token| !token.is_cancelled()),
+                    "Worktree preparation was cancelled or is no longer active."
+                );
+                anyhow::ensure!(
+                    schedule.bind_worktree(key, path),
+                    "Cannot protect the reserved worktree from overlapping execution; preparation stopped."
+                );
+                Ok(())
+            })();
+            let _ = reply.send(result);
+        }
         Command::Acquire {
             key,
             lease,
@@ -377,6 +406,7 @@ async fn finish(
 }
 async fn manage(
     mut commands: mpsc::UnboundedReceiver<Command>,
+    control: mpsc::UnboundedSender<Command>,
     events: mpsc::Sender<Event>,
     limit: usize,
     stopping: Arc<AtomicBool>,
@@ -457,6 +487,9 @@ async fn manage(
                 continue;
             }
             let tx = events.clone();
+            let lifecycle = LifecycleClient {
+                commands: control.clone(),
+            };
             let worker_stopping = stopping.clone();
             let storage = storage.clone();
             let worktree_base = convoy.worktree_base.clone();
@@ -483,6 +516,7 @@ async fn manage(
                     &worker_stopping,
                     &worker_safe,
                     &tx,
+                    &lifecycle,
                     storage,
                     worktree_base,
                     admin,
@@ -539,6 +573,76 @@ async fn manage(
 mod history_tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
+
+    #[tokio::test]
+    async fn worktree_binding_does_not_extend_leases_for_abandoned_or_cancelled_requests() {
+        use crate::domain::ExecutionMode;
+        for state in ["abandoned", "cancelled", "closing", "finished", "active"] {
+            let cancellation = Cancellation::default();
+            let mut runs = BTreeMap::from([(
+                1,
+                Convoy {
+                    worktree_base: None,
+                    task: Arc::new(TaskConfig::default()),
+                    backend: Arc::new(crate::agents::codex::Codex),
+                    repositories: vec![None],
+                    cancellations: vec![cancellation.clone()],
+                    done: Arc::new(AtomicBool::new(false)),
+                    remaining: 1,
+                },
+            )]);
+            let mut schedule = Schedule::new(1);
+            schedule.insert(
+                1,
+                1,
+                std::iter::once(Lease {
+                    path: "source".into(),
+                    common_dir: Some("source/.git".into()),
+                    worktree: None,
+                    mode: ExecutionMode::IsolatedWorktree,
+                }),
+            );
+            assert_eq!(schedule.next(), Some((1, 0)));
+            let (reply, response) = tokio::sync::oneshot::channel();
+            let response = if state == "abandoned" {
+                drop(response);
+                None
+            } else {
+                Some(response)
+            };
+            if state == "cancelled" {
+                cancellation.cancel();
+            }
+            if state == "finished" {
+                runs.remove(&1);
+            }
+            command(
+                Command::BindWorktree {
+                    key: (1, 0),
+                    path: "abandoned/checkout".into(),
+                    reply,
+                },
+                &mut runs,
+                &mut schedule,
+                &mut (state == "closing"),
+                &mut Operations::default(),
+            );
+            if let Some(response) = response {
+                assert_eq!(
+                    response.await.unwrap().is_ok(),
+                    state == "active",
+                    "{state}"
+                );
+            }
+            // A rejected/abandoned command must not consume the one-time binding.
+            assert_eq!(
+                schedule.bind_worktree((1, 0), "fresh/checkout".into()),
+                state != "active",
+                "{state}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn history_protection_tracks_lifecycle_release_and_unconfirmed_cleanup() {
         let temp = tempfile::tempdir().unwrap();

@@ -375,31 +375,51 @@ fn claude_result(failed: bool) {
 
 fn validation_fixture(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let mode = &args[1];
-    if mode == "validation-gate" || mode == "validation-child" {
+    if matches!(
+        mode.as_str(),
+        "validation-gate" | "validation-child" | "validation-crash-tree" | "validation-orphan-tree"
+    ) {
         let control = std::path::Path::new(&args[2]);
-        let name = if mode == "validation-gate" {
-            "parent"
-        } else {
-            "child"
-        };
+        let parent = mode != "validation-child";
+        let name = if parent { "parent" } else { "child" };
         let lock = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(false)
             .open(control.join(format!("{name}.lock")))?;
         fs2::FileExt::lock_exclusive(&lock)?;
-        let mut child = if mode == "validation-gate" {
-            Some(
-                Command::new(std::env::current_exe()?)
-                    .args(["validation-child", &args[2]])
-                    .spawn()?,
-            )
+        let mut child = if parent {
+            let mut command = Command::new(std::env::current_exe()?);
+            command.args(["validation-child", &args[2]]);
+            if mode == "validation-orphan-tree" {
+                command
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null());
+            }
+            Some(command.spawn()?)
         } else {
             None
         };
         std::fs::write(control.join(format!("{name}.ready")), "ready")?;
         println!("validation {name} ready");
         let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        if mode == "validation-crash-tree" || mode == "validation-orphan-tree" {
+            while !control.join("child.ready").exists() {
+                if std::time::Instant::now() > deadline {
+                    return Err("crash fixture child timed out".into());
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            // Let the test choose the exact exit moment after observing locks.
+            while !control.join("exit-parent").exists() {
+                if std::time::Instant::now() > deadline {
+                    return Err("parent exit gate timed out".into());
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            std::process::exit(args.get(3).and_then(|s| s.parse().ok()).unwrap_or(7));
+        }
         while !control.join("release").exists() {
             if std::time::Instant::now() > deadline {
                 return Err("validation gate timed out".into());

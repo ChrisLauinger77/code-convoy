@@ -201,7 +201,33 @@ On macOS, `ui/quit_macos` creates an `NSApplication` subclass before eframe init
 
 Overall status is Running while any job is running, otherwise Preparing while any isolated job is preparing, otherwise Queued while work remains. Once terminal, any failure wins, then cancellation, then success only if every job succeeded. Progress counts terminal jobs, not just successes; job rows preserve the individual outcomes.
 
-`process-wrap` is a deliberate dependency: it supplies Unix process groups and Windows Job Objects without application-owned unsafe platform code. Windows children start suspended, join their Job Object, and then resume. Cancellation forcefully stops the process group/job and waits for termination. A drop guard also initiates cleanup if a worker future is dropped. Normal application close first confirms active work, then cancels all jobs and keeps servicing events until workers finish; an exit fallback attempts bounded cleanup.
+`process-wrap` supplies Unix process groups and Windows Job Objects. Windows children start suspended, join their Job Object, and then resume. Cancellation forcefully stops the process group/job and waits for termination. A drop guard also initiates cleanup if a worker future is dropped. Normal application close first confirms active work, then cancels all jobs and keeps servicing events until workers finish; an exit fallback attempts bounded cleanup.
+
+On Unix, `process/unix` adds a narrow POSIX identity guard using `libc` (already a
+transitive dependency). `waitid(WEXITED | WNOHANG | WNOWAIT)` observes the direct
+child without reaping it. CodeConvoy exclusively owns that child: no competing
+waiter or automatic `SIGCHLD` reaper is permitted. Incompatible `SIGCHLD` settings
+are rejected before spawn. While the unreaped leader reserves its PID, Stop and
+Drop may signal its process group. When the leader exits, remaining group members
+are terminated even if they redirected/closed every standard stream. The leader's
+original exit status is preserved. Exit observation backs off from 5 ms to at most
+80 ms during long-running jobs; cancellation interrupts the sleep and signals
+directly. A missing or invalid spawn identity is retained as a supervision error
+in the managed child, so it cannot panic or bypass the caller's protection by
+being mistaken for a failure to launch. It never authorizes signalling.
+
+Before the reaping wait is polled, the guard permanently disables destructive
+signals. Only the owned direct child is reaped; the library's group-wide wait is
+bypassed so a reused group number cannot select an unrelated child for reaping.
+Completion then requires a read-only `kill(-pgid, 0)` probe to return
+`ESRCH`. A reused ID can cause a conservative cleanup timeout, but cannot receive
+a late cancellation or Drop signal. Darwin may report `EPERM` for a zombie-only
+group; that is never evidence of absence. Only a subsequent absence probe after
+reaping can confirm completion. Remaining members, permission errors, unreaped
+orphans or other uncertainty cannot release the repository. Cleanup has a
+five-second deadline; failure propagates immediately even if output pipes remain
+open, preserving the existing manager quarantine and history pins. No scheduler
+policy changes or process-wide subreaper are introduced.
 
 Unix process groups cannot contain a descendant that deliberately creates a new session/group. Abrupt OS termination or a crash cannot guarantee cleanup on Unix. No promise is made to recover or kill stale processes by persisted PID (PID reuse would make that unsafe). The application does not manage detached sessions. These constraints should be tested further before packaging a release.
 
@@ -229,7 +255,9 @@ History is unlimited by default; optional count/age retention excludes active co
 - `fs2`: cross-platform file locking.
 - `sha2`: SHA-256 detects changed attachment contents without persisting them.
 - `base64`: Claude's documented structured image input. Both additions use small, established crates already available in the dependency cache.
-- `process-wrap`: Unix/Windows process-tree lifecycle.
+- `process-wrap`: Unix process groups and Windows Job Objects.
+- `libc` (Unix only): POSIX non-reaping waits, signal-disposition checks and
+  process-group signalling/probes. Existing transitive package/version retained.
 - `anyhow`: actionable contextual errors at I/O boundaries.
 
 No provider SDK, secret store, shell interpreter, database, plugin loading, Git hosting integration, or remote execution is included. Test-only fixtures exercise real local process and Git behavior without calling a model provider.
@@ -346,7 +374,11 @@ The scheduler distinguishes repository access from checkout execution. Two
 isolated jobs sharing a common directory can execute simultaneously in independently
 reserved paths. A Direct lease is exclusive against both modes for that common
 Git identity, including a separately registered linked worktree. Different Git
-repositories at genuinely nested source paths still conflict. This provides an
+repositories at genuinely nested source paths still conflict. Before creation,
+the worker binds its reserved checkout path to the admitted lease through the
+manager and rechecks conflicts. That path remains protected through execution,
+inspection and any unsafe-cleanup quarantine, including against newly registered
+nested repositories. This provides an
 exclusive protection boundary for a future Apply operation, without implementing
 Apply or a new scheduling system. External Git applications and agent-initiated
 shared-administration commands are outside CodeConvoy's coordination.
@@ -358,6 +390,9 @@ capability checks and queued-job revalidation still run before agent spawn; file
 are never copied into the worktree. Activity/Raw output stay per job.
 
 Preparation and agent processes use the shared process-tree cancellation machinery.
+After an agent has spawned, cancellation can bypass a blocked startup Activity
+message so the shared executor can terminate its process tree without waiting
+for the UI event queue to drain.
 Git checkout has a bounded five-minute timeout and awaits cancellation/cleanup;
 ordinary inspection retains its 20-second command timeout. Every preparation
 inspection receives the job cancellation token and awaits subprocess cleanup. The

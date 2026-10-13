@@ -32,6 +32,11 @@ unicase = "2.10"
 # outside it. Both transports share the existing application runtime safely.
 notify-rust = "4.18.2"
 
+[target.'cfg(unix)'.dependencies]
+# POSIX waitid(WNOWAIT) keeps the group leader's identity until signalling ends.
+# Already a transitive dependency; no new runtime or process supervisor service.
+libc = "0.2"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # eframe disables winit defaults; enable its Adwaita title bar on Wayland.
 winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }

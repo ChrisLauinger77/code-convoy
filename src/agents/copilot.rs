@@ -172,7 +172,7 @@ impl AgentBackend for Copilot {
         spec.remove_env = std::env::vars_os()
             .filter_map(|(key, _)| {
                 key.to_str()
-                    .filter(|key| key.starts_with("GIT_"))
+                    .filter(|key| crate::process::git_environment_override(key, cfg!(windows)))
                     .map(str::to_owned)
             })
             .collect();

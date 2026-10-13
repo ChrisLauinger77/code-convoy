@@ -148,6 +148,7 @@ async fn job_work(
     stopping: &AtomicBool,
     repository_safe: &AtomicBool,
     tx: &mpsc::Sender<Event>,
+    client: &LifecycleClient,
     storage: Option<std::path::PathBuf>,
     worktree_base: Option<std::path::PathBuf>,
     administration: Arc<Administration>,
@@ -217,6 +218,7 @@ async fn job_work(
         // Every initialization failure must still pin the reserved attempt in history.
         // It grants no creation or cleanup authority, even if the checkout is absent.
         preparation?;
+        client.bind_worktree(&metadata, cancellation, stopping).await?;
         administration.healthy.store(false, Ordering::Release);
         let creation = crate::worktrees::create(&metadata, cancellation, repository_safe).await;
         administration.healthy.store(repository_safe.load(Ordering::Acquire), Ordering::Release);
@@ -230,7 +232,8 @@ async fn job_work(
         };
         run_agent(run, job, &execution, task, backend, cancellation, stopping, repository_safe, tx, &mut launched).await
     }.await;
-    let cancelled = cancellation.is_cancelled() && repository_safe.load(Ordering::Acquire);
+    let cancelled = (stopping.load(Ordering::Acquire) || cancellation.is_cancelled())
+        && repository_safe.load(Ordering::Acquire);
     let message = if cancelled {
         if ready {
             "Agent cancelled"
@@ -384,7 +387,13 @@ async fn run_agent(
         }) => { result.context("Application closed.")?; }
     }
     if task.execution_mode == ExecutionMode::IsolatedWorktree {
-        lifecycle(tx, run, job, "Running agent in isolated worktree").await;
+        // The process already exists. UI backpressure must not delay entering
+        // execute, which owns cancellation and awaits process-tree cleanup.
+        tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => {},
+            _ = lifecycle(tx, run, job, "Running agent in isolated worktree") => {},
+        }
     }
     let decoder = Mutex::new((backend.output(), 0usize, raw_output::RawOutput::default()));
     let result = process::execute(
