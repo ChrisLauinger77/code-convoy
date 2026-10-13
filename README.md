@@ -29,12 +29,12 @@ explicit confirmation; assignment never runs validation. See
 
 ![image](assets/screenshot.png)
 
-| Backend            | Status    | Authenticated E2E status                                                                             |
-| ------------------ | --------- | ---------------------------------------------------------------------------------------------------- |
-| Codex CLI          | Supported | User-verified on Linux (two concurrent repositories) and macOS                                       |
-| GitHub Copilot CLI | Supported | User-verified on Linux (two concurrent repositories) and macOS                                       |
-| OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally      |
-| Claude Code        | Supported | User-verified on macOS (five-repository README summarization convoy)                                 |
+| Backend            | Status    | Authenticated E2E status                                                                        |
+| ------------------ | --------- | ----------------------------------------------------------------------------------------------- |
+| Codex CLI          | Supported | User-verified on Linux (two concurrent repositories) and macOS                                  |
+| GitHub Copilot CLI | Supported | User-verified on Linux (two concurrent repositories) and macOS                                  |
+| OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally |
+| Claude Code        | Supported | User-verified on Linux (five-repository README summarization convoy) and macOS                  |
 
 ## Downloads and platform support
 
