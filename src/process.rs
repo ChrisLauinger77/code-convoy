@@ -1,6 +1,8 @@
 //! Shell-free process execution with bounded output and process-tree cancellation.
 use anyhow::{Context, Result};
-use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
+use process_wrap::tokio::{ChildWrapper, CommandWrap};
+#[cfg(unix)]
+mod unix;
 use std::{
     ffi::OsString,
     path::PathBuf,
@@ -74,16 +76,49 @@ impl Cancellation {
 }
 pub struct ManagedChild {
     child: Box<dyn ChildWrapper>,
+    #[cfg(unix)]
+    group: unix::Group,
+    #[cfg(not(unix))]
     reaped: bool,
 }
 impl Drop for ManagedChild {
     fn drop(&mut self) {
+        #[cfg(unix)]
+        let _ = self.group.terminate();
+        #[cfg(not(unix))]
         if !self.reaped {
             let _ = self.child.start_kill();
         }
     }
 }
+impl ManagedChild {
+    async fn wait(&mut self) -> Result<ExitStatus> {
+        #[cfg(unix)]
+        {
+            let deadline = self
+                .group
+                .before_reap()
+                .await
+                .context("Cannot supervise the Unix process group.")?;
+            tokio::time::timeout_at(deadline, async {
+                let status = self.child.wait().await?;
+                self.group.after_reap().await?;
+                Ok(status)
+            })
+            .await
+            .context(
+                "Process group cleanup timed out; repository protection must remain reserved.",
+            )?
+        }
+        #[cfg(not(unix))]
+        {
+            Ok(self.child.wait().await?)
+        }
+    }
+}
 pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
+    #[cfg(unix)]
+    unix::check_reaping()?;
     let mut command = CommandWrap::with_new(&spec.program, |c| {
         c.args(&spec.args)
             .current_dir(&spec.directory)
@@ -101,7 +136,10 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
             c.env(key, value);
         }
     });
-    command.wrap(KillOnDrop);
+    // Unix Drop uses the unreaped identity guard, never a cached group ID or
+    // Tokio's independent kill-on-drop after supervision has lost identity.
+    #[cfg(not(unix))]
+    command.wrap(process_wrap::tokio::KillOnDrop);
     #[cfg(unix)]
     command.wrap(process_wrap::tokio::ProcessGroup::leader());
     #[cfg(windows)]
@@ -121,11 +159,18 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
         )
     })?;
     Ok(ManagedChild {
+        // No wait has been polled on this freshly spawned child, so its ID exists.
+        #[cfg(unix)]
+        group: unix::Group::new(child.id().expect("freshly spawned child has an ID")),
         child,
+        #[cfg(not(unix))]
         reaped: false,
     })
 }
 pub fn cancel(child: &mut ManagedChild) -> std::io::Result<()> {
+    #[cfg(unix)]
+    return child.group.terminate();
+    #[cfg(not(unix))]
     child.child.start_kill()
 }
 
@@ -161,18 +206,20 @@ pub async fn execute(
                 if let Err(e) = stdin.write_all(&input).await
                     && e.kind() != std::io::ErrorKind::BrokenPipe
                 {
-                    return Err(e);
+                    return Err(e.into());
                 }
             }
-            Ok::<_, std::io::Error>(())
+            Ok::<_, anyhow::Error>(())
         };
-        let (status, out, err, written) = tokio::join!(
-            child.child.wait(),
+        // Propagate supervision errors even if an unconfirmed descendant still
+        // holds an output pipe. The owner must quarantine, not wait for EOF.
+        let (status, _, _, _) = tokio::try_join!(
+            child.wait(),
             pump(stdout, Stream::Stdout, &output),
             pump(stderr, Stream::Stderr, &output),
             writer
-        );
-        Ok::<_, anyhow::Error>((status?, out?, err?, written?).0)
+        )?;
+        Ok::<_, anyhow::Error>(status)
     };
     let result = tokio::select! {
         biased;
@@ -182,7 +229,10 @@ pub async fn execute(
     match result {
         Some(result) => {
             let status = result?;
-            child.reaped = true;
+            #[cfg(not(unix))]
+            {
+                child.reaped = true;
+            }
             Ok(ProcessResult {
                 status: Some(status),
                 cancelled: false,
@@ -190,10 +240,13 @@ pub async fn execute(
         }
         None => {
             cancel_process(&mut child).context("Could not terminate the agent process tree.")?;
-            let status = tokio::time::timeout(Duration::from_secs(5), child.child.wait())
+            let status = tokio::time::timeout(Duration::from_secs(5), child.wait())
                 .await
                 .context("Agent termination timed out; inspect remaining processes.")??;
-            child.reaped = true;
+            #[cfg(not(unix))]
+            {
+                child.reaped = true;
+            }
             Ok(ProcessResult {
                 status: Some(status),
                 cancelled: true,
@@ -205,7 +258,7 @@ async fn pump(
     mut reader: impl AsyncRead + Unpin,
     stream: Stream,
     output: &impl Fn(Stream, &[u8]),
-) -> std::io::Result<()> {
+) -> Result<()> {
     let mut bytes = [0; 8192];
     loop {
         let count = reader.read(&mut bytes).await?;

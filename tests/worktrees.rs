@@ -62,7 +62,11 @@ struct Harness {
 
 /// Starts a parent and descendant without waiting for stdin, so the test can
 /// observe live processes while the runner is blocked publishing Started.
-struct ProcessTreeFixture(std::path::PathBuf);
+struct ProcessTreeFixture {
+    control: std::path::PathBuf,
+    mode: &'static str,
+    refuse_cancel: bool,
+}
 impl agents::AgentBackend for ProcessTreeFixture {
     fn id(&self) -> AgentId {
         AgentId::Codex
@@ -89,9 +93,16 @@ impl agents::AgentBackend for ProcessTreeFixture {
             env!("CARGO_BIN_EXE_codeconvoy-test-agent"),
             &repository.path,
         )
-        .args(&["validation-gate"]);
-        spec.args.push(self.0.as_os_str().to_owned());
+        .args(&[self.mode]);
+        spec.args.push(self.control.as_os_str().to_owned());
         Ok(spec)
+    }
+    fn cancel(&self, child: &mut codeconvoy::process::ManagedChild) -> std::io::Result<()> {
+        if self.refuse_cancel {
+            Err(std::io::Error::other("fixture termination refusal"))
+        } else {
+            codeconvoy::process::cancel(child)
+        }
     }
     fn output(&self) -> Box<dyn agents::AgentOutput> {
         agents::codex::Codex.output()
@@ -118,7 +129,11 @@ async fn cancellation_and_shutdown_stop_spawned_trees_before_draining_a_full_act
             .start(
                 1,
                 prepared,
-                std::sync::Arc::new(ProcessTreeFixture(control.clone())),
+                std::sync::Arc::new(ProcessTreeFixture {
+                    control: control.clone(),
+                    mode: "validation-gate",
+                    refuse_cancel: false,
+                }),
             )
             .unwrap();
         h.until(|events| {
@@ -179,6 +194,132 @@ async fn cancellation_and_shutdown_stop_spawned_trees_before_draining_a_full_act
             stopped_without_drain,
             "UI backpressure prevented process-tree cancellation (shutdown={shutdown})"
         );
+    }
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn descendant_cleanup_precedes_repository_release_and_failed_termination_quarantines() {
+    for mode in [ExecutionMode::Direct, ExecutionMode::IsolatedWorktree] {
+        for refuse_cancel in [false, true] {
+            let mut h = Harness::new(2);
+            let source = repository(h.root.path(), "source").await;
+            let mut task = h.task(1, AgentId::Codex, false, false);
+            task.execution_mode = mode;
+            let prepared = runner::prepare(task, vec![source.clone()]).await.unwrap();
+            let control = h.root.path().join("control");
+            h.manager
+                .start(
+                    1,
+                    prepared,
+                    std::sync::Arc::new(ProcessTreeFixture {
+                        control: control.clone(),
+                        mode: "validation-orphan-tree",
+                        refuse_cancel,
+                    }),
+                )
+                .unwrap();
+            h.until(|events| {
+                events
+                    .iter()
+                    .any(|e| matches!(e, Event::Started { run: 1, .. }))
+            })
+            .await;
+            wait_file(&control.join("child.ready")).await;
+            let lock = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(control.join("child.lock"))
+                .unwrap();
+            assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+            let mut task = h.task(2, AgentId::Codex, false, false);
+            task.execution_mode = ExecutionMode::Direct;
+            h.start(2, task, vec![source.clone()]).await;
+            h.until(|events| {
+                events.iter().any(|e| {
+                    matches!(
+                        e,
+                        Event::Queued {
+                            run: 2,
+                            reason: QueueReason::Repository(1),
+                            ..
+                        }
+                    )
+                })
+            })
+            .await;
+            if refuse_cancel {
+                h.manager.cancel_run(1);
+            } else {
+                fs::write(control.join("exit-parent"), "exit leader").unwrap();
+            }
+            h.until(|events| Harness::finished(events, 1, JobStatus::Failed))
+                .await;
+            if refuse_cancel {
+                h.until(|events| {
+                    events.iter().any(|e| {
+                        matches!(
+                            e,
+                            Event::Queued {
+                                run: 2,
+                                reason: QueueReason::CleanupFailed(1),
+                                ..
+                            }
+                        )
+                    })
+                })
+                .await;
+                assert!(h.manager.history_protected(1));
+                assert!(h.events.iter().any(|e| matches!(e, Event::Finished {run: 1, detail, ..} if detail.contains("fixture termination refusal") && detail.contains("remain reserved"))));
+                assert!(
+                    !h.events
+                        .iter()
+                        .any(|e| matches!(e, Event::Started { run: 2, .. }))
+                );
+                if mode == ExecutionMode::IsolatedWorktree {
+                    assert!(!h.events.iter().any(|e| matches!(
+                        e,
+                        Event::Result {
+                            run: 1,
+                            result: Some(_),
+                            ..
+                        }
+                    )));
+                }
+                // A subsequent clean observation/Drop kill cannot erase the
+                // failure. Unrelated work can still use the other global slot.
+                let peer = repository(h.root.path(), "peer").await;
+                let mut task = h.task(3, AgentId::Codex, false, false);
+                task.execution_mode = ExecutionMode::Direct;
+                h.start(3, task, vec![peer]).await;
+                h.until(|events| Harness::ready(events, 3)).await;
+                h.release(3, "peer");
+                h.until(|events| Harness::finished(events, 3, JobStatus::Succeeded))
+                    .await;
+                h.manager.cancel_run(2);
+                h.until(|events| Harness::finished(events, 2, JobStatus::Cancelled))
+                    .await;
+            } else {
+                let stopped = fs2::FileExt::try_lock_exclusive(&lock).is_ok();
+                fs::write(control.join("release"), "finish regression fixture").unwrap();
+                h.until(|events| Harness::ready(events, 2)).await;
+                h.release(2, "source");
+                h.until(|events| Harness::finished(events, 2, JobStatus::Succeeded))
+                    .await;
+                assert!(
+                    stopped,
+                    "repository protection released before descendant exit"
+                );
+            }
+            assert_eq!(
+                fs::read_to_string(source.path.join("tracked.txt")).unwrap(),
+                "committed base\n"
+            );
+            if mode == ExecutionMode::IsolatedWorktree {
+                assert!(h.metadata(1).path.exists());
+            }
+            h.close().await;
+        }
     }
 }
 

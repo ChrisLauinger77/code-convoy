@@ -3,7 +3,7 @@
 This is the historical Part 3.1A record. Part 3.1B is now covered by the
 [recovery and cleanup validation record](worktree-recovery-validation.md).
 The [1.0 readiness PR 2 audit](#10-readiness-pr-2-audit-2026-10-13) below records
-the current execution audit and its unresolved release blocker.
+the current execution audit, Unix supervision fix and verification boundaries.
 
 Validated on 2026-10-07 on macOS, on `codex/v0.3-worktree-core`.
 Part 3.1A-1 was audited and extended in place. No merge, PR, release, version bump,
@@ -158,9 +158,9 @@ outside this work; no such actions were added.
 
 Audited from merged PR 1 (`67ca0e2`) on Linux using disposable repositories and
 fixture CLIs. This is execution/worktree stabilization only. The package remains
-0.10.0; no release was prepared or published. The fixes are independently
-reviewable, but **the Unix descendant-exit issue below blocks a claim that PR 2's
-full lifecycle acceptance criteria, or 1.0 release readiness, have been met**.
+0.10.0; no release was prepared or published. The initial handoff identified a Unix
+descendant-exit blocker. The maintainer-authorized follow-up implements the scoped
+fix described below. PR #58 remains draft; this audit does not declare 1.0 ready.
 
 ### Execution paths and existing regression coverage
 
@@ -208,7 +208,7 @@ cancellation, and cancellation after a failed leader leaves a descendant holding
 its inherited output pipes. That last test verifies the descendant's OS lock is
 released while an independent process tree stays alive and finishes normally.
 
-### Unresolved Unix process-exit blocker
+### Unix process-exit blocker and follow-up fix
 
 A disposable diagnostic reproduced a separate existing gap in `process::execute`:
 a launcher spawned the fixture's `validation-child` with stdin, stdout and stderr
@@ -217,21 +217,60 @@ The descendant stayed in the same process group. `process::capture` returned cod
 7 while the descendant still held `child.lock`. The diagnostic explicitly wrote
 the fixture's release marker and confirmed the lock was released afterward.
 
-The current `process-wrap` 10.0.1 Unix group wait reaps the direct child and uses
+The original `process-wrap` 10.0.1 Unix group wait reaped the direct child and used
 `waitpid` for children that the application can reap. A reparented grandchild is
-not necessarily one of them. Once output pipes are closed, CodeConvoy can treat
-the execution as finished and release its repository lease despite a surviving
-writer. A later Stop no longer has an active job to cancel. This is more than the
+not necessarily one of them. Once output pipes closed, CodeConvoy could treat
+execution as finished and release its repository lease despite a surviving
+writer. A later Stop no longer had an active job to cancel. This was more than the
 known limitation of processes deliberately escaping their process group.
 
-This PR does not claim that case is safe. Blindly signalling a cached process-group
-ID after reaping the leader could target a reused ID, violating the unrelated-
-process safety requirement. A fix needs a reviewed Unix waiting/reaping strategy
-that preserves process identity until descendant cleanup is confirmed, with Linux
-and macOS coverage. That process-supervision change is deferred under this task's
-restriction on architectural rewrites, and must be resolved within the maintainer's
-release plan before declaring the lifecycle acceptance criteria complete. No extra
-PR or automatic follow-up was created.
+The fix retains the existing process groups and manager leases. A small Unix
+guard observes leader exit with `waitid(WNOWAIT)` while keeping the child unreaped,
+then terminates remaining group members before allowing the reaping wait. Every
+destructive signal, including Drop and repeated cancellation, requires the owned
+unreaped identity. Before reaping starts, signalling is permanently disarmed;
+only signal-zero probes remain. Completion requires group absence (`ESRCH`), never
+just the leader's exit, pipe EOF or successful delivery of a kill signal. A reused
+group ID can cause conservative refusal/timeout, but is never sent a late kill.
+The CLI's original exit code survives this cleanup, including success or failure.
+
+The guard rejects `SIGCHLD=SIG_IGN` and `SA_NOCLDWAIT` before spawning. CodeConvoy
+must remain the exclusive waiter for its children; an unexpected lost-child error
+disables all further signalling. A five-second cleanup deadline bounds waiting
+for init/launchd to reap orphan zombies. Errors and timeouts propagate even with
+open pipes, leaving the existing repository/capacity quarantine and history pins
+intact. A later inspection or best-effort Drop kill cannot mark that failure safe.
+No scheduler redesign, supervisor daemon, global subreaper or dependency-version
+change was needed; Unix now directly declares the already-resolved `libc` package.
+
+Linux's [waitid documentation](https://man7.org/linux/man-pages/man2/waitid.2.html)
+describes non-reaping observation. Apple's
+[waitid implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_exit.c)
+also supports `WNOWAIT`, but can leave the information buffer unchanged for
+`WNOHANG`, so the buffer is zero-initialized. Apple's
+[group signalling implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sig.c)
+can report `EPERM` for a zombie-only group. On macOS, that response after observed
+leader exit allows reaping, but still requires a subsequent absence proof. It is
+never treated as successful cleanup by itself. The
+[signal-zero contract](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kill.2.html)
+provides the non-signalling probe. Platform CI must verify these semantics natively.
+
+Additional deterministic coverage:
+
+- Closed/redirected stdin, stdout and stderr with a live descendant holding an OS
+  lock; both parent exit 0 and exit 7. The test reproduced the original failure
+  before the fix and now requires lock release before `execute` returns.
+- Direct and isolated manager jobs with a same-repository waiter; completion and
+  admission occur only after descendant cleanup. Injected termination failure
+  instead preserves quarantine, history protection and retained worktrees, while
+  an unrelated job still runs.
+- Actual unexpected reaping and modelled numeric-ID reuse using a separate live
+  fixture group; identity loss and a post-reap timeout forbid subsequent kills.
+- A supervision failure while a descendant holds output open returns an error
+  without waiting for EOF. Dedicated subprocess tests reject automatic reaping
+  settings without launching the requested command.
+- Existing future-drop, repeated cancellation, shutdown, backpressure, preparation,
+  validation and peer-isolation tests continue through the same executor.
 
 ### Validation and remaining boundaries
 
@@ -239,23 +278,29 @@ On Linux 7.2.9 with Rust 1.96.1:
 
 - `cargo fmt --check` — passed.
 - `cargo clippy --all-targets --all-features -- -D warnings` — passed.
-- `cargo test --all-features` — 581 top-level tests passed; 9 existing optional
+- `cargo test --all-features` — 587 top-level tests passed; 9 existing optional
   tests ignored. Subprocess environment probes also passed.
 - `cargo build --release` — passed.
 - `python3 -m unittest discover -s packaging -p 'test_*.py'` — 23 passed.
 - `git diff --check` — passed.
 
-The new concurrency and backpressure regressions were first reproduced failing,
-then passed after fixes. These passing checks do not cover or resolve the
-closed-output descendant blocker demonstrated by the separate diagnostic.
+The concurrency, backpressure and closed-output descendant regressions were first
+reproduced failing, then passed after fixes.
 All destructive fixture operations target disposable directories. Tests use
 `TMPDIR=/var/tmp` outside the desktop sandbox because its synthetic `/tmp/.git`
 marker causes the deliberate nested-storage rejection checks to reject fixtures.
 
-No authenticated provider task, native GUI session, macOS/Windows run, or packaged
-application verification was performed in this PR. Existing optional tests remain
-ignored. Ordinary cleanup is deliberately unavailable on Windows until stable
+No authenticated provider task, native GUI session, or packaged application
+verification was performed locally. Native macOS/Windows follow-up CI results are
+reported in the PR handoff; Linux test counts above are not cross-platform claims.
+Existing optional tests remain ignored. Ordinary cleanup is deliberately unavailable on Windows until stable
 filesystem-identity proof exists. External Git programs remain outside manager
 coordination; worktrees are isolation, not a security sandbox. Unconfirmed cleanup
 continues to quarantine ownership/capacity rather than admitting conflicting work.
+The process-group boundary still cannot contain commands that deliberately create
+a new session/group, and abrupt termination of CodeConvoy itself cannot guarantee
+Unix cleanup. Stale PIDs are never signalled on restart. Unreaped orphan zombies
+or rapid ID reuse may conservatively quarantine a repository even after all its
+writers have stopped. Users must inspect processes before restarting after an
+unconfirmed cleanup; the existing quarantine lasts for the current session.
 PR 3 has not begun.

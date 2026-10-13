@@ -113,7 +113,7 @@ async fn cancellation_and_future_drop_stop_descendants_in_unicode_paths() {
 }
 
 #[tokio::test]
-async fn cancellation_after_leader_failure_stops_descendants_but_preserves_a_peer() {
+async fn cancellation_racing_leader_failure_stops_descendants_but_preserves_a_peer() {
     let temp = executable::directory();
     let executable = executable(temp.path());
     let control = temp.path().join("failed tree");
@@ -135,6 +135,7 @@ async fn cancellation_after_leader_failure_stops_descendants_but_preserves_a_pee
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         }
+        fs::write(control.join("exit-parent"), "exit leader").unwrap();
         // This lock is released by OS process exit, proving that cancellation
         // below runs after the leader has died, not merely after child startup.
         let parent = fs::OpenOptions::new()
@@ -164,7 +165,6 @@ async fn cancellation_after_leader_failure_stops_descendants_but_preserves_a_pee
         .write(true)
         .open(peer_control.join("child.lock"))
         .unwrap();
-    assert!(fs2::FileExt::try_lock_exclusive(&child_lock).is_err());
     cancellation.cancel();
     cancellation.cancel();
     let result = failed.await.unwrap();
@@ -179,7 +179,11 @@ async fn cancellation_after_leader_failure_stops_descendants_but_preserves_a_pee
     // Also release the failed fixture on a regression, without any PID-based kill.
     fs::write(control.join("release"), "finish descendant").unwrap();
     let peer_result = peer.await.unwrap().unwrap();
-    assert!(matches!(result, Err(error) if error.to_string().contains("cancelled")));
+    match result {
+        Err(error) => assert!(error.to_string().contains("cancelled"), "{error:#}"),
+        // Unix supervision may already have finished cleaning the failed tree.
+        Ok(result) => assert_eq!(result.status.code(), Some(7)),
+    }
     assert!(
         stopped.is_ok(),
         "descendant survived cancellation after leader failure"
@@ -188,4 +192,47 @@ async fn cancellation_after_leader_failure_stops_descendants_but_preserves_a_pee
         peer_alive && peer_result.status.success(),
         "cancellation affected an unrelated process tree"
     );
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn parent_exit_cannot_complete_while_closed_stream_descendant_holds_a_lock() {
+    for code in [0, 7] {
+        let temp = executable::directory();
+        let executable = executable(temp.path());
+        let mut spec = CommandSpec::new(executable, temp.path()).args(&["validation-orphan-tree"]);
+        spec.args
+            .extend([temp.path().as_os_str().to_owned(), code.to_string().into()]);
+        let task = tokio::spawn(async move { process::capture(spec, 4096).await });
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !temp.path().join("child.ready").exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let lock = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(temp.path().join("child.lock"))
+            .unwrap();
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        fs::write(temp.path().join("exit-parent"), "exit with live descendant").unwrap();
+        let result = task.await.unwrap();
+        let stopped_before_return = fs2::FileExt::try_lock_exclusive(&lock).is_ok();
+        // Always release the original unfixed fixture before asserting.
+        fs::write(temp.path().join("release"), "finish fixture").unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while fs2::FileExt::try_lock_exclusive(&lock).is_err() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(
+            stopped_before_return,
+            "parent exit {code} released execution while its closed-stream descendant was alive"
+        );
+        assert_eq!(result.unwrap().status.code(), Some(code));
+    }
 }
