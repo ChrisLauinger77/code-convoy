@@ -925,6 +925,14 @@ passes are always qualified as past executions, never current file certification
 See [validation configuration and use](validation.md) for platform resolution,
 local command trust, persistence and the manual acceptance checklist.
 
+`validation/launch_macos` adds common toolchain directories only to validation
+children's PATH, preserving inherited absolute entries first and excluding
+empty/relative entries. It includes an absolute launcher's parent so env-based
+scripts can find sibling runtimes. It runs during background command preparation,
+loads no shell profiles and changes no process-global environment. Linux/Windows,
+agent discovery, the shared process owner and persisted command snapshots remain
+unchanged.
+
 
 ### v0.8 validation presets and bulk assignment
 

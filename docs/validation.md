@@ -94,7 +94,23 @@ its own arguments; CodeConvoy adds no shell or scripting language. Tools must be
 installed separately and usable without interactive stdin. GUI PATH may differ
 from terminal PATH, so an absolute executable is useful when discovery fails.
 
-The child inherits the process environment, except `PWD` and `GIT_*` overrides,
+On macOS, validation keeps inherited absolute PATH entries first, then appends
+the configured absolute executable's directory, toolchain directory overrides
+(`XDG_BIN_DIR`, `NVM_BIN`, `PNPM_HOME`, `HOMEBREW_PREFIX/bin`, `VOLTA_HOME/bin`),
+user locations (`~/.local/bin`, `~/bin`, `~/.cargo/bin`, `~/.npm-global/bin`,
+`~/.volta/bin`), and Homebrew, MacPorts and standard system bin directories.
+This lets Finder/Dock launches run presets such as `npm run lint` and lets
+`/usr/bin/env node` launchers find their runtime. Empty and relative entries are
+excluded to avoid implicitly finding executables in a repository. Only the
+validation child's PATH changes; CodeConvoy does not load shell profiles, select
+version-manager versions, install tools or replace explicit executable paths.
+For a version-manager installation absent from those locations, configure an
+absolute launcher path with its runtime alongside it, or launch CodeConvoy from
+the configured terminal environment. Linux and Windows retain inherited PATH
+behavior and the Windows native-executable requirement above.
+
+The child inherits the process environment, with the macOS PATH handling above,
+except `PWD` and `GIT_*` overrides,
 which are removed to keep repository targeting local to this operation. Key matching
 is case-insensitive on Windows and case-sensitive on Unix. CodeConvoy does not dump
 environment values. These commands run with your account's access;
@@ -176,6 +192,14 @@ pass/failure, missing executables/directories, retained-worktree targeting,
 cancellation and descendant cleanup, conflicting operations, agent independence,
 shutdown, timestamps/duration and history. Headless egui checks exercise required
 780 × 560, 1180 × 820 and 1600 × 1000 layouts in System/Dark/Light modes.
+
+The macOS regression uses a fresh process with a desktop-style PATH and disposable
+toolchain directories. It verifies fallback launcher and env-based runtime lookup,
+inherited PATH priority, absolute-launcher sibling runtimes, literal arguments,
+unchanged command snapshots and process-global PATH, and missing absolute paths
+remaining unavailable. On 2026-10-13, a separate smoke check also launched the
+installed Homebrew npm 11.20.0 with PATH initially limited to `/usr/bin:/bin`, using
+the validation PATH helper. That check requested only `npm --version`.
 
 Native acceptance remains separate: configure/run/edit/remove a command, cancel
 an active validation, inspect output, refresh a changed diff, restart the app to
