@@ -1,5 +1,7 @@
 //! Explicit local validation, separate from agent outcomes and scheduling.
 pub mod configuration;
+#[cfg(target_os = "macos")]
+mod launch_macos;
 pub mod presets;
 use crate::{
     domain::{self, ExecutionMode, Job},
@@ -79,7 +81,7 @@ impl Command {
             .collect::<Vec<_>>()
             .join(" ")
     }
-    fn spec(&self, directory: &Path) -> CommandSpec {
+    fn spec(&self, directory: &Path) -> Result<CommandSpec> {
         let mut spec = CommandSpec::new(&self.executable, directory);
         spec.args = self.arguments.iter().map(Into::into).collect();
         // Preserve toolchain/auth environment, while keeping Git and PWD rooted here.
@@ -87,7 +89,9 @@ impl Command {
             .filter_map(|(k, _)| k.into_string().ok())
             .filter(|k| repository_environment_override(k, cfg!(windows)))
             .collect();
-        spec
+        #[cfg(target_os = "macos")]
+        launch_macos::configure(&mut spec)?;
+        Ok(spec)
     }
 }
 
@@ -368,7 +372,7 @@ async fn execute(
                     "Cancelled before execution.".into(),
                 )
             } else {
-                match process::spawn(&command.spec(&path)) {
+                match command.spec(&path).and_then(|spec| process::spawn(&spec)) {
                     Err(error) => (
                         if cancellation.is_cancelled() {
                             Status::Cancelled
@@ -501,7 +505,8 @@ mod tests {
             executable: "cargo".into(),
             arguments: vec!["test".into()],
         }
-        .spec(Path::new("."));
+        .spec(Path::new("."))
+        .expect("validation command specification");
         for (injected, removed) in [
             ("GIT_INDEX_FILE", true),
             ("Git_Dir", cfg!(windows)),

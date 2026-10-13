@@ -1,6 +1,9 @@
 #![cfg(feature = "test-support")]
 #![allow(clippy::unwrap_used)]
 //! Real OS processes in disposable paths; the same tests run on all CI hosts.
+#[path = "support/executable.rs"]
+mod executable;
+
 use codeconvoy::process::{self, Cancellation, CommandSpec};
 use std::{fs, path::Path, time::Duration};
 
@@ -13,13 +16,13 @@ fn executable(root: &Path) -> std::path::PathBuf {
         "fixture agent"
     };
     let path = directory.join(name);
-    fs::copy(env!("CARGO_BIN_EXE_codeconvoy-test-agent"), &path).unwrap();
+    executable::install(&path);
     path
 }
 
 #[tokio::test]
 async fn native_executable_directory_arguments_and_stdin_preserve_unicode_and_spaces() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = executable::directory();
     let executable = executable(temp.path());
     let directory = temp.path().join("repository ü 日本語");
     fs::create_dir(&directory).unwrap();
@@ -57,7 +60,7 @@ async fn native_executable_directory_arguments_and_stdin_preserve_unicode_and_sp
 #[tokio::test]
 async fn cancellation_and_future_drop_stop_descendants_in_unicode_paths() {
     for abort in [false, true] {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = executable::directory();
         let executable = executable(temp.path());
         let control = temp.path().join("child control ü 日本語");
         fs::create_dir(&control).unwrap();

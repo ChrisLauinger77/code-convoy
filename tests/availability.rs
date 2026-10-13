@@ -1,6 +1,9 @@
 #![cfg(feature = "test-support")]
 #![allow(clippy::unwrap_used)]
 
+#[path = "support/executable.rs"]
+mod executable;
+
 use codeconvoy::{
     agents::availability::CliChecks,
     domain::{AgentId, AppState},
@@ -18,7 +21,7 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> Self {
-        let directory = tempfile::tempdir().unwrap();
+        let directory = executable::directory();
         std::fs::write(directory.path().join("probe-tracking"), "track").unwrap();
         let (tx, completions) = mpsc::channel();
         let checks = CliChecks::new(
@@ -40,7 +43,7 @@ impl Fixture {
             .path()
             .join(name)
             .with_extension(std::env::consts::EXE_EXTENSION);
-        std::fs::copy(env!("CARGO_BIN_EXE_codeconvoy-test-agent"), &path).unwrap();
+        executable::install(&path);
         path.to_str().unwrap().into()
     }
     fn marker(&self, name: &str) -> PathBuf {
@@ -556,13 +559,13 @@ async fn launch_preflight_and_startup_do_not_spawn_simultaneous_backend_probes()
 fn automatic_discovery_and_exact_manual_names_use_gui_safe_locations() {
     const ROOT: &str = "CODECONVOY_TEST_DISCOVERY_ROOT";
     let Ok(root) = std::env::var(ROOT) else {
-        let directory = tempfile::tempdir().unwrap();
+        let directory = executable::directory();
         for name in ["codex", "chosen-codex"] {
             let path = directory
                 .path()
                 .join(name)
                 .with_extension(std::env::consts::EXE_EXTENSION);
-            std::fs::copy(env!("CARGO_BIN_EXE_codeconvoy-test-agent"), path).unwrap();
+            executable::install(&path);
         }
         std::fs::write(directory.path().join("probe-tracking"), "track").unwrap();
         // A separate test process keeps PATH changes isolated from parallel tests.

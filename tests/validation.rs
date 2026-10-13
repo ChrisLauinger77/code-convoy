@@ -359,6 +359,139 @@ async fn failure_is_separate_from_agent_outcome_and_latest_result_replaces_previ
     assert_eq!(f.state.runs[0].status(), JobStatus::Succeeded);
     assert_eq!(f.job().exit_code, Some(0));
 }
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn macos_gui_path_finds_validation_launchers_and_their_runtimes() {
+    use std::os::unix::fs::PermissionsExt;
+    const ROOT: &str = "CODECONVOY_TEST_VALIDATION_PATH_ROOT";
+    let Ok(root) = std::env::var(ROOT) else {
+        let temp = tempfile::Builder::new()
+            .prefix("validation tools ü ")
+            .tempdir()
+            .unwrap();
+        let root = temp.path();
+        for (directory, marker, names) in [
+            (
+                "install/bin",
+                "fallback",
+                vec!["cc-validation-tool", "cc-validation-precedence"],
+            ),
+            ("path", "inherited", vec!["cc-validation-precedence"]),
+            ("absolute", "sibling", vec!["cc-validation-tool"]),
+        ] {
+            let directory = root.join(directory);
+            std::fs::create_dir_all(&directory).unwrap();
+            let runtime = directory.join(format!("cc-validation-runtime-{marker}"));
+            std::fs::write(&runtime, format!(
+                "#!/bin/sh\nexec \"$CODECONVOY_TEST_VALIDATION_AGENT\" validation-pass {marker} \"$@\"\n"
+            )).unwrap();
+            std::fs::set_permissions(&runtime, std::fs::Permissions::from_mode(0o755)).unwrap();
+            for name in names {
+                let launcher = directory.join(name);
+                std::fs::write(
+                    &launcher,
+                    format!("#!/usr/bin/env cc-validation-runtime-{marker}\n"),
+                )
+                .unwrap();
+                std::fs::set_permissions(&launcher, std::fs::Permissions::from_mode(0o755))
+                    .unwrap();
+            }
+        }
+        // A fresh process isolates the Finder-style PATH from concurrent tests.
+        assert!(
+            Process::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "macos_gui_path_finds_validation_launchers_and_their_runtimes",
+                    "--nocapture"
+                ])
+                .env(ROOT, root)
+                .env(
+                    "CODECONVOY_TEST_VALIDATION_AGENT",
+                    env!("CARGO_BIN_EXE_codeconvoy-test-agent")
+                )
+                .env(
+                    "PATH",
+                    std::env::join_paths([
+                        root.join("path"),
+                        PathBuf::from("/usr/bin"),
+                        PathBuf::from("/bin")
+                    ])
+                    .unwrap()
+                )
+                .env("HOMEBREW_PREFIX", root.join("install"))
+                .env_remove("XDG_BIN_DIR")
+                .env_remove("NVM_BIN")
+                .env_remove("PNPM_HOME")
+                .env_remove("VOLTA_HOME")
+                .status()
+                .unwrap()
+                .success()
+        );
+        return;
+    };
+    let root = PathBuf::from(root);
+    let inherited = std::env::var_os("PATH");
+    let mut f = Fixture::new(false).await;
+    let arguments = vec![
+        "two words".into(),
+        "日本語".into(),
+        "$(literal)".into(),
+        "".into(),
+    ];
+    for (executable, marker) in [
+        ("cc-validation-tool".to_owned(), "fallback"),
+        ("cc-validation-precedence".to_owned(), "inherited"),
+        (
+            root.join("absolute/cc-validation-tool")
+                .to_str()
+                .unwrap()
+                .to_owned(),
+            "sibling",
+        ),
+    ] {
+        let command = Command {
+            executable,
+            arguments: arguments.clone(),
+        };
+        f.start(command.clone());
+        let record = f.finish().await;
+        assert_eq!(
+            record.status,
+            Status::Passed,
+            "{} {}",
+            record.detail,
+            record.output
+        );
+        assert_eq!(record.exit_code, Some(0));
+        assert_eq!(record.command, command);
+        assert!(
+            record.output.contains(&format!("arguments=[\"{marker}\",")),
+            "{}",
+            record.output
+        );
+        assert!(
+            record
+                .output
+                .contains(&serde_json::to_string(&arguments).unwrap()[1..]),
+            "{}",
+            record.output
+        );
+    }
+    f.start(Command {
+        executable: root
+            .join("missing/cc-validation-tool")
+            .to_str()
+            .unwrap()
+            .into(),
+        arguments: vec![],
+    });
+    assert_eq!(f.finish().await.status, Status::Unavailable);
+    assert_eq!(std::env::var_os("PATH"), inherited);
+    f.manager.shutdown();
+}
+
 #[tokio::test]
 async fn launch_errors_and_disappeared_directories_are_unavailable() {
     let mut f = Fixture::new(false).await;
