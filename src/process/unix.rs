@@ -38,13 +38,20 @@ pub(super) struct Group {
 }
 
 impl Group {
-    pub fn new(pid: u32) -> Self {
-        // Unix spawn returns a positive pid_t. A child cannot be init (PID 1).
-        assert!(pid > 1 && pid <= i32::MAX as u32, "invalid spawned PID");
-        Self {
-            pid: pid as libc::pid_t,
+    pub fn new(pid: Option<u32>) -> io::Result<Self> {
+        let pid = pid
+            .and_then(|pid| libc::pid_t::try_from(pid).ok())
+            .filter(|&pid| pid > 1)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Spawned child has no valid Unix process identity.",
+                )
+            })?;
+        Ok(Self {
+            pid,
             phase: Phase::Anchored,
-        }
+        })
     }
 
     fn exited(&mut self) -> io::Result<bool> {
@@ -111,11 +118,17 @@ impl Group {
                 "Process supervision lost its child identity.",
             ));
         }
+        let mut poll = POLL;
         while !self.exited()? {
-            tokio::time::sleep(POLL).await;
+            tokio::time::sleep(poll).await;
+            // Short commands finish promptly; long jobs need at most ~13 idle
+            // probes/second. Cancellation drops this sleep and signals directly.
+            poll = (poll * 2).min(Duration::from_millis(80));
         }
         // A completed CLI must not leave background writers behind, regardless
         // of exit code or inherited pipe state. Preserve the CLI's exit status.
+        // A failed signal intentionally leaves Anchored so Drop may retry while
+        // the unreaped child still reserves the identity.
         self.terminate()?;
         let deadline = Instant::now() + CLEANUP;
         // Disarm BEFORE the first poll of the reaping wait. Dropping that future
@@ -161,6 +174,43 @@ mod tests {
             .process_group(0)
             .spawn()
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn invalid_spawn_identity_fails_supervision_without_signalling() {
+        use super::super::{self as process, CommandSpec};
+        for pid in [
+            None,
+            Some(0),
+            Some(1),
+            Some(i32::MAX as u32 + 1),
+            Some(u32::MAX),
+        ] {
+            assert_eq!(
+                Group::new(pid).err().unwrap().kind(),
+                io::ErrorKind::InvalidInput
+            );
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let mut spec = CommandSpec::new("/bin/sh", directory.path()).args(&["-c", "read value"]);
+        spec.input = Some(Vec::new()); // Keep stdin open so the child cannot finish.
+        let mut child = process::spawn(&spec).unwrap();
+        // Model a wrapper losing its ID immediately after launch. Keep the real
+        // guard only for fixture cleanup; the managed child must report failure.
+        let identity = std::mem::replace(&mut child.group, Group::new(None));
+        let wait = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
+        let cancel = process::cancel(&mut child);
+        let survived = child.child.inner_mut().try_wait().unwrap().is_none();
+        child.group = identity;
+        process::cancel(&mut child).unwrap();
+        child.wait().await.unwrap();
+
+        let error = wait
+            .expect("identity failure must not await process exit")
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("no valid Unix process identity"));
+        assert_eq!(cancel.unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert!(survived, "unconfirmed identity must never authorize a kill");
     }
 
     #[test]
@@ -223,7 +273,7 @@ mod tests {
             .process_group(0)
             .spawn()
             .unwrap();
-        let mut group = Group::new(child.id());
+        let mut group = Group::new(Some(child.id())).unwrap();
         child.wait().unwrap(); // Simulate an unexpected external reaper.
         assert_eq!(
             group.terminate().unwrap_err().raw_os_error(),

@@ -199,8 +199,10 @@ cleanliness checks through that operation. No cleanup policy was relaxed.
    case-aware rule. They now share the matching rule; inherited `Git_Dir` or
    `gIt_WoRk_TrEe` cannot bypass stripping on Windows. Unix matching remains case
    sensitive, original names are removed, and unrelated environment is preserved.
-   Shared matching tests cover both rules; actual Windows execution remains for
-   platform verification.
+   `validation::tests::repository_overrides_follow_platform_environment_case_rules`
+   exercises both `windows = false` and `windows = true` on every platform,
+   including mixed-case names, unrelated names and non-ASCII boundary input.
+   Native Windows CI additionally verifies actual command environment removal.
 4. **Cancel a pending worktree binding without waiting for Activity.** The manager
    can be blocked sending a queue notification while a worker waits for its
    `BindWorktree` reply under the administration guard. That reply wait now selects
@@ -245,6 +247,16 @@ probes remain. Completion requires group absence (`ESRCH`), never
 just the leader's exit, pipe EOF or successful delivery of a kill signal. A reused
 group ID can cause conservative refusal/timeout, but is never sent a late kill.
 The CLI's original exit code survives this cleanup, including success or failure.
+Leader-exit polling backs off from 5 ms to 80 ms to reduce idle wakeups during
+long-running jobs. Cancellation interrupts that sleep; the short, five-second
+post-reap cleanup still probes every 5 ms. A failed termination leaves the guard
+anchored for a safe Drop retry while the leader remains unreaped.
+
+Missing or invalid spawn IDs return an identity-construction error instead of
+panicking. That error stays with the already-launched managed child and propagates
+through wait/cancel, preserving the caller's unsafe-until-supervised protection.
+Returning a spawn error after launch would incorrectly bypass that protection.
+Drop cannot signal an unconfirmed identity.
 
 The guard rejects `SIGCHLD=SIG_IGN` and `SA_NOCLDWAIT` before spawning. CodeConvoy
 must remain the exclusive waiter for its children; an unexpected lost-child error
@@ -278,6 +290,10 @@ Additional deterministic coverage:
   an unrelated job still runs.
 - Actual unexpected reaping and modelled numeric-ID reuse using a separate live
   fixture group; identity loss and a post-reap timeout forbid subsequent kills.
+- Missing, zero, init and out-of-range spawn identities return errors without
+  panicking. An injected construction failure with a real live child makes wait
+  and cancellation fail promptly without signalling it; fixture cleanup uses the
+  separately retained valid identity.
 - A supervision failure while a descendant holds output open returns an error
   without waiting for EOF. Dedicated subprocess tests reject automatic reaping
   settings without launching the requested command.
@@ -290,7 +306,7 @@ On Linux 7.2.9 with Rust 1.96.1:
 
 - `cargo fmt --check` — passed.
 - `cargo clippy --all-targets --all-features -- -D warnings` — passed.
-- `cargo test --all-features` — 590 top-level tests passed; 9 existing optional
+- `cargo test --all-features` — 591 top-level tests passed; 9 existing optional
   tests ignored. Subprocess environment probes also passed.
 - `cargo build --release` — passed.
 - `python3 -m unittest discover -s packaging -p 'test_*.py'` — 23 passed.

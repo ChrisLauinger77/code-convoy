@@ -210,7 +210,11 @@ waiter or automatic `SIGCHLD` reaper is permitted. Incompatible `SIGCHLD` settin
 are rejected before spawn. While the unreaped leader reserves its PID, Stop and
 Drop may signal its process group. When the leader exits, remaining group members
 are terminated even if they redirected/closed every standard stream. The leader's
-original exit status is preserved.
+original exit status is preserved. Exit observation backs off from 5 ms to at most
+80 ms during long-running jobs; cancellation interrupts the sleep and signals
+directly. A missing or invalid spawn identity is retained as a supervision error
+in the managed child, so it cannot panic or bypass the caller's protection by
+being mistaken for a failure to launch. It never authorizes signalling.
 
 Before the reaping wait is polled, the guard permanently disables destructive
 signals. Only the owned direct child is reaped; the library's group-wide wait is

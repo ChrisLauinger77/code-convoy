@@ -77,14 +77,16 @@ impl Cancellation {
 pub struct ManagedChild {
     child: Box<dyn ChildWrapper>,
     #[cfg(unix)]
-    group: unix::Group,
+    group: std::io::Result<unix::Group>,
     #[cfg(not(unix))]
     reaped: bool,
 }
 impl Drop for ManagedChild {
     fn drop(&mut self) {
         #[cfg(unix)]
-        let _ = self.group.terminate();
+        if let Ok(group) = &mut self.group {
+            let _ = group.terminate();
+        }
         #[cfg(not(unix))]
         if !self.reaped {
             let _ = self.child.start_kill();
@@ -95,8 +97,12 @@ impl ManagedChild {
     async fn wait(&mut self) -> Result<ExitStatus> {
         #[cfg(unix)]
         {
-            let deadline = self
+            let group = self
                 .group
+                .as_mut()
+                .map_err(|error| std::io::Error::new(error.kind(), error.to_string()))
+                .context("Cannot supervise the Unix process group.")?;
+            let deadline = group
                 .before_reap()
                 .await
                 .context("Cannot supervise the Unix process group.")?;
@@ -106,7 +112,7 @@ impl ManagedChild {
                 // Unix spawn installs only ProcessGroup; its inner is the native
                 // child. Our identity guard owns the group lifecycle instead.
                 let status = self.child.inner_mut().wait().await?;
-                self.group.after_reap().await?;
+                group.after_reap().await?;
                 Ok(status)
             })
             .await
@@ -163,9 +169,11 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
         )
     })?;
     Ok(ManagedChild {
-        // No wait has been polled on this freshly spawned child, so its ID exists.
+        // Retain any identity error in the child: returning a spawn error after
+        // launch would bypass the caller's unsafe-until-supervised protection.
+        // wait/cancel report it and Drop cannot signal an unconfirmed identity.
         #[cfg(unix)]
-        group: unix::Group::new(child.id().expect("freshly spawned child has an ID")),
+        group: unix::Group::new(child.id()),
         child,
         #[cfg(not(unix))]
         reaped: false,
@@ -173,7 +181,11 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
 }
 pub fn cancel(child: &mut ManagedChild) -> std::io::Result<()> {
     #[cfg(unix)]
-    return child.group.terminate();
+    return child
+        .group
+        .as_mut()
+        .map_err(|error| std::io::Error::new(error.kind(), error.to_string()))?
+        .terminate();
     #[cfg(not(unix))]
     child.child.start_kill()
 }
