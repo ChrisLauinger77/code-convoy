@@ -88,6 +88,23 @@ impl Schedule {
                     .map(|((run, _), _)| QueueReason::Repository(*run))
             })
     }
+    /// Extend the admitted lease before Git creates the reserved checkout. The
+    /// source/common identity still permits independent isolated attempts, while
+    /// the actual checkout now excludes newly registered nested repositories.
+    pub fn bind_worktree(&mut self, key: Key, path: PathBuf) -> bool {
+        let Some(mut lease) = self.active.get(&key).cloned() else {
+            return false;
+        };
+        if lease.mode != ExecutionMode::IsolatedWorktree || lease.worktree.is_some() {
+            return false;
+        }
+        lease.worktree = Some(path);
+        if self.repository_wait(&lease).is_some() {
+            return false;
+        }
+        self.active.insert(key, lease);
+        true
+    }
     pub fn begin_maintenance(&mut self, id: u64, key: Key, lease: Lease, cleanup: bool) -> bool {
         if self.maintenance.values().any(|p| lease.conflicts(p))
             || self.quarantined.iter().any(|(_, p)| lease.conflicts(p))
@@ -291,6 +308,50 @@ mod tests {
             s.waiting()
                 .contains(&((3, 0), QueueReason::CleanupFailed(1)))
         );
+        assert_eq!(s.next(), None);
+    }
+
+    #[test]
+    fn reserved_checkouts_recheck_conflicts_and_remain_protected_after_unsafe_exit() {
+        let mut s = Schedule::new(4);
+        let isolated = Lease {
+            path: "/source".into(),
+            worktree: None,
+            common_dir: Some("/source/.git".into()),
+            mode: ExecutionMode::IsolatedWorktree,
+        };
+        s.insert(1, 1, [isolated.clone()].into_iter());
+        s.insert(2, 1, [isolated].into_iter());
+        add(&mut s, 3, 1, &["/occupied"]);
+        assert_eq!(s.next(), Some((1, 0)));
+        assert_eq!(s.next(), Some((2, 0)));
+        assert_eq!(s.next(), Some((3, 0)));
+        assert!(!s.bind_worktree((1, 0), "/occupied/tree".into()));
+        assert!(!s.bind_worktree((3, 0), "/direct-job".into()));
+        assert!(!s.bind_worktree((4, 0), "/missing-job".into()));
+        assert!(s.bind_worktree((1, 0), "/retained/one".into()));
+        assert!(s.bind_worktree((2, 0), "/retained/two".into()));
+        assert!(!s.bind_worktree((1, 0), "/replacement".into()));
+        let nested = Lease {
+            path: "/retained/one/nested".into(),
+            worktree: None,
+            common_dir: Some("/retained/one/nested/.git".into()),
+            mode: ExecutionMode::IsolatedWorktree,
+        };
+        s.insert(4, 1, [nested.clone()].into_iter());
+        assert_eq!(s.next(), None);
+        assert!(s.waiting().contains(&((4, 0), QueueReason::Repository(1))));
+        let exclusive = Lease {
+            mode: ExecutionMode::Direct,
+            ..nested
+        };
+        assert!(!s.begin_maintenance(1, (4, 0), exclusive.clone(), true));
+        s.finish((1, 0), false);
+        assert!(
+            s.waiting()
+                .contains(&((4, 0), QueueReason::CleanupFailed(1)))
+        );
+        assert!(!s.begin_maintenance(2, (4, 0), exclusive, true));
         assert_eq!(s.next(), None);
     }
 

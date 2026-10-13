@@ -153,7 +153,7 @@ impl AgentBackend for OpenCode {
         spec.remove_env = std::env::vars_os()
             .filter_map(|(key, _)| {
                 key.to_str()
-                    .filter(|k| k.starts_with("GIT_"))
+                    .filter(|k| crate::process::git_environment_override(k, cfg!(windows)))
                     .map(str::to_owned)
             })
             .collect();

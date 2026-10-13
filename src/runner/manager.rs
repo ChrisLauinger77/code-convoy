@@ -36,6 +36,11 @@ pub(super) struct Convoy {
     remaining: usize,
 }
 pub(super) enum Command {
+    BindWorktree {
+        key: Key,
+        path: std::path::PathBuf,
+        reply: tokio::sync::oneshot::Sender<Result<()>>,
+    },
     Acquire {
         key: Key,
         lease: Lease,
@@ -96,6 +101,7 @@ impl RunManager {
         let history_pins = Arc::new(std::sync::Mutex::new(BTreeMap::new()));
         let join = tokio::spawn(manage(
             rx,
+            commands.clone(),
             events,
             global_limit.clamp(1, MAX_CONCURRENCY),
             stopping.clone(),
@@ -257,6 +263,20 @@ fn command(
     operations: &mut Operations,
 ) {
     match command {
+        Command::BindWorktree { key, path, reply } => {
+            let result = (|| {
+                anyhow::ensure!(
+                    !*closing,
+                    "The application is closing; worktree preparation stopped."
+                );
+                anyhow::ensure!(
+                    schedule.bind_worktree(key, path),
+                    "Cannot protect the reserved worktree from overlapping execution; preparation stopped."
+                );
+                Ok(())
+            })();
+            let _ = reply.send(result);
+        }
         Command::Acquire {
             key,
             lease,
@@ -377,6 +397,7 @@ async fn finish(
 }
 async fn manage(
     mut commands: mpsc::UnboundedReceiver<Command>,
+    control: mpsc::UnboundedSender<Command>,
     events: mpsc::Sender<Event>,
     limit: usize,
     stopping: Arc<AtomicBool>,
@@ -457,6 +478,9 @@ async fn manage(
                 continue;
             }
             let tx = events.clone();
+            let lifecycle = LifecycleClient {
+                commands: control.clone(),
+            };
             let worker_stopping = stopping.clone();
             let storage = storage.clone();
             let worktree_base = convoy.worktree_base.clone();
@@ -483,6 +507,7 @@ async fn manage(
                     &worker_stopping,
                     &worker_safe,
                     &tx,
+                    &lifecycle,
                     storage,
                     worktree_base,
                     admin,

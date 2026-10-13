@@ -98,14 +98,12 @@ impl Command {
 fn repository_environment_override(key: &str, windows: bool) -> bool {
     // Windows environment lookup ignores ASCII case. Keep the original key
     // spelling in remove_env so every inherited override is removed explicitly.
-    if windows {
+    let pwd = if windows {
         key.eq_ignore_ascii_case("PWD")
-            || key
-                .get(..4)
-                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("GIT_"))
     } else {
-        key == "PWD" || key.starts_with("GIT_")
-    }
+        key == "PWD"
+    };
+    pwd || crate::process::git_environment_override(key, windows)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

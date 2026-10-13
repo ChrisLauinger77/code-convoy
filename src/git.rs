@@ -56,7 +56,7 @@ pub(crate) fn command(path: &Path, args: &[&str]) -> CommandSpec {
     spec.remove_env = std::env::vars_os()
         .filter_map(|(key, _)| {
             let key = key.to_str()?;
-            key.starts_with("GIT_").then(|| key.to_owned())
+            crate::process::git_environment_override(key, cfg!(windows)).then(|| key.to_owned())
         })
         .collect();
     spec.env = vec![
@@ -425,6 +425,77 @@ pub async fn diff_job(job: &crate::domain::Job) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn git_and_agent_commands_remove_inherited_repository_overrides() {
+        const CHILD: &str = "CODECONVOY_GIT_ENV_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            // A subprocess avoids mutating the parallel test runner's environment.
+            let status =
+                std::process::Command::new(std::env::current_exe().expect("test executable"))
+                    .args([
+                        "--exact",
+                        "git::tests::git_and_agent_commands_remove_inherited_repository_overrides",
+                    ])
+                    .env(CHILD, "1")
+                    .env("GIT_INDEX_FILE", "synthetic index")
+                    .env("Git_Dir", "synthetic git directory")
+                    .env("gIt_WoRk_TrEe", "synthetic working tree")
+                    .env("CODECONVOY_UNRELATED_ENV_TEST", "preserve")
+                    .status()
+                    .expect("start isolated environment test");
+            assert!(status.success());
+            return;
+        }
+        let repository = crate::domain::Repository {
+            path: Path::new(".").to_owned(),
+            name: "selected".into(),
+        };
+        let mut specs = vec![("Git".to_owned(), command(&repository.path, &["status"]))];
+        for agent in [
+            crate::domain::AgentId::Codex,
+            crate::domain::AgentId::Copilot,
+            crate::domain::AgentId::OpenCode,
+            crate::domain::AgentId::Claude,
+        ] {
+            let task = crate::domain::TaskConfig {
+                agent,
+                prompt: "fixture task".into(),
+                ..Default::default()
+            };
+            let backend = crate::agents::backend(agent).expect("built-in backend");
+            specs.push((
+                agent.label().to_owned(),
+                backend.build(&task, &repository).expect("agent command"),
+            ));
+        }
+        for (label, spec) in specs {
+            for (injected, removed) in [
+                ("GIT_INDEX_FILE", true),
+                ("Git_Dir", cfg!(windows)),
+                ("gIt_WoRk_TrEe", cfg!(windows)),
+            ] {
+                let key = std::env::vars_os()
+                    .filter_map(|(key, _)| key.into_string().ok())
+                    .find(|key| {
+                        if cfg!(windows) {
+                            key.eq_ignore_ascii_case(injected)
+                        } else {
+                            key == injected
+                        }
+                    })
+                    .expect("injected environment key");
+                assert_eq!(spec.remove_env.contains(&key), removed, "{label}: {key}");
+            }
+            assert!(
+                !spec
+                    .remove_env
+                    .iter()
+                    .any(|k| k == "CODECONVOY_UNRELATED_ENV_TEST"),
+                "{label}"
+            );
+        }
+    }
 
     #[cfg(windows)]
     #[test]

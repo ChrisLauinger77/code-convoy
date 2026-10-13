@@ -59,14 +59,217 @@ struct Harness {
     rx: mpsc::Receiver<Event>,
     events: Vec<Event>,
 }
+
+/// Starts a parent and descendant without waiting for stdin, so the test can
+/// observe live processes while the runner is blocked publishing Started.
+struct ProcessTreeFixture(std::path::PathBuf);
+impl agents::AgentBackend for ProcessTreeFixture {
+    fn id(&self) -> AgentId {
+        AgentId::Codex
+    }
+    fn options(&self) -> &'static [agents::OptionSpec] {
+        agents::codex::Codex.options()
+    }
+    fn detection(
+        &self,
+        options: &AgentOptions,
+        directory: &Path,
+    ) -> anyhow::Result<codeconvoy::process::CommandSpec> {
+        agents::codex::Codex.detection(options, directory)
+    }
+    fn check_detection(&self, help: &str) -> anyhow::Result<()> {
+        agents::codex::Codex.check_detection(help)
+    }
+    fn build(
+        &self,
+        _: &TaskConfig,
+        repository: &Repository,
+    ) -> anyhow::Result<codeconvoy::process::CommandSpec> {
+        let mut spec = codeconvoy::process::CommandSpec::new(
+            env!("CARGO_BIN_EXE_codeconvoy-test-agent"),
+            &repository.path,
+        )
+        .args(&["validation-gate"]);
+        spec.args.push(self.0.as_os_str().to_owned());
+        Ok(spec)
+    }
+    fn output(&self) -> Box<dyn agents::AgentOutput> {
+        agents::codex::Codex.output()
+    }
+    fn execution_summary(&self, options: &AgentOptions) -> String {
+        agents::codex::Codex.execution_summary(options)
+    }
+}
+
+#[tokio::test]
+async fn cancellation_and_shutdown_stop_spawned_trees_before_draining_a_full_activity_queue() {
+    for shutdown in [false, true] {
+        let mut h = Harness::with_event_capacity(1, 1);
+        let source = repository(h.root.path(), "source").await;
+        // One slot lets Started fill the queue before the next Activity message.
+        let prepared = runner::prepare(
+            h.task(1, AgentId::Codex, false, false),
+            vec![source.clone()],
+        )
+        .await
+        .unwrap();
+        let control = h.root.path().join("control");
+        h.manager
+            .start(
+                1,
+                prepared,
+                std::sync::Arc::new(ProcessTreeFixture(control.clone())),
+            )
+            .unwrap();
+        h.until(|events| {
+            events
+                .iter()
+                .any(|e| matches!(e, Event::Output {text, ..} if text.contains("Worktree ready")))
+        })
+        .await;
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !control.join("child.ready").exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("fixture process tree did not start");
+        let locks = ["parent", "child"].map(|name| {
+            let lock = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(control.join(format!("{name}.lock")))
+                .unwrap();
+            assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+            lock
+        });
+        if shutdown {
+            h.manager.shutdown();
+            h.manager.shutdown();
+        } else {
+            h.manager.cancel_run(1);
+            h.manager.cancel_run(1);
+        }
+        let stopped_without_drain = tokio::time::timeout(Duration::from_secs(5), async {
+            for lock in &locks {
+                while fs2::FileExt::try_lock_exclusive(lock).is_err() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+        })
+        .await
+        .is_ok();
+        // Drain and await cleanup even when checking the unfixed regression.
+        h.until(|events| Harness::finished(events, 1, JobStatus::Cancelled))
+            .await;
+        assert_eq!(
+            h.events
+                .iter()
+                .filter(|e| matches!(e, Event::Finished { run: 1, .. }))
+                .count(),
+            1
+        );
+        assert!(h.metadata(1).path.exists());
+        assert_eq!(
+            fs::read_to_string(source.path.join("tracked.txt")).unwrap(),
+            "committed base\n"
+        );
+        h.close().await;
+        assert!(
+            stopped_without_drain,
+            "UI backpressure prevented process-tree cancellation (shutdown={shutdown})"
+        );
+    }
+}
+
+#[tokio::test]
+async fn active_isolated_checkout_blocks_a_new_nested_repository_until_cancellation_finishes() {
+    let mut h = Harness::new(2);
+    let source = repository(h.root.path(), "source").await;
+    h.start(
+        1,
+        h.task(1, AgentId::Codex, false, false),
+        vec![source.clone()],
+    )
+    .await;
+    h.until(|events| Harness::ready(events, 1)).await;
+    let owned = h.metadata(1);
+    let nested = repository(&owned.path, "nested").await;
+    let mut task = h.task(2, AgentId::Codex, false, false);
+    task.execution_mode = ExecutionMode::Direct;
+    h.start(2, task, vec![nested.clone()]).await;
+    h.until(|events| {
+        Harness::ready(events, 2)
+            || events.iter().any(|event| {
+                matches!(
+                    event,
+                    Event::Queued {
+                        run: 2,
+                        reason: QueueReason::Repository(1),
+                        ..
+                    }
+                )
+            })
+    })
+    .await;
+    let blocked = !h
+        .events
+        .iter()
+        .any(|e| matches!(e, Event::Started { run: 2, .. }));
+    // Always stop fixtures before asserting a failure in the regression.
+    if !blocked {
+        h.manager.shutdown();
+        h.close().await;
+        panic!("nested repository ran inside an active isolated checkout");
+    }
+    let peer = repository(h.root.path(), "unrelated").await;
+    let mut task = h.task(3, AgentId::Codex, false, false);
+    task.execution_mode = ExecutionMode::Direct;
+    h.start(3, task, vec![peer]).await;
+    h.until(|events| Harness::ready(events, 3)).await;
+    h.manager.cancel_run(1);
+    h.manager.cancel_run(1);
+    h.until(|events| {
+        Harness::finished(events, 1, JobStatus::Cancelled) && Harness::ready(events, 2)
+    })
+    .await;
+    assert!(h.manager.is_active(3));
+    h.release(2, "nested");
+    h.release(3, "unrelated");
+    h.until(|events| {
+        Harness::finished(events, 2, JobStatus::Succeeded)
+            && Harness::finished(events, 3, JobStatus::Succeeded)
+    })
+    .await;
+    assert_eq!(
+        h.events
+            .iter()
+            .filter(|e| matches!(e, Event::Finished { run: 1, .. }))
+            .count(),
+        1
+    );
+    assert!(owned.path.exists());
+    assert_eq!(
+        fs::read_to_string(source.path.join("tracked.txt")).unwrap(),
+        "committed base\n"
+    );
+    assert_eq!(
+        fs::read_to_string(nested.path.join("tracked.txt")).unwrap(),
+        "committed base\n"
+    );
+    h.close().await;
+}
 impl Harness {
     fn new(limit: usize) -> Self {
+        Self::with_event_capacity(limit, 256)
+    }
+    fn with_event_capacity(limit: usize, capacity: usize) -> Self {
         let root = tempfile::Builder::new()
             .prefix("convoy ü worktrees ")
             .tempdir()
             .unwrap();
         fs::create_dir(root.path().join("control")).unwrap();
-        let (tx, rx) = mpsc::channel(256);
+        let (tx, rx) = mpsc::channel(capacity);
         let manager = RunManager::with_worktree_directory(
             limit,
             tx,

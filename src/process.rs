@@ -12,6 +12,17 @@ use tokio::{
     sync::watch,
 };
 
+/// Windows environment names ignore ASCII case. Repository overrides must be
+/// removed with the same rule before Git or an agent enters a selected checkout.
+pub(crate) fn git_environment_override(key: &str, windows: bool) -> bool {
+    if windows {
+        key.get(..4)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("GIT_"))
+    } else {
+        key.starts_with("GIT_")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CommandSpec {
     pub program: OsString,

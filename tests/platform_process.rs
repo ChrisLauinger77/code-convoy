@@ -111,3 +111,81 @@ async fn cancellation_and_future_drop_stop_descendants_in_unicode_paths() {
         assert!(!control.join("filter.survived").exists());
     }
 }
+
+#[tokio::test]
+async fn cancellation_after_leader_failure_stops_descendants_but_preserves_a_peer() {
+    let temp = executable::directory();
+    let executable = executable(temp.path());
+    let control = temp.path().join("failed tree");
+    let peer_control = temp.path().join("independent tree");
+    fs::create_dir(&control).unwrap();
+    fs::create_dir(&peer_control).unwrap();
+    let start = |mode, directory: &Path, token: Cancellation| {
+        let mut spec = CommandSpec::new(&executable, temp.path()).args(&[mode]);
+        spec.args.push(directory.as_os_str().to_owned());
+        tokio::spawn(async move { process::capture_cancellable(spec, 4096, &token).await })
+    };
+    let cancellation = Cancellation::default();
+    let failed = start("validation-crash-tree", &control, cancellation.clone());
+    let peer_token = Cancellation::default();
+    let peer = start("validation-gate", &peer_control, peer_token.clone());
+    let ready = tokio::time::timeout(Duration::from_secs(10), async {
+        for path in [&control, &peer_control] {
+            while !path.join("child.ready").exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+        // This lock is released by OS process exit, proving that cancellation
+        // below runs after the leader has died, not merely after child startup.
+        let parent = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(control.join("parent.lock"))
+            .unwrap();
+        while fs2::FileExt::try_lock_exclusive(&parent).is_err() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    if ready.is_err() {
+        cancellation.cancel();
+        peer_token.cancel();
+        let _ = failed.await;
+        let _ = peer.await;
+        panic!("fixture leader did not exit after starting its descendant");
+    }
+    let child_lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(control.join("child.lock"))
+        .unwrap();
+    let peer_lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(peer_control.join("child.lock"))
+        .unwrap();
+    assert!(fs2::FileExt::try_lock_exclusive(&child_lock).is_err());
+    cancellation.cancel();
+    cancellation.cancel();
+    let result = failed.await.unwrap();
+    let stopped = tokio::time::timeout(Duration::from_secs(5), async {
+        while fs2::FileExt::try_lock_exclusive(&child_lock).is_err() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    let peer_alive = !peer.is_finished() && fs2::FileExt::try_lock_exclusive(&peer_lock).is_err();
+    fs::write(peer_control.join("release"), "finish peer").unwrap();
+    // Also release the failed fixture on a regression, without any PID-based kill.
+    fs::write(control.join("release"), "finish descendant").unwrap();
+    let peer_result = peer.await.unwrap().unwrap();
+    assert!(matches!(result, Err(error) if error.to_string().contains("cancelled")));
+    assert!(
+        stopped.is_ok(),
+        "descendant survived cancellation after leader failure"
+    );
+    assert!(
+        peer_alive && peer_result.status.success(),
+        "cancellation affected an unrelated process tree"
+    );
+}

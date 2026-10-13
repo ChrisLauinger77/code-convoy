@@ -346,7 +346,11 @@ The scheduler distinguishes repository access from checkout execution. Two
 isolated jobs sharing a common directory can execute simultaneously in independently
 reserved paths. A Direct lease is exclusive against both modes for that common
 Git identity, including a separately registered linked worktree. Different Git
-repositories at genuinely nested source paths still conflict. This provides an
+repositories at genuinely nested source paths still conflict. Before creation,
+the worker binds its reserved checkout path to the admitted lease through the
+manager and rechecks conflicts. That path remains protected through execution,
+inspection and any unsafe-cleanup quarantine, including against newly registered
+nested repositories. This provides an
 exclusive protection boundary for a future Apply operation, without implementing
 Apply or a new scheduling system. External Git applications and agent-initiated
 shared-administration commands are outside CodeConvoy's coordination.
@@ -358,6 +362,9 @@ capability checks and queued-job revalidation still run before agent spawn; file
 are never copied into the worktree. Activity/Raw output stay per job.
 
 Preparation and agent processes use the shared process-tree cancellation machinery.
+After an agent has spawned, cancellation can bypass a blocked startup Activity
+message so the shared executor can terminate its process tree without waiting
+for the UI event queue to drain.
 Git checkout has a bounded five-minute timeout and awaits cancellation/cleanup;
 ordinary inspection retains its 20-second command timeout. Every preparation
 inspection receives the job cancellation token and awaits subprocess cleanup. The

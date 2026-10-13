@@ -62,6 +62,19 @@ impl Drop for AdministrationHealth<'_> {
 }
 
 impl LifecycleClient {
+    pub(super) async fn bind_worktree(&self, metadata: &WorktreeMetadata) -> Result<()> {
+        let (reply, response) = oneshot::channel();
+        self.commands
+            .send(Command::BindWorktree {
+                key: (metadata.run, metadata.job),
+                path: metadata.path.clone(),
+                reply,
+            })
+            .context("The run manager stopped before worktree creation.")?;
+        response
+            .await
+            .context("Worktree lease registration was interrupted.")?
+    }
     async fn permit(&self, metadata: &WorktreeMetadata, cleanup: bool) -> Result<Permit> {
         self.acquire(
             (metadata.run, metadata.job),

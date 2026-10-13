@@ -2,6 +2,8 @@
 
 This is the historical Part 3.1A record. Part 3.1B is now covered by the
 [recovery and cleanup validation record](worktree-recovery-validation.md).
+The [1.0 readiness PR 2 audit](#10-readiness-pr-2-audit-2026-10-13) below records
+the current execution audit and its unresolved release blocker.
 
 Validated on 2026-10-07 on macOS, on `codex/v0.3-worktree-core`.
 Part 3.1A-1 was audited and extended in place. No merge, PR, release, version bump,
@@ -151,3 +153,109 @@ escaping agent subprocesses remain outside the existing coordination boundary.
 
 Apply/Discard, convoy-wide Review, Retry and the other later-part features remain
 outside this work; no such actions were added.
+
+## 1.0 readiness PR 2 audit (2026-10-13)
+
+Audited from merged PR 1 (`67ca0e2`) on Linux using disposable repositories and
+fixture CLIs. This is execution/worktree stabilization only. The package remains
+0.10.0; no release was prepared or published. The fixes are independently
+reviewable, but **the Unix descendant-exit issue below blocks a claim that PR 2's
+full lifecycle acceptance criteria, or 1.0 release readiness, have been met**.
+
+### Execution paths and existing regression coverage
+
+| Path | Checks and evidence |
+| --- | --- |
+| Convoy snapshots and selection (`domain`, `library`, `runner`) | `tests/core.rs`, `tests/library.rs`, `tests/workflows.rs`, `tests/convoys.rs`: overlapping selections, nested registration rejection, immutable task/settings/context, multiple convoys, deterministic admission, global/per-convoy limits, blocked jobs using no slot |
+| Agent execution (`agents`, `process`, `runner`) | `tests/execution.rs`, `tests/convoys.rs`, `tests/platform_process.rs`: all four backend invocations, literal arguments/stdin/cwd, missing executables and startup/build/protocol failure, bounded output, cancellation scopes, repeated shutdown, descendant termination and peer isolation |
+| Creation and location (`worktrees`, `worktrees/location`, manager leases) | `tests/worktrees.rs`, `tests/worktree_locations.rs`: reviewed committed base, dirty-source exclusion, concurrent unique attempts, missing repositories, invalid/unwritable storage, symlinks, manifest/binding write failure, retained partial state, custom and previous base directories, no Direct fallback |
+| Git observations (`git`, `worktrees`, `review`) | `tests/core.rs`, `tests/repository_health.rs`, `tests/worktrees.rs`, `tests/worktree_recovery.rs`: dirty/index/untracked/conflicted changes, detached/unborn HEAD, missing Git state, index alternatives, fixed-base diffs, agent outcome independent of modifications, immutable real indexes |
+| Validation (`validation`, lifecycle permits) | `tests/validation.rs`, `tests/validation_presets.rs`: original retained directory with no source fallback, explicit manual start, historical identity mismatch, unavailable executable/directory, process cancellation and shutdown, independent agent/validation outcomes, exclusion against cleanup and active work |
+| Ordinary manual cleanup (`storage/management`, Store transaction, `worktrees/cleanup`) | `tests/support/managed_cleanup.rs`, `worktrees/cleanup_tests.rs`: exact ownership/backlinks, changed preview, late edits, dirty/staged/untracked/ignored files, unknown/user worktrees, active jobs/validation, exclusive lease, journal/save failures, bulk continuation and deduplication, no force removal or recursive fallback |
+| Recovery and explicit result resolution (`persistence/results`, `worktrees/recovery`, `worktrees/apply`) | `tests/worktree_recovery.rs`: restart identity reconciliation, metadata pinned through history removal, missing/replaced directories, intent/outcome persistence, uncertain writes preserved, Apply/Discard ownership and concurrency guards |
+
+Ordinary cleanup remains separate from the existing explicitly confirmed Discard
+operation. Discard intentionally disposes of a reviewed owned result and uses its
+existing guarded removal primitive; ordinary cleanup cannot route around its
+cleanliness checks through that operation. No cleanup policy was relaxed.
+
+### Safety fixes
+
+1. **Protect the actual running checkout.** Previously an isolated job's scheduler
+   lease tracked its source/common Git directory but omitted the created checkout.
+   Registering a new real nested repository there allowed a Direct job to run
+   concurrently. A real-Git regression failed before the fix. The worker now binds
+   the reserved path through the manager before Git creation, rechecks conflicts,
+   and retains that path through completion or unsafe-cleanup quarantine. Separate
+   isolated attempts of the same source still run concurrently.
+2. **Cancellation through a full Activity queue.** An agent could already be alive
+   when the runner blocked on its isolated-startup Activity message, before entering
+   the process executor. The regression failed with the parent and descendant
+   retaining their OS locks until the UI queue drained. That send now observes
+   cancellation, allowing the executor to terminate the tree first. Repeated Stop
+   and repeated shutdown both pass with the UI queue deliberately left full.
+3. **Respect Windows environment-name matching.** Git and all four agent launchers
+   previously stripped only uppercase `GIT_*` names, unlike validation's existing
+   case-aware rule. They now share the matching rule; inherited `Git_Dir` or
+   `gIt_WoRk_TrEe` cannot bypass stripping on Windows. Unix matching remains case
+   sensitive, original names are removed, and unrelated environment is preserved.
+   Shared matching tests cover both rules; actual Windows execution remains for
+   platform verification.
+
+New tests also cover late lease conflicts, quarantine protecting the actual
+checkout, continued admission of an unrelated job, one completion after repeated
+cancellation, and cancellation after a failed leader leaves a descendant holding
+its inherited output pipes. That last test verifies the descendant's OS lock is
+released while an independent process tree stays alive and finishes normally.
+
+### Unresolved Unix process-exit blocker
+
+A disposable diagnostic reproduced a separate existing gap in `process::execute`:
+a launcher spawned the fixture's `validation-child` with stdin, stdout and stderr
+redirected to the null device, waited for `child.ready`, then exited with code 7.
+The descendant stayed in the same process group. `process::capture` returned code
+7 while the descendant still held `child.lock`. The diagnostic explicitly wrote
+the fixture's release marker and confirmed the lock was released afterward.
+
+The current `process-wrap` 10.0.1 Unix group wait reaps the direct child and uses
+`waitpid` for children that the application can reap. A reparented grandchild is
+not necessarily one of them. Once output pipes are closed, CodeConvoy can treat
+the execution as finished and release its repository lease despite a surviving
+writer. A later Stop no longer has an active job to cancel. This is more than the
+known limitation of processes deliberately escaping their process group.
+
+This PR does not claim that case is safe. Blindly signalling a cached process-group
+ID after reaping the leader could target a reused ID, violating the unrelated-
+process safety requirement. A fix needs a reviewed Unix waiting/reaping strategy
+that preserves process identity until descendant cleanup is confirmed, with Linux
+and macOS coverage. That process-supervision change is deferred under this task's
+restriction on architectural rewrites, and must be resolved within the maintainer's
+release plan before declaring the lifecycle acceptance criteria complete. No extra
+PR or automatic follow-up was created.
+
+### Validation and remaining boundaries
+
+On Linux 7.2.9 with Rust 1.96.1:
+
+- `cargo fmt --check` — passed.
+- `cargo clippy --all-targets --all-features -- -D warnings` — passed.
+- `cargo test --all-features` — 581 top-level tests passed; 9 existing optional
+  tests ignored. Subprocess environment probes also passed.
+- `cargo build --release` — passed.
+- `python3 -m unittest discover -s packaging -p 'test_*.py'` — 23 passed.
+- `git diff --check` — passed.
+
+The new concurrency and backpressure regressions were first reproduced failing,
+then passed after fixes. These passing checks do not cover or resolve the
+closed-output descendant blocker demonstrated by the separate diagnostic.
+All destructive fixture operations target disposable directories. Tests use
+`TMPDIR=/var/tmp` outside the desktop sandbox because its synthetic `/tmp/.git`
+marker causes the deliberate nested-storage rejection checks to reject fixtures.
+
+No authenticated provider task, native GUI session, macOS/Windows run, or packaged
+application verification was performed in this PR. Existing optional tests remain
+ignored. Ordinary cleanup is deliberately unavailable on Windows until stable
+filesystem-identity proof exists. External Git programs remain outside manager
+coordination; worktrees are isolation, not a security sandbox. Unconfirmed cleanup
+continues to quarantine ownership/capacity rather than admitting conflicting work.
+PR 3 has not begun.
