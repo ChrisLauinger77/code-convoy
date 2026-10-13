@@ -101,7 +101,11 @@ impl ManagedChild {
                 .await
                 .context("Cannot supervise the Unix process group.")?;
             tokio::time::timeout_at(deadline, async {
-                let status = self.child.wait().await?;
+                // Reap only our direct child. The wrapper's group-wide waitpid
+                // could reap an unrelated child if the old PGID were reused.
+                // Unix spawn installs only ProcessGroup; its inner is the native
+                // child. Our identity guard owns the group lifecycle instead.
+                let status = self.child.inner_mut().wait().await?;
                 self.group.after_reap().await?;
                 Ok(status)
             })

@@ -213,7 +213,9 @@ are terminated even if they redirected/closed every standard stream. The leader'
 original exit status is preserved.
 
 Before the reaping wait is polled, the guard permanently disables destructive
-signals. Completion then requires a read-only `kill(-pgid, 0)` probe to return
+signals. Only the owned direct child is reaped; the library's group-wide wait is
+bypassed so a reused group number cannot select an unrelated child for reaping.
+Completion then requires a read-only `kill(-pgid, 0)` probe to return
 `ESRCH`. A reused ID can cause a conservative cleanup timeout, but cannot receive
 a late cancellation or Drop signal. Darwin may report `EPERM` for a zombie-only
 group; that is never evidence of absence. Only a subsequent absence probe after

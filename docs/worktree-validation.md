@@ -229,7 +229,9 @@ guard observes leader exit with `waitid(WNOWAIT)` while keeping the child unreap
 then terminates remaining group members before allowing the reaping wait. Every
 destructive signal, including Drop and repeated cancellation, requires the owned
 unreaped identity. Before reaping starts, signalling is permanently disarmed;
-only signal-zero probes remain. Completion requires group absence (`ESRCH`), never
+only the owned direct child is reaped, bypassing the library's group-wide wait
+which could select another child after numeric-ID reuse. Only signal-zero group
+probes remain. Completion requires group absence (`ESRCH`), never
 just the leader's exit, pipe EOF or successful delivery of a kill signal. A reused
 group ID can cause conservative refusal/timeout, but is never sent a late kill.
 The CLI's original exit code survives this cleanup, including success or failure.
