@@ -125,18 +125,18 @@ fn settings_compatibility_and_malformed_policies_fail_closed() {
         let value = format!(
             r#"{{"next_run":42,"history_retention":{{"automatic":true,"max_entries":{bad},"max_age_days":30}}}}"#
         );
-        let state: AppState = serde_json::from_str(&value).unwrap();
-        assert_eq!(state.next_run, 42);
-        assert_eq!(state.history_retention, RetentionPolicy::default());
+        let error = serde_json::from_str::<AppState>(&value).unwrap_err();
+        assert!(error.to_string().contains("history_retention"));
     }
     for value in [
         r#"null"#,
         r#"{"automatic":"yes"}"#,
         r#"{"automatic":true,"max_age_days":0}"#,
     ] {
-        let state: AppState =
-            serde_json::from_str(&format!(r#"{{"history_retention":{value}}}"#)).unwrap();
-        assert_eq!(state.history_retention, RetentionPolicy::default());
+        assert!(
+            serde_json::from_str::<AppState>(&format!(r#"{{"history_retention":{value}}}"#))
+                .is_err()
+        );
     }
     for count in [
         "0",

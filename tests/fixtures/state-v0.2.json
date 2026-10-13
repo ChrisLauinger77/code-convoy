@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "next_run": 43,
+  "repositories": [{"name": "Grüße repo", "path": "/fixture/Grüße repo"}],
+  "draft": {
+    "prompt": "Continue the review",
+    "agent": "claude",
+    "options": {"model": "review-model", "permissions": "default"},
+    "concurrency": 3,
+    "attachments": [
+      {
+        "path": "/fixture/context/requirements.md",
+        "filename": "requirements.md",
+        "kind": "markdown",
+        "size": 24,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "agent_options": {
+    "codex": {"model": "codex-model", "sandbox": "read-only"},
+    "copilot": {"model": "copilot-model", "permissions": "existing"},
+    "opencode": {"model": "provider/model", "variant": "high"},
+    "claude": {"model": "review-model", "permissions": "default"}
+  },
+  "global_concurrency": 6,
+  "runs": [
+    {
+      "id": 41,
+      "created_at": 1700000000,
+      "task": {
+        "prompt": "Historical task",
+        "agent": "copilot",
+        "options": {"model": "historical-model"},
+        "concurrency": 2,
+        "attachments": [
+          {
+            "path": "/fixture/context/requirements.md",
+            "filename": "requirements.md",
+            "kind": "markdown",
+            "size": 24,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "jobs": [
+        {
+          "repository": {"name": "Grüße repo", "path": "/fixture/Grüße repo"},
+          "status": "succeeded",
+          "started_at": 1700000001,
+          "finished_at": 1700000010,
+          "exit_code": 0,
+          "before": {"branch": "main", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "changed": 1},
+          "interrupted": false
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "created_at": 1700000000,
+      "task": {
+        "prompt": "Historical task",
+        "agent": "copilot",
+        "options": {"model": "historical-model"},
+        "concurrency": 2,
+        "attachments": [
+          {
+            "path": "/fixture/context/requirements.md",
+            "filename": "requirements.md",
+            "kind": "markdown",
+            "size": 24,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "jobs": [
+        {
+          "repository": {"name": "Grüße repo", "path": "/fixture/Grüße repo"},
+          "status": "running",
+          "started_at": 1700000001,
+          "finished_at": null,
+          "exit_code": null,
+          "before": {"branch": "main", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "changed": 1},
+          "interrupted": false
+        }
+      ]
+    }
+  ],
+  "groups": [{"name": "Maintenance ü", "repositories": ["/fixture/Grüße repo", "/fixture/missing repository"]}],
+  "templates": [{"name": "Release review", "prompt": "Inspect packaging; preserve user changes."}]
+}

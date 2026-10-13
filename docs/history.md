@@ -122,9 +122,9 @@ Those explicit saves and the final exit save can still pause on slow storage.
 
 A missing state file starts an empty application. An empty file, invalid UTF-8,
 truncated JSON, missing core `version`/`next_run`/`runs` fields, invalid records,
-duplicate convoy IDs or unsupported future version is an error. Startup stops;
-the original file is left unchanged and that Store refuses further writes,
-including retention. Back up the file and use a compatible version or restore a
+malformed retention settings, duplicate convoy IDs or an unsupported future version
+is an error. Startup stops; the original file is left unchanged and that Store
+refuses further writes, including retention. Back up the file and use a compatible version or restore a
 known-good backup before restarting. Move the preserved file aside only if you
 intend to start fresh. Exports are reports, not backups or import files.
 
@@ -140,3 +140,39 @@ uncertain durability result; the previous disk contents cannot be promised then.
 Windows uses the existing tempfile platform replacement, not delete-then-rename;
 sharing violations can fail safely. Native Windows/macOS and power-loss testing
 remain release-candidate checks, not inferred from Linux tests.
+
+## Data-format compatibility
+
+The application version, internal state format and public export schema are
+independent. Preparing application version 1.0.0 does not require changing either
+the internal `state.json` `version: 1` or the public JSON export's
+`schema_version: 1`.
+
+Supported 0.x settings and retained history remain readable. New optional fields
+use documented defaults: for example, saves predating retention keep unlimited
+history with automatic retention disabled. Present but malformed retention settings
+are errors, not instructions to reset preferences. Unfinished jobs and validation
+recover as interrupted/cancelled; agents and validation commands never resume.
+Saved worktree observations require fresh ownership/Git verification.
+
+Internal JSON, sibling worktree ownership manifests, original-location bindings
+and cleanup journals are application-managed recovery data, not public extension
+interfaces. Their implementation may evolve with compatible loading or explicit
+migrations; their individual serialization details are not frozen for all 1.x
+versions. This readiness change needs no migration. Preserve the complete original
+application-data directory and retained worktree locations when making a backup.
+Copying `state.json` alone is insufficient to back up ownership evidence or results.
+
+Unknown additive fields in ordinary state objects are accepted but are not retained
+when the application saves again. Validation command objects reject unknown fields.
+Unknown enum values and unsupported state version numbers fail loading and disable
+saving. Downgrading after a newer application has saved data is not guaranteed safe;
+keep the original backup and use a compatible application. Do not treat arbitrary
+extra state fields as a supported way to extend CodeConvoy.
+
+The [public JSON history export schema](history-export.md#json-schema-1) is a
+separate, documented report contract. It is unchanged by this work. Use that schema
+for report consumers; internal state is not an export format, and exports cannot
+restore configuration, ownership or complete history. See the
+[stable-readiness persistence audit](history-reliability-validation.md#stable-readiness-pr-1--compatibility-and-data-integrity)
+for tested upgrade boundaries and limitations.

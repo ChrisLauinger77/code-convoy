@@ -23,11 +23,26 @@ impl RetentionPolicy {
     }
 }
 
-/// An invalid retention object fails closed without losing unrelated settings.
-/// In particular, a partially malformed policy must never authorize automatic deletion.
+/// Missing policies default at the AppState field, but malformed saved policies
+/// must fail the load. Silently defaulting would let the next save erase the
+/// original settings. Store's failed-load guard also prevents retention writes.
 pub fn deserialize_policy<'de, D: Deserializer<'de>>(d: D) -> Result<RetentionPolicy, D::Error> {
-    let value = serde_json::Value::deserialize(d)?;
-    Ok(serde_json::from_value(value).unwrap_or_default())
+    struct PolicyObject;
+    impl<'de> serde::de::Visitor<'de> for PolicyObject {
+        type Value = RetentionPolicy;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a history retention object")
+        }
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+            RetentionPolicy::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+        }
+    }
+    // Require an object rather than accepting an empty positional sequence as
+    // defaults, and retain duplicate-field errors instead of parsing via Value.
+    d.deserialize_map(PolicyObject)
+        .map_err(|error| serde::de::Error::custom(format!("Invalid history_retention: {error}")))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

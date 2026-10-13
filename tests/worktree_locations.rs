@@ -120,6 +120,102 @@ fn preference_roundtrips_and_old_state_keeps_default() {
 }
 
 #[tokio::test]
+async fn legacy_default_and_custom_ownership_survive_upgrade_without_rewriting_records() {
+    // Unix flock descriptors can be inherited briefly between a neighboring
+    // test's fork and exec. Isolate this immediate close/reopen check from those
+    // unrelated child launches, without retrying or weakening Store locking.
+    const CHILD: &str = "CODECONVOY_UPGRADE_OWNERSHIP_TEST";
+    if std::env::var_os(CHILD).is_none() {
+        let status = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "legacy_default_and_custom_ownership_survive_upgrade_without_rewriting_records",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        return;
+    }
+    for (fixture, custom_location) in [
+        (include_bytes!("fixtures/state-v0.3.json").as_slice(), false),
+        (include_bytes!("fixtures/state-v0.6.json").as_slice(), true),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let repo = repository(&root, "legacy repo 日本語").await;
+        let store = Store::open(&root.join("state")).unwrap();
+        let storage = store.directory().join("worktrees");
+        let custom = custom_location.then(|| root.join("original custom ü"));
+        let m = reserve(&storage, custom.as_deref(), &repo, 41).await;
+        worktrees::create(&m, &Cancellation::default(), &AtomicBool::new(true))
+            .await
+            .unwrap();
+        fs::write(m.path.join("tracked"), "retained legacy changes\n").unwrap();
+
+        let mut legacy: serde_json::Value = serde_json::from_slice(fixture).unwrap();
+        legacy["runs"].as_array_mut().unwrap().truncate(1);
+        legacy["repositories"] = serde_json::json!([repo]);
+        if let Some(base) = &custom {
+            legacy["worktree_base"] = serde_json::json!(base);
+        }
+        let job = &mut legacy["runs"][0]["jobs"][0];
+        job["repository"] = serde_json::json!(repo);
+        job["resolution"] = "Unresolved".into();
+        job.as_object_mut().unwrap().remove("resolved_at");
+        // Rebind only fixture paths and the Git commit. Keep the historical
+        // ownership keys and marker, rather than generating a current record.
+        let ownership = &mut job["worktree"];
+        ownership["repository"] = serde_json::json!(repo);
+        ownership["common_dir"] = serde_json::json!(m.common_dir);
+        ownership["path"] = serde_json::json!(m.path);
+        ownership["base_commit"] = serde_json::json!(m.base_commit);
+        assert_eq!(
+            serde_json::from_value::<WorktreeMetadata>(ownership.clone()).unwrap(),
+            m
+        );
+        let manifest = m.path.parent().unwrap().join("owner.json");
+        let owner_bytes = serde_json::to_vec_pretty(ownership).unwrap();
+        fs::write(&manifest, &owner_bytes).unwrap();
+        let binding = custom.as_ref().map(|_| record(&storage, &m));
+        if let Some(path) = &binding {
+            fs::write(path, &owner_bytes).unwrap();
+        }
+        let bytes = serde_json::to_vec(&legacy).unwrap();
+        fs::write(store.history_path(), &bytes).unwrap();
+        let mut loaded = store.load().unwrap();
+        assert_eq!(fs::read(store.history_path()).unwrap(), bytes);
+        assert!(!loaded.runs[0].jobs[0].result_checked);
+        // A later preference must not relocate or invalidate historical ownership.
+        loaded.worktree_base = Some(root.join("new preference"));
+        store.save(&loaded.persistence_snapshot()).unwrap();
+        drop(store);
+        let reopened = Store::open(&root.join("state")).unwrap();
+        let restored = reopened.load().unwrap();
+        let job = &restored.runs[0].jobs[0];
+        assert_eq!(job.worktree.as_ref(), Some(&m));
+        assert!(!job.result_checked);
+        let (tx, _rx) = tokio::sync::mpsc::channel(16);
+        let manager = RunManager::with_worktree_directory(1, tx, storage);
+        let report = manager.lifecycle().inspect(41, 0, job, false).await;
+        assert_eq!(report.availability, ResultAvailability::Available);
+        assert_eq!(fs::read(&manifest).unwrap(), owner_bytes);
+        if let Some(path) = binding {
+            assert_eq!(fs::read(path).unwrap(), owner_bytes);
+        }
+        assert_eq!(
+            fs::read_to_string(m.path.join("tracked")).unwrap(),
+            "retained legacy changes\n"
+        );
+        assert_eq!(
+            fs::read_to_string(repo.path.join("tracked")).unwrap(),
+            "base\n"
+        );
+    }
+}
+
+#[tokio::test]
 async fn default_and_missing_custom_base_resolve_without_relocating_anything() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
