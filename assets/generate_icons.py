@@ -18,6 +18,18 @@ for points in lines:
 for x, y in ((650, 300), (720, 512), (650, 724)):
     draw.ellipse(((x-52)*SCALE, (y-52)*SCALE, (x+52)*SCALE, (y+52)*SCALE),
                  fill="#ecf8f5")
+# Monochrome status-area glyph: same artwork, no tile, heavier strokes for 16-24 px.
+# Black on transparency is a macOS template image; other platforms recolor at runtime.
+tray = Image.new("RGBA", (1024 * SCALE, 1024 * SCALE))
+tray_draw = ImageDraw.Draw(tray)
+for points in lines:
+    tray_draw.line([(x*SCALE, y*SCALE) for x, y in points],
+                   fill="black", width=72*SCALE, joint="curve")
+for x, y in ((650, 300), (720, 512), (650, 724)):
+    tray_draw.ellipse(((x-72)*SCALE, (y-72)*SCALE, (x+72)*SCALE, (y+72)*SCALE),
+                      fill="black")
+tray.crop((176*SCALE, 192*SCALE, 816*SCALE, 832*SCALE)).resize(
+    (64, 64), Image.Resampling.LANCZOS).save(ROOT / "tray-glyph.png")
 for size in (32, 128, 256, 512, 1024):
     image.resize((size, size), Image.Resampling.LANCZOS).save(ROOT / f"codeconvoy-{size}.png")
 image.resize((256, 256), Image.Resampling.LANCZOS).save(

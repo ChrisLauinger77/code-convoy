@@ -176,3 +176,14 @@ fn backend_update_and_health_failures_disable_minimization_without_retry() {
         service.sync_with(preferences, 2, |_, _| panic!("automatic retry"));
     }
 }
+
+#[test]
+fn tray_glyph_is_monochrome_with_transparent_background() {
+    for (light, value) in [(false, 0), (true, u8::MAX)] {
+        let image = tray_glyph(light).unwrap();
+        let pixels = image.rgba.as_chunks::<4>().0;
+        assert!(pixels.iter().all(|p| p[3] == 0 || p[..3] == [value; 3]));
+        assert_eq!(pixels[0][3], 0);
+        assert!(pixels.iter().any(|p| p[3] == u8::MAX));
+    }
+}

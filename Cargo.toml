@@ -44,6 +44,8 @@ winit = { version = "0.30.13", default-features = false, features = ["wayland-cs
 ksni = "0.3.6"
 # Required for dual-runtime selection shared with accessibility/notifications.
 zbus = { version = "5.19", default-features = false, features = ["async-io"] }
+# StreamExt for zbus signal streams; already a transitive dependency of zbus.
+futures-lite = { version = "2.6", default-features = false }
 
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
 # Native menus on the existing eframe event loop; no GTK or extra UI thread.
