@@ -4,8 +4,10 @@ Run under xvfb-run and dbus-run-session, with openbox and wmctrl installed.
 This is virtual-display evidence, not native desktop/Wayland certification.
 """
 import argparse
+import ctypes
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -22,7 +24,16 @@ def stop(process):
             process.wait(timeout=10)
 
 
-def smoke(binary, mode, debug=False):
+def smoke(binary, mode):
+    debugger = shutil.which("gdb")
+    prctl = ctypes.CDLL(None).prctl
+    prctl.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
+
+    def allow_test_debugger():
+        # Permit only this test parent's diagnostic children under Linux Yama.
+        # Unsupported kernels merely lack the optional failure backtrace.
+        prctl(0x59616d61, os.getppid(), 0, 0, 0)  # PR_SET_PTRACER
+
     with tempfile.TemporaryDirectory(prefix="codeconvoy-linux-runtime-") as temporary:
         home = Path(temporary)
         env = dict(os.environ, HOME=str(home), XDG_DATA_HOME=str(home / "data"),
@@ -47,11 +58,9 @@ def smoke(binary, mode, debug=False):
                     time.sleep(0.1)
                 else:
                     raise RuntimeError("Window manager did not become ready")
-                command = [str(binary)]
-                if debug:
-                    command = ["gdb", "--batch", "-ex", "set pagination off", "-ex", "run",
-                               "-ex", "thread apply all bt 12", "--args", *command]
-                process = subprocess.Popen(command, env=env, stdout=log, stderr=log, start_new_session=True)
+                process = subprocess.Popen([str(binary)], env=env, stdout=log, stderr=log,
+                                           start_new_session=True,
+                                           preexec_fn=allow_test_debugger if debugger else None)
                 deadline = time.monotonic() + 30
                 window = None
                 while time.monotonic() < deadline:
@@ -78,10 +87,11 @@ def smoke(binary, mode, debug=False):
                     raise RuntimeError(f"Application failed normal shutdown: {process.returncode}")
                 print(f"PASS {binary.name}: {mode}, Xvfb window/store initialization and normal close", flush=True)
             except Exception:
-                if debug and process is not None and process.poll() is None:
-                    process.send_signal(signal.SIGINT)  # Stop under GDB and print all thread stacks.
+                if debugger and process is not None and process.poll() is None:
                     try:
-                        process.wait(timeout=10)
+                        subprocess.run([debugger, "--batch", "-ex", "thread apply all bt 12",
+                                        "--pid", str(process.pid)], env=env, stdout=log, stderr=log,
+                                       timeout=15, check=False)
                     except subprocess.TimeoutExpired:
                         pass
                 pids = str(wm.pid) + (f",{process.pid}" if process is not None else "")
@@ -104,6 +114,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("binary", type=Path)
     parser.add_argument("--mode", choices=["native", "extract", "fuse"], default="native")
-    parser.add_argument("--debug", action="store_true", help="diagnostic GDB rerun after ordinary startup fails")
     args = parser.parse_args()
-    smoke(args.binary.resolve(strict=True), args.mode, args.debug)
+    smoke(args.binary.resolve(strict=True), args.mode)

@@ -25,17 +25,9 @@ case "$1" in
 esac
 git --version
 sha256sum dist/*.deb dist/*.rpm dist/*.AppImage
-# Supply the system bus a normal desktop has; Docker does not run an init system.
-dbus-uuidgen --ensure=/etc/machine-id
-mkdir -p /run/dbus
-dbus-daemon --system --fork --nopidfile
 # Package installation needs root; ordinary desktop execution does not.
 useradd --create-home package-test
-if ! runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py /usr/bin/codeconvoy; then
-  # A diagnostic rerun never converts a failed ordinary launch into a pass.
-  runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py /usr/bin/codeconvoy --debug || true
-  exit 1
-fi
+runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py /usr/bin/codeconvoy
 runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py dist/*.AppImage --mode extract
 export PATH="/candidate/target/packaging/linux/host-bin:$PATH"
 export CODECONVOY_EXPECT_PATH="$PATH"
