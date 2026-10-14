@@ -293,7 +293,8 @@ symlink aliases are covered by their targets; broken/escaping links fail.
 section contributes requirements: exported definitions do not raise the minimum.
 Version tuples are compared numerically, including weak requirements. Unknown or
 private GLIBC ABI names, incomplete need records, command failures and readelf
-diagnostics fail validation. Any requirement above 2.39 fails the candidate before
+diagnostics fail validation. Dynamic loader tags must agree with the version
+needs table, so missing section headers cannot hide requirements. Any requirement above 2.39 fails the candidate before
 upload. The static runtime may legitimately have no versioned GLIBC requirements;
 the application's executable may not silently lose its measurement.
 

@@ -28,6 +28,8 @@ def required_glibc(output):
         if not header or header[1] in seen:
             raise ValueError("Malformed or duplicate ELF version section")
         seen.add(header[1])
+        if len(lines) < 3 or int(header[2]) == 0:
+            raise ValueError("Incomplete ELF version section")
         if header[1] != "needs":
             continue
         libraries = 0
@@ -69,7 +71,22 @@ def inspect_glibc(path):
     if result.stderr.strip():
         raise ValueError(f"Cannot inspect ELF {path}: {result.stderr.strip()}")
     try:
-        return required_glibc(result.stdout)
+        requirement = required_glibc(result.stdout)
+        # The loader follows dynamic tags, not section headers. A removed or
+        # damaged .gnu.version_r header must not masquerade as a static ELF.
+        dynamic = run("readelf", "--dynamic", "--wide", path, capture_output=True,
+                      text=True, env=dict(os.environ, LC_ALL="C"))
+        if dynamic.stderr.strip():
+            raise ValueError(dynamic.stderr.strip())
+        if not ("Dynamic section at offset " in dynamic.stdout
+                or dynamic.stdout.strip() == "There is no dynamic section in this file."):
+            raise ValueError("Malformed ELF dynamic information")
+        table = re.search(r"Version needs section '\S+' contains (\d+) entr(?:y|ies):", result.stdout)
+        count = re.findall(r"\(VERNEEDNUM\)\s+(\d+)", dynamic.stdout)
+        pointers = dynamic.stdout.count("(VERNEED)")
+        if (table and (count != [table[1]] or pointers != 1)) or (not table and (count or pointers)):
+            raise ValueError("Incomplete ELF version needs information: dynamic tags disagree with sections")
+        return requirement
     except ValueError as error:
         raise ValueError(f"Cannot inspect ELF {path}: {error}") from error
 
@@ -96,7 +113,7 @@ def inspect_payload(root):
                 raise ValueError(f"Package symlink escapes its payload: {path}")
             continue
         if path.is_file() and is_elf(path):
-            requirements.append((str(path.relative_to(root)), inspect_glibc(path)))
+            requirements.append((path.relative_to(root).as_posix(), inspect_glibc(path)))
     if dict(requirements)["usr/bin/codeconvoy"] is None:
         raise ValueError("No glibc requirements found in the final Linux executable")
     return requirements

@@ -49,6 +49,9 @@ def smoke(binary, mode):
                     time.sleep(0.1)
                 else:
                     raise RuntimeError("Application did not create its window and isolated store")
+                time.sleep(2)  # Allow startup/render work to run before closing.
+                if process.poll() is not None:
+                    raise RuntimeError("Application exited after creating its window")
                 if mode == "fuse":
                     mounts = set(Path("/proc/self/mountinfo").read_text().splitlines()) - mounts_before
                     if not any(" - fuse" in line and ".mount_" in line for line in mounts):
