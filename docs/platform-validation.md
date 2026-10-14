@@ -19,7 +19,8 @@ repository was run. `TMPDIR=/var/tmp` avoids the desktop sandbox's synthetic
 - **Automated tests:** formatting, strict all-target/all-feature Clippy and the
   full Rust suite passed locally: 592 tests, zero failures, nine existing optional
   tests ignored. The private D-Bus test was additionally run and passed; all 23
-  packaging unit tests and the release build passed.
+  packaging unit tests and the release build passed. Counts exclude subprocess
+  repetitions; all required checks were repeated after the regression expansion.
 - **Native Linux smoke:** both `desktop_performance 0 2` and
   `v09_history_validation --smoke` passed on Wayland with `DISPLAY` removed, and
   on X11 through XWayland with `WAYLAND_DISPLAY`/`WAYLAND_SOCKET` removed. Each
@@ -33,9 +34,15 @@ repository was run. `TMPDIR=/var/tmp` avoids the desktop sandbox's synthetic
   and unrelated-file preservation. Dependency resolution was bypassed in that
   empty root; this is not an apt compatibility test. The package startup script
   checks liveness then terminates its fixture, not interactive/normal Quit.
-- **Build/test matrix:** [initial PR CI run 38573674622](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38573674622)
-  passed on Linux and macOS. Windows exposed Git's overlong worktree-root limit
-  below. The expanded success/refusal regressions await their final native CI run.
+- **Build/test matrix:** [merged-source CI](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38572066655)
+  passed on all three platforms. The expanded regression commit `2204e06` passed
+  the full native test suite on Linux, macOS and Windows in
+  [CI run 38576285524](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38576285524);
+  Windows also passed WARP initialization. The
+  [initial PR run](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38573674622)
+  exposed Git's overlong worktree-root limit below. Subsequent documentation-head
+  results are available in the [PR checks](https://github.com/ChrisLauinger77/code-convoy/pull/59/checks).
+  These are native CI tests, not interactive desktop certification.
 - **Package matrix:** existing [Release run 38572061998](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38572061998)
   **passed** on source `77965f3c4fb63e372c8fd3d1921331bab29960dc`: Ubuntu 26.04,
   Windows 2025 and macOS 26 runners, Rust 1.99.0 and Python 3.15. It built all six
@@ -43,6 +50,9 @@ repository was run. `TMPDIR=/var/tmp` avoids the desktop sandbox's synthetic
   and generated the aggregate checksum manifest. All six downloaded checksums
   passed locally; the tested Linux files match the final aggregate. Publication
   and downstream package-repository updates were skipped; no tag was created.
+  These binaries embed the baseline revision, not the PR head. The runtime source
+  and packaging configuration are unchanged in PR 3; a final 1.0 candidate must
+  still be built and tested from its own exact commit.
 
 A compiled binary, an automated test, a live desktop smoke and a checked package
 are separate evidence. Historical macOS interactive results below and in the
@@ -63,7 +73,7 @@ Procedures for the remaining interactive checks are in the
 | Clipboard and shortcuts | Mapping, modal gating and output tests; cross-application paste/native chords **not verified** | Command mapping tests; native copy/paste **not retested** | Control mapping tests; native copy/paste **not tested** |
 | Process cancellation and shutdown | Real fixture processes, descendants, repeated Stop, future drop, quarantine and peer isolation **passed locally** | Native process tests **passed** in package CI | Native Job Object/process-tree tests **passed** in package CI |
 | Worktree creation/recovery/cleanup | Real Git regression suite **passed locally**; native history fixture retains checkout | Native Git suite **passed** in package CI | Native Git suite **passed** in package CI; ordinary Storage cleanup remains deliberately unavailable |
-| Unicode, spaces, long paths | Literal invocation tests and >300 UTF-16-unit tracked paths/custom base **passed** | Deep custom base **passed** in initial PR CI; expanded tracked-path test pending | **Known limitation:** Git rejects overlong worktree roots; success/refusal regressions pending. Drive/UNC spelling, junction and sharing tests passed in baseline CI; live UNC server not tested |
+| Unicode, spaces, long paths | Literal invocation tests and >300 UTF-16-unit tracked paths/custom base **passed** | Long tracked paths and deep custom base **passed** | Long tracked paths and overlong-root refusal/recovery regressions **passed**. **Known limitation:** Git rejects overlong worktree roots. Drive/UNC spelling, junction and sharing tests passed; live UNC server not tested |
 | Linux packages and environment | **Passed:** DEB/RPM/AppImage assembly, host-Git/CLI-name probe, Xvfb startup; downloaded AppImage on Wayland/XWayland; disposable-root DEB install/start/remove. Native RPM install/dependency resolution **not tested** | — | — |
 | macOS Universal bundle/distribution | — | **Passed:** arm64 + x86_64, lipo, bundle metadata/license, ad-hoc signature and mounted DMG; Intel native UI not tested | — |
 | Windows installer/portable/removal | — | — | **Passed:** metadata, per-user install, Start Menu, license, portable identity, uninstall/state preservation; interactive installed startup not tested |
@@ -138,8 +148,15 @@ intended oldest Linux distribution remains an explicit release compatibility
 gate. The local Debian host meets this requirement. The tested AppImage SHA-256
 is `bc1eb8844e3e6ff335fa08dce090b557d9a38f39c9d77ee43aab3c07c09488f4`.
 
-Pending PR regression results and the unperformed native desktop interactions
-above remain release-verification gaps, not green gates. Before final 1.0
+One Windows attempt of `38576285524` timed out in the existing
+`claude_build_spawn_and_zero_exit_protocol_failures_release_slots_and_repository_leases`
+test's 10-second lifecycle wait, before reaching the new regressions. The unchanged
+Windows rerun passed the full suite, including both new cases. No timeout,
+assertion or test coverage was relaxed. The intermittent timeout's cause is not
+established and remains a CI reliability observation.
+
+The unperformed native desktop interactions above remain release-verification
+gaps, not green gates. Before final 1.0
 publication, test the exact candidate on the intended Linux distributions,
 macOS Intel/Apple Silicon and Windows desktop versions using the checklist.
 Ad-hoc macOS signing is not notarization; Windows Authenticode signing is absent.
