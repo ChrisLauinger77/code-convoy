@@ -4,8 +4,20 @@
     {
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/release\\.yml$/"],
-      "matchStrings": ["# renovate: datasource=(?<datasource>crate) depName=(?<depName>cargo-packager)\\s+PACKAGER_VERSION: '(?<currentValue>[^']+)'"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>crate) depName=(?<depName>cargo-packager)\\s+PACKAGER_VERSION: '(?<currentValue>[^']+)'"
+      ],
       "versioningTemplate": "semver"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Pin Linux release runner to Ubuntu 24.04 for glibc 2.39 compatibility",
+      "matchManagers": ["github-actions"],
+      "matchDatasources": ["github-runners"],
+      "matchPackageNames": ["ubuntu"],
+      "matchFileNames": [".github/workflows/release.yml"],
+      "enabled": false
     }
   ]
 }
