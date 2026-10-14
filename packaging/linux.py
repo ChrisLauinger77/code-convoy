@@ -1,31 +1,11 @@
 """Linux package assembly; invoked by release.py after the locked native build."""
 import json
 import os
-import re
 import shutil
 import urllib.request
 
 from release import ROOT, DIST, checksum, fresh_work, one_file, package, run, version
-
-
-def required_glibc(output):
-    # Definitions exported by a bundled library are not its runtime requirements.
-    needs = output.partition("Version needs section")[2]
-    names = set(re.findall(r"Name: (GLIBC_\S+)", needs))
-    if any(not re.fullmatch(r"GLIBC_[0-9]+(?:\.[0-9]+)+", name) for name in names):
-        raise ValueError(f"Unrecognized glibc ABI requirement; inspect before packaging: {sorted(names)}")
-    versions = [tuple(map(int, name.removeprefix("GLIBC_").split("."))) for name in names]
-    return max(versions) if versions else None
-
-
-def inspect_glibc(path):
-    output = run("readelf", "--version-info", "--wide", path, capture_output=True,
-                 text=True, env=dict(os.environ, LC_ALL="C")).stdout
-    return required_glibc(output)
-
-
-def glibc_label(value):
-    return ".".join(map(str, value))
+from linux_abi import glibc_label, inspect_glibc, verify_artifacts
 
 
 def verify_linux_payload(appdir):
@@ -37,29 +17,6 @@ def verify_linux_payload(appdir):
     }.items():
         if (appdir / target).read_bytes() != (ROOT / source).read_bytes():
             raise ValueError(f"Unexpected package payload: {target}")
-
-
-def report_appimage_glibc(appdir, work):
-    requirements = []
-    for path in sorted(appdir.rglob("*")):
-        if path.is_symlink() or not path.is_file():
-            continue
-        with path.open("rb") as source:
-            if source.read(4) != b"\x7fELF":
-                continue
-        required = inspect_glibc(path)
-        if required:
-            requirements.append((required, path.relative_to(appdir)))
-    if not requirements:
-        raise ValueError("No glibc requirements found in the deployed AppImage payload")
-    minimum = max(value for value, _ in requirements)
-    report = f"AppImage payload requires glibc >= {glibc_label(minimum)}\n"
-    report += "".join(f"{glibc_label(value)}  {path}\n" for value, path in requirements)
-    (work / "glibc-requirements.txt").write_text(report, encoding="utf-8")
-    print(report, flush=True)
-    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
-        with open(summary, "a", encoding="utf-8") as output:
-            output.write(f"\n### Linux runtime ABI inspection\n\n```text\n{report}```\n")
 
 
 def download_tools(work):
@@ -110,7 +67,6 @@ def package_linux():
     tools = download_tools(work)
     run(tools["linuxdeploy"], "--appimage-extract-and-run", "--appdir", appdir,
         "--desktop-file", desktop, "--icon-file", appdir / "usr/share/icons/hicolor/256x256/apps/codeconvoy.png")
-    report_appimage_glibc(appdir, work)
     # Replace any generated AppRun, including a symlink, after dependency deployment.
     launcher = appdir / "AppRun"
     launcher.unlink(missing_ok=True)
@@ -120,6 +76,7 @@ def package_linux():
     image = DIST / f"CodeConvoy-{version()}-x86_64.AppImage"
     run(tools["appimagetool"], "--appimage-extract-and-run", "--runtime-file", tools["runtime"], appdir, image, env=env)
     image.chmod(0o755)
+    verify_artifacts([deb, rpm, image], work)
     # Exercise the same AppRun/runtime with the project's real process/Git layer.
     # This probe image is an intermediate test artifact, never a public download.
     probe_dir = work / "probe.AppDir"

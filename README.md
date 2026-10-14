@@ -43,7 +43,7 @@ Published releases provide these native artifacts:
 | Platform   | Architecture                 | Artifact                                                   | Status                                                                                |
 | ---------- | ---------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Windows 11 | x86_64                       | NSIS installer and portable/Scoop ZIP                      | Installer and portable package published                                              |
-| Linux      | x86_64                       | AppImage, Debian `amd64` package, and RPM `x86_64` package | AppImage and Debian package natively tested; RPM installation remains a release check |
+| Linux      | x86_64                       | AppImage, Debian `amd64` package, and RPM `x86_64` package | Targets Ubuntu 24.04 LTS, Debian 13 Stable and newer compatible glibc distributions; see the [verification matrix](docs/platform-validation.md#linux-glibc-239-baseline) for runtime evidence |
 | macOS      | Universal (arm64 and x86_64) | Disk image (`.dmg`) containing the universal app           | Natively tested on Apple Silicon; native Intel execution remains a release check      |
 
 ARM Linux/Windows packages are not currently published. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
@@ -146,11 +146,20 @@ must leave user state and retained repositories alone; it is not worktree cleanu
 
 ### Package requirements and first launch
 
-Linux packages are built on Ubuntu 26.04. The DEB is user-verified to install
-and run on Debian Forky; AppImage startup is also user-verified there. Packaging derives the DEB’s minimum glibc version from the built executable and
-records AppImage payload requirements in the candidate run summary. Check those
-requirements for the exact download; an AppImage does not supply glibc. Older
-distributions still need native candidate testing.
+New Linux candidates are built on Ubuntu 24.04. **glibc 2.39 is the intended
+minimum supported binary ABI**, targeting Ubuntu 24.04 LTS, Debian 13 Stable
+and newer compatible glibc-based x86_64 distributions. Every ELF in the final
+DEB, RPM and AppImage, including the AppImage runtime, must require no GLIBC
+version newer than 2.39. The DEB dependency remains derived from the measured
+executable requirement; each artifact's maximum is recorded in its candidate
+summary. Previously published packages are not rebuilt by this change; check
+the exact download's release notes and requirements.
+
+An ABI check or container startup does not establish complete distribution
+compatibility. Native desktop validation, including Wayland/XWayland, graphics,
+clipboard and portals, remains a separate release gate; see the
+[platform verification matrix](docs/platform-validation.md#linux-glibc-239-baseline).
+AppImage does not supply glibc, a graphics driver or a desktop portal.
 A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.

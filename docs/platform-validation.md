@@ -1,5 +1,54 @@
 # Cross-platform release verification
 
+## Linux glibc 2.39 baseline
+
+This focused infrastructure change follows readiness PR 3 and does not start
+readiness PR 4. Application version remains 0.10.0. It changes only Linux build
+and package verification infrastructure, its disposable probe and documentation;
+the application and Windows/macOS build configuration are unchanged.
+
+The intended minimum supported binary ABI is **glibc 2.39**, targeting Ubuntu
+24.04 LTS, Debian 13 Stable and newer compatible glibc-based x86_64 distributions.
+Every final DEB/RPM/AppImage ELF, including the outer AppImage runtime, must pass
+the 2.39 ceiling. This is not a complete distribution compatibility claim.
+
+### Candidate and automated evidence
+
+The non-publishing candidate run, final artifact measurements and validation
+results will be recorded here after this change's candidate completes. No tag,
+release publication or downstream package update is authorized by these checks.
+
+| Check | Ubuntu 24.04 LTS | Debian 13 Stable | Fedora 44 (RPM) |
+| --- | --- | --- | --- |
+| Normal dependency-resolving install | Candidate APT/container check pending | Candidate APT/container check pending | Candidate DNF/container check pending |
+| Installed application, Xvfb window and normal close | Pending | Pending | Pending |
+| Exact AppImage extraction fallback | Pending | Pending | Pending |
+| Mounted AppImage/FUSE | Candidate runner check pending when device available | Not tested | Not tested |
+| Disposable Git worktree create/remove and process cancellation | Candidate probe pending | Candidate probe pending | Candidate probe pending |
+| Native Wayland and XWayland startup | Not tested on this target | Not tested on this target | Not tested on this target |
+| Hardware rendering, decorations, clipboard and file dialogs | Not tested | Not tested | Not tested |
+| Native desktop normal Quit and task cancellation | Not tested | Not tested | Not tested |
+
+Containers use the host kernel and a private virtual X server, not the target's
+complete desktop. The probe exercises real CodeConvoy Git/process code with a
+redirected descendant and disposable repositories; it is not the final GUI's
+interactive agent workflow. Native target desktop environments are not currently
+provisioned for this task. Unperformed desktop checks remain release-verification
+gaps, even if all candidate ABI and container gates pass. Earlier Forky/GNOME
+results below do not substitute for Ubuntu 24.04 or Debian 13 evidence.
+
+For native acceptance, install the exact candidate DEB through APT on clean
+Ubuntu 24.04 and Debian 13 desktops, launch from the desktop entry and terminal,
+exercise native Wayland with `DISPLAY` unset and XWayland with Wayland variables
+unset, and test both FUSE and extraction launches of the same AppImage. Check
+rendering/decorations, cross-application clipboard, portal selection/cancel,
+normal Quit, disposable worktree preparation/cleanup, and fixture-agent Stop and
+shutdown. RPM requires the corresponding native Fedora check. Record the image,
+kernel, desktop, Git versions, artifact hashes and outcomes. Do not force missing
+dependencies, use provider credentials or operate on user repositories.
+
+---
+
 ## 1.0 readiness PR 3 — 2026-10-14
 
 This is verification of the merged PR 2 implementation (`77965f3`), plus focused

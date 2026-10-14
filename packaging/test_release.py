@@ -8,7 +8,6 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-import linux
 import release
 
 
@@ -20,21 +19,6 @@ class ReleaseGates(unittest.TestCase):
         self.assertEqual(versions, [release.version()])
         notes = (release.ROOT / "docs/release-notes.md").read_text(encoding="utf-8")
         self.assertTrue(notes.startswith(f"# CodeConvoy {release.version()} — "))
-
-    def test_glibc_reads_requirements_not_exported_definitions(self):
-        output = """Version definition section '.gnu.version_d':
-          Name: GLIBC_2.99
-        Version needs section '.gnu.version_r':
-          Name: GLIBC_2.9 Flags: none
-          Name: GLIBC_2.43 Flags: none
-          Name: GLIBC_2.3.4 Flags: none
-          Name: GCC_3.0 Flags: none
-        """
-        self.assertEqual(linux.required_glibc(output), (2, 43))
-        self.assertIsNone(linux.required_glibc("No version information found"))
-        self.assertIsNone(linux.required_glibc("Version definition section: Name: GLIBC_2.99"))
-        with self.assertRaisesRegex(ValueError, "Unrecognized glibc ABI"):
-            linux.required_glibc("Version needs section: Name: GLIBC_PRIVATE Flags: none")
 
     def test_deb_uses_measured_requirement_and_refuses_missing_measurement(self):
         with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"):

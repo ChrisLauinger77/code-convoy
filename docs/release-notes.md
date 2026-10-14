@@ -38,9 +38,13 @@ repository safeguards, retained worktrees and explicit validation remain intact.
 
 ### Packaging and upgrades
 
-- DEB dependencies use the built executable's measured glibc minimum. AppImage
-  packaging records requirements for all deployed ELF files; older-distribution
-  compatibility still requires testing the exact candidate.
+- Linux candidates now build on Ubuntu 24.04, with glibc 2.39 as the intended
+  minimum supported binary ABI for Ubuntu 24.04 LTS, Debian 13 Stable and newer
+  compatible glibc distributions. Final DEB, RPM and AppImage ELF requirements,
+  including the AppImage runtime, are measured and rejected above 2.39. DEB
+  dependencies still use the executable's measured minimum. Older published
+  packages are unchanged; native distribution compatibility remains subject to
+  the exact-candidate evidence in the platform matrix.
 - Windows installed/portable packages and the macOS bundle include the license.
   Packaging verifies archive contents, bundle metadata and icons. Artifact names
   and package-manager executable/app paths remain unchanged.
