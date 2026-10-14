@@ -54,7 +54,9 @@ Ubuntu 24.04 runner. No application dependency or toolchain version changed.
 | Native desktop normal Quit and task cancellation | Not tested | Not tested | Not tested |
 
 Local userspaces ran in disposable unprivileged Bubblewrap namespaces on the
-Forky host kernel. Ubuntu used the checksum-verified Canonical 24.04.5 base image.
+Forky host kernel. Ubuntu used the checksum-verified Canonical 24.04.5 base image;
+its local diagnostic root also contained compiler/debugging tools. Hosted
+install checks started from clean distribution images with test tools added.
 Earlier candidate `38596495277` also passed local Debian/Fedora userspace
 installation/startup/removal, using the same OCI image digests as the hosted
 checks. The table above reports the latest candidate. Package installation used
