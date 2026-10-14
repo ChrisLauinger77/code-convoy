@@ -739,6 +739,118 @@ async fn preparation_failure_has_no_direct_fallback_and_other_jobs_continue() {
 }
 
 #[tokio::test]
+#[cfg(windows)]
+async fn overlong_windows_worktree_root_fails_without_launch_and_retains_ownership() {
+    let mut h = Harness::new(1);
+    let source = repository(h.root.path(), "source").await;
+    // This Git limit is independent of its long tracked-file-path opt-in.
+    command(&source.path, &["config", "core.longpaths", "true"]);
+    let source_index = fs::read(source.path.join(".git/index")).unwrap();
+    let mut base = h.root.path().canonicalize().unwrap().join("long worktrees");
+    while base.as_os_str().to_string_lossy().encode_utf16().count() < 300 {
+        base.push("nested-directory-with-spaces-and-unicode-日本語");
+    }
+    h.manager.set_worktree_base(Some(base.clone()));
+    let mut run = h
+        .start(
+            1,
+            h.task(1, AgentId::Codex, true, false),
+            vec![source.clone()],
+        )
+        .await;
+    h.until(|events| Harness::finished(events, 1, JobStatus::Failed))
+        .await;
+    assert!(
+        !h.events
+            .iter()
+            .any(|event| matches!(event, Event::Started { run: 1, .. }))
+    );
+    assert!(!Harness::ready(&h.events, 1));
+    let metadata = h.metadata(1);
+    assert_eq!(metadata.path.parent().unwrap().parent().unwrap(), base);
+    let manifest = metadata.path.parent().unwrap().join("owner.json");
+    let original_manifest = fs::read(&manifest).unwrap();
+    let storage = h.root.path().join("retained worktrees ü");
+    let location = storage.join(".locations").join(format!(
+        "{}.json",
+        metadata
+            .path
+            .parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+    ));
+    let original_location = fs::read(&location).unwrap();
+    run.jobs[0].worktree = Some(metadata.clone());
+    let (status, exit_code, detail) = h
+        .events
+        .iter()
+        .find_map(|event| match event {
+            Event::Finished {
+                run: 1,
+                status,
+                exit_code,
+                detail,
+                ..
+            } => Some((*status, *exit_code, detail.clone())),
+            _ => None,
+        })
+        .unwrap();
+    // Keep this specific: another failure must not masquerade as coverage of
+    // Git's setup_explicit_git_dir limit. Revisit when upstream removes it.
+    assert!(detail.contains("'$GIT_DIR' too big"), "{detail}");
+    assert!(detail.contains("No direct execution was attempted; partial state is retained"));
+    run.jobs[0].finish(status, exit_code, detail);
+    let store = Store::open(&h.root.path().join("state")).unwrap();
+    store
+        .save(&AppState {
+            repositories: vec![source.clone()],
+            runs: vec![run],
+            next_run: 2,
+            worktree_base: Some(base),
+            ..Default::default()
+        })
+        .unwrap();
+    let restored = store.load().unwrap();
+    let job = &restored.runs[0].jobs[0];
+    assert_eq!(job.status, JobStatus::Failed);
+    assert_eq!(job.worktree.as_ref(), Some(&metadata));
+    assert!(job.unresolved_retained_result());
+    let report = h.manager.lifecycle().inspect(1, 0, job, false).await;
+    assert!(
+        !matches!(
+            report.availability,
+            ResultAvailability::Available | ResultAvailability::Cleaned
+        ),
+        "{}",
+        report.detail
+    );
+    assert_eq!(fs::read(manifest).unwrap(), original_manifest);
+    assert_eq!(fs::read(location).unwrap(), original_location);
+    assert_eq!(
+        fs::read(source.path.join(".git/index")).unwrap(),
+        source_index
+    );
+    assert_eq!(
+        fs::read_to_string(source.path.join("tracked.txt")).unwrap(),
+        "committed base\n"
+    );
+    assert!(git::status(&source.path).await.unwrap().entries.is_empty());
+    // A fresh request at the default location can use the slot and source lease
+    // after Git has exited. Never relocate or retry the failed attempt itself.
+    h.manager.set_worktree_base(None);
+    h.start(2, h.task(2, AgentId::Codex, false, false), vec![source])
+        .await;
+    h.until(|events| Harness::ready(events, 2)).await;
+    h.release(2, "tree");
+    h.until(|events| Harness::finished(events, 2, JobStatus::Succeeded))
+        .await;
+    h.close().await;
+}
+
+#[tokio::test]
 async fn global_and_convoy_limits_cover_preparation_and_execution_and_revalidate_attachments() {
     let mut h = Harness::new(2);
     let a = repository(h.root.path(), "a").await;

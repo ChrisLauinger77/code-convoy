@@ -245,6 +245,107 @@ async fn default_and_missing_custom_base_resolve_without_relocating_anything() {
 }
 
 #[tokio::test]
+async fn long_paths_preserve_identity_through_recovery_and_explicit_cleanup() {
+    check_long_paths(false).await;
+    // Git for Windows rejects an overlong GIT_DIR even with core.longpaths.
+    // The manager-level refusal regression in worktrees.rs covers that boundary.
+    #[cfg(unix)]
+    check_long_paths(true).await;
+}
+
+async fn check_long_paths(deep_base: bool) {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let repo = repository(&root, "source ü 日本語").await;
+    // Git for Windows requires this opt-in. Configure only the disposable
+    // repository, never the user's global Git or OS long-path settings.
+    git_cmd(&repo.path, &["config", "core.longpaths", "true"]);
+    let mut tracked = PathBuf::new();
+    while tracked.as_os_str().to_string_lossy().encode_utf16().count() < 300 {
+        tracked.push("long-tracked-directory-with-spaces-日本語");
+    }
+    fs::create_dir_all(repo.path.join(&tracked)).unwrap();
+    tracked.push("content ü.txt");
+    fs::write(repo.path.join(&tracked), "long path content\n").unwrap();
+    git_cmd(&repo.path, &["add", "."]);
+    git_cmd(&repo.path, &["commit", "-qm", "long tracked path"]);
+    let source_index = fs::read(repo.path.join(".git/index")).unwrap();
+    let store = Store::open(&root.join("state")).unwrap();
+    let storage = store.directory().join("worktrees");
+    let mut base = root.join("worktrees ü");
+    if deep_base {
+        while base.as_os_str().to_string_lossy().encode_utf16().count() < 300 {
+            base.push("nested-directory-with-spaces-and-unicode-日本語");
+        }
+    }
+    let metadata = reserve(&storage, Some(&base), &repo, 1).await;
+    assert!(
+        metadata
+            .path
+            .join(&tracked)
+            .as_os_str()
+            .to_string_lossy()
+            .encode_utf16()
+            .count()
+            > 260
+    );
+    let safe = AtomicBool::new(true);
+    worktrees::create(&metadata, &Cancellation::default(), &safe)
+        .await
+        .unwrap();
+    assert!(safe.load(std::sync::atomic::Ordering::Acquire));
+    assert_eq!(
+        fs::read_to_string(metadata.path.join("tracked")).unwrap(),
+        "base\n"
+    );
+    assert_eq!(
+        fs::read_to_string(metadata.path.join(&tracked)).unwrap(),
+        "long path content\n"
+    );
+    assert_eq!(
+        git::register(&metadata.path).await.unwrap().path,
+        metadata.path
+    );
+    let mut state = state(repo.clone(), metadata.clone(), Some(base));
+    store.save(&state).unwrap();
+    state = store.load().unwrap();
+    let (tx, _rx) = tokio::sync::mpsc::channel(16);
+    let mut manager = RunManager::with_worktree_directory(1, tx, storage.clone());
+    let report = manager
+        .lifecycle()
+        .inspect(1, 0, &state.runs[0].jobs[0], true)
+        .await;
+    assert_eq!(
+        report.availability,
+        ResultAvailability::Available,
+        "{}",
+        report.detail
+    );
+    // Explicit retained-result cleanup has its own ownership transaction. This
+    // must not enable ordinary Storage cleanup on Windows or weaken that guard.
+    store
+        .cleanup_result(&mut state, &manager, 1, 0)
+        .await
+        .unwrap();
+    assert!(!metadata.path.exists());
+    assert!(record(&storage, &metadata).exists());
+    assert_eq!(
+        fs::read_to_string(repo.path.join("tracked")).unwrap(),
+        "base\n"
+    );
+    assert_eq!(
+        fs::read(repo.path.join(".git/index")).unwrap(),
+        source_index
+    );
+    assert_eq!(
+        fs::read_to_string(repo.path.join(&tracked)).unwrap(),
+        "long path content\n"
+    );
+    manager.shutdown();
+    (&mut manager.join).await.unwrap();
+}
+
+#[tokio::test]
 async fn invalid_locations_and_nested_attempts_fail_before_git_or_fallback() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
