@@ -89,7 +89,8 @@ def smoke(binary, mode):
             except Exception:
                 if debugger and process is not None and process.poll() is None:
                     try:
-                        subprocess.run([debugger, "--batch", "-ex", "thread apply all bt 12",
+                        subprocess.run([debugger, "--batch", "-ex", "info proc mappings",
+                                        "-ex", "thread apply all bt 12",
                                         "--pid", str(process.pid)], env=env, stdout=log, stderr=log,
                                        timeout=15, check=False)
                     except subprocess.TimeoutExpired:
@@ -99,6 +100,10 @@ def smoke(binary, mode):
                                                        "-o", "pid,ppid,lwp,stat,wchan:24,comm"]):
                     diagnostic = subprocess.run(command, env=env, capture_output=True, text=True)
                     print(f"{command}:\n{diagnostic.stdout}{diagnostic.stderr}", flush=True)
+                if shutil.which("xwininfo"):
+                    windows = subprocess.run(["xwininfo", "-root", "-tree"], env=env,
+                                             capture_output=True, text=True)
+                    print(f"X11 window tree (including unmapped windows):\n{windows.stdout}{windows.stderr}", flush=True)
                 print(f"Isolated store locks: {list(home.rglob('app.lock'))}", flush=True)
                 log.flush()
                 log.seek(0)

@@ -7,6 +7,9 @@ from pathlib import Path
 from release import checksum, run
 
 MAX_GLIBC = (2, 39)
+BASELINE_HINT = ("Keep the Linux release runner pinned to ubuntu-24.04 and rebuild "
+                 "affected dependencies/tools for that baseline; do not raise MAX_GLIBC "
+                 "to bypass this gate.")
 
 
 def required_glibc(output):
@@ -109,7 +112,11 @@ def inspect_payload(root):
         if path.is_symlink():
             # An internal alias is covered by its regular target. Never follow
             # an external/broken link and accidentally inspect a host library.
-            if not path.resolve(strict=True).is_relative_to(root.resolve()):
+            try:
+                target = path.resolve(strict=True)
+            except (OSError, RuntimeError) as error:
+                raise ValueError(f"Cannot resolve package symlink {path}: {error}") from error
+            if not target.is_relative_to(root.resolve()):
                 raise ValueError(f"Package symlink escapes its payload: {path}")
             continue
         if path.is_file() and is_elf(path):
@@ -140,7 +147,7 @@ def inspect_artifact(artifact, work):
             runtime = inspect_glibc(artifact)
             requirements.append(("AppImage runtime", runtime))
             if runtime and runtime > MAX_GLIBC:
-                raise ValueError(f"{artifact.name}: AppImage runtime requires GLIBC_{glibc_label(runtime)}, maximum is {glibc_label(MAX_GLIBC)}")
+                raise ValueError(f"{artifact.name}: AppImage runtime requires GLIBC_{glibc_label(runtime)}, maximum is {glibc_label(MAX_GLIBC)}. {BASELINE_HINT}")
             # The pinned runtime reports the embedded filesystem's exact offset;
             # unsquashfs reads that final image without launching its application.
             offset = run(artifact, "--appimage-offset", capture_output=True, text=True).stdout.strip()
@@ -150,13 +157,14 @@ def inspect_artifact(artifact, work):
         else:
             raise ValueError(f"Unsupported Linux artifact: {artifact.name}")
         requirements.extend(inspect_payload(payload))
+    # inspect_payload requires a measured GLIBC requirement on the main ELF.
     maximum = max(value for _, value in requirements if value)
     report = f"{artifact.name}: maximum required GLIBC {glibc_label(maximum)} (ceiling {glibc_label(MAX_GLIBC)})\n"
     report += f"SHA256 {checksum(artifact)}\n"
     report += "".join(f"  {glibc_label(value)}  {name}\n" for name, value in requirements)
     print(report, flush=True)
     if maximum > MAX_GLIBC:
-        raise ValueError(f"Final artifact exceeds GLIBC {glibc_label(MAX_GLIBC)}:\n{report}")
+        raise ValueError(f"Final artifact exceeds GLIBC {glibc_label(MAX_GLIBC)}. {BASELINE_HINT}\n{report}")
     return report
 
 

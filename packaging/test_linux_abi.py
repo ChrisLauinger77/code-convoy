@@ -107,8 +107,31 @@ class LinuxAbi(unittest.TestCase):
                         self.assertIn("maximum required GLIBC 2.39", report)
                         self.assertIn(abi.checksum(artifact), report)
                     else:
-                        with self.assertRaisesRegex(ValueError, "exceeds GLIBC 2.39"):
+                        with self.assertRaisesRegex(ValueError, "exceeds GLIBC 2.39") as rejected:
                             abi.inspect_artifact(artifact, work)
+                        self.assertIn("ubuntu-24.04", str(rejected.exception))
+                        self.assertIn("do not raise MAX_GLIBC", str(rejected.exception))
+
+    @unittest.skipIf(sys.platform == "win32", "Linux payload symlinks require native symlink support")
+    def test_payload_symlinks_are_resolved_or_rejected_with_context(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary).resolve()
+            root = work / "payload"
+            main = elf(root, "usr/bin/codeconvoy")
+            alias = root / "alias"
+            outside = elf(work, "outside")
+            with patch.object(abi, "inspect_glibc", return_value=(2, 39)) as inspect:
+                alias.symlink_to(main.relative_to(root))
+                self.assertEqual(abi.inspect_payload(root), [("usr/bin/codeconvoy", (2, 39))])
+                inspect.assert_called_once_with(main)
+                for target, message in (("missing", "Cannot resolve package symlink"),
+                                        ("alias", "Cannot resolve package symlink"),
+                                        (outside, "Package symlink escapes its payload")):
+                    alias.unlink()
+                    alias.symlink_to(target)
+                    with self.subTest(target=target), self.assertRaisesRegex(ValueError, message) as rejected:
+                        abi.inspect_payload(root)
+                    self.assertIn(str(alias), str(rejected.exception))
 
     def test_every_binary_and_dependency_contributes_to_final_maximum(self):
         for high_name in ("usr/bin/helper", "usr/lib/libdependency.so"):

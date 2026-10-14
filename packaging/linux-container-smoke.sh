@@ -13,7 +13,7 @@ case "$1" in
     apt-get update
     apt-get install -y ./dist/*.deb
     apt-get install -y python3 xvfb xauth openbox wmctrl dbus-x11 procps passwd util-linux gdb
-    dpkg-query -W code-convoy libc6
+    dpkg-query -W code-convoy libc6 libegl-mesa0 libgl1-mesa-dri libx11-6 xvfb xdg-desktop-portal dbus
     ;;
   fedora)
     dnf install -y ./dist/*.rpm
@@ -23,6 +23,7 @@ case "$1" in
     ;;
   *) exit 2 ;;
 esac
+uname -a
 git --version
 sha256sum dist/*.deb dist/*.rpm dist/*.AppImage
 # Package installation needs root; ordinary desktop execution does not.

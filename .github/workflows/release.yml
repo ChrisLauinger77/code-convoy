@@ -34,6 +34,7 @@ jobs:
 
   linux:
     needs: validate
+    # Only this job builds Linux ELF output; other jobs do not set its glibc ABI.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
