@@ -94,7 +94,7 @@ fn default_command_uses_print_stream_json_exact_stdin_and_repository_cwd() {
 
 #[test]
 fn optional_model_effort_turns_and_permissions_are_claude_specific() {
-    for mode in ["dontAsk", "acceptEdits"] {
+    for mode in ["dontAsk", "acceptEdits", "auto"] {
         for effort in ["low", "medium", "high", "xhigh", "max"] {
             let mut task = task();
             task.options = [
@@ -105,11 +105,19 @@ fn optional_model_effort_turns_and_permissions_are_claude_specific() {
             ]
             .into();
             let spec = Claude.build(&task, &repo()).unwrap();
+            assert_eq!(spec.args[7], "--permission-mode");
             assert_eq!(spec.args[8], mode);
             assert_eq!(spec.args[9], "--model=--literal;$(no shell)");
             assert_eq!(spec.args[10], format!("--effort={effort}").as_str());
             assert_eq!(spec.args[11], "--max-turns=12");
             assert_eq!(spec.args.len(), 12);
+            assert!(
+                !spec
+                    .args
+                    .iter()
+                    .any(|arg| arg.to_string_lossy().contains("bypass")
+                        || arg.to_string_lossy().contains("skip-permissions"))
+            );
             assert_eq!(spec.input.as_deref(), Some(task.prompt.as_bytes()));
         }
     }
@@ -131,7 +139,10 @@ fn invalid_options_fail_before_spawn_without_accepting_secret_or_other_backend_s
         ("model", "bad\0name"),
         ("effort", "ultracode"),
         ("permission_mode", "bypassPermissions"),
-        ("permission_mode", "auto"),
+        ("permission_mode", "Auto"),
+        ("permission_mode", "unsupported-mode"),
+        ("permission_mode", "default"),
+        ("permission_mode", "plan"),
         ("max_turns", "0"),
         ("max_turns", "-1"),
         ("max_turns", "1.5"),
@@ -159,6 +170,129 @@ fn invalid_options_fail_before_spawn_without_accepting_secret_or_other_backend_s
     invalid = task();
     invalid.options.insert("model".into(), "x".repeat(4097));
     assert!(Claude.build(&invalid, &repo()).is_err());
+}
+
+#[test]
+fn auto_is_selectable_with_explicit_availability_and_policy_limits() {
+    let permission = Claude
+        .options()
+        .iter()
+        .find(|o| o.key == "permission_mode")
+        .unwrap();
+    assert_eq!(permission.default, "dontAsk");
+    let OptionKind::Choice(choices) = permission.kind else {
+        panic!("permissions must be selectable")
+    };
+    assert_eq!(
+        choices,
+        &[
+            ("dontAsk", "Existing approvals; deny asks"),
+            ("acceptEdits", "Accept edits / file commands"),
+            ("auto", "Auto"),
+        ]
+    );
+    let summary = Claude.execution_summary(&[("permission_mode".into(), "auto".into())].into());
+    for explanation in [
+        "classifier",
+        "supporting Claude CLI",
+        "organization policy",
+        "Manual",
+        "never retries with broader permissions",
+        "not an OS sandbox",
+    ] {
+        assert!(summary.contains(explanation), "missing {explanation}");
+    }
+    assert!(
+        Claude
+            .execution_summary(&Default::default())
+            .starts_with("Existing approvals apply; calls needing new approval are denied.")
+    );
+    assert!(
+        Claude
+            .execution_summary(&[("permission_mode".into(), "acceptEdits".into())].into())
+            .starts_with("File edits and common filesystem commands are automatically approved.")
+    );
+}
+
+#[test]
+fn reported_permissions_are_visible_without_changing_existing_completion_rules() {
+    for mode in ["auto", "dontAsk", "acceptEdits", "future-mode"] {
+        let mut output = Claude.output();
+        let init = line(&json!({"type":"system", "subtype":"init", "permissionMode":mode}));
+        assert_eq!(output.push(Stream::Stdout, &init).as_bytes(), init);
+        let activity = output.take_activity().unwrap();
+        assert!(activity.contains(&format!(
+            "[CodeConvoy] Claude reported permission mode: {mode}."
+        )));
+        assert!(!activity.contains("Auto was not active"));
+        output.push(Stream::Stdout, &line(&success()));
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+    }
+    // Older CLIs may omit the field. Never infer that the requested mode is active.
+    for reported in [Value::Null, json!(""), json!(false)] {
+        let mut output = Claude.output();
+        output.push(
+            Stream::Stdout,
+            &line(&json!({"type":"system", "subtype":"init", "permissionMode":reported})),
+        );
+        assert!(
+            output
+                .take_activity()
+                .unwrap()
+                .contains("Auto availability cannot be confirmed")
+        );
+        output.push(Stream::Stdout, &line(&success()));
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+    }
+}
+
+#[test]
+fn policy_or_availability_fallback_is_visible_even_when_claude_completes_successfully() {
+    for mode in ["default", "manual"] {
+        let mut output = Claude.output();
+        // A reported Manual mode must not be mistaken for active Auto, including
+        // if it follows an earlier Auto report. The raw record is kept intact.
+        output.push(
+            Stream::Stdout,
+            &line(&json!({"type":"system", "subtype":"init", "permissionMode":"auto"})),
+        );
+        output.take_activity();
+        let reported = line(&json!({"type":"system", "subtype":"init", "permissionMode":mode}));
+        assert_eq!(output.push(Stream::Stdout, &reported).as_bytes(), reported);
+        let activity = output.take_activity().unwrap();
+        assert!(activity.contains("Auto was not active"));
+        assert!(activity.contains("organization policy"));
+        assert!(activity.contains("does not retry with broader permissions"));
+        output.push(Stream::Stdout, &line(&success()));
+        output.finish();
+        for (exit, expected) in [(0, JobStatus::Succeeded), (1, JobStatus::Failed)] {
+            let (outcome, message) = output.interpret(status(exit));
+            assert_eq!(outcome, expected);
+            // Keep the warning in the terminal summary as well as bounded Activity.
+            assert!(message.contains("Auto was not active"));
+            assert!(message.contains("organization policy"));
+        }
+    }
+}
+
+#[test]
+fn unsupported_auto_or_policy_rejection_preserves_cli_diagnostic_and_fails() {
+    for diagnostic in [
+        "error: option '--permission-mode <mode>' argument 'auto' is invalid",
+        "Auto mode is unavailable for this model",
+        "Auto mode disabled by organization policy",
+    ] {
+        let mut output = Claude.output();
+        // A CLI may reject before emitting any JSON; stderr remains actionable.
+        output.push(Stream::Stderr, diagnostic.as_bytes());
+        assert!(output.finish().contains(diagnostic));
+        assert!(output.take_activity().unwrap().contains(diagnostic));
+        let (outcome, message) = output.interpret(status(1));
+        assert_eq!(outcome, JobStatus::Failed);
+        assert!(
+            message.contains("CLI support, account/model availability and organization policy")
+        );
+    }
 }
 
 #[test]
@@ -349,6 +483,55 @@ fn errors_malformed_incomplete_duplicate_and_post_result_records_fail_closed() {
 }
 
 #[test]
+fn observed_ui_render_notification_can_follow_result_but_cannot_hide_errors_or_execution() {
+    let notification = json!({"type":"system", "subtype":"ui_invalidate", "event":"ui.render", "prompts_screened":true});
+    for with_ids in [false, true] {
+        let mut event = notification.clone();
+        if with_ids {
+            event["session_id"] = json!("fixture");
+            event["uuid"] = json!("notification");
+        }
+        let mut output = Claude.output();
+        output.push(Stream::Stdout, &line(&event));
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+        output.push(Stream::Stdout, &line(&success()));
+        assert_eq!(
+            output.push(Stream::Stdout, &line(&event)).as_bytes(),
+            line(&event)
+        );
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+        assert_eq!(output.interpret(status(1)).0, JobStatus::Failed);
+        output.push(Stream::Stdout, &line(&success()));
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+    }
+    let mut missing = notification.clone();
+    missing.as_object_mut().unwrap().remove("prompts_screened");
+    let mut invalid = vec![missing];
+    for (key, value) in [
+        ("type", json!("assistant")),
+        ("subtype", json!("error")),
+        ("event", json!("execution")),
+        ("prompts_screened", json!(false)),
+        ("prompts_screened", json!("true")),
+        ("error", json!("execution failed")),
+        ("message", json!({"content":"later activity"})),
+        ("unknown", json!(true)),
+        ("uuid", json!(null)),
+    ] {
+        let mut event = notification.clone();
+        event[key] = value;
+        invalid.push(event);
+    }
+    for event in invalid {
+        let mut output = Claude.output();
+        output.push(Stream::Stdout, &line(&success()));
+        output.push(Stream::Stdout, &line(&event));
+        output.push(Stream::Stdout, &line(&notification));
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed, "{event}");
+    }
+}
+
+#[test]
 fn sdk_sized_buffer_accepts_large_valid_records_and_never_parses_oversize_fragments() {
     let mut event = success();
     event["result"] = json!("x".repeat(600 * 1024));
@@ -429,6 +612,51 @@ fn version_one_state_preserves_old_backends_and_claude_draft_history_and_restart
     }
 }
 
+#[test]
+fn saved_auto_and_legacy_permissions_preserve_preferences_history_and_templates() {
+    for mode in [None, Some("dontAsk"), Some("acceptEdits"), Some("auto")] {
+        let mut state: AppState = serde_json::from_value(json!({
+            "version": 1,
+            "draft": {"agent":"claude", "prompt":"old task", "options":{}},
+            "templates": [{"name":"Review", "prompt":"Review the README"}]
+        }))
+        .unwrap();
+        if let Some(mode) = mode {
+            state
+                .draft
+                .options
+                .insert("permission_mode".into(), mode.into());
+        }
+        let original = state.draft.clone();
+        state.runs.push(Run {
+            provenance: None,
+            id: 1,
+            created_at: 0,
+            task: original.clone(),
+            jobs: vec![Job::queued(repo())],
+        });
+        // Backend switching saves Claude's preferences without modifying templates.
+        state.select_agent(AgentId::Codex);
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store.save(&state).unwrap();
+        let mut restored = store.load().unwrap();
+        restored.select_agent(AgentId::Claude);
+        assert_eq!(restored.draft.options, original.options);
+        assert_eq!(restored.runs[0].task.options, original.options);
+        restored.reuse_task(restored.runs[0].task.clone());
+        assert_eq!(restored.draft.options, original.options);
+        restored.draft.prompt = restored.templates[0].prompt.clone();
+        assert_eq!(
+            serde_json::to_value(&restored.templates).unwrap(),
+            json!([{"name":"Review", "prompt":"Review the README"}])
+        );
+        let spec = Claude.build(&restored.draft, &repo()).unwrap();
+        assert_eq!(spec.args[8], mode.unwrap_or("dontAsk"));
+        assert_eq!(spec.args.len(), 9);
+    }
+}
+
 #[tokio::test]
 async fn missing_claude_is_actionable_and_does_not_disable_other_backends() {
     let dir = tempfile::tempdir().unwrap();
@@ -481,7 +709,7 @@ async fn installed_claude_accepts_generated_arguments() {
         ("max_turns".into(), "10".into()),
     ]
     .into();
-    for mode in ["dontAsk", "acceptEdits"] {
+    for mode in ["dontAsk", "acceptEdits", "auto"] {
         task.options.insert("permission_mode".into(), mode.into());
         let mut spec = Claude
             .build(
@@ -504,5 +732,125 @@ async fn installed_claude_accepts_generated_arguments() {
         Claude
             .check_detection(&String::from_utf8_lossy(&captured.stdout))
             .unwrap();
+    }
+}
+
+#[tokio::test]
+#[ignore = "Uses authenticated Claude and billable model calls; requires available Auto mode"]
+async fn authenticated_claude_auto_and_disabled_auto_in_disposable_repositories() {
+    for disabled in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(
+            std::process::Command::new("git")
+                .args(["init", "--quiet"])
+                .current_dir(dir.path())
+                .status()
+                .unwrap()
+                .success()
+        );
+        if disabled {
+            std::fs::create_dir(dir.path().join(".claude")).unwrap();
+            std::fs::write(
+                dir.path().join(".claude/settings.json"),
+                r#"{"permissions":{"disableAutoMode":"disable"}}"#,
+            )
+            .unwrap();
+        } else {
+            std::fs::write(
+                dir.path().join("fixture.txt"),
+                "CodeConvoy Auto mode fixture\n",
+            )
+            .unwrap();
+        }
+        let mut task = task();
+        task.options = [
+            ("permission_mode".into(), "auto".into()),
+            ("max_turns".into(), "4".into()),
+        ]
+        .into();
+        task.prompt = if disabled {
+            "Reply with exactly AUTO_DISABLED_FIXTURE. Do not use any tools or access any files."
+        } else {
+            "This is an authorized disposable CodeConvoy compatibility fixture. Read fixture.txt and create auto-mode-check.txt in this directory containing exactly AUTO_MODE_OK followed by a newline. Do not access files outside this repository, use network tools, or run Git commands. Report whether the file was written."
+        }.into();
+        let spec = Claude
+            .build(
+                &task,
+                &Repository {
+                    name: "Auto fixture".into(),
+                    path: dir.path().into(),
+                },
+            )
+            .unwrap();
+        let captured = tokio::time::timeout(
+            std::time::Duration::from_secs(120),
+            process::capture(spec, 1024 * 1024),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(!captured.truncated);
+        let events: Vec<Value> = String::from_utf8(captured.stdout.clone())
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        let init = events
+            .iter()
+            .find(|e| e["type"] == "system" && e["subtype"] == "init")
+            .unwrap();
+        assert_eq!(
+            init["permissionMode"],
+            if disabled { "default" } else { "auto" }
+        );
+        let mut output = Claude.output();
+        output.push(Stream::Stdout, &captured.stdout);
+        output.push(Stream::Stderr, &captured.stderr);
+        output.finish();
+        let (outcome, message) = output.interpret(captured.status);
+        if outcome != JobStatus::Succeeded {
+            for event in &events {
+                if event["type"] == "system" && event["subtype"] == "ui_invalidate" {
+                    let mut notification = event.clone();
+                    let fields = notification.as_object_mut().unwrap();
+                    fields.remove("session_id");
+                    fields.remove("uuid");
+                    println!("Claude fixture trailing notification: {notification}");
+                }
+                let diagnostics: serde_json::Map<String, Value> = [
+                    "type",
+                    "subtype",
+                    "error",
+                    "is_error",
+                    "duration_ms",
+                    "duration_api_ms",
+                    "num_turns",
+                    "terminal_reason",
+                    "stop_reason",
+                    "deferred_tool_use",
+                    "api_error_status",
+                    "errors",
+                ]
+                .into_iter()
+                .filter_map(|key| event.get(key).map(|v| (key.to_owned(), v.clone())))
+                .collect();
+                println!(
+                    "Claude fixture protocol diagnostic: {}",
+                    Value::Object(diagnostics)
+                );
+            }
+        }
+        assert_eq!(outcome, JobStatus::Succeeded, "{message}");
+        assert_eq!(message.contains("Auto was not active"), disabled);
+        if !disabled {
+            assert_eq!(
+                std::fs::read_to_string(dir.path().join("auto-mode-check.txt")).unwrap(),
+                "AUTO_MODE_OK\n"
+            );
+        }
+        println!(
+            "Authenticated Claude fixture: disabled={disabled}, reported mode={}, outcome={outcome:?}",
+            init["permissionMode"]
+        );
     }
 }

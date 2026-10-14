@@ -17,6 +17,86 @@ CLI version, file-editing behavior, attachments and real-CLI cancellation were n
 provided as part of this confirmation. The original fixture and contract evidence
 below remains a historical record of the 2026-10-05 checks.
 
+## Auto permission mode — 2026-10-14
+
+Auto is now an explicit third choice, generating `--permission-mode auto`.
+`dontAsk` remains the default, and `acceptEdits` retains its existing behavior.
+Only Claude's option definitions, execution explanation and output decoding
+change; the backend interface, runner, Git/worktree lifecycle and other backends
+are unchanged. No dependency or persisted-state schema changes are required.
+Templates still contain only their name and task text.
+
+The installed Claude Code **2.1.300** accepts the generated arguments. Its help
+and the current official [CLI reference](https://code.claude.com/docs/en/cli-reference)
+and [permission-mode documentation](https://code.claude.com/docs/en/permission-modes)
+confirm Auto. Availability is determined by Claude's CLI, account, model and
+organization settings. Check CLI only checks the core help contract and version;
+it does not certify Auto support or entitlement, and no numeric minimum version
+is asserted. Unsupported invocations remain failed, with stderr preserved and
+an actionable completion diagnostic. No automatic permission retry is added.
+
+Claude can accept Auto yet report Manual (`permissionMode: default` or `manual`).
+The decoder shows reported modes in Activity and retains a Manual/Auto-not-active
+notice in the terminal summary, even when the task succeeds under Manual
+permissions. Missing init mode information is explicitly unverified.
+CodeConvoy does not alter Claude policy/settings
+or add bypass flags. Reporting depends on the CLI's stream and diagnostics; it
+is not independent enforcement or continuous inspection of organization policy.
+
+Authenticated Linux checks used Debian forky/sid, the existing Claude login,
+default model/effort and disposable Git repositories, with a four-turn limit:
+
+- Auto reported `permissionMode: auto` and model `claude-opus-5-5`, read a fixture,
+  wrote the exact `AUTO_MODE_OK` line, and returned a successful final result.
+- A separate repository with `.claude/settings.json` containing
+  `{"permissions":{"disableAutoMode":"disable"}}` reported `default` despite
+  the Auto argument. A no-tools response succeeded with no stderr. This confirms
+  why exit status alone cannot establish Auto availability. The setting is a
+  local simulation of the documented restriction, not an organization-admin test.
+
+No credential file was inspected or edited. These checks do not establish native
+UI behavior, every account/provider/model combination, organization policy updates
+during execution, authenticated cancellation, or macOS/Windows Auto execution.
+Existing process and lifecycle fixture tests cover cancellation and supervision.
+The optional authenticated regression in `tests/claude.rs` repeats both scenarios
+through CodeConvoy's command builder, capture and output decoder; it stays ignored
+in ordinary tests because it requires authentication and makes model calls.
+
+The authenticated regression initially exposed an existing decoder incompatibility:
+Claude 2.1.300 returned a successful final result, then this notification:
+
+```json
+{"type":"system","subtype":"ui_invalidate","event":"ui.render","prompts_screened":true}
+```
+
+Previously every record after the result failed completion. The decoder now
+accepts only this observed UI-render shape after a result, with optional nonempty
+string `session_id`/`uuid` fields. It preserves the record in output. Additional
+fields, malformed variants, execution messages, errors and duplicate results
+still fail; a notification alone cannot establish success. This narrow exception
+uses installed-CLI evidence, not a claim that the private notification is a stable
+documented SDK contract. Future shape changes fail conservatively and may require
+a compatibility update. The real Auto and disabled-Auto tests both passed after
+this correction.
+
+Final local validation after the decoder correction:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features` | 600 passed, 0 failed, 10 opt-in tests ignored (excluding seven nested fixture-test summaries) |
+| `cargo build --release` | Passed on Linux |
+| `cargo test --all-features --test claude -- --include-ignored --nocapture --test-threads=1` | All 19 passed, including the installed help/version probe and authenticated Auto/disabled-Auto probe |
+
+Deterministic Claude coverage includes exact arguments for all three modes,
+unchanged defaults and approval explanations, rejection of unknown/bypass modes,
+CLI rejection diagnostics, Manual fallback, missing mode reports, persisted
+draft/preferences/history/reuse and unchanged templates, plus the narrowly
+accepted trailing notification and rejected malformed/error variants. The full
+suite reran existing scheduler, worktree, cancellation and supervision regressions.
+No Windows/macOS build or native Auto UI verification was performed in this task.
+
 ## Contract evidence
 
 The implementation was checked against current official sources, not remembered flags:
@@ -37,13 +117,13 @@ These are rolling documentation/source references inspected on the recorded date
 
 The [README contract](../README.md#claude-code-contract) gives the exact command, controls and permission limitations. Claude receives only the task through stdin; no shell interpolates it. Native repository paths are passed as the process working directory. Authentication/provider configuration stays with Claude, except that inherited repository/PWD overrides are removed.
 
-Only model, effort, permission mode and maximum turns are exposed alongside executable selection. No maintained model catalog is needed. Custom tool-rule strings, additional directories and agent/subagent definitions add policy/configuration surface not needed for this release. Bypass and classifier-based auto modes are deliberately absent. `ultracode` is a composite mode, not exposed as another effort level. No session resume, remote attachment or worktree flags are used.
+Only model, effort, permission mode and maximum turns are exposed alongside executable selection. No maintained model catalog is needed. Custom tool-rule strings, additional directories and agent/subagent definitions add policy/configuration surface not needed for this release. Bypass remains absent; classifier-based Auto was added on 2026-10-14 as described above. `ultracode` is a composite mode, not exposed as another effort level. No session resume, remote attachment or worktree flags are used.
 
-`--permission-prompts none` is documented only for newer releases. This implementation relies on the documented print-mode behavior without a permission host, plus the explicit permission mode, rather than requiring that newer flag. Existing permission hooks can still decide requests. `--bare` is not used because the backend is intended to inherit the user's established configuration. Print skips trust prompts: repository hooks/MCP servers can run. Neither offered permission mode is an OS sandbox, and neither promises file access is confined to the selected repository.
+`--permission-prompts none` is documented only for newer releases. This implementation relies on the documented print-mode behavior without a permission host, plus the explicit permission mode, rather than requiring that newer flag. Existing permission hooks can still decide requests. `--bare` is not used because the backend is intended to inherit the user's established configuration. Print skips trust prompts: repository hooks/MCP servers can run. None of the offered permission modes is an OS sandbox or promises file access is confined to the selected repository.
 
 Claude owns result interpretation. Required success fields and conservative failure rules are documented in [architecture](architecture.md#fourth-backend-review-claude-code). A success subtype alone is insufficient: the official schema permits `is_error=true` even on a success-shaped result. Recovered tool failures remain distinct from session errors. Output retains metadata for inspection, with the parsed final result held locally by the decoder. No normalized Activity model was added.
 
-## Validation evidence
+## Original validation evidence — 2026-10-05
 
 | Area | Result |
 | --- | --- |
@@ -54,7 +134,7 @@ Claude owns result interpretation. Required success fields and conservative fail
 | State/UI logic | Old version-1 states, all backend preferences, restart recovery, accepted-launch clearing, immutable history and Claude reuse without launch tested; generic terminal-history cleanup regression retained |
 | Native macOS UI | Actual egui App with isolated disposable state and synthetic history: selector, all four backend switches, missing CLI, Claude controls, Tab/Enter navigation, history/settings/reuse, 780×560 and expanded layouts, dark/light/system themes checked |
 | Installed Claude / authentication | User-confirmed working on macOS, 2026-10-12; five-repository README summarization convoy (see above) |
-| Other platforms | No native Linux/Windows Claude run performed; CI must validate platform builds/tests |
+| Other platforms | No native Linux/Windows Claude run performed at the original validation; see the later Linux Auto checks above |
 
 The temporary UI launcher and app wrapper were removed after inspection. Its history was visibly labelled synthetic and never represented a Claude execution. Native UI checks used a separate temporary store, not the user's saved CodeConvoy state.
 

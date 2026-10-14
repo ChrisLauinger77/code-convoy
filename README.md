@@ -625,16 +625,20 @@ CodeConvoy passes separate arguments directly, sets the selected repository as t
 | Executable  | `claude` on PATH or an absolute executable path; native `claude.exe` on Windows                                                     |
 | Model       | **Claude default** when blank; otherwise `--model=ALIAS_OR_ID`, without a fixed model catalog                                       |
 | Effort      | Claude default, or `--effort=low/medium/high/xhigh/max`; CLI/model support applies                                                  |
-| Permissions | **Existing approvals; deny asks** (`dontAsk`, default), or **Accept edits / file commands** (`acceptEdits`)                         |
+| Permissions | **Existing approvals; deny asks** (`dontAsk`, default), **Accept edits / file commands** (`acceptEdits`), or **Auto** (`auto`)        |
 | Max turns   | Blank preserves Claude's default; otherwise `--max-turns=POSITIVE_INTEGER`. Reaching it fails completion. This is not a time limit. |
 
 These are [Claude tool permissions](https://code.claude.com/docs/en/permissions), **not an OS sandbox**. Existing approvals can allow writes and shell commands. `acceptEdits` additionally auto-approves edits and common filesystem commands such as `mkdir`, `touch`, `mv` and `cp`. Unresolved permission requests are denied because CodeConvoy supplies no interactive permission host. Existing permission hooks still apply. No additional directories or blanket bypass are enabled by CodeConvoy; configured access remains Claude's responsibility.
+
+**Auto** passes `--permission-mode auto` and uses Claude's classifier for tool approvals. It requires a supporting CLI, account and model; [organization policy and availability restrictions](https://code.claude.com/docs/en/permission-modes#eliminate-permission-prompts-with-auto-mode) still apply. CodeConvoy reports Claude's effective `permissionMode` in Activity. If Claude reports Manual (`default`/`manual`), Activity and the final job summary explicitly say Auto was not active; the task can still complete under those permissions. An init record without a mode is reported as unverified. Rejected invocations fail with the CLI diagnostic in Activity/Raw output. CodeConvoy never retries with broader permissions or substitutes `--dangerously-skip-permissions`; choose a different supported mode explicitly if needed.
 
 Use trusted repositories: print mode skips workspace trust prompts and can load repository hooks/MCP configuration. Disabling session persistence does not disable all Claude logging, configuration or network activity.
 
 `Check CLI` checks the core help interface and displays the version where available, without contacting a model. Some documented flags are hidden from help, so this is a compatibility check, not proof that every optional setting works on an older CLI. Missing Claude is a normal state and does not affect other backends.
 
-Output retains Claude's JSON records for assistant/tool activity and metadata, extracts final response text, and labels stderr. Success requires exit zero and one valid final `result` with `subtype=success`, `is_error=false`, required result fields, and no explicit execution/protocol error or reported interruption. Errors, missing results, malformed/oversized records and activity after the result fail conservatively. Recovered tool failures and permission denials remain visible; review the response and diff even after success. Assembly allows 1 MiB per record, following the official SDK's default; existing display/log caps still apply.
+In particular, **Available** does not certify Auto availability. There is no hardcoded minimum Claude version or account/model catalog. Existing saved settings keep their mode; settings without a permission mode still use `dontAsk`. Task templates continue to store task text only.
+
+Output retains Claude's JSON records for assistant/tool activity and metadata, extracts final response text, and labels stderr. Success requires exit zero and one valid final `result` with `subtype=success`, `is_error=false`, required result fields, and no explicit execution/protocol error or reported interruption. Errors, missing results, malformed/oversized records and execution activity after the result fail conservatively. Only the exact UI-render notification shape observed with Claude 2.1.300 may follow a result; see the [validation record](docs/claude-validation.md#auto-permission-mode--2026-10-14). Recovered tool failures and permission denials remain visible; review the response and diff even after success. Assembly allows 1 MiB per record, following the official SDK's default; existing display/log caps still apply.
 
 Scheduling, repository safeguards, cancellation, draft clearing, persisted options, snapshots, history and **Reuse convoy** use the shared lifecycle unchanged. No state migration is required, and reuse never starts work automatically.
 
@@ -653,6 +657,12 @@ An optional installed-CLI probe runs help/version only:
 
 ```sh
 cargo test --all-features --test claude installed_claude_accepts_generated_arguments -- --ignored --nocapture
+```
+
+The separate authenticated Auto probe makes model calls using existing Claude authentication and disposable Git repositories. It checks an actual file write and a local `disableAutoMode` setting; it does not test an organization-admin deployment. Run it only when Auto is available for your account:
+
+```sh
+cargo test --all-features --test claude authenticated_claude_auto_and_disabled_auto_in_disposable_repositories -- --ignored --nocapture
 ```
 
 ## Repository safety and data
