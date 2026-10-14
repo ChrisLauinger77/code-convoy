@@ -12,12 +12,12 @@ case "$1" in
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     apt-get install -y ./dist/*.deb
-    apt-get install -y python3 xvfb xauth openbox wmctrl dbus-x11 procps passwd util-linux
+    apt-get install -y python3 xvfb xauth openbox wmctrl dbus-x11 procps passwd util-linux gdb
     dpkg-query -W code-convoy libc6
     ;;
   fedora)
     dnf install -y ./dist/*.rpm
-    dnf install -y python3 xorg-x11-server-Xvfb xorg-x11-xauth openbox wmctrl dbus-daemon procps-ng shadow-utils util-linux
+    dnf install -y python3 xorg-x11-server-Xvfb xorg-x11-xauth openbox wmctrl dbus-daemon procps-ng shadow-utils util-linux gdb
     rpm -q code-convoy glibc
     rpm -q --requires code-convoy
     ;;
@@ -27,10 +27,15 @@ git --version
 sha256sum dist/*.deb dist/*.rpm dist/*.AppImage
 # Supply the system bus a normal desktop has; Docker does not run an init system.
 dbus-uuidgen --ensure=/etc/machine-id
+mkdir -p /run/dbus
 dbus-daemon --system --fork --nopidfile
 # Package installation needs root; ordinary desktop execution does not.
 useradd --create-home package-test
-runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py /usr/bin/codeconvoy
+if ! runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py /usr/bin/codeconvoy; then
+  # A diagnostic rerun never converts a failed ordinary launch into a pass.
+  runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py /usr/bin/codeconvoy --debug || true
+  exit 1
+fi
 runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py dist/*.AppImage --mode extract
 export PATH="/candidate/target/packaging/linux/host-bin:$PATH"
 export CODECONVOY_EXPECT_PATH="$PATH"

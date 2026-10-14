@@ -6,7 +6,9 @@ License: MIT
 URL: https://github.com/ChrisLauinger77/code-convoy
 BuildArch: x86_64
 Requires: git, xdg-utils, xdg-desktop-portal
-Requires: libX11, libXcursor, libXi, libXrandr, libxkbcommon, libxkbcommon-x11, wayland-libs
+Requires: libX11, libXcursor, libXi, libXrandr, libxkbcommon, libxkbcommon-x11
+# Runtime-loaded libraries; distributions can split these into different packages.
+Requires: libwayland-client.so.0()(64bit), libwayland-cursor.so.0()(64bit)
 Requires: mesa-libEGL, mesa-libGL, dbus-libs, fontconfig
 # rpmbuild additionally derives ELF/glibc/libgcc requirements from the binary.
 %global debug_package %{nil}

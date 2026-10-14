@@ -22,7 +22,7 @@ def stop(process):
             process.wait(timeout=10)
 
 
-def smoke(binary, mode):
+def smoke(binary, mode, debug=False):
     with tempfile.TemporaryDirectory(prefix="codeconvoy-linux-runtime-") as temporary:
         home = Path(temporary)
         env = dict(os.environ, HOME=str(home), XDG_DATA_HOME=str(home / "data"),
@@ -47,7 +47,11 @@ def smoke(binary, mode):
                     time.sleep(0.1)
                 else:
                     raise RuntimeError("Window manager did not become ready")
-                process = subprocess.Popen([str(binary)], env=env, stdout=log, stderr=log, start_new_session=True)
+                command = [str(binary)]
+                if debug:
+                    command = ["gdb", "--batch", "-ex", "set pagination off", "-ex", "run",
+                               "-ex", "thread apply all bt 12", "--args", *command]
+                process = subprocess.Popen(command, env=env, stdout=log, stderr=log, start_new_session=True)
                 deadline = time.monotonic() + 30
                 window = None
                 while time.monotonic() < deadline:
@@ -74,6 +78,12 @@ def smoke(binary, mode):
                     raise RuntimeError(f"Application failed normal shutdown: {process.returncode}")
                 print(f"PASS {binary.name}: {mode}, Xvfb window/store initialization and normal close", flush=True)
             except Exception:
+                if debug and process is not None and process.poll() is None:
+                    process.send_signal(signal.SIGINT)  # Stop under GDB and print all thread stacks.
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        pass
                 pids = str(wm.pid) + (f",{process.pid}" if process is not None else "")
                 for command in (["wmctrl", "-lp"], ["ps", "-L", "-p", pids,
                                                        "-o", "pid,ppid,lwp,stat,wchan:24,comm"]):
@@ -94,5 +104,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("binary", type=Path)
     parser.add_argument("--mode", choices=["native", "extract", "fuse"], default="native")
+    parser.add_argument("--debug", action="store_true", help="diagnostic GDB rerun after ordinary startup fails")
     args = parser.parse_args()
-    smoke(args.binary.resolve(strict=True), args.mode)
+    smoke(args.binary.resolve(strict=True), args.mode, args.debug)
