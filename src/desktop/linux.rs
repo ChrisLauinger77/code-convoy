@@ -95,8 +95,8 @@ pub(super) fn start(
     let online = Arc::new(AtomicBool::new(false));
     let active = online.clone();
     let task = runtime.spawn(async move {
-        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
-        let light = light_glyph(&desktop, color_scheme().await);
+        let (gnome_shell, color_scheme) = appearance().await;
+        let light = light_glyph(gnome_shell, color_scheme);
         let icon = match super::tray_glyph(light) {
             Ok(image) => {
                 let mut argb = image.rgba;
@@ -162,35 +162,52 @@ pub(super) fn start(
 /// SNI pixmaps are not recolored by hosts. GNOME Shell's top bar stays dark in
 /// either style; other panels follow the desktop color scheme. Only an explicit
 /// light preference selects the black glyph.
-fn light_glyph(desktop: &str, color_scheme: Option<u32>) -> bool {
+fn light_glyph(gnome_shell: bool, color_scheme: Option<u32>) -> bool {
     const PREFER_LIGHT: u32 = 2;
-    desktop
-        .split(':')
-        .any(|name| name.eq_ignore_ascii_case("GNOME"))
-        || color_scheme != Some(PREFER_LIGHT)
+    gnome_shell || color_scheme != Some(PREFER_LIGHT)
 }
 
-/// XDG Settings portal `org.freedesktop.appearance` `color-scheme`, if readable.
-async fn color_scheme() -> Option<u32> {
+/// Whether GNOME Shell owns the session panel, and the XDG Settings portal
+/// `org.freedesktop.appearance` `color-scheme`, if readable. GNOME Shell is
+/// detected by its bus name because `XDG_CURRENT_DESKTOP` may list `GNOME` only
+/// as a compatibility entry (for example `Budgie:GNOME`).
+async fn appearance() -> (bool, Option<u32>) {
     let read = async {
         let connection = zbus::Connection::session().await.ok()?;
-        let reply = connection
-            .call_method(
-                Some("org.freedesktop.portal.Desktop"),
-                "/org/freedesktop/portal/desktop",
-                Some("org.freedesktop.portal.Settings"),
-                "ReadOne",
-                &("org.freedesktop.appearance", "color-scheme"),
-            )
-            .await
-            .ok()?;
-        let value: zbus::zvariant::OwnedValue = reply.body().deserialize().ok()?;
-        u32::try_from(value).ok()
+        let gnome_shell = async {
+            let reply = connection
+                .call_method(
+                    Some("org.freedesktop.DBus"),
+                    "/org/freedesktop/DBus",
+                    Some("org.freedesktop.DBus"),
+                    "NameHasOwner",
+                    &("org.gnome.Shell",),
+                )
+                .await
+                .ok()?;
+            reply.body().deserialize::<bool>().ok()
+        };
+        let color_scheme = async {
+            let reply = connection
+                .call_method(
+                    Some("org.freedesktop.portal.Desktop"),
+                    "/org/freedesktop/portal/desktop",
+                    Some("org.freedesktop.portal.Settings"),
+                    "ReadOne",
+                    &("org.freedesktop.appearance", "color-scheme"),
+                )
+                .await
+                .ok()?;
+            let value: zbus::zvariant::OwnedValue = reply.body().deserialize().ok()?;
+            u32::try_from(value).ok()
+        };
+        Some((gnome_shell.await.unwrap_or(false), color_scheme.await))
     };
     tokio::time::timeout(Duration::from_secs(2), read)
         .await
         .ok()
         .flatten()
+        .unwrap_or((false, None))
 }
 
 impl Backend for LinuxTray {
@@ -215,11 +232,11 @@ impl Drop for LinuxTray {
 
 #[cfg(test)]
 #[test]
-fn glyph_contrasts_with_gnome_bar_and_explicit_light_panels_only() {
-    assert!(light_glyph("ubuntu:GNOME", Some(2)));
-    assert!(light_glyph("GNOME", None));
-    assert!(!light_glyph("KDE", Some(2)));
-    assert!(light_glyph("KDE", Some(1)));
-    assert!(light_glyph("KDE", Some(0)));
-    assert!(light_glyph("", None));
+fn glyph_contrasts_with_gnome_shell_and_explicit_light_panels_only() {
+    assert!(light_glyph(true, Some(2)));
+    assert!(light_glyph(true, None));
+    assert!(!light_glyph(false, Some(2)));
+    assert!(light_glyph(false, Some(1)));
+    assert!(light_glyph(false, Some(0)));
+    assert!(light_glyph(false, None));
 }

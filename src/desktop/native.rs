@@ -54,13 +54,14 @@ pub(super) fn start(state: MenuState, events: Events) -> Result<Box<dyn Backend>
     #[cfg(windows)]
     let image = super::tray_glyph(!windows_light_taskbar())?;
     let icon = Icon::from_rgba(image.rgba, image.width, image.height).map_err(|e| e.to_string())?;
-    let icon = TrayIconBuilder::new()
+    let builder = TrayIconBuilder::new()
         .with_menu(Box::new(menu.clone()))
-        .with_tooltip(state.tooltip())
-        .with_icon(icon)
-        .with_icon_as_template(cfg!(target_os = "macos"))
-        .build()
-        .map_err(|e| e.to_string())?;
+        .with_tooltip(state.tooltip());
+    #[cfg(target_os = "macos")]
+    let builder = builder.with_icon_templated(icon);
+    #[cfg(windows)]
+    let builder = builder.with_icon(icon);
+    let icon = builder.build().map_err(|e| e.to_string())?;
     // On Windows creation can succeed before Explorer has registered the icon.
     // NIM_MODIFY confirms registration; failure must not enable close-to-tray.
     icon.set_tooltip(Some(state.tooltip()))
