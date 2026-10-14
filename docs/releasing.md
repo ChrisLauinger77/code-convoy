@@ -275,8 +275,10 @@ and writes their final checksums. Do not run `publish.py` locally as a build tes
 
 Linux runtime packages are separate from CI packaging tools: desktop graphics,
 X11/Wayland libraries, fontconfig, libdbus, Git, URL-opening utilities and the
-desktop's portal/backend. The Debian dependency list and RPM requirements use
-their respective distribution names; RPM also derives ELF requirements.
+desktop's portal/backend. Debian uses distribution package names; RPM uses
+package names and library capabilities, and also derives ELF requirements.
+Wayland's client/cursor SONAME capabilities support Fedora's split packages
+without requiring the unavailable `wayland-libs` package name.
 The DEB is user-verified to install and run on Debian Forky; AppImage startup is
 also user-verified there.
 The Linux release build uses Ubuntu 24.04; **glibc 2.39 is the intended minimum
@@ -296,9 +298,10 @@ section contributes requirements: exported definitions do not raise the minimum.
 Version tuples are compared numerically, including weak requirements. Unknown or
 private GLIBC ABI names, incomplete need records, command failures and readelf
 diagnostics fail validation. Dynamic loader tags must agree with the version
-needs table, so missing section headers cannot hide requirements. Any requirement above 2.39 fails the candidate before
-upload. The static runtime may legitimately have no versioned GLIBC requirements;
-the application's executable may not silently lose its measurement.
+needs table, so missing section headers cannot hide requirements. Any requirement
+above 2.39 fails the candidate before upload. The static runtime may legitimately
+have no versioned GLIBC requirements; the application's executable may not silently
+lose its measurement.
 
 `target/packaging/linux/glibc-requirements.txt` and the candidate summary record
 each final artifact's SHA-256, every inspected ELF and its highest required GLIBC
@@ -317,6 +320,12 @@ certification. Verify graphics, decorations, clipboard, portals and shutdown on
 the actual target desktops with the exact candidate before claiming complete
 distribution compatibility. Record missing evidence in the
 [platform matrix](platform-validation.md#linux-glibc-239-baseline).
+
+Packages are retained after ABI validation for failure diagnosis; aggregation
+still requires all runtime checks to pass. The startup harness requires a mapped
+window, an isolated store and ordinary window close. A timeout fails the job,
+with window/process diagnostics and an optional GDB backtrace of the original
+stalled process. Installing GDB is only a test-environment dependency.
 
 The X11 backend loads `libxkbcommon-x11.so.0` with `dlopen`, so ELF dependency
 scanning does not discover it. CI and DEB explicitly require

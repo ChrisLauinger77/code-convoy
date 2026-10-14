@@ -14,20 +14,74 @@ the 2.39 ceiling. This is not a complete distribution compatibility claim.
 
 ### Candidate and automated evidence
 
-The non-publishing candidate run, final artifact measurements and validation
-results will be recorded here after this change's candidate completes. No tag,
-release publication or downstream package update is authorized by these checks.
+The current implementation is in [draft PR 60](https://github.com/ChrisLauinger77/code-convoy/pull/60).
+The following measured package evidence comes from non-publishing
+[candidate 38599276230](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38599276230),
+source `747d480c055115cad35183b1cd9fcde797424148`. Its Linux runtime gate failed;
+it is **not a complete validated candidate**. Aggregation did not generate a
+six-package `SHA256SUMS`. The three downloaded Linux hashes were independently
+checked against the packaging job's recorded hashes, and the final archives
+were extracted and inspected again locally.
+
+| Final artifact | Highest GLIBC requirement | SHA-256 |
+| --- | --- | --- |
+| `code-convoy_0.10.0_amd64.deb` | 2.39 | `9621314a830c88b7f087031bb4a576650c23da8f2a496661ea9dc673bbdff25e` |
+| `code-convoy-0.10.0-1.x86_64.rpm` | 2.39 | `76bfd3ba2e0554ba2d9a1831d91293eebfdbca5ee998849d3b247725f7fe6614` |
+| `CodeConvoy-0.10.0-x86_64.AppImage` | 2.39 | `844d893f0550b643eb46f0d4ae73670a235ceda8bbaac62abf6335a82e519ea4` |
+
+The outer AppImage runtime has no versioned GLIBC requirement and was inspected
+separately. These packages currently contain no additional shared-library ELFs;
+the executable imports weak `pidfd_spawnp` and `pidfd_getpid` versions at 2.39.
+The gate counts weak requirements and will also inspect any future bundled ELF.
+
+Local formatting, strict all-target/all-feature Clippy, the release build, all
+592 Rust tests (nine existing optional tests ignored), the separately enabled
+private-D-Bus test and all 34 packaging tests passed. This includes real ELF/DEB
+fixtures and rejection of stripped version-section metadata. The pinned Rust
+1.99.0, Python 3.15, cargo-packager and AppImage tools successfully built on the
+Ubuntu 24.04 runner. No application dependency or toolchain version changed.
 
 | Check | Ubuntu 24.04 LTS | Debian 13 Stable | Fedora 44 (RPM) |
 | --- | --- | --- | --- |
-| Normal dependency-resolving install | Candidate APT/container check pending | Candidate APT/container check pending | Candidate DNF/container check pending |
-| Installed application, Xvfb window and normal close | Pending | Pending | Pending |
-| Exact AppImage extraction fallback | Pending | Pending | Pending |
-| Mounted AppImage/FUSE | Candidate runner check pending when device available | Not tested | Not tested |
-| Disposable Git worktree create/remove and process cancellation | Candidate probe pending | Candidate probe pending | Candidate probe pending |
+| Normal dependency-resolving install | APT passed, hosted and local userspaces | APT passed, hosted | DNF passed, hosted, with corrected Wayland requirements |
+| Installed application, Xvfb window and normal close | Passed locally; ordinary hosted startup failed | Passed, hosted | Passed, hosted |
+| Exact AppImage extraction fallback | Passed locally; not reached in hosted container | Passed, hosted | Passed, hosted |
+| Mounted AppImage/FUSE | Passed on the Ubuntu runner with Xvfb | Not tested | Not tested |
+| Disposable Git worktree create/remove and process cancellation | Local probe passed; not reached in hosted container | Hosted probe passed | Hosted probe passed |
+| Package removal | Passed locally | Passed, hosted | Passed, hosted |
 | Native Wayland and XWayland startup | Not tested on this target | Not tested on this target | Not tested on this target |
 | Hardware rendering, decorations, clipboard and file dialogs | Not tested | Not tested | Not tested |
 | Native desktop normal Quit and task cancellation | Not tested | Not tested | Not tested |
+
+Local userspaces ran in disposable unprivileged Bubblewrap namespaces on the
+Forky host kernel. Ubuntu used the checksum-verified Canonical 24.04.5 base image.
+Earlier candidate `38596495277` also passed local Debian/Fedora userspace
+installation/startup/removal, using the same OCI image digests as the hosted
+checks. The table above reports the latest candidate. Package installation used
+ordinary APT/DNF dependency resolution; GUI tests ran as an unprivileged fixture user with an isolated store, private Xvfb/Openbox display,
+private session bus and software GL. The tests closed the actual window normally.
+The probe used the same pinned AppImage launcher/runtime and a separate
+Ubuntu-built fixture executable, never a public artifact or an authenticated agent.
+
+RPM validation exposed an uninstallable `wayland-libs` package requirement on
+Fedora 44. The spec now requests the `libwayland-client.so.0()(64bit)` and
+`libwayland-cursor.so.0()(64bit)` capabilities; DNF resolves the split library
+packages, while rpmbuild retains its generated GLIBC requirements. No dependency
+resolution was forced or bypassed.
+
+The hosted Ubuntu first launch creates the store but does not map its window
+within 30 seconds. The original-process trace shows its main thread waiting in
+`epoll`; there is no mapped CodeConvoy window. The cause is unresolved. The exact
+same artifacts pass ordinary startup and normal close in the local Ubuntu
+userspace. A previous diagnostic launch under GDB also passed, but neither
+result replaces the failed ordinary hosted launch. No timeout was waived,
+feature disabled or application behavior changed to make the check pass.
+
+**Release blockers:** resolve the hosted Ubuntu startup failure and obtain a
+fully successful fresh candidate (including aggregate checksums/provenance),
+then complete the native target desktop checks below before claiming full
+distribution compatibility. The PR remains draft for maintainer review. No tag,
+publication or downstream update was performed; readiness PR 4 was not started.
 
 Containers use the host kernel and a private virtual X server, not the target's
 complete desktop. The probe exercises real CodeConvoy Git/process code with a

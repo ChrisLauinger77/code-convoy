@@ -44,7 +44,9 @@ repository safeguards, retained worktrees and explicit validation remain intact.
   including the AppImage runtime, are measured and rejected above 2.39. DEB
   dependencies still use the executable's measured minimum. Older published
   packages are unchanged; native distribution compatibility remains subject to
-  the exact-candidate evidence in the platform matrix.
+  the exact-candidate evidence in the platform matrix. The current candidate
+  remains blocked by an unresolved Ubuntu hosted startup failure; Debian 13
+  and Fedora 44 pass the container installation/startup checks.
 - Windows installed/portable packages and the macOS bundle include the license.
   Packaging verifies archive contents, bundle metadata and icons. Artifact names
   and package-manager executable/app paths remain unchanged.
