@@ -47,14 +47,18 @@ pub(super) fn start(state: MenuState, events: Events) -> Result<Box<dyn Backend>
     }
     menu.append_items(&[&active, &quit])
         .map_err(|e| e.to_string())?;
-    let image =
-        eframe::icon_data::from_png_bytes(include_bytes!("../../assets/codeconvoy-256.png"))
-            .map_err(|e| e.to_string())?;
+    // macOS tints the black template for the menu bar; Windows has no template
+    // mechanism, so match the taskbar theme read at tray creation.
+    #[cfg(target_os = "macos")]
+    let image = super::tray_glyph(false)?;
+    #[cfg(windows)]
+    let image = super::tray_glyph(!windows_light_taskbar())?;
     let icon = Icon::from_rgba(image.rgba, image.width, image.height).map_err(|e| e.to_string())?;
     let icon = TrayIconBuilder::new()
         .with_menu(Box::new(menu.clone()))
         .with_tooltip(state.tooltip())
         .with_icon(icon)
+        .with_icon_as_template(cfg!(target_os = "macos"))
         .build()
         .map_err(|e| e.to_string())?;
     // On Windows creation can succeed before Explorer has registered the icon.
@@ -83,6 +87,15 @@ pub(super) fn start(state: MenuState, events: Events) -> Result<Box<dyn Backend>
         tooltip: state.tooltip(),
     }))
 }
+/// Windows 10/11 taskbars are dark unless the system (not app) theme is light.
+#[cfg(windows)]
+fn windows_light_taskbar() -> bool {
+    windows_registry::CURRENT_USER
+        .open(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        .and_then(|key| key.get_u32("SystemUsesLightTheme"))
+        .is_ok_and(|light| light == 1)
+}
+
 impl Backend for NativeTray {
     fn update(&mut self, state: MenuState) -> Result<(), String> {
         self.count.set_text(state.count_label());

@@ -89,22 +89,31 @@ pub(super) fn start(
     events: Events,
     runtime: &tokio::runtime::Handle,
 ) -> Result<Box<dyn Backend>, String> {
-    let image =
-        eframe::icon_data::from_png_bytes(include_bytes!("../../assets/codeconvoy-256.png"))
-            .map_err(|e| e.to_string())?;
-    let mut argb = image.rgba;
-    for pixel in argb.as_chunks_mut::<4>().0 {
-        pixel.rotate_right(1);
-    }
-    let icon = ksni::Icon {
-        width: image.width as i32,
-        height: image.height as i32,
-        data: argb,
-    };
+    // Validate the embedded glyph before reporting the tray as starting.
+    super::tray_glyph(false)?;
     let (updates, mut receiver) = watch::channel(state);
     let online = Arc::new(AtomicBool::new(false));
     let active = online.clone();
     let task = runtime.spawn(async move {
+        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+        let light = light_glyph(&desktop, color_scheme().await);
+        let icon = match super::tray_glyph(light) {
+            Ok(image) => {
+                let mut argb = image.rgba;
+                for pixel in argb.as_chunks_mut::<4>().0 {
+                    pixel.rotate_right(1);
+                }
+                ksni::Icon {
+                    width: image.width as i32,
+                    height: image.height as i32,
+                    data: argb,
+                }
+            }
+            Err(error) => {
+                events.emit(Event::Unavailable(error));
+                return;
+            }
+        };
         let item = Item {
             state,
             events: events.clone(),
@@ -150,6 +159,40 @@ pub(super) fn start(
         online,
     }))
 }
+/// SNI pixmaps are not recolored by hosts. GNOME Shell's top bar stays dark in
+/// either style; other panels follow the desktop color scheme. Only an explicit
+/// light preference selects the black glyph.
+fn light_glyph(desktop: &str, color_scheme: Option<u32>) -> bool {
+    const PREFER_LIGHT: u32 = 2;
+    desktop
+        .split(':')
+        .any(|name| name.eq_ignore_ascii_case("GNOME"))
+        || color_scheme != Some(PREFER_LIGHT)
+}
+
+/// XDG Settings portal `org.freedesktop.appearance` `color-scheme`, if readable.
+async fn color_scheme() -> Option<u32> {
+    let read = async {
+        let connection = zbus::Connection::session().await.ok()?;
+        let reply = connection
+            .call_method(
+                Some("org.freedesktop.portal.Desktop"),
+                "/org/freedesktop/portal/desktop",
+                Some("org.freedesktop.portal.Settings"),
+                "ReadOne",
+                &("org.freedesktop.appearance", "color-scheme"),
+            )
+            .await
+            .ok()?;
+        let value: zbus::zvariant::OwnedValue = reply.body().deserialize().ok()?;
+        u32::try_from(value).ok()
+    };
+    tokio::time::timeout(Duration::from_secs(2), read)
+        .await
+        .ok()
+        .flatten()
+}
+
 impl Backend for LinuxTray {
     fn update(&mut self, state: MenuState) -> Result<(), String> {
         self.updates
@@ -168,4 +211,15 @@ impl Drop for LinuxTray {
     fn drop(&mut self) {
         self.task.abort();
     }
+}
+
+#[cfg(test)]
+#[test]
+fn glyph_contrasts_with_gnome_bar_and_explicit_light_panels_only() {
+    assert!(light_glyph("ubuntu:GNOME", Some(2)));
+    assert!(light_glyph("GNOME", None));
+    assert!(!light_glyph("KDE", Some(2)));
+    assert!(light_glyph("KDE", Some(1)));
+    assert!(light_glyph("KDE", Some(0)));
+    assert!(light_glyph("", None));
 }

@@ -94,6 +94,19 @@ impl MenuState {
     }
 }
 
+/// Monochrome status-area glyph: black on transparency, like most tray icons.
+/// macOS tints it as a template image; other platforms pick a contrast color.
+fn tray_glyph(light: bool) -> Result<eframe::egui::IconData, String> {
+    let mut image = eframe::icon_data::from_png_bytes(include_bytes!("../assets/tray-glyph.png"))
+        .map_err(|e| e.to_string())?;
+    if light {
+        for pixel in image.rgba.as_chunks_mut::<4>().0 {
+            pixel[..3].fill(u8::MAX);
+        }
+    }
+    Ok(image)
+}
+
 trait Backend {
     fn update(&mut self, state: MenuState) -> Result<(), String>;
     // Used only immediately before a close-to-tray decision, never on a timer.
