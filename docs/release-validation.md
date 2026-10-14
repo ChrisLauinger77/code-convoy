@@ -125,7 +125,7 @@ native desktop checks. Non-building workflow jobs retain their existing runners.
 
 | Platform | Remaining validation |
 | --- | --- |
-| Linux X11 and Wayland | ABI inspection and DEB dependency reconciliation completed in PR 60; hosted Fedora RPM install/start passed. Resolve Ubuntu 24.04 hosted startup, obtain a successful complete candidate, and finish native Ubuntu/Debian/Fedora desktop tests: Wayland/XWayland, portal selection/cancellation, clipboard/URLs, installed agents, concurrent cancellation and shutdown |
+| Linux X11 and Wayland | ABI inspection and DEB dependency reconciliation completed in PR 60; hosted Ubuntu/Debian/Fedora install/start checks now pass after correcting window-manager readiness. Finish native Ubuntu/Debian/Fedora desktop tests: Wayland/XWayland, portal selection/cancellation, clipboard/URLs, installed agents, concurrent cancellation and shutdown |
 | Windows x86-64 | On a real desktop check no console flashes, picker, keyboard navigation, installed/portable startup and descendant cancellation on Stop/Stop Convoy/Stop All/close |
 | Intel macOS | Intel slice is built/inspected but was not run on Intel hardware |
 | Downloaded macOS app | Local ad-hoc integrity was verified; actual browser quarantine/Gatekeeper first-launch flow and oldest supported macOS version remain unverified |

@@ -322,10 +322,13 @@ distribution compatibility. Record missing evidence in the
 [platform matrix](platform-validation.md#linux-glibc-239-baseline).
 
 Packages are retained after ABI validation for failure diagnosis; aggregation
-still requires all runtime checks to pass. The startup harness requires a mapped
-window, an isolated store and ordinary window close. A timeout fails the job,
-with window/process diagnostics and an optional GDB backtrace of the original
-stalled process. Installing GDB is only a test-environment dependency.
+still requires all runtime checks to pass. The startup harness waits for Openbox's
+startup callback before launching the application: `wmctrl -m` can succeed while
+the window manager is still initializing. A fresh private callback marker, a
+bounded wait and a live-process check prevent that readiness race. It then
+requires a mapped window, an isolated store and ordinary window close. A timeout
+fails the job, with window/process diagnostics and an optional GDB backtrace of
+the original stalled process. Installing GDB is only a test-environment dependency.
 
 The X11 backend loads `libxkbcommon-x11.so.0` with `dlopen`, so ELF dependency
 scanning does not discover it. CI and DEB explicitly require
