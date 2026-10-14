@@ -287,6 +287,9 @@ fn gate(
         serde_json::to_vec(args)?,
     )?;
     if claude {
+        if let Some(init) = config.get("claude_init") {
+            println!("{init}");
+        }
         println!(
             "{}",
             serde_json::json!({"type":"assistant", "message":{"content":[{"type":"text","text":format!("fixture gate ready {marker}")}]}})

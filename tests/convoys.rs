@@ -987,6 +987,85 @@ async fn independent_claude_convoys_snapshot_options_and_release_global_capacity
 }
 
 #[tokio::test]
+async fn simultaneous_claude_modes_use_their_own_snapshot_for_auto_warnings() {
+    for reported in [None, Some("default"), Some("manual")] {
+        let mut h = Harness::new(4);
+        let mut repositories = Vec::new();
+        let mut init = serde_json::json!({"type":"system", "subtype":"init"});
+        if let Some(mode) = reported {
+            init["permissionMode"] = serde_json::json!(mode);
+        }
+        for (index, mode) in [None, Some("dontAsk"), Some("acceptEdits"), Some("auto")]
+            .into_iter()
+            .enumerate()
+        {
+            let run = index as u64 + 1;
+            let repo = h.repo(&format!("claude-mode-{run}")).await;
+            let mut task = h.task(run, AgentId::Claude, 1, false);
+            task.prompt = format!(
+                "codeconvoy-fixture-gate\n{}",
+                serde_json::json!({"control":h.control,"ticket":run.to_string(),"claude_init":init})
+            );
+            if let Some(mode) = mode {
+                task.options.insert("permission_mode".into(), mode.into());
+            }
+            let prepared = runner::prepare(task.clone(), vec![repo.clone()])
+                .await
+                .unwrap();
+            task.options.insert(
+                "permission_mode".into(),
+                if mode == Some("auto") {
+                    "dontAsk"
+                } else {
+                    "auto"
+                }
+                .into(),
+            );
+            h.start(run, prepared);
+            repositories.push(repo);
+        }
+        h.until(|events| (1..=4).all(|run| Harness::ready(events, run, 0)))
+            .await;
+        for (index, repo) in repositories.iter().enumerate() {
+            h.release(index as u64 + 1, repo);
+        }
+        h.finish_all(4).await;
+        for run in 1..=4 {
+            assert!(Harness::finished(&h.events, run, 0, JobStatus::Succeeded));
+            let mut activity = String::new();
+            let mut raw = String::new();
+            let mut detail = String::new();
+            for event in &h.events {
+                match event {
+                    Event::Output {
+                        run: id,
+                        text,
+                        raw: bytes,
+                        ..
+                    } if *id == run => {
+                        activity.push_str(text);
+                        raw.push_str(bytes);
+                    }
+                    Event::Finished {
+                        run: id,
+                        detail: message,
+                        ..
+                    } if *id == run => detail.push_str(message),
+                    _ => {}
+                }
+            }
+            assert!(raw.contains(&init.to_string()));
+            assert_eq!(
+                activity.contains("Auto"),
+                run == 4,
+                "run={run}, reported={reported:?}: {activity}"
+            );
+            assert_eq!(detail.contains("Auto"), run == 4 && reported.is_some());
+        }
+    }
+}
+
+#[tokio::test]
 async fn claude_build_spawn_and_zero_exit_protocol_failures_release_slots_and_repository_leases() {
     for failure in ["build", "spawn", "result_error", "malformed", "incomplete"] {
         let mut h = Harness::new(1);

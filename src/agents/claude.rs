@@ -45,10 +45,11 @@ static OPTIONS: &[OptionSpec] = &[
         key: "permission_mode",
         label: "Permissions",
         default: "dontAsk",
-        help: "Existing approvals denies calls that need new approval; existing allow rules still apply. Accept edits also approves file edits and common filesystem commands, including mkdir, touch, mv and cp. Print mode has no permission host, so unresolved requests are denied. Neither choice is an OS sandbox.",
+        help: "Existing approvals denies calls that need new approval; existing allow rules still apply. Accept edits also approves file edits and common filesystem commands, including mkdir, touch, mv and cp. Auto uses Claude's classifier to decide approvals; CLI, account, model and organization support are required. Activity shows the reported mode, including Manual fallback when Auto is unavailable. Print mode has no permission host, so unresolved requests are denied. None of these modes is an OS sandbox.",
         kind: OptionKind::Choice(&[
             ("dontAsk", "Existing approvals; deny asks"),
             ("acceptEdits", "Accept edits / file commands"),
+            ("auto", "Auto"),
         ]),
     },
     OptionSpec {
@@ -195,6 +196,12 @@ impl AgentBackend for Claude {
     fn output(&self) -> Box<dyn AgentOutput> {
         Box::<ClaudeOutput>::default()
     }
+    fn output_with_options(&self, options: &AgentOptions) -> Box<dyn AgentOutput> {
+        Box::new(ClaudeOutput {
+            auto_requested: value(options, &OPTIONS[3]) == "auto",
+            ..Default::default()
+        })
+    }
     fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
         crate::attachments::validate_limits(&task.attachments)?;
         for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
@@ -211,10 +218,14 @@ impl AgentBackend for Claude {
         "Text context via stdin; images as base64 content blocks through stream-json stdin. Provider limits still apply; image contents are not saved by CodeConvoy."
     }
     fn execution_summary(&self, options: &AgentOptions) -> String {
-        let mode = if value(options, &OPTIONS[3]) == "acceptEdits" {
-            "File edits and common filesystem commands are automatically approved."
-        } else {
-            "Existing approvals apply; calls needing new approval are denied."
+        let mode = match value(options, &OPTIONS[3]) {
+            "acceptEdits" => {
+                "File edits and common filesystem commands are automatically approved."
+            }
+            "auto" => {
+                "Auto asks Claude's classifier to decide tool approvals. Requires a supporting Claude CLI, account and model; organization policy can disable it. Check Activity for the reported mode or CLI rejection. Claude may use Manual permissions if Auto is unavailable; CodeConvoy never retries with broader permissions."
+            }
+            _ => "Existing approvals apply; calls needing new approval are denied.",
         };
         format!(
             "{mode} No interactive permission host. These are Claude tool permissions, not an OS sandbox; configured access and hooks still apply. Existing Claude authentication/configuration is used. Print mode skips workspace trust prompts and can run repository hooks/MCP servers. Only use trusted repositories. Session persistence is disabled; other Claude logs may remain."
@@ -231,6 +242,8 @@ struct ClaudeOutput {
     oversized: [bool; 2],
     protocol_error: bool,
     explicit_error: bool,
+    auto_requested: bool,
+    manual_permissions_reported: bool,
     // Keep the parsed Claude result (including usage/denials/metadata) for outcome
     // interpretation, without introducing a shared activity/event abstraction.
     result: Option<Value>,
@@ -253,9 +266,10 @@ impl ClaudeOutput {
                 );
             }
         };
-        // A print invocation has a single final result, documented as the last
-        // record. A duplicate result or later activity is not a confirmed finish.
-        self.protocol_error |= self.result.is_some();
+        // Claude 2.1.300 emits a UI-render invalidation after its final result.
+        // Accept only that observed notification shape (see validation record),
+        // never arbitrary trailing system messages, errors or execution activity.
+        self.protocol_error |= self.result.is_some() && !ui_render_notification(&event);
         let kind = event["type"].as_str().unwrap_or("");
         match kind {
             "assistant" => {
@@ -293,10 +307,27 @@ impl ClaudeOutput {
             "user" => self
                 .activity
                 .push_str("Claude user message (details in Raw output)\n"),
-            "system" => self.activity.push_str(&format!(
-                "Claude system: {}\n",
-                event["subtype"].as_str().unwrap_or("event")
-            )),
+            "system" => {
+                self.activity.push_str(&format!(
+                    "Claude system: {}\n",
+                    event["subtype"].as_str().unwrap_or("event")
+                ));
+                if let Some(mode) = event["permissionMode"].as_str().filter(|m| !m.is_empty()) {
+                    self.activity.push_str(&format!(
+                        "[CodeConvoy] Claude reported permission mode: {mode}.\n"
+                    ));
+                    // Claude can accept --permission-mode auto yet start in
+                    // Manual when settings/model/account support disable Auto.
+                    // Keep that observable without retrying or changing policy.
+                    if self.auto_requested && matches!(mode, "default" | "manual") {
+                        self.manual_permissions_reported = true;
+                        self.activity.push_str(MANUAL_PERMISSIONS_NOTICE);
+                        self.activity.push('\n');
+                    }
+                } else if self.auto_requested && event["subtype"].as_str() == Some("init") {
+                    self.activity.push_str("[CodeConvoy] Claude did not report its permission mode; Auto availability cannot be confirmed.\n");
+                }
+            }
             "result" => {
                 self.activity.push_str(&format!(
                     "Claude result: {}\n{}\n",
@@ -419,12 +450,12 @@ impl AgentOutput for ClaudeOutput {
         text
     }
     fn interpret(&self, status: ExitStatus) -> (JobStatus, String) {
-        if status.success()
+        let (outcome, mut message) = if status.success()
             && self.confirmed_result()
             && !self.protocol_error
             && !self.explicit_error
         {
-            (JobStatus::Succeeded, "Claude Code completed. Review its response, permission denials and working-tree diff; CLI completion does not prove task fulfillment.".into())
+            (JobStatus::Succeeded, "Claude Code completed. Review its response, permission denials and working-tree diff; CLI completion does not prove task fulfillment.".to_owned())
         } else {
             (
                 JobStatus::Failed,
@@ -432,9 +463,33 @@ impl AgentOutput for ClaudeOutput {
                     "Claude Code completion was not confirmed ({status}). Expected one valid final success result with is_error=false and no execution/protocol errors. Inspect output for interrupted execution, turn limits, authentication, model, permission or CLI errors."
                 ),
             )
+        };
+        if self.auto_requested && outcome == JobStatus::Failed {
+            message.push_str(" For unavailable Auto mode, check CLI support, account/model availability and organization policy; choose a different permission mode explicitly if needed.");
         }
+        if self.manual_permissions_reported {
+            message.push(' ');
+            message.push_str(MANUAL_PERMISSIONS_NOTICE);
+        }
+        (outcome, message)
     }
     fn take_activity(&mut self) -> Option<String> {
         Some(std::mem::take(&mut self.activity))
     }
+}
+
+const MANUAL_PERMISSIONS_NOTICE: &str = "[CodeConvoy] Claude reported Manual permissions; Auto was not active. Check CLI support, account/model availability and organization policy. CodeConvoy does not retry with broader permissions.";
+
+fn ui_render_notification(event: &Value) -> bool {
+    event["type"] == "system"
+        && event["subtype"] == "ui_invalidate"
+        && event["event"] == "ui.render"
+        && event["prompts_screened"] == true
+        && event.as_object().is_some_and(|fields| {
+            fields.iter().all(|(key, value)| match key.as_str() {
+                "type" | "subtype" | "event" | "prompts_screened" => true,
+                "session_id" | "uuid" => value.as_str().is_some_and(|id| !id.is_empty()),
+                _ => false,
+            })
+        })
 }
