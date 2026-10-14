@@ -107,17 +107,25 @@ validated but had **not yet run on GitHub Actions** in that work. Linux/Windows
 packages were not built or executed on that macOS host. That record does not
 validate later workflow changes.
 
-The 2026-10-06 CI/Renovate review found that release packaging now selects
+The historical 2026-10-06 CI/Renovate review found that release packaging selected
 `ubuntu-26.04`, `windows-2025`, `macos-26`, Rust 1.99.0 and Python 3.14. Normal
 CI uses latest runners and stable Rust, targets pushes/PRs to `main`, and skips
 Markdown-only changes. These were configuration observations; the subsequent
 hosted tag run above passed the native build/package gates, including the
 AppImage host-process and virtual-desktop startup checks on the updated Linux
-runner. Desktop checks beyond those hosted gates remain below.
+runner. Those runner/toolchain observations describe that historical run.
+
+PR 60 now pins only the Linux build job to Ubuntu 24.04 and enforces GLIBC 2.39
+on every final DEB/RPM/AppImage ELF, including the AppImage runtime. The DEB
+minimum is measured rather than fixed at 2.35; RPM requirements are generated
+and its Fedora dependency-resolving installation passed. See the
+[current compatibility evidence](platform-validation.md#linux-glibc-239-baseline)
+for exact artifacts, the unresolved hosted Ubuntu startup failure and missing
+native desktop checks. Non-building workflow jobs retain their existing runners.
 
 | Platform | Remaining validation |
 | --- | --- |
-| Linux X11 and Wayland | Inspect final GLIBC requirements after the Ubuntu 26.04 runner update and reconcile the DEB's declared `libc6 (>= 2.35)` dependency; test the oldest intended distribution; install RPM; test portal selection/cancellation, clipboard/URLs, host Git and installed agent lookup, concurrent cancellation and shutdown |
+| Linux X11 and Wayland | ABI inspection and DEB dependency reconciliation completed in PR 60; hosted Ubuntu/Debian/Fedora install/start checks now pass after correcting window-manager readiness. Finish native Ubuntu/Debian/Fedora desktop tests: Wayland/XWayland, portal selection/cancellation, clipboard/URLs, installed agents, concurrent cancellation and shutdown |
 | Windows x86-64 | On a real desktop check no console flashes, picker, keyboard navigation, installed/portable startup and descendant cancellation on Stop/Stop Convoy/Stop All/close |
 | Intel macOS | Intel slice is built/inspected but was not run on Intel hardware |
 | Downloaded macOS app | Local ad-hoc integrity was verified; actual browser quarantine/Gatekeeper first-launch flow and oldest supported macOS version remain unverified |

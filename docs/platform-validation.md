@@ -1,5 +1,137 @@
 # Cross-platform release verification
 
+## Linux glibc 2.39 baseline
+
+This focused infrastructure change follows readiness PR 3 and does not start
+readiness PR 4. Application version remains 0.10.0. It changes only Linux build
+and package verification infrastructure, its disposable probe and documentation;
+the application and Windows/macOS build configuration are unchanged.
+
+The intended minimum supported binary ABI is **glibc 2.39**, targeting Ubuntu
+24.04 LTS, Debian 13 Stable and newer compatible glibc-based x86_64 distributions.
+Every final DEB/RPM/AppImage ELF, including the outer AppImage runtime, must pass
+the 2.39 ceiling. This is not a complete distribution compatibility claim.
+
+### Candidate and automated evidence
+
+The current implementation is in [PR 60](https://github.com/ChrisLauinger77/code-convoy/pull/60).
+The following measured package evidence comes from non-publishing
+[candidate 38607496008](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38607496008),
+source `6137ea87ba7a1eebc160ebb18d809fdd9f77f0b3`. All platform build/package
+jobs and aggregation passed; publication and downstream updates were skipped.
+All six downloaded assets passed the original aggregate `SHA256SUMS` through
+`release.verify_checksums`. `candidate.verify_run` and `select_artifact` verified
+the successful first-attempt manual run, repository, source commit, workflow
+and non-expired `release-assets` artifact (`11917775520`). The Linux bytes match
+both that aggregate and the packaging job's recorded hashes; all three final
+archives were also independently extracted and inspected locally.
+
+| Final artifact | Highest GLIBC requirement | SHA-256 |
+| --- | --- | --- |
+| `code-convoy_0.10.0_amd64.deb` | 2.39 | `20a2b5d7d1affb710dd3920b0bffb1bfe4de82d7cb622e3604b91bb16fb995af` |
+| `code-convoy-0.10.0-1.x86_64.rpm` | 2.39 | `54501df257e3f0f422dc125d02c4c2424ea070ce956b1b3d787e41d63ef8234e` |
+| `CodeConvoy-0.10.0-x86_64.AppImage` | 2.39 | `7656c805e1a5281b2c824715046dca61b3240869970148e98278433416df81d9` |
+
+The outer AppImage runtime has no versioned GLIBC requirement and was inspected
+separately. These packages currently contain no additional shared-library ELFs;
+the executable imports weak `pidfd_spawnp` and `pidfd_getpid` versions at 2.39.
+The gate counts weak requirements and will also inspect any future bundled ELF.
+
+Local formatting, strict all-target/all-feature Clippy, the release build, all
+592 Rust tests (nine existing optional tests ignored), the separately enabled
+private-D-Bus test and all 38 packaging tests passed. This includes real ELF/DEB
+fixtures and rejection of stripped version-section metadata. The pinned Rust
+1.99.0, Python 3.15, cargo-packager and AppImage tools successfully built on the
+Ubuntu 24.04 runner. No application dependency or toolchain version changed.
+
+[CI 38607488518](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38607488518)
+also passed on Linux, macOS and Windows for implementation commit `6137ea8`.
+The subsequent documentation-only commit records these results; candidate
+provenance remains pinned to `6137ea8`.
+
+| Check | Ubuntu 24.04 LTS | Debian 13 Stable | Fedora 44 (RPM) |
+| --- | --- | --- | --- |
+| Normal dependency-resolving install | APT passed, hosted and local userspaces | APT passed, hosted | DNF passed, hosted, with corrected Wayland requirements |
+| Installed application, Xvfb window and normal close | Passed, hosted and local | Passed, hosted | Passed, hosted |
+| Exact AppImage extraction fallback | Passed, hosted and local | Passed, hosted | Passed, hosted |
+| Mounted AppImage/FUSE | Passed on the Ubuntu runner with Xvfb | Not tested | Not tested |
+| Disposable Git worktree create/remove and process cancellation | Hosted probe passed | Hosted probe passed | Hosted probe passed |
+| Package removal | Passed, hosted and local | Passed, hosted | Passed, hosted |
+| Native Wayland and XWayland startup | Not tested on this target | Not tested on this target | Not tested on this target |
+| Hardware rendering, decorations, clipboard and file dialogs | Not tested | Not tested | Not tested |
+| Native desktop normal Quit and task cancellation | Not tested | Not tested | Not tested |
+
+Hosted checks started from clean Ubuntu 24.04, Debian 13 and Fedora 44 images
+with ordinary APT/DNF dependency resolution and test tools added. The userspaces
+shared the runner's Linux 6.17.0-1022-azure kernel. Installed glibc versions were
+2.39-0ubuntu8.9, 2.41-12+deb13u4 and 2.43-8.fc44 respectively. GUI checks ran as
+an unprivileged fixture user with an isolated store, private Xvfb/Openbox display,
+private session bus and software GL, and closed the actual window normally.
+The probe used the same pinned AppImage launcher/runtime and a separate
+Ubuntu-built fixture executable, never a public artifact or an authenticated agent.
+
+The local reproduction used the same official Ubuntu 24.04 OCI image as the
+hosted check (amd64 manifest
+`sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b`)
+in disposable unprivileged Bubblewrap namespaces on the Forky host kernel.
+It installed the candidate DEB and the same test-tool package list through APT;
+all 336 package versions recorded during the earlier hosted install matched.
+This replaced the earlier diagnostic root containing extra build dependencies.
+The current candidate also passed local dependency-resolving installation,
+DEB and AppImage extraction startup/normal close, and removal with one CPU and
+a deliberately lowered Openbox scheduling priority.
+
+RPM validation exposed an uninstallable `wayland-libs` package requirement on
+Fedora 44. The spec now requests the `libwayland-client.so.0()(64bit)` and
+`libwayland-cursor.so.0()(64bit)` capabilities; DNF resolves the split library
+packages, while rpmbuild retains its generated GLIBC requirements. No dependency
+resolution was forced or bypassed.
+
+The previous [candidate 38605226365](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38605226365)
+failed Ubuntu startup with an initialized store and an unmapped window; its
+remaining platform jobs were cancelled after that failure. The failure was
+reproduced locally on one CPU with a slowed window manager. A private diagnostic
+build located the idle main thread in the X11 event loop, rather than a portal
+call; APT had installed the portal in both Ubuntu and Debian.
+
+The harness incorrectly treated `wmctrl -m` success as completed startup.
+[Openbox advertises its identity early](https://sources.debian.org/src/openbox/3.6.1-12/openbox/screen.c/),
+while its [startup callback runs after initialization and window management](https://sources.debian.org/src/openbox/3.6.1-12/openbox/openbox.c/).
+The corrected harness waits for that callback's fresh private marker and rejects
+an exited or timed-out window manager before launching CodeConvoy. Deterministic
+tests cover early advertisement, missing callback and process exit. With the
+same unmodified earlier package bytes, five DEB and five AppImage extraction
+launches passed under the constrained reproduction; the fresh candidate now
+also passes the ordinary hosted Ubuntu check. Diagnostic/instrumented builds
+are not counted as candidate runtime evidence. Application behavior, the
+30-second startup limit and the post-window render dwell were not changed.
+
+**Remaining release-verification gaps:** complete the native target desktop
+checks below before claiming full distribution compatibility. The Ubuntu hosted
+startup blocker is resolved, and the complete candidate plus aggregate
+checksum/provenance verification passed. The PR awaits maintainer approval. No tag, publication or
+downstream update was performed; readiness PR 4 was not started.
+
+Containers use the host kernel and a private virtual X server, not the target's
+complete desktop. The probe exercises real CodeConvoy Git/process code with a
+redirected descendant and disposable repositories; it is not the final GUI's
+interactive agent workflow. Native target desktop environments are not currently
+provisioned for this task. Unperformed desktop checks remain release-verification
+gaps, even if all candidate ABI and container gates pass. Earlier Forky/GNOME
+results below do not substitute for Ubuntu 24.04 or Debian 13 evidence.
+
+For native acceptance, install the exact candidate DEB through APT on clean
+Ubuntu 24.04 and Debian 13 desktops, launch from the desktop entry and terminal,
+exercise native Wayland with `DISPLAY` unset and XWayland with Wayland variables
+unset, and test both FUSE and extraction launches of the same AppImage. Check
+rendering/decorations, cross-application clipboard, portal selection/cancel,
+normal Quit, disposable worktree preparation/cleanup, and fixture-agent Stop and
+shutdown. RPM requires the corresponding native Fedora check. Record the image,
+kernel, desktop, Git versions, artifact hashes and outcomes. Do not force missing
+dependencies, use provider credentials or operate on user repositories.
+
+---
+
 ## 1.0 readiness PR 3 — 2026-10-14
 
 This is verification of the merged PR 2 implementation (`77965f3`), plus focused

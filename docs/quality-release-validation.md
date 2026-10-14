@@ -46,7 +46,10 @@ of these locally built artifacts, not the Ubuntu release runner's output or a
 promise that every older desktop works. RPM's generated dependencies include its
 ELF requirements. AppImage still uses host glibc and graphics/session services.
 The report is written to `target/packaging/linux/glibc-requirements.txt` and the
-candidate run summary; it is not an extra public release asset.
+candidate run summary; it is not an extra public release asset. As of PR 60 it
+measures every final DEB, RPM and AppImage ELF, including the AppImage runtime,
+and records per-artifact maxima and checksums. The 2.43 measurement above is
+historical; see the [current 2.39 candidate evidence](platform-validation.md#linux-glibc-239-baseline).
 
 The RPM transaction first failed without chroot capability. It passed with only
 CAP_SYS_CHROOT added inside an unprivileged user namespace. This is package-file

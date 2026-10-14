@@ -24,7 +24,7 @@ remain in Git history; preserve separate historical validation records.
    publish this candidate** step. The annotated tag includes `Candidate-Run:`
    and points to the exact tested commit. Tag creation is a maintainer action.
 
-Only manual runs build packages. They build Linux x86-64 on `ubuntu-26.04`,
+Only manual runs build packages. They build Linux x86-64 on `ubuntu-24.04`,
 Windows x86-64 on `windows-2025`, and both macOS architectures using Apple's SDK on `macos-26`. Rust 1.99.0,
 Python 3.15 and the committed lockfile are used. Each platform runs formatting,
 strict Clippy and all non-ignored tests; no authenticated agent tasks or provider
@@ -143,6 +143,11 @@ revalidate the packages before tagging. Update AppImage tool URLs and their
 verified SHA-256 values together; mismatches fail before downloaded tools run.
 Native runner SDKs, system package versions and package timestamps can vary;
 this is a repeatable, locked build recipe, not a claim of byte-identical artifacts.
+Keep the Linux build runner at Ubuntu 24.04 while glibc 2.39 is the intended
+minimum supported ABI; a suggested runner upgrade is a compatibility decision,
+not routine version maintenance. Validation, aggregation and publication runners
+do not select the shipped binary's ABI. Never reuse compiled objects from a
+newer sysroot in the baseline build.
 
 ## Packaging choice
 
@@ -161,8 +166,10 @@ it using relative ELF library paths; AppRun does not alter `PATH` or
 `LD_LIBRARY_PATH`. No filesystem sandbox or bundled Git/agent installations are
 introduced. CI creates a disposable probe image using the same launcher/runtime
 and CodeConvoy's real process/Git layer to verify access to a host repository,
-host Git, all four CLI-name fixtures and unchanged search paths. The probe is
-never distributed and never contacts an agent service.
+host Git, disposable worktree creation/removal, all four CLI-name fixtures,
+redirected-descendant cancellation and unchanged search paths. The probe is
+never distributed and never contacts an agent service. It exercises the process
+and Git layers, not an interactive task through the final GUI binary.
 
 `cargo-packager` downloads its NSIS toolchain/helpers on Windows; its pinned
 version fixes that tool selection. These are installer helpers, not a Tauri
@@ -227,7 +234,9 @@ not change global environment settings. Package assembly expects the repository'
 normal `target/` directory; do not override `CARGO_TARGET_DIR` for these commands.
 
 On Linux, install the README's source prerequisites plus packaging/test-only
-packages: `binutils rpm desktop-file-utils file patchelf squashfs-tools xvfb xauth`.
+packages: `binutils rpm rpm2cpio cpio desktop-file-utils file patchelf
+squashfs-tools xvfb xauth openbox wmctrl dbus-x11`. Use Ubuntu 24.04 for release
+packaging; a newer host can produce binaries rejected by the ABI gate.
 
 ```sh
 python3 packaging/build.py
@@ -266,21 +275,60 @@ and writes their final checksums. Do not run `publish.py` locally as a build tes
 
 Linux runtime packages are separate from CI packaging tools: desktop graphics,
 X11/Wayland libraries, fontconfig, libdbus, Git, URL-opening utilities and the
-desktop's portal/backend. The Debian dependency list and RPM requirements use
-their respective distribution names; RPM also derives ELF requirements.
+desktop's portal/backend. Debian uses distribution package names; RPM uses
+package names and library capabilities, and also derives ELF requirements.
+Wayland's client/cursor SONAME capabilities support Fedora's split packages
+without requiring the unavailable `wayland-libs` package name.
 The DEB is user-verified to install and run on Debian Forky; AppImage startup is
 also user-verified there.
-The release runner uses Ubuntu 26.04. Packaging reads the executable's required
-GLIBC symbol versions with `readelf` and sets the DEB's `libc6` minimum from that
+The Linux release build uses Ubuntu 24.04; **glibc 2.39 is the intended minimum
+supported binary ABI** for Ubuntu 24.04 LTS, Debian 13 Stable and newer compatible
+glibc distributions. Packaging reads the executable's required GLIBC symbol
+versions with GNU `readelf` and sets the DEB's `libc6` minimum from that
 measurement; it verifies the generated control field. RPM derives its own ELF
-requirements. After dependency deployment, every ELF file in the AppImage payload
-is inspected; `target/packaging/linux/glibc-requirements.txt` and the candidate run
-summary record each requirement and the maximum. Exported symbol definitions do
-not raise the minimum. Unrecognized GLIBC ABI names fail packaging for inspection.
-This measures symbol requirements, not full distribution compatibility: verify
-the oldest intended desktop using the exact candidate before publishing. AppImage
-still uses the host graphics/session services and portal; it is not an entire
-Linux distribution.
+requirements.
+
+After all three Linux packages are assembled, `linux_abi.py` independently
+extracts the final DEB with `dpkg-deb`, the RPM with `rpm2cpio`/`cpio`, and the
+AppImage with `unsquashfs` at the final runtime's reported offset. It examines
+every regular ELF in those payloads and the outer AppImage runtime. Internal
+symlink aliases are covered by their targets; broken/escaping links fail.
+`readelf --version-info --wide` runs in the C locale. Only the Version needs
+section contributes requirements: exported definitions do not raise the minimum.
+Version tuples are compared numerically, including weak requirements. Unknown or
+private GLIBC ABI names, incomplete need records, command failures and readelf
+diagnostics fail validation. Dynamic loader tags must agree with the version
+needs table, so missing section headers cannot hide requirements. Any requirement
+above 2.39 fails the candidate before upload. The static runtime may legitimately
+have no versioned GLIBC requirements; the application's executable may not silently
+lose its measurement.
+
+`target/packaging/linux/glibc-requirements.txt` and the candidate summary record
+each final artifact's SHA-256, every inspected ELF and its highest required GLIBC
+version. Aggregation checksums and tag/candidate provenance verification are
+unchanged. No new public format, Linux variant or rebuild-at-publication path is
+introduced.
+
+The Linux candidate job also installs the same packages in disposable Ubuntu
+24.04, Debian 13 and Fedora 44 containers using normal APT/DNF dependency
+resolution, starts the installed application and AppImage extraction fallback
+on Xvfb, requests normal window close, runs the disposable process/Git probe,
+and removes the package. The Ubuntu runner checks mounted AppImage startup when
+`/dev/fuse` exists; a missing device is explicitly reported. These are userspace
+and virtual-display checks, not native Wayland/XWayland or interactive desktop
+certification. Verify graphics, decorations, clipboard, portals and shutdown on
+the actual target desktops with the exact candidate before claiming complete
+distribution compatibility. Record missing evidence in the
+[platform matrix](platform-validation.md#linux-glibc-239-baseline).
+
+Packages are retained after ABI validation for failure diagnosis; aggregation
+still requires all runtime checks to pass. The startup harness waits for Openbox's
+startup callback before launching the application: `wmctrl -m` can succeed while
+the window manager is still initializing. A fresh private callback marker, a
+bounded wait and a live-process check prevent that readiness race. It then
+requires a mapped window, an isolated store and ordinary window close. A timeout
+fails the job, with window/process diagnostics and an optional GDB backtrace of
+the original stalled process. Installing GDB is only a test-environment dependency.
 
 The X11 backend loads `libxkbcommon-x11.so.0` with `dlopen`, so ELF dependency
 scanning does not discover it. CI and DEB explicitly require
