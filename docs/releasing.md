@@ -234,7 +234,9 @@ not change global environment settings. Package assembly expects the repository'
 normal `target/` directory; do not override `CARGO_TARGET_DIR` for these commands.
 
 On Linux, install the README's source prerequisites plus packaging/test-only
-packages: `binutils rpm desktop-file-utils file patchelf squashfs-tools xvfb xauth`.
+packages: `binutils rpm rpm2cpio cpio desktop-file-utils file patchelf
+squashfs-tools xvfb xauth openbox wmctrl dbus-x11`. Use Ubuntu 24.04 for release
+packaging; a newer host can produce binaries rejected by the ABI gate.
 
 ```sh
 python3 packaging/build.py

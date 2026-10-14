@@ -25,6 +25,9 @@ case "$1" in
 esac
 git --version
 sha256sum dist/*.deb dist/*.rpm dist/*.AppImage
+# Supply the system bus a normal desktop has; Docker does not run an init system.
+dbus-uuidgen --ensure=/etc/machine-id
+dbus-daemon --system --fork --nopidfile
 # Package installation needs root; ordinary desktop execution does not.
 useradd --create-home package-test
 runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py /usr/bin/codeconvoy

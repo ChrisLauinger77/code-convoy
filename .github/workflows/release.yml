@@ -58,6 +58,13 @@ jobs:
       - run: cargo install --locked --version "$PACKAGER_VERSION" cargo-packager
       - name: Package and verify DEB, RPM, AppImage and host tools
         run: python packaging/release.py linux
+      # Retain verified package bytes for diagnosis if a runtime check fails.
+      # Aggregation still requires the entire Linux job to succeed.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-linux
+          path: dist/*
+          if-no-files-found: error
       - name: Fresh AppImage startup on a virtual desktop
         run: xvfb-run -a python packaging/smoke.py dist/CodeConvoy-$(python packaging/release.py version)-x86_64.AppImage
       - name: AppImage FUSE startup and normal close when available
@@ -69,14 +76,11 @@ jobs:
           fi
       - name: Exact packages on clean Ubuntu 24.04, Debian 13 and Fedora 44 userspaces
         run: |
-          docker run --rm --init -v "$PWD:/candidate:ro" ubuntu:24.04 bash /candidate/packaging/linux-container-smoke.sh ubuntu
-          docker run --rm --init -v "$PWD:/candidate:ro" debian:13 bash /candidate/packaging/linux-container-smoke.sh debian
-          docker run --rm --init -v "$PWD:/candidate:ro" fedora:44 bash /candidate/packaging/linux-container-smoke.sh fedora
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: packages-linux
-          path: dist/*
-          if-no-files-found: error
+          status=0
+          docker run --rm --init -v "$PWD:/candidate:ro" ubuntu:24.04 bash /candidate/packaging/linux-container-smoke.sh ubuntu || status=1
+          docker run --rm --init -v "$PWD:/candidate:ro" debian:13 bash /candidate/packaging/linux-container-smoke.sh debian || status=1
+          docker run --rm --init -v "$PWD:/candidate:ro" fedora:44 bash /candidate/packaging/linux-container-smoke.sh fedora || status=1
+          exit "$status"
 
   windows:
     needs: validate

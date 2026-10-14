@@ -74,7 +74,9 @@ def smoke(binary, mode):
                     raise RuntimeError(f"Application failed normal shutdown: {process.returncode}")
                 print(f"PASS {binary.name}: {mode}, Xvfb window/store initialization and normal close", flush=True)
             except Exception:
-                for command in (["wmctrl", "-lp"], ["ps", "-eLf"]):
+                pids = str(wm.pid) + (f",{process.pid}" if process is not None else "")
+                for command in (["wmctrl", "-lp"], ["ps", "-L", "-p", pids,
+                                                       "-o", "pid,ppid,lwp,stat,wchan:24,comm"]):
                     diagnostic = subprocess.run(command, env=env, capture_output=True, text=True)
                     print(f"{command}:\n{diagnostic.stdout}{diagnostic.stderr}", flush=True)
                 print(f"Isolated store locks: {list(home.rglob('app.lock'))}", flush=True)

@@ -43,7 +43,7 @@ Published releases provide these native artifacts:
 | Platform   | Architecture                 | Artifact                                                   | Status                                                                                |
 | ---------- | ---------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Windows 11 | x86_64                       | NSIS installer and portable/Scoop ZIP                      | Installer and portable package published                                              |
-| Linux      | x86_64                       | AppImage, Debian `amd64` package, and RPM `x86_64` package | Targets Ubuntu 24.04 LTS, Debian 13 Stable and newer compatible glibc distributions; see the [verification matrix](docs/platform-validation.md#linux-glibc-239-baseline) for runtime evidence |
+| Linux      | x86_64                       | AppImage, Debian `amd64` package, and RPM `x86_64` package | New candidates target Ubuntu 24.04 LTS, Debian 13 Stable and newer compatible glibc distributions; see the [verification matrix](docs/platform-validation.md#linux-glibc-239-baseline) for runtime evidence |
 | macOS      | Universal (arm64 and x86_64) | Disk image (`.dmg`) containing the universal app           | Natively tested on Apple Silicon; native Intel execution remains a release check      |
 
 ARM Linux/Windows packages are not currently published. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
@@ -178,8 +178,9 @@ Open Anyway** for CodeConvoy if you trust the source. See
 Do not disable Gatekeeper globally. Windows packages are not Authenticode signed;
 Windows may show an unknown-publisher warning.
 
-No package installs Git, coding-agent CLIs, credentials, services, or an updater.
-Install and authenticate the agents separately. Desktop launchers may have a
+DEB/RPM package managers resolve Git as a declared dependency. No package bundles
+coding-agent CLIs, credentials, services, or an updater. Install and authenticate
+the agents separately. Desktop launchers may have a
 different `PATH` from your terminal, particularly Finder on macOS; provide the
 agent's absolute executable path using **Find CLI** or manual entry if automatic
 discovery cannot locate it, and ensure Git is on the application's `PATH`.
