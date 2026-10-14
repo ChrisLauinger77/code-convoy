@@ -26,7 +26,9 @@ def smoke(binary, mode):
     with tempfile.TemporaryDirectory(prefix="codeconvoy-linux-runtime-") as temporary:
         home = Path(temporary)
         env = dict(os.environ, HOME=str(home), XDG_DATA_HOME=str(home / "data"),
-                   XDG_CONFIG_HOME=str(home / "config"), LIBGL_ALWAYS_SOFTWARE="1")
+                   XDG_CONFIG_HOME=str(home / "config"), XDG_RUNTIME_DIR=str(home / "runtime"),
+                   LIBGL_ALWAYS_SOFTWARE="1")
+        (home / "runtime").mkdir(mode=0o700)
         for key in ("WAYLAND_DISPLAY", "WAYLAND_SOCKET", "APPIMAGE_EXTRACT_AND_RUN"):
             env.pop(key, None)
         if mode == "extract":
@@ -36,6 +38,15 @@ def smoke(binary, mode):
             wm = subprocess.Popen(["openbox", "--sm-disable"], env=env, stdout=log, stderr=log, start_new_session=True)
             process = None
             try:
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline:
+                    if wm.poll() is not None:
+                        raise RuntimeError(f"Window manager exited: {wm.returncode}")
+                    if subprocess.run(["wmctrl", "-m"], env=env, capture_output=True).returncode == 0:
+                        break
+                    time.sleep(0.1)
+                else:
+                    raise RuntimeError("Window manager did not become ready")
                 process = subprocess.Popen([str(binary)], env=env, stdout=log, stderr=log, start_new_session=True)
                 deadline = time.monotonic() + 30
                 window = None
@@ -63,6 +74,10 @@ def smoke(binary, mode):
                     raise RuntimeError(f"Application failed normal shutdown: {process.returncode}")
                 print(f"PASS {binary.name}: {mode}, Xvfb window/store initialization and normal close", flush=True)
             except Exception:
+                for command in (["wmctrl", "-lp"], ["ps", "-eLf"]):
+                    diagnostic = subprocess.run(command, env=env, capture_output=True, text=True)
+                    print(f"{command}:\n{diagnostic.stdout}{diagnostic.stderr}", flush=True)
+                print(f"Isolated store locks: {list(home.rglob('app.lock'))}", flush=True)
                 log.flush()
                 log.seek(0)
                 print(log.read().decode(errors="replace"), flush=True)

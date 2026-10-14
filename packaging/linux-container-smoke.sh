@@ -12,12 +12,12 @@ case "$1" in
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     apt-get install -y ./dist/*.deb
-    apt-get install -y python3 xvfb xauth openbox wmctrl dbus-x11 procps
+    apt-get install -y python3 xvfb xauth openbox wmctrl dbus-x11 procps passwd util-linux
     dpkg-query -W code-convoy libc6
     ;;
   fedora)
     dnf install -y ./dist/*.rpm
-    dnf install -y python3 xorg-x11-server-Xvfb xorg-x11-xauth openbox wmctrl dbus-daemon procps-ng
+    dnf install -y python3 xorg-x11-server-Xvfb xorg-x11-xauth openbox wmctrl dbus-daemon procps-ng shadow-utils util-linux
     rpm -q code-convoy glibc
     rpm -q --requires code-convoy
     ;;
@@ -25,12 +25,14 @@ case "$1" in
 esac
 git --version
 sha256sum dist/*.deb dist/*.rpm dist/*.AppImage
-xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py /usr/bin/codeconvoy
-xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py dist/*.AppImage --mode extract
+# Package installation needs root; ordinary desktop execution does not.
+useradd --create-home package-test
+runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py /usr/bin/codeconvoy
+runuser -u package-test -- xvfb-run -a dbus-run-session -- python3 packaging/linux_runtime.py dist/*.AppImage --mode extract
 export PATH="/candidate/target/packaging/linux/host-bin:$PATH"
 export CODECONVOY_EXPECT_PATH="$PATH"
 export CODECONVOY_EXPECT_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
-APPIMAGE_EXTRACT_AND_RUN=1 /candidate/target/packaging/linux/probe.AppImage
+runuser -u package-test -- env APPIMAGE_EXTRACT_AND_RUN=1 /candidate/target/packaging/linux/probe.AppImage
 case "$1" in
   ubuntu|debian) apt-get remove -y code-convoy ;;
   fedora) dnf remove -y code-convoy ;;
