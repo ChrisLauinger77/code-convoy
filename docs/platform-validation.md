@@ -2,8 +2,8 @@
 
 ## 1.0 readiness PR 3 — 2026-10-14
 
-This is verification of the merged PR 2 implementation (`77965f3`), plus one
-focused long-path regression. Application version remains **0.10.0**. No product
+This is verification of the merged PR 2 implementation (`77965f3`), plus focused
+long-path regressions. Application version remains **0.10.0**. No product
 feature, desktop framework, dependency, scheduler, ownership rule or release
 infrastructure changes. The package run below is a non-publishing verification
 candidate, not the final 1.0 candidate or authorization to tag it.
@@ -26,13 +26,23 @@ repository was run. `TMPDIR=/var/tmp` avoids the desktop sandbox's synthetic
   exited through its ordinary close path. The history fixture verified that the
   retained worktree contents and Git backlink survived. No software-rendering
   override was set; this does not establish which physical GPU was selected.
-- **Build/test matrix:** existing [CI run 38572066655](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38572066655)
-  checks the merged source on Linux, macOS and Windows. Results are pending;
-  the new long-path test also requires its own native CI result.
+- **Exact Linux packages:** downloaded `packages-linux` from the candidate run
+  below. Its AppImage started with isolated empty state on both native Wayland
+  and XWayland. Its DEB passed a real `dpkg` install/remove transaction in a
+  disposable unprivileged root, installed-binary Wayland startup, license checks
+  and unrelated-file preservation. Dependency resolution was bypassed in that
+  empty root; this is not an apt compatibility test. The package startup script
+  checks liveness then terminates its fixture, not interactive/normal Quit.
+- **Build/test matrix:** [initial PR CI run 38573674622](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38573674622)
+  passed on Linux and macOS. Windows exposed Git's overlong worktree-root limit
+  below. The expanded success/refusal regressions await their final native CI run.
 - **Package matrix:** existing [Release run 38572061998](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38572061998)
-  checks source `77965f3c4fb63e372c8fd3d1921331bab29960dc` using the existing pinned
-  runners/toolchain. Package results are pending. Its manual trigger skips both
-  publication and downstream package-repository updates; no tag is created.
+  **passed** on source `77965f3c4fb63e372c8fd3d1921331bab29960dc`: Ubuntu 26.04,
+  Windows 2025 and macOS 26 runners, Rust 1.99.0 and Python 3.15. It built all six
+  packages, checked the Universal macOS bundle and Windows installer/uninstaller,
+  and generated the aggregate checksum manifest. All six downloaded checksums
+  passed locally; the tested Linux files match the final aggregate. Publication
+  and downstream package-repository updates were skipped; no tag was created.
 
 A compiled binary, an automated test, a live desktop smoke and a checked package
 are separate evidence. Historical macOS interactive results below and in the
@@ -45,18 +55,18 @@ Procedures for the remaining interactive checks are in the
 
 | Area / procedure | Linux | macOS | Windows |
 | --- | --- | --- | --- |
-| Native startup, render, normal close | **Passed:** both fixtures on GNOME Wayland and XWayland | **Not tested interactively:** candidate startup pending | **Not tested interactively:** WARP initialization is an automated CI check |
+| Native startup, render, normal close | **Passed:** both fixtures on GNOME Wayland and XWayland | Packaged startup/liveness **passed** on macOS CI; interactive/normal Quit **not retested** | **Not tested interactively:** WARP initialization is an automated CI check |
 | Decorations | **Passed, protocol evidence:** resolved Adwaita feature plus five frame buffers attached/committed on native Wayland; decorated XWayland window captured | Existing AppKit/decorated viewport configuration audited; **not retested visually** | Existing decorated viewport configuration audited; **not retested visually** |
 | Minimize/restore, Dock/taskbar, tray menus | Shared state/callback tests; **native interaction not verified** | Shared tests; prior Dock/quit evidence is historical | Shared tests; Explorer/notification-area interaction **not tested** |
 | Notifications and click activation | Private-bus unavailable-service behavior **passed**; visible delivery/click **not tested** | Policy/callback tests; bundle permission/Focus/click **not tested** | Policy/callback tests; installed/portable delivery/click **not tested** |
 | File dialogs | Parented portal configuration and selection/cancel tests; native chooser **not tested** | Main-thread parented sheets audited; native chooser **not retested** | COM dialog adapter audited; native chooser **not tested** |
 | Clipboard and shortcuts | Mapping, modal gating and output tests; cross-application paste/native chords **not verified** | Command mapping tests; native copy/paste **not retested** | Control mapping tests; native copy/paste **not tested** |
-| Process cancellation and shutdown | Real fixture processes, descendants, repeated Stop, future drop, quarantine and peer isolation **passed locally** | Same native process tests in CI, **pending** | Job Object/process-tree tests in CI, **pending** |
-| Worktree creation/recovery/cleanup | Real Git regression suite **passed locally**; native history fixture retains checkout | Native Git tests in CI, **pending** | Native Git tests in CI, **pending**; ordinary Storage cleanup remains deliberately unavailable |
-| Unicode, spaces, long paths | Existing literal invocation tests and new >300 UTF-16-unit custom worktree path **passed** | Same tests in CI, **pending** | Same tests plus drive/UNC spelling, junction and sharing tests in CI, **pending**; live UNC server not tested |
-| Linux packages and environment | DEB/RPM/AppImage, host-Git/CLI-name probe and Xvfb package startup **pending** | — | — |
-| macOS Universal bundle/distribution | — | arm64 + x86_64, lipo, bundle metadata/license, ad-hoc signature and mounted DMG **pending**; Intel native UI not tested | — |
-| Windows installer/portable/removal | — | — | Metadata, per-user install, Start Menu, license, portable identity, uninstall/state preservation **pending**; interactive installed startup not tested |
+| Process cancellation and shutdown | Real fixture processes, descendants, repeated Stop, future drop, quarantine and peer isolation **passed locally** | Native process tests **passed** in package CI | Native Job Object/process-tree tests **passed** in package CI |
+| Worktree creation/recovery/cleanup | Real Git regression suite **passed locally**; native history fixture retains checkout | Native Git suite **passed** in package CI | Native Git suite **passed** in package CI; ordinary Storage cleanup remains deliberately unavailable |
+| Unicode, spaces, long paths | Literal invocation tests and >300 UTF-16-unit tracked paths/custom base **passed** | Deep custom base **passed** in initial PR CI; expanded tracked-path test pending | **Known limitation:** Git rejects overlong worktree roots; success/refusal regressions pending. Drive/UNC spelling, junction and sharing tests passed in baseline CI; live UNC server not tested |
+| Linux packages and environment | **Passed:** DEB/RPM/AppImage assembly, host-Git/CLI-name probe, Xvfb startup; downloaded AppImage on Wayland/XWayland; disposable-root DEB install/start/remove. Native RPM install/dependency resolution **not tested** | — | — |
+| macOS Universal bundle/distribution | — | **Passed:** arm64 + x86_64, lipo, bundle metadata/license, ad-hoc signature and mounted DMG; Intel native UI not tested | — |
+| Windows installer/portable/removal | — | — | **Passed:** metadata, per-user install, Start Menu, license, portable identity, uninstall/state preservation; interactive installed startup not tested |
 
 The additional XWayland interactive fixture rendered, but GNOME declined the
 attempted automated activation/input (the compositor's active window did not
@@ -92,18 +102,43 @@ launch proves native Wayland behavior.
 
 ### Focused regression and remaining release gates
 
-`long_custom_location_preserves_identity_through_recovery_and_explicit_cleanup`
-creates a custom base longer than 300 UTF-16 code units, including spaces and
-Japanese text. It checks real checkout creation, canonical registration, saved
-ownership reload, lifecycle inspection, explicit retained-result cleanup and
-preservation of the source index/content and ownership tombstone. Only its
-fixture repository enables Git's `core.longpaths`; application code does not
-change global Git or Windows settings. This does not promise arbitrary-length
-paths or compatibility with every external agent. Ordinary Windows Storage
-cleanup remains subject to its existing stable-filesystem-identity restriction.
+`long_paths_preserve_identity_through_recovery_and_explicit_cleanup` creates
+tracked paths longer than 300 UTF-16 code units, including spaces and Japanese
+text. It checks real checkout creation, canonical registration, saved ownership
+reload, lifecycle inspection, explicit retained-result cleanup and preservation
+of the source index/content and ownership tombstone. Unix also exercises a custom
+base longer than 300 UTF-16 code units. Only its disposable repository enables
+Git's `core.longpaths`, as described in the
+[Git for Windows FAQ](https://gitforwindows.org/faq); application code does not
+change global Git or Windows settings.
 
-No confirmed platform product defect has been found in these completed checks.
-Pending build/package results and the unperformed native desktop interactions
+**Known Windows limitation:** Git 2.55.0.windows.5 rejected that deep custom base
+with `fatal: '$GIT_DIR' too big`, despite `core.longpaths=true`. Its
+[`setup_explicit_git_dir` check](https://github.com/git-for-windows/git/blob/v2.55.0.windows.5/setup.c#L1156)
+limits the UTF-8 byte length of `GIT_DIR` to `PATH_MAX - 40` before resolving the
+worktree's `.git` file. Long tracked-file support does not remove this root-path
+limit. This is an upstream boundary, not a failing safety check to bypass.
+Choose a shorter worktree base for a **fresh** convoy; leave existing failed
+attempts and their ownership records intact. No path aliases, automatic
+relocation, Direct fallback or broad cleanup workaround was introduced.
+
+`overlong_windows_worktree_root_fails_without_launch_and_retains_ownership`
+requires that exact Git diagnostic and verifies no agent starts, failed status
+and ownership survive save/reload, recovery does not claim Available/Cleaned,
+source index/content stay intact, and a fresh request at a shorter base can run
+after Git exits. The first CI failure is retained above as evidence; it is not
+reclassified as successful long-root support. Ordinary Windows Storage cleanup
+remains subject to its existing stable-filesystem-identity restriction.
+
+No new runtime fix is claimed. Arbitrary-length roots and every external agent's
+path behavior are not supported by this verification.
+The candidate DEB and deployed AppImage require **glibc 2.43**, measured by the
+existing packaging checks. Older glibc desktops cannot run these artifacts; the
+intended oldest Linux distribution remains an explicit release compatibility
+gate. The local Debian host meets this requirement. The tested AppImage SHA-256
+is `bc1eb8844e3e6ff335fa08dce090b557d9a38f39c9d77ee43aab3c07c09488f4`.
+
+Pending PR regression results and the unperformed native desktop interactions
 above remain release-verification gaps, not green gates. Before final 1.0
 publication, test the exact candidate on the intended Linux distributions,
 macOS Intel/Apple Silicon and Windows desktop versions using the checklist.
