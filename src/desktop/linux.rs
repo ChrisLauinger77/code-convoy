@@ -83,6 +83,10 @@ impl Drop for Shutdown {
         drop(self.0.shutdown());
     }
 }
+enum Change {
+    State(MenuState),
+    Icon(ksni::Icon),
+}
 
 pub(super) fn start(
     state: MenuState,
@@ -95,20 +99,9 @@ pub(super) fn start(
     let online = Arc::new(AtomicBool::new(false));
     let active = online.clone();
     let task = runtime.spawn(async move {
-        let (gnome_shell, color_scheme) = appearance().await;
-        let light = light_glyph(gnome_shell, color_scheme);
-        let icon = match super::tray_glyph(light) {
-            Ok(image) => {
-                let mut argb = image.rgba;
-                for pixel in argb.as_chunks_mut::<4>().0 {
-                    pixel.rotate_right(1);
-                }
-                ksni::Icon {
-                    width: image.width as i32,
-                    height: image.height as i32,
-                    data: argb,
-                }
-            }
+        let mut appearance = Appearance::read().await;
+        let icon = match sni_icon(appearance.light()) {
+            Ok(icon) => icon,
             Err(error) => {
                 events.emit(Event::Unavailable(error));
                 return;
@@ -134,22 +127,36 @@ pub(super) fn start(
         };
         active.store(true, Ordering::Release);
         events.emit(Event::Ready);
-        while receiver.changed().await.is_ok() {
-            let state = *receiver.borrow_and_update();
-            match tokio::time::timeout(
-                Duration::from_secs(5),
-                handle.0.update(|item| item.state = state),
-            )
-            .await
-            {
-                Ok(Some(())) => {}
-                _ => {
-                    active.store(false, Ordering::Release);
-                    events.emit(Event::Unavailable(
-                        "Linux tray service stopped responding.".into(),
-                    ));
-                    break;
+        loop {
+            let change = tokio::select! {
+                changed = receiver.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                    Change::State(*receiver.borrow_and_update())
                 }
+                color_scheme = appearance.changed() => {
+                    appearance.color_scheme = Some(color_scheme);
+                    // The glyph was validated at startup; keep the current one if not.
+                    let Ok(icon) = sni_icon(appearance.light()) else {
+                        continue;
+                    };
+                    Change::Icon(icon)
+                }
+            };
+            let update = handle.0.update(|item| match change {
+                Change::State(state) => item.state = state,
+                Change::Icon(icon) => item.icon = icon,
+            });
+            if !matches!(
+                tokio::time::timeout(Duration::from_secs(5), update).await,
+                Ok(Some(()))
+            ) {
+                active.store(false, Ordering::Release);
+                events.emit(Event::Unavailable(
+                    "Linux tray service stopped responding.".into(),
+                ));
+                break;
             }
         }
     });
@@ -159,6 +166,20 @@ pub(super) fn start(
         online,
     }))
 }
+/// SNI pixmaps are ARGB in network byte order.
+fn sni_icon(light: bool) -> Result<ksni::Icon, String> {
+    let image = super::tray_glyph(light)?;
+    let mut argb = image.rgba;
+    for pixel in argb.as_chunks_mut::<4>().0 {
+        pixel.rotate_right(1);
+    }
+    Ok(ksni::Icon {
+        width: image.width as i32,
+        height: image.height as i32,
+        data: argb,
+    })
+}
+
 /// SNI pixmaps are not recolored by hosts. GNOME Shell's top bar stays dark in
 /// either style; other panels follow the desktop color scheme. Only an explicit
 /// light preference selects the black glyph.
@@ -167,47 +188,120 @@ fn light_glyph(gnome_shell: bool, color_scheme: Option<u32>) -> bool {
     gnome_shell || color_scheme != Some(PREFER_LIGHT)
 }
 
-/// Whether GNOME Shell owns the session panel, and the XDG Settings portal
-/// `org.freedesktop.appearance` `color-scheme`, if readable. GNOME Shell is
-/// detected by its bus name because `XDG_CURRENT_DESKTOP` may list `GNOME` only
-/// as a compatibility entry (for example `Budgie:GNOME`).
-async fn appearance() -> (bool, Option<u32>) {
-    let read = async {
-        let connection = zbus::Connection::session().await.ok()?;
-        let gnome_shell = async {
-            let reply = connection
-                .call_method(
-                    Some("org.freedesktop.DBus"),
-                    "/org/freedesktop/DBus",
-                    Some("org.freedesktop.DBus"),
-                    "NameHasOwner",
-                    &("org.gnome.Shell",),
-                )
-                .await
-                .ok()?;
-            reply.body().deserialize::<bool>().ok()
+const SETTINGS: &str = "org.freedesktop.portal.Settings";
+const APPEARANCE: &str = "org.freedesktop.appearance";
+const COLOR_SCHEME: &str = "color-scheme";
+
+/// Panel contrast inputs. GNOME Shell is detected by its bus name because
+/// `XDG_CURRENT_DESKTOP` may list `GNOME` only as a compatibility entry (for
+/// example `Budgie:GNOME`). Elsewhere the XDG Settings portal `color-scheme` is
+/// read once and then followed through `SettingChanged`.
+struct Appearance {
+    gnome_shell: bool,
+    color_scheme: Option<u32>,
+    changes: Option<zbus::MessageStream>,
+}
+impl Appearance {
+    fn light(&self) -> bool {
+        light_glyph(self.gnome_shell, self.color_scheme)
+    }
+
+    async fn read() -> Self {
+        let read = async {
+            let connection = zbus::Connection::session().await.ok()?;
+            let gnome_shell = async {
+                let reply = connection
+                    .call_method(
+                        Some("org.freedesktop.DBus"),
+                        "/org/freedesktop/DBus",
+                        Some("org.freedesktop.DBus"),
+                        "NameHasOwner",
+                        &("org.gnome.Shell",),
+                    )
+                    .await
+                    .ok()?;
+                reply.body().deserialize::<bool>().ok()
+            }
+            .await
+            .unwrap_or(false);
+            if gnome_shell {
+                return Some(Self {
+                    gnome_shell,
+                    color_scheme: None,
+                    changes: None,
+                });
+            }
+            // Subscribe before reading so a change in between is not lost.
+            let changes = async {
+                let rule = zbus::MatchRule::builder()
+                    .msg_type(zbus::message::Type::Signal)
+                    .interface(SETTINGS)
+                    .ok()?
+                    .member("SettingChanged")
+                    .ok()?
+                    .arg(0, APPEARANCE)
+                    .ok()?
+                    .arg(1, COLOR_SCHEME)
+                    .ok()?
+                    .build();
+                zbus::MessageStream::for_match_rule(rule, &connection, Some(4))
+                    .await
+                    .ok()
+            }
+            .await;
+            let color_scheme = async {
+                let reply = connection
+                    .call_method(
+                        Some("org.freedesktop.portal.Desktop"),
+                        "/org/freedesktop/portal/desktop",
+                        Some(SETTINGS),
+                        "ReadOne",
+                        &(APPEARANCE, COLOR_SCHEME),
+                    )
+                    .await
+                    .ok()?;
+                let value: zbus::zvariant::OwnedValue = reply.body().deserialize().ok()?;
+                u32::try_from(value).ok()
+            }
+            .await;
+            Some(Self {
+                gnome_shell,
+                color_scheme,
+                changes,
+            })
         };
-        let color_scheme = async {
-            let reply = connection
-                .call_method(
-                    Some("org.freedesktop.portal.Desktop"),
-                    "/org/freedesktop/portal/desktop",
-                    Some("org.freedesktop.portal.Settings"),
-                    "ReadOne",
-                    &("org.freedesktop.appearance", "color-scheme"),
-                )
-                .await
-                .ok()?;
-            let value: zbus::zvariant::OwnedValue = reply.body().deserialize().ok()?;
-            u32::try_from(value).ok()
-        };
-        Some((gnome_shell.await.unwrap_or(false), color_scheme.await))
-    };
-    tokio::time::timeout(Duration::from_secs(2), read)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or((false, None))
+        tokio::time::timeout(Duration::from_secs(2), read)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(Self {
+                gnome_shell: false,
+                color_scheme: None,
+                changes: None,
+            })
+    }
+
+    /// Next portal `color-scheme` value. Pending forever without a subscription.
+    async fn changed(&mut self) -> u32 {
+        use futures_lite::StreamExt;
+        while let Some(changes) = &mut self.changes {
+            match changes.next().await {
+                Some(Ok(message)) => {
+                    if let Ok((_, _, value)) =
+                        message
+                            .body()
+                            .deserialize::<(String, String, zbus::zvariant::OwnedValue)>()
+                        && let Ok(value) = u32::try_from(value)
+                    {
+                        return value;
+                    }
+                }
+                Some(Err(_)) => {}
+                None => self.changes = None,
+            }
+        }
+        std::future::pending().await
+    }
 }
 
 impl Backend for LinuxTray {
