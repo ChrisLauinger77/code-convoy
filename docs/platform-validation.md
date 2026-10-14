@@ -1,4 +1,120 @@
-# v0.10 PR 4: cross-platform hardening
+# Cross-platform release verification
+
+## 1.0 readiness PR 3 — 2026-10-14
+
+This is verification of the merged PR 2 implementation (`77965f3`), plus one
+focused long-path regression. Application version remains **0.10.0**. No product
+feature, desktop framework, dependency, scheduler, ownership rule or release
+infrastructure changes. The package run below is a non-publishing verification
+candidate, not the final 1.0 candidate or authorization to tag it.
+
+### Evidence and environment
+
+Local host: Debian forky/sid, GNOME Shell 50.5 in a Wayland session, Linux
+7.2.9 x86-64, Rust 1.96.1, Git 2.53.0 and Python 3.14.8. All repositories and
+application stores used by the probes are disposable; no provider task or user
+repository was run. `TMPDIR=/var/tmp` avoids the desktop sandbox's synthetic
+`/tmp/.git`; subprocess/socket tests run outside that sandbox.
+
+- **Automated tests:** formatting, strict all-target/all-feature Clippy and the
+  full Rust suite passed locally: 592 tests, zero failures, nine existing optional
+  tests ignored. The private D-Bus test was additionally run and passed; all 23
+  packaging unit tests and the release build passed.
+- **Native Linux smoke:** both `desktop_performance 0 2` and
+  `v09_history_validation --smoke` passed on Wayland with `DISPLAY` removed, and
+  on X11 through XWayland with `WAYLAND_DISPLAY`/`WAYLAND_SOCKET` removed. Each
+  exited through its ordinary close path. The history fixture verified that the
+  retained worktree contents and Git backlink survived. No software-rendering
+  override was set; this does not establish which physical GPU was selected.
+- **Build/test matrix:** existing [CI run 38572066655](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38572066655)
+  checks the merged source on Linux, macOS and Windows. Results are pending;
+  the new long-path test also requires its own native CI result.
+- **Package matrix:** existing [Release run 38572061998](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38572061998)
+  checks source `77965f3c4fb63e372c8fd3d1921331bab29960dc` using the existing pinned
+  runners/toolchain. Package results are pending. Its manual trigger skips both
+  publication and downstream package-repository updates; no tag is created.
+
+A compiled binary, an automated test, a live desktop smoke and a checked package
+are separate evidence. Historical macOS interactive results below and in the
+linked feature records are useful prior evidence, not a new native 1.0 check.
+
+### Current verification matrix
+
+Procedures for the remaining interactive checks are in the
+[native smoke checklist](#native-smoke-checklist). **Not tested** is not a pass.
+
+| Area / procedure | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| Native startup, render, normal close | **Passed:** both fixtures on GNOME Wayland and XWayland | **Not tested interactively:** candidate startup pending | **Not tested interactively:** WARP initialization is an automated CI check |
+| Decorations | **Passed, protocol evidence:** resolved Adwaita feature plus five frame buffers attached/committed on native Wayland; decorated XWayland window captured | Existing AppKit/decorated viewport configuration audited; **not retested visually** | Existing decorated viewport configuration audited; **not retested visually** |
+| Minimize/restore, Dock/taskbar, tray menus | Shared state/callback tests; **native interaction not verified** | Shared tests; prior Dock/quit evidence is historical | Shared tests; Explorer/notification-area interaction **not tested** |
+| Notifications and click activation | Private-bus unavailable-service behavior **passed**; visible delivery/click **not tested** | Policy/callback tests; bundle permission/Focus/click **not tested** | Policy/callback tests; installed/portable delivery/click **not tested** |
+| File dialogs | Parented portal configuration and selection/cancel tests; native chooser **not tested** | Main-thread parented sheets audited; native chooser **not retested** | COM dialog adapter audited; native chooser **not tested** |
+| Clipboard and shortcuts | Mapping, modal gating and output tests; cross-application paste/native chords **not verified** | Command mapping tests; native copy/paste **not retested** | Control mapping tests; native copy/paste **not tested** |
+| Process cancellation and shutdown | Real fixture processes, descendants, repeated Stop, future drop, quarantine and peer isolation **passed locally** | Same native process tests in CI, **pending** | Job Object/process-tree tests in CI, **pending** |
+| Worktree creation/recovery/cleanup | Real Git regression suite **passed locally**; native history fixture retains checkout | Native Git tests in CI, **pending** | Native Git tests in CI, **pending**; ordinary Storage cleanup remains deliberately unavailable |
+| Unicode, spaces, long paths | Existing literal invocation tests and new >300 UTF-16-unit custom worktree path **passed** | Same tests in CI, **pending** | Same tests plus drive/UNC spelling, junction and sharing tests in CI, **pending**; live UNC server not tested |
+| Linux packages and environment | DEB/RPM/AppImage, host-Git/CLI-name probe and Xvfb package startup **pending** | — | — |
+| macOS Universal bundle/distribution | — | arm64 + x86_64, lipo, bundle metadata/license, ad-hoc signature and mounted DMG **pending**; Intel native UI not tested | — |
+| Windows installer/portable/removal | — | — | Metadata, per-user install, Start Menu, license, portable identity, uninstall/state preservation **pending**; interactive installed startup not tested |
+
+The additional XWayland interactive fixture rendered, but GNOME declined the
+attempted automated activation/input (the compositor's active window did not
+become the fixture). No keyboard, picker, clipboard or restoration result is
+claimed from those attempts. The idle fixture was explicitly terminated without
+starting any job; that termination is not normal-quit evidence.
+
+### Wayland decoration verification
+
+The resolved graph is `winit 0.30.13` with `wayland-csd-adwaita`, selecting
+`sctk-adwaita 0.10.1` and its `ab_glyph` renderer. Both Wayland runs had no `DISPLAY`,
+so they could not fall back to XWayland. Their `WAYLAND_DEBUG=1` traces showed an
+`xdg_toplevel` and all five Adwaita decoration subsurfaces, with attached buffers,
+input regions and commits. The empty fixture produced a 35-pixel header buffer
+and the four surrounding frame parts, then rendered the application. This is
+protocol/render evidence; decoration-button clicking and resize hit targets
+still need interactive verification.
+
+Reproduce using the existing fixtures and the build command below:
+
+```sh
+cargo tree --locked -e features -i sctk-adwaita
+env -u DISPLAY WAYLAND_DEBUG=1 target/release/examples/desktop_performance 0 2
+env -u DISPLAY WAYLAND_DEBUG=1 target/release/examples/v09_history_validation --smoke
+env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET target/release/examples/desktop_performance 0 2
+env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET target/release/examples/v09_history_validation --smoke
+```
+
+Use a real Wayland session for the first two launches. The first-render samples
+were approximately 55 ms on Wayland and 51 ms on XWayland; these single samples
+are smoke evidence, not a performance guarantee. Neither Xvfb nor an XWayland
+launch proves native Wayland behavior.
+
+### Focused regression and remaining release gates
+
+`long_custom_location_preserves_identity_through_recovery_and_explicit_cleanup`
+creates a custom base longer than 300 UTF-16 code units, including spaces and
+Japanese text. It checks real checkout creation, canonical registration, saved
+ownership reload, lifecycle inspection, explicit retained-result cleanup and
+preservation of the source index/content and ownership tombstone. Only its
+fixture repository enables Git's `core.longpaths`; application code does not
+change global Git or Windows settings. This does not promise arbitrary-length
+paths or compatibility with every external agent. Ordinary Windows Storage
+cleanup remains subject to its existing stable-filesystem-identity restriction.
+
+No confirmed platform product defect has been found in these completed checks.
+Pending build/package results and the unperformed native desktop interactions
+above remain release-verification gaps, not green gates. Before final 1.0
+publication, test the exact candidate on the intended Linux distributions,
+macOS Intel/Apple Silicon and Windows desktop versions using the checklist.
+Ad-hoc macOS signing is not notarization; Windows Authenticode signing is absent.
+Existing Unix process-group escape, external reaper and session-scoped quarantine
+limits remain documented in [the PR 2 audit](worktree-validation.md#unix-process-exit-blocker-and-follow-up-fix).
+PR 4 has not started. No release version, tag or publication is part of PR 3.
+
+---
+
+# Earlier v0.10 PR 4: cross-platform hardening
 
 This is a platform audit and regression-coverage change. It adds no backend,
 scheduling, persistence-format or packaging behavior. The Wayland Adwaita frame
