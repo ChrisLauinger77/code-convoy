@@ -196,6 +196,12 @@ impl AgentBackend for Claude {
     fn output(&self) -> Box<dyn AgentOutput> {
         Box::<ClaudeOutput>::default()
     }
+    fn output_with_options(&self, options: &AgentOptions) -> Box<dyn AgentOutput> {
+        Box::new(ClaudeOutput {
+            auto_requested: value(options, &OPTIONS[3]) == "auto",
+            ..Default::default()
+        })
+    }
     fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
         crate::attachments::validate_limits(&task.attachments)?;
         for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
@@ -236,6 +242,7 @@ struct ClaudeOutput {
     oversized: [bool; 2],
     protocol_error: bool,
     explicit_error: bool,
+    auto_requested: bool,
     manual_permissions_reported: bool,
     // Keep the parsed Claude result (including usage/denials/metadata) for outcome
     // interpretation, without introducing a shared activity/event abstraction.
@@ -312,12 +319,12 @@ impl ClaudeOutput {
                     // Claude can accept --permission-mode auto yet start in
                     // Manual when settings/model/account support disable Auto.
                     // Keep that observable without retrying or changing policy.
-                    if matches!(mode, "default" | "manual") {
+                    if self.auto_requested && matches!(mode, "default" | "manual") {
                         self.manual_permissions_reported = true;
                         self.activity.push_str(MANUAL_PERMISSIONS_NOTICE);
                         self.activity.push('\n');
                     }
-                } else if event["subtype"].as_str() == Some("init") {
+                } else if self.auto_requested && event["subtype"].as_str() == Some("init") {
                     self.activity.push_str("[CodeConvoy] Claude did not report its permission mode; Auto availability cannot be confirmed.\n");
                 }
             }
@@ -453,10 +460,13 @@ impl AgentOutput for ClaudeOutput {
             (
                 JobStatus::Failed,
                 format!(
-                    "Claude Code completion was not confirmed ({status}). Expected one valid final success result with is_error=false and no execution/protocol errors. Inspect output for interrupted execution, turn limits, authentication, model, permission or CLI errors. For unavailable Auto mode, check CLI support, account/model availability and organization policy; choose a different permission mode explicitly if needed."
+                    "Claude Code completion was not confirmed ({status}). Expected one valid final success result with is_error=false and no execution/protocol errors. Inspect output for interrupted execution, turn limits, authentication, model, permission or CLI errors."
                 ),
             )
         };
+        if self.auto_requested && outcome == JobStatus::Failed {
+            message.push_str(" For unavailable Auto mode, check CLI support, account/model availability and organization policy; choose a different permission mode explicitly if needed.");
+        }
         if self.manual_permissions_reported {
             message.push(' ');
             message.push_str(MANUAL_PERMISSIONS_NOTICE);

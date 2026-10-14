@@ -11,7 +11,9 @@ repository safeguards, retained worktrees and explicit validation remain intact.
 - Claude's permission selector now includes **Auto**, passed as
   `--permission-mode auto`. Existing permissions and the `dontAsk` default are
   unchanged. Activity reports Claude's actual mode; Manual fallback is also
-  recorded in the final job summary. Unsupported invocations retain their CLI
+  recorded in the final job summary for Auto jobs. Auto availability diagnostics
+  follow each job's saved mode and do not appear on legacy-mode jobs.
+  Unsupported invocations retain their CLI
   error, with no automatic retry or unrestricted-permission substitution. Auto
   remains subject to CLI, account/model and organization support; see the
   [authenticated Linux evidence and limitations](claude-validation.md#auto-permission-mode--2026-10-14).

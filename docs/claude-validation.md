@@ -21,9 +21,12 @@ below remains a historical record of the 2026-10-05 checks.
 
 Auto is now an explicit third choice, generating `--permission-mode auto`.
 `dontAsk` remains the default, and `acceptEdits` retains its existing behavior.
-Only Claude's option definitions, execution explanation and output decoding
-change; the backend interface, runner, Git/worktree lifecycle and other backends
-are unchanged. No dependency or persisted-state schema changes are required.
+Claude owns the option definitions, execution explanation and output decoding.
+The runner passes immutable job options through a default `output_with_options`
+factory, so Claude can limit Auto diagnostics to jobs that selected Auto. Other
+backends still use their existing `output()` factories; scheduling, supervision
+and the Git/worktree lifecycle are unchanged. No dependency or persisted-state
+schema changes are required.
 Templates still contain only their name and task text.
 
 The installed Claude Code **2.1.300** accepts the generated arguments. Its help
@@ -37,8 +40,12 @@ an actionable completion diagnostic. No automatic permission retry is added.
 
 Claude can accept Auto yet report Manual (`permissionMode: default` or `manual`).
 The decoder shows reported modes in Activity and retains a Manual/Auto-not-active
-notice in the terminal summary, even when the task succeeds under Manual
-permissions. Missing init mode information is explicitly unverified.
+notice in the terminal summary for Auto jobs, even when the task succeeds under
+Manual permissions. Missing init mode information is explicitly unverified for
+Auto jobs. Default, `dontAsk` and `acceptEdits` jobs receive neither Auto fallback
+warnings nor Auto availability hints on failure. Regression tests reproduce the
+original misleading warning and exercise simultaneous jobs with different saved
+permission modes, without changing backend Raw output.
 CodeConvoy does not alter Claude policy/settings
 or add bypass flags. Reporting depends on the CLI's stream and diagnostics; it
 is not independent enforcement or continuous inspection of organization policy.
@@ -79,19 +86,20 @@ documented SDK contract. Future shape changes fail conservatively and may requir
 a compatibility update. The real Auto and disabled-Auto tests both passed after
 this correction.
 
-Final local validation after the decoder correction:
+Final local validation after the decoder and review fixes:
 
 | Check | Result |
 | --- | --- |
 | `cargo fmt --check` | Passed |
 | `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
-| `cargo test --all-features` | 600 passed, 0 failed, 10 opt-in tests ignored (excluding seven nested fixture-test summaries) |
+| `cargo test --all-features` | 602 passed, 0 failed, 10 opt-in tests ignored (excluding seven nested fixture-test summaries) |
 | `cargo build --release` | Passed on Linux |
-| `cargo test --all-features --test claude -- --include-ignored --nocapture --test-threads=1` | All 19 passed, including the installed help/version probe and authenticated Auto/disabled-Auto probe |
+| `cargo test --all-features --test claude -- --include-ignored --nocapture --test-threads=1` | All 20 passed, including the installed help/version probe and authenticated Auto/disabled-Auto probe |
 
 Deterministic Claude coverage includes exact arguments for all three modes,
 unchanged defaults and approval explanations, rejection of unknown/bypass modes,
-CLI rejection diagnostics, Manual fallback, missing mode reports, persisted
+CLI rejection diagnostics, Manual fallback, missing mode reports, Auto warning
+scope across concurrent jobs with different modes, persisted
 draft/preferences/history/reuse and unchanged templates, plus the narrowly
 accepted trailing notification and rejected malformed/error variants. The full
 suite reran existing scheduler, worktree, cancellation and supervision regressions.
@@ -144,4 +152,4 @@ Local checks all passed: `cargo fmt --check`, `cargo clippy --all-targets --all-
 
 Use the [safe two-repository E2E procedure](../README.md#safe-manual-claude-e2e-test) on a machine with Claude already configured. Verify real final-result shape, configured hooks/permissions, independent edits/diffs and cancellation with the installed release. Native Windows executable resolution and Job Object behavior, Linux desktop behavior, and the remaining macOS editing/cancellation behaviors still need real-CLI checks. On Windows use native `claude.exe`; explicit `.cmd`/`.bat` wrappers are rejected. The existing process-group limitation for deliberately detached descendants remains.
 
-No backend abstraction change was necessary. Codex, Copilot and OpenCode implementations are unchanged; the backend abstraction is now feature-frozen for v0.1.0 except for bug fixes.
+The initial backend addition needed no abstraction change. Auto diagnostics now use the small options-aware decoder factory described above. Codex, Copilot and OpenCode implementations remain unchanged; the backend abstraction is feature-frozen for v0.1.0 except for bug fixes.

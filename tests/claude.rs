@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use codeconvoy::{
-    agents::{self, AgentBackend, OptionKind, claude::Claude},
+    agents::{self, AgentBackend, AgentOutput, OptionKind, claude::Claude},
     domain::{AgentId, AppState, Job, JobStatus, Repository, Run, TaskConfig},
     persistence::Store,
     process::{self, Stream},
@@ -42,6 +42,9 @@ fn success() -> Value {
 }
 fn line(event: &Value) -> Vec<u8> {
     (event.to_string() + "\n").into_bytes()
+}
+fn auto_output() -> Box<dyn AgentOutput> {
+    Claude.output_with_options(&[("permission_mode".into(), "auto".into())].into())
 }
 
 #[test]
@@ -230,7 +233,7 @@ fn reported_permissions_are_visible_without_changing_existing_completion_rules()
     }
     // Older CLIs may omit the field. Never infer that the requested mode is active.
     for reported in [Value::Null, json!(""), json!(false)] {
-        let mut output = Claude.output();
+        let mut output = auto_output();
         output.push(
             Stream::Stdout,
             &line(&json!({"type":"system", "subtype":"init", "permissionMode":reported})),
@@ -249,7 +252,7 @@ fn reported_permissions_are_visible_without_changing_existing_completion_rules()
 #[test]
 fn policy_or_availability_fallback_is_visible_even_when_claude_completes_successfully() {
     for mode in ["default", "manual"] {
-        let mut output = Claude.output();
+        let mut output = auto_output();
         // A reported Manual mode must not be mistaken for active Auto, including
         // if it follows an earlier Auto report. The raw record is kept intact.
         output.push(
@@ -282,7 +285,7 @@ fn unsupported_auto_or_policy_rejection_preserves_cli_diagnostic_and_fails() {
         "Auto mode is unavailable for this model",
         "Auto mode disabled by organization policy",
     ] {
-        let mut output = Claude.output();
+        let mut output = auto_output();
         // A CLI may reject before emitting any JSON; stderr remains actionable.
         output.push(Stream::Stderr, diagnostic.as_bytes());
         assert!(output.finish().contains(diagnostic));
@@ -292,6 +295,42 @@ fn unsupported_auto_or_policy_rejection_preserves_cli_diagnostic_and_fails() {
         assert!(
             message.contains("CLI support, account/model availability and organization policy")
         );
+    }
+}
+
+#[test]
+fn auto_diagnostics_are_scoped_to_the_requested_mode() {
+    let backend = agents::backend(AgentId::Claude).unwrap();
+    for requested in [None, Some("dontAsk"), Some("acceptEdits"), Some("auto")] {
+        let options = requested
+            .map(|mode| ("permission_mode".into(), mode.into()))
+            .into_iter()
+            .collect();
+        for reported in [None, Some("default"), Some("manual")] {
+            let mut output = backend.output_with_options(&options);
+            let mut init = json!({"type":"system", "subtype":"init"});
+            if let Some(mode) = reported {
+                init["permissionMode"] = json!(mode);
+            }
+            let raw = line(&init);
+            assert_eq!(output.push(Stream::Stdout, &raw).as_bytes(), raw);
+            let activity = output.take_activity().unwrap();
+            assert_eq!(
+                activity.contains("Auto"),
+                requested == Some("auto"),
+                "requested={requested:?}, reported={reported:?}: {activity}"
+            );
+            output.push(Stream::Stdout, &line(&success()));
+            let (outcome, detail) = output.interpret(status(0));
+            assert_eq!(outcome, JobStatus::Succeeded);
+            assert_eq!(
+                detail.contains("Auto"),
+                requested == Some("auto") && reported.is_some()
+            );
+            let (outcome, detail) = output.interpret(status(1));
+            assert_eq!(outcome, JobStatus::Failed);
+            assert_eq!(detail.contains("Auto"), requested == Some("auto"));
+        }
     }
 }
 
@@ -803,7 +842,7 @@ async fn authenticated_claude_auto_and_disabled_auto_in_disposable_repositories(
             init["permissionMode"],
             if disabled { "default" } else { "auto" }
         );
-        let mut output = Claude.output();
+        let mut output = Claude.output_with_options(&task.options);
         output.push(Stream::Stdout, &captured.stdout);
         output.push(Stream::Stderr, &captured.stderr);
         output.finish();

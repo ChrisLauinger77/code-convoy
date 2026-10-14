@@ -47,6 +47,10 @@ pub trait AgentBackend: Send + Sync {
     fn check_detection(&self, help: &str) -> Result<()>;
     fn build(&self, task: &TaskConfig, repository: &Repository) -> Result<CommandSpec>;
     fn output(&self) -> Box<dyn AgentOutput>;
+    /// Initialize per-job decoding with the immutable execution options.
+    fn output_with_options(&self, _options: &AgentOptions) -> Box<dyn AgentOutput> {
+        self.output()
+    }
     fn execution_summary(&self, options: &AgentOptions) -> String;
     fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
         crate::attachments::validate_limits(&task.attachments)?;

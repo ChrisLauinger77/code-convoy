@@ -395,7 +395,11 @@ async fn run_agent(
             _ = lifecycle(tx, run, job, "Running agent in isolated worktree") => {},
         }
     }
-    let decoder = Mutex::new((backend.output(), 0usize, raw_output::RawOutput::default()));
+    let decoder = Mutex::new((
+        backend.output_with_options(&task.options),
+        0usize,
+        raw_output::RawOutput::default(),
+    ));
     let result = process::execute(
         child,
         spec.input,
