@@ -8,6 +8,7 @@ import ctypes
 import os
 from pathlib import Path
 import shutil
+import shlex
 import signal
 import subprocess
 import tempfile
@@ -22,6 +23,17 @@ def stop(process):
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
             process.wait(timeout=10)
+
+
+def wait_for_window_manager(process, ready):
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"Window manager exited: {process.returncode}")
+        if ready.exists():
+            return
+        time.sleep(0.1)
+    raise RuntimeError("Window manager did not become ready")
 
 
 def smoke(binary, mode):
@@ -46,18 +58,16 @@ def smoke(binary, mode):
             env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
         mounts_before = set(Path("/proc/self/mountinfo").read_text().splitlines())
         with (home / "startup.log").open("w+b") as log:
-            wm = subprocess.Popen(["openbox", "--sm-disable"], env=env, stdout=log, stderr=log, start_new_session=True)
+            # Openbox advertises itself to wmctrl before completing startup.
+            # Its startup callback runs after initialization/window management;
+            # a fresh private marker prevents launching the app in that gap.
+            ready = home / "openbox-ready"
+            wm = subprocess.Popen(["openbox", "--sm-disable", "--startup",
+                                   shlex.join(["touch", str(ready)])],
+                                  env=env, stdout=log, stderr=log, start_new_session=True)
             process = None
             try:
-                deadline = time.monotonic() + 10
-                while time.monotonic() < deadline:
-                    if wm.poll() is not None:
-                        raise RuntimeError(f"Window manager exited: {wm.returncode}")
-                    if subprocess.run(["wmctrl", "-m"], env=env, capture_output=True).returncode == 0:
-                        break
-                    time.sleep(0.1)
-                else:
-                    raise RuntimeError("Window manager did not become ready")
+                wait_for_window_manager(wm, ready)
                 process = subprocess.Popen([str(binary)], env=env, stdout=log, stderr=log,
                                            start_new_session=True,
                                            preexec_fn=allow_test_debugger if debugger else None)
