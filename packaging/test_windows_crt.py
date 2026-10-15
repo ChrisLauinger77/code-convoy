@@ -37,6 +37,17 @@ class WindowsCrtTests(unittest.TestCase):
             with self.subTest(log=log), self.assertRaises(ValueError):
                 crt.loaded_libraries(log)
 
+    def test_native_msvc_basename_uses_only_the_active_full_search_path(self):
+        log = ("Searching C:\\VC\\libcmt.lib:\n Found mainCRTStartup\n"
+               " Referenced in main.obj\n Loaded libcmt.lib(exe_main.obj)\n"
+               "Searching D:\\other\\libcmt.lib:\n Loaded LIBCMT.lib(other.obj)\n")
+        self.assertEqual(crt.loaded_libraries(log), {r"C:\VC\libcmt.lib": ["exe_main.obj"],
+                                                   r"D:\other\libcmt.lib": ["other.obj"]})
+        for boundary in ("Searching C:\\VC\\other.lib:", "Finished searching libraries", "Starting pass 2",
+                         "Searching libcmt.lib:"):
+            with self.subTest(boundary=boundary), self.assertRaisesRegex(ValueError, "full library path"):
+                crt.loaded_libraries("Searching C:\\VC\\libcmt.lib:\n" + boundary + "\n Loaded libcmt.lib(x.obj)")
+
     def test_command_file_path_cannot_inject_shell_code(self):
         self.assertEqual(crt.command_path(r"C:\Program Files\link.exe"), '"C:\\Program Files\\link.exe"')
         for char in '\r\n"%!^&|<>':

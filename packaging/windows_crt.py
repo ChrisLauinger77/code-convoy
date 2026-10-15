@@ -40,8 +40,15 @@ def loaded_libraries(log):
     paths, and fail if MSVC changes this diagnostic format rather than guessing.
     """
     libraries = {}
+    searched = None
     for line in log.splitlines():
         line = line.strip()
+        if line.startswith("Searching "):
+            match = re.fullmatch(r"Searching (.+\.(?:lib|rlib)):", line, re.I)
+            searched = match.group(1) if match and PureWindowsPath(match.group(1)).is_absolute() else None
+            continue
+        if line == "Finished searching libraries" or line.startswith("Starting pass "):
+            searched = None
         if not line.startswith("Loaded "):
             continue
         match = re.fullmatch(r"Loaded (.+\.(?:lib|rlib))\(([^\r\n]+)\)", line, re.I)
@@ -49,7 +56,12 @@ def loaded_libraries(log):
             raise ValueError(f"Unrecognized linker Loaded record: {line}")
         path, member = match.groups()
         if not PureWindowsPath(path).is_absolute():
-            raise ValueError(f"Linker did not identify a full library path: {path}")
+            # MSVC 14.51 prints a basename here. Only its immediately active
+            # absolute search record can disambiguate it, never LIB or PATH.
+            if (not searched or PureWindowsPath(path).name != path
+                    or PureWindowsPath(searched).name.lower() != path.lower()):
+                raise ValueError(f"Linker did not identify a full library path: {path}")
+            path = searched
         libraries.setdefault(path, set()).add(member)
     if not libraries or not any(PureWindowsPath(p).name.lower() in CRT_NAMES for p in libraries):
         raise ValueError("No selected CRT library evidence in linker diagnostics")
