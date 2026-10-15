@@ -273,10 +273,16 @@ class FinalLicensePayload(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0)
             with patch.object(licenses, "checked_catalog", return_value=(catalog, {})), \
                  patch.object(licenses, "materials", return_value={"notice.txt": b"notice"}), \
+                 patch("windows_crt.inspect_installer") as inspect_crt, \
                  patch.object(licenses.subprocess, "run", side_effect=extract):
                 licenses.verify_windows_installer(root / "final.exe", root, exe)
                 for mode in ("changed plugin", "missing notice", "new library"):
                     with self.subTest(mode=mode), self.assertRaises(ValueError):
+                        licenses.verify_windows_installer(root / "final.exe", root, exe)
+                if licenses.os.name == "nt":
+                    mode = "valid"
+                    inspect_crt.side_effect = ValueError("CRT inspection failed")
+                    with self.assertRaisesRegex(ValueError, "CRT inspection failed"):
                         licenses.verify_windows_installer(root / "final.exe", root, exe)
 
     def test_every_missing_or_tampered_material_fails_on_final_directory(self):

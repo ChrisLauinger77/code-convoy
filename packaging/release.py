@@ -217,6 +217,8 @@ def verify_windows_exe(path):
 
 
 def windows():
+    import windows_crt
+    windows_crt.verify(ROOT / "target/release/codeconvoy.exe")
     work = fresh_work("windows")
     binaries = work / "bin"
     binaries.mkdir()
@@ -234,6 +236,7 @@ def windows():
         for name in licenses.FILES:
             zipped.write(licenses.BUNDLE / name, name)
     verify_windows_zip(archive, exe)
+    windows_crt.record_packages(installer, archive, exe)
 
 
 def verify_windows_zip(archive, exe):

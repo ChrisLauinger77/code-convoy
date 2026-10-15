@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -260,6 +261,9 @@ def verify_windows_installer(archive, work, exe):
         for name, checksum in plugins.items():
             if digest((payload / name).read_bytes()) != checksum:
                 raise ValueError(f"Final installer plugin differs from the license audit: {name}")
+        if os.name == "nt":
+            from windows_crt import inspect_installer
+            inspect_installer(archive, payload, exe)
         print("Final Windows installer: notices, sources, application and embedded plugins verified", flush=True)
 
 

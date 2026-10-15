@@ -6,6 +6,11 @@ on:
     paths-ignore:
       - "**/*.md"
   workflow_dispatch:
+    inputs:
+      windows_crt_audit:
+        description: Inspect Windows release linker inputs and test installer/ZIP (no publication)
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -39,3 +44,30 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo test --locked --bin codeconvoy software_adapter_initializes_egui_renderer -- --ignored --nocapture
       - run: cargo build --locked --release --bin codeconvoy
+      # An opt-in diagnostic run, not a release candidate. Keep release pins.
+      - name: Install audited Windows release tools
+        if: runner.os == 'Windows' && inputs.windows_crt_audit
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot install audited Rust toolchain' }
+          cargo +1.99.0 install --locked --version 0.11.8 cargo-packager
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot install audited packager' }
+      - name: Capture Windows CRT provenance and verify packages
+        if: runner.os == 'Windows' && inputs.windows_crt_audit
+        env:
+          RUSTUP_TOOLCHAIN: "1.99.0"
+        run: |
+          python packaging/build.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows CRT provenance capture failed' }
+          python packaging/release.py windows
+          if ($LASTEXITCODE -ne 0) { throw 'Windows packaging verification failed' }
+          ./packaging/windows-smoke.ps1
+      - name: Retain Windows CRT diagnostic evidence
+        if: always() && runner.os == 'Windows' && inputs.windows_crt_audit
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-crt-audit
+          path: |
+            target/packaging/windows-crt/*
+            dist/*windows*
+          if-no-files-found: error

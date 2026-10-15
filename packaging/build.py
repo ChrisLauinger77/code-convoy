@@ -23,4 +23,8 @@ command = ["cargo", "build", "--locked", "--release"]
 command += ["--features", "test-support", "--example", "package_probe"] if args.probe else ["--bin", "codeconvoy"]
 if args.target:
     command += ["--target", args.target]
-subprocess.run(command, cwd=ROOT, env=env, check=True)
+if os.name == "nt" and not args.probe:
+    import windows_crt
+    windows_crt.build(command, env, args.target)
+else:
+    subprocess.run(command, cwd=ROOT, env=env, check=True)
