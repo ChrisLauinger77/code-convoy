@@ -13,6 +13,16 @@ import windows_crt as crt
 
 
 class WindowsCrtTests(unittest.TestCase):
+    def test_msvc_help_exit_does_not_relax_real_link_failure_checks(self):
+        banner = b"Microsoft (R) Incremental Linker Version 14.51.36231.0\r\n"
+        for code in (0, 1100):
+            with patch.object(crt.subprocess, "run", return_value=SimpleNamespace(returncode=code, stdout=banner)):
+                self.assertEqual(crt.linker_version("link.exe", {}), banner.decode().strip())
+        for code, text in ((1, banner), (1100, b"invalid command"), (0, b"")):
+            with patch.object(crt.subprocess, "run", return_value=SimpleNamespace(returncode=code, stdout=text)):
+                with self.assertRaisesRegex(ValueError, "Cannot identify MSVC"):
+                    crt.linker_version("link.exe", {})
+
     def test_only_loaded_archive_members_are_selected(self):
         path = r"C:\Program Files\Microsoft Visual Studio\VC\lib\libcmt.lib"
         log = (r"Searching C:\SDK\libucrt.lib:" + "\n Found _symbol\n"

@@ -32,19 +32,6 @@ jobs:
         with:
           python-version: "3.15"
       - run: python -m unittest discover -s packaging -p 'test_*.py'
-      - run: cargo fmt --check
-      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - run: cargo test --locked --all-features
-      - name: Linux desktop services unavailable
-        if: runner.os == 'Linux'
-        env:
-          CODECONVOY_PRIVATE_BUS_TEST: "1"
-        run: dbus-run-session -- cargo test --locked --all-features --test linux_desktop -- --ignored --nocapture
-      - name: Windows software graphics startup
-        if: runner.os == 'Windows'
-        run: cargo test --locked --bin codeconvoy software_adapter_initializes_egui_renderer -- --ignored --nocapture
-      - run: cargo build --locked --release --bin codeconvoy
-        if: runner.os != 'Windows' || !inputs.windows_crt_audit
       # An opt-in diagnostic run, not a release candidate. Keep release pins.
       - name: Install audited Windows release tools
         if: runner.os == 'Windows' && inputs.windows_crt_audit
@@ -72,3 +59,16 @@ jobs:
             target/packaging/windows-crt/*
             dist/*windows*
           if-no-files-found: error
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: cargo test --locked --all-features
+      - name: Linux desktop services unavailable
+        if: runner.os == 'Linux'
+        env:
+          CODECONVOY_PRIVATE_BUS_TEST: "1"
+        run: dbus-run-session -- cargo test --locked --all-features --test linux_desktop -- --ignored --nocapture
+      - name: Windows software graphics startup
+        if: runner.os == 'Windows'
+        run: cargo test --locked --bin codeconvoy software_adapter_initializes_egui_renderer -- --ignored --nocapture
+      - run: cargo build --locked --release --bin codeconvoy
+        if: runner.os != 'Windows' || !inputs.windows_crt_audit

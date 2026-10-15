@@ -63,6 +63,18 @@ def command_path(path):
     return f'"{path}"'
 
 
+def linker_version(linker, env):
+    # MSVC LINK returns 1100 for /? even when it successfully prints help.
+    # This exception is limited to the probe; an actual link must return zero.
+    probe = subprocess.run([str(linker), "/?"], env=env, stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, check=False)
+    text = probe.stdout.decode("utf-8", errors="replace")
+    match = re.search(r"^Microsoft \(R\) Incremental Linker Version [0-9]+(?:\.[0-9]+)+\s*$", text, re.M)
+    if probe.returncode not in (0, 1100) or not match:
+        raise ValueError(f"Cannot identify MSVC linker (probe exit {probe.returncode}): {text}")
+    return match.group().strip()
+
+
 def msvc_environment(env):
     env = {key.upper(): value for key, value in env.items()}
     vswhere = Path(env["PROGRAMFILES(X86)"]) / "Microsoft Visual Studio/Installer/vswhere.exe"
@@ -93,7 +105,7 @@ def msvc_environment(env):
                           ("instanceId", "installationPath", "installationVersion", "productId", "isPrerelease")},
         "environment": {key: selected[key] for key in required},
         "linker": {"path": str(linker), "sha256": checksum(linker),
-                   "version": output([linker, "/?"], env=selected).splitlines()[0]},
+                   "version": linker_version(linker, selected)},
     }
     return selected, record
 
