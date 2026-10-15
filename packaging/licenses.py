@@ -74,6 +74,26 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
     source = next((p for p in catalog["sources"] if p["path"] == f"sources/option-ext-{mpl['version']}.crate"), None)
     if source is None or source["sha256"] != mpl["checksum"]:
         raise ValueError("MPL source archive must match the locked option-ext crate")
+    # Rust's generated report is not the library's dependency lockfile. Keep
+    # that second inventory complete as well, including explicit target exclusions.
+    library_lock = evidence / "sources" / f"rust-{catalog['inputs']['rust']}-library-Cargo.lock"
+    libraries = [p for p in tomllib.loads(library_lock.read_text())["package"] if p.get("source")]
+    identities = lambda packages: {(p["name"], p["version"], p["checksum"]) for p in packages}
+    if (identities(libraries) != identities(catalog["rust_library_packages"])
+            or len(catalog["rust_library_packages"]) != len(libraries)):
+        raise ValueError("Rust standard-library dependency inventory is incomplete")
+    covered = {(n["origin"], n["text"]) for c in catalog["components"] for n in c["notices"]}
+    if not catalog["rust_source_notices"] or any((n["origin"], n["text"]) not in covered for n in catalog["rust_source_notices"]):
+        raise ValueError("Missing Rust in-tree library notices")
+    for package in catalog["rust_library_packages"]:
+        if package.get("audit_scope"):
+            if package["name"] not in {"fortanix-sgx-abi", "vex-sdk", "wasip1"}:
+                raise ValueError("Unreviewed Rust standard-library target exclusion")
+            continue
+        if not any(c["name"] == "Rust std dependency: " + package["name"]
+                   and c["version"] == package["version"] and c.get("checksum") == package["checksum"]
+                   and c["notices"] for c in catalog["components"]):
+            raise ValueError(f"Missing Rust standard-library notice coverage: {package['name']}")
     return catalog, texts
 
 

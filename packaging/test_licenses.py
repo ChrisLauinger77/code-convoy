@@ -90,7 +90,25 @@ class LicenseEvidence(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "MPL source archive"):
             self.check()
 
+    def test_stdlib_report_does_not_replace_its_own_lockfile_coverage(self):
+        self.catalog["components"] = [c for c in self.catalog["components"]
+                                      if c["name"] != "Rust std dependency: addr2line"]
+        with self.assertRaisesRegex(ValueError, "Missing Rust standard-library notice"):
+            self.check()
+
+    def test_stdlib_dependency_cannot_disappear_from_inventory(self):
+        self.catalog["rust_library_packages"].pop()
+        with self.assertRaisesRegex(ValueError, "standard-library dependency inventory"):
+            self.check()
+
+    def test_compiler_builtins_and_nested_source_notices_cannot_be_omitted(self):
+        self.catalog["components"] = [c for c in self.catalog["components"]
+                                      if not c["name"].startswith("Rust in-tree library dependencies")]
+        with self.assertRaisesRegex(ValueError, "Missing Rust in-tree library notices"):
+            self.check()
+
     def test_no_missing_notice_can_hide_by_dropping_its_blocker(self):
+        self.catalog["crates"][0]["unresolved"] = "fixture-obligation"
         self.catalog["release_blockers"] = []
         with self.assertRaisesRegex(ValueError, "Untracked"):
             self.check()
@@ -215,7 +233,10 @@ class FinalLicensePayload(unittest.TestCase):
                 native.assert_called_with(Path("final"), {"usr/bin/codeconvoy"})
 
     def test_release_is_blocked_by_documented_unresolved_obligations(self):
-        with self.assertRaisesRegex(ValueError, "license release blockers remain"):
+        with patch.object(licenses, "checked_catalog", return_value=({"release_blockers": [{"id": "fixture-source-gap"}]}, {})):
+            with self.assertRaisesRegex(ValueError, "license release blockers remain"):
+                licenses.require_release_ready()
+        with patch.object(licenses, "checked_catalog", return_value=({"release_blockers": []}, {})):
             licenses.require_release_ready()
 
 

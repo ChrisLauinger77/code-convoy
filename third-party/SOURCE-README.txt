@@ -31,3 +31,7 @@ Do not rely on the upstream tag URL alone as fulfillment of that obligation.
 All source archive checksums and retrieval locations are in the accompanying
 inventory. These files are shipped inside the existing packages; they are not
 a new public release artifact or a replacement for the license terms.
+
+rust-1.99.0-library-Cargo.lock records the standard library's separate dependency
+versions/checksums, recovered from the verified Rust source distribution. Its
+notices supplement COPYRIGHT-library.html where that report omits entries.

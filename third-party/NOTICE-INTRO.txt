@@ -24,8 +24,12 @@ files. Preserve the MPL text and source notices when redistributing.
 Embedded Hack, Noto Emoji, Ubuntu and emoji-icon-font assets are unmodified.
 Their copyright, font naming and redistribution conditions follow below.
 Unicode data notices accompany the crates that include them. Additional Rust
-standard-library copyright/Unicode/compiler-builtins notices and component
-versions are in RUST-STDLIB-LICENSES.html, readable offline in a browser.
+standard-library copyright/Unicode notices and component versions are in
+RUST-STDLIB-LICENSES.html, readable offline in a browser. Its omissions are
+supplemented below from Rust 1.99.0's checksum-verified source distribution:
+the library's own dependency lockfile, compiler-builtins, libm, architecture
+intrinsics, unwind and other nested library notices. compiler-builtins uses
+MIT AND Apache-2.0 WITH LLVM-exception, not a choice of just one of those terms.
 
 The AppImage launcher is a separate runtime containing statically linked
 third-party libraries, including LGPL-2.1 libfuse. See THIRD-PARTY-SOURCES.zip

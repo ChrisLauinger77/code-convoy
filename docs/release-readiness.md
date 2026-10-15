@@ -95,9 +95,12 @@ Local 1.0.0 validation on Debian forky/sid, Rust 1.96.1 and Python 3.14.8:
 - Locked all-feature Rust tests: **602 passed, 0 failed, 10 ignored**; nested
   subprocess summaries excluded. Includes all upgrade fixtures above.
 - Locked release application build: passed.
-- Packaging regression suite: **55 passed**; license evidence and prospective
+- Packaging regression suite: **58 passed**; license evidence and prospective
   `v1.0.0` tag/version checks passed. No tag was created.
 - Existing remote `v1.0.0` tag and release checks returned absent.
+- Opt-in private-D-Bus unavailable-service regression: **1 passed** with its
+  test-support feature enabled; no visible notification or tray interaction is
+  implied.
 
 Fresh candidate and exact final-artifact results will be recorded after the
 platform package build completes. Earlier 0.10.0 package references are

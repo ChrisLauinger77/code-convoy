@@ -18,7 +18,7 @@ separately records normal dependency edges. The other 74 entries are explicit
 exclusions for these release targets. This does not imply every object survives
 linking, or that every listed crate is in every package.
 
-The initial collection contains **327 distinct notice texts**, deduplicated by
+The collection contains **342 distinct notice texts**, deduplicated by
 their content hashes in [texts.json](../third-party/texts.json). It retains
 upstream copyright statements, notices, font licenses and protocol XML copyright
 blocks. When a crate omits a license file, the evidence refers to its exact
@@ -26,13 +26,24 @@ blocks. When a crate omits a license file, the evidence refers to its exact
 branch. Notice text is decoded as UTF-8 (removing a BOM where present); source
 archives retain their original bytes.
 
-The inventory also identifies **19 assets, runtimes and packaging components**,
+The inventory also identifies **47 assets, runtimes, packaging and supplemental
+Rust library components**,
 with unresolved versions expressly marked. Rust's separate standard-library
 report covers **141 out-of-tree entries** plus in-tree exceptions; its complete
 upstream HTML is included, with those component/version/license entries indexed
 in the catalog. It was recovered from the checksum-verified Rust **1.99.0**
 compiler distribution. That report conservatively includes tooling and targets
 beyond CodeConvoy; the compiler itself is not shipped in the application.
+
+Cross-checking the verified `rust-src` distribution exposed omissions in that
+generated report: `compiler_builtins` and some versions in `library/Cargo.lock`
+were absent. The catalog therefore also covers all **30 registry entries** in
+that separate lockfile, with notices for 27 and explicit SGX/VEX/WASI exclusions
+for the other three. It retains the in-tree compiler-builtins, libm, backtrace,
+stdarch, portable-simd and LLVM unwind license files. Compiler-builtins 0.1.160
+requires **MIT AND Apache-2.0 WITH LLVM-exception**, rather than an OR choice.
+The complete original HTML is retained as evidence, not treated as an infallible
+or exhaustive inventory. The library lockfile is included in the source ZIP.
 
 | Component group | Distribution and conditions addressed |
 | --- | --- |
@@ -137,7 +148,9 @@ Installer evidence: [NSIS licenses and linking exception](https://nsis.sourcefor
    texts from exact upstream source revisions, preserving origin URLs. For MPL
    source, use the original registry archive and match its Cargo.lock digest.
 4. When changing Rust, recover its exact `COPYRIGHT-library.html`, MIT and Apache
-   notices from a checksum-verified release archive. Recheck installer/runtime
+   notices from a checksum-verified release archive. Compare the separate
+   `library/Cargo.lock` and nested licenses in the matching verified `rust-src`
+   archive; the generated report can omit them. Recheck installer/runtime
    native inputs when changing packaging tools or runner toolchains. Do not
    replace unknown identities with guesses or generic SPDX templates.
 5. Run `python3 packaging/licenses.py check`, all packaging tests and required
@@ -148,7 +161,7 @@ Installer evidence: [NSIS licenses and linking exception](https://nsis.sourcefor
 ## Verification record
 
 Local 1.0.0 formatting, strict Clippy, locked Rust tests (602 passed, 10 ignored),
-release build and 55 packaging tests passed. Fresh candidate artifact evidence
+release build and the packaging tests passed. Fresh candidate artifact evidence
 will be recorded here after the platform package build completes. Older candidate bytes
 were used only to inspect installer layout, not to claim notice delivery by this
 change. No tag or public release has been created.
