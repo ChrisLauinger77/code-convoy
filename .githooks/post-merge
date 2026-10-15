@@ -1,0 +1,8 @@
+#!/bin/sh
+# Download new crates when a pull changed Cargo.lock; the next build picks them up
+changed=$(git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD)
+
+echo "$changed" | grep -E '(^|/)Cargo\.lock$' | while read -r lock; do
+  echo "$lock changed, running cargo fetch..."
+  cargo fetch --locked --manifest-path "$(dirname "$lock")/Cargo.toml"
+done
