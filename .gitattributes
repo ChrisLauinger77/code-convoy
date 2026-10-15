@@ -3,4 +3,6 @@
 third-party/** -text
 # Preserve the compiler distribution's original HTML, including its whitespace.
 third-party/RUST-STDLIB-LICENSES.html -whitespace
+# Preserve these upstream references verbatim, including their whitespace.
+third-party/sources/gcc-14.2.0-* -whitespace
 packaging/appimage-tools.json text eol=lf

@@ -128,6 +128,26 @@ class LicenseEvidence(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing AppImage version/source"):
             self.check()
 
+    def test_compiler_startup_evidence_cannot_be_omitted(self):
+        startup = self.catalog["native_provenance"]["appimage"]["compiler_startup"]
+        component = next(c for c in self.catalog["components"] if c["name"] == startup["component"])
+        for notice in startup["reference_notices"]:
+            with self.subTest(notice=notice["origin"]):
+                component["notices"].remove(notice)
+                with self.assertRaisesRegex(ValueError, "Missing AppImage compiler startup"):
+                    self.check()
+                component["notices"].append(notice)
+        for path in startup["reference_sources"]:
+            with self.subTest(source=path):
+                source = next(s for s in self.catalog["sources"] if s["path"] == path)
+                self.catalog["sources"].remove(source)
+                with self.assertRaisesRegex(ValueError, "Missing AppImage compiler startup"):
+                    self.check()
+                self.catalog["sources"].append(source)
+        self.catalog["components"].remove(component)
+        with self.assertRaisesRegex(ValueError, "Missing AppImage compiler startup"):
+            self.check()
+
     def test_no_missing_notice_can_hide_by_dropping_its_blocker(self):
         self.catalog["crates"][0]["unresolved"] = "fixture-obligation"
         self.catalog["release_blockers"] = []

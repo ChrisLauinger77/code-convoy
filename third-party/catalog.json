@@ -16436,6 +16436,27 @@
         }
       ],
       "unresolved": "nsis-plugins"
+    },
+    {
+      "name": "GNU CRT startup code",
+      "version": "UNRESOLVED (GCC 14.2.0 source reference)",
+      "license": "GPL-3.0-or-later WITH GCC-exception-3.1 (upstream reference; exact inputs unresolved)",
+      "scope": "AppImage launcher: observed GNU-style startup symbols; not the GCC compiler executable",
+      "notices": [
+        {
+          "text": "17b9f4c14d694081978108a8cdec4d1a0096b7d3370fbcd3a3535ed07a361cd0",
+          "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/libgcc/crtstuff.c :: copyright/license header"
+        },
+        {
+          "text": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+          "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING3"
+        },
+        {
+          "text": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+          "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING.RUNTIME"
+        }
+      ],
+      "unresolved": "appimage-versions"
     }
   ],
   "sources": [
@@ -16501,6 +16522,24 @@
       "path": "sources/nsis-tauri-utils-0.2.1.tar.gz",
       "sha256": "3ab63a407ea20abfca30e27fc5f01c90ca973fba33f2ef3ec48cff2e803ae0f3",
       "origin": "https://codeload.github.com/tauri-apps/nsis-tauri-utils/tar.gz/refs/tags/nsis_tauri_utils-v0.2.1"
+    },
+    {
+      "path": "sources/gcc-14.2.0-crtstuff.c",
+      "sha256": "5859380c2242ce108b323fe216847df6f2be052fa98ca56eb6284daacda3befd",
+      "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/libgcc/crtstuff.c",
+      "scope": "Unmodified upstream reference only; exact shipped CRT object provenance remains unresolved."
+    },
+    {
+      "path": "sources/gcc-14.2.0-COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING3",
+      "scope": "Unmodified upstream reference only; exact shipped CRT object provenance remains unresolved."
+    },
+    {
+      "path": "sources/gcc-14.2.0-COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+      "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING.RUNTIME",
+      "scope": "Unmodified upstream reference only; exact shipped CRT object provenance remains unresolved."
     }
   ],
   "files": [
@@ -16514,7 +16553,7 @@
   "release_blockers": [
     {
       "id": "appimage-versions",
-      "detail": "Matched runtime/debug evidence identifies upstream musl 1.2.5, zstd 1.5.6, zlib 1.3.1 and mimalloc 2.1.7; matching notices/source now included. Exact Alpine APK revisions and downstream patches remain unverified. Upstream build logs expired; no immutable image/package manifest recovered."
+      "detail": "Matched runtime/debug evidence identifies upstream musl 1.2.5, zstd 1.5.6, zlib 1.3.1 and mimalloc 2.1.7; matching notices/source now included. Exact Alpine APK revisions and downstream patches remain unverified. Upstream build logs expired; no immutable image/package manifest recovered. GNU-style CRT startup symbols are also observed; upstream GCC 14.2.0 reference source, GPLv3 and runtime exception 3.1 are included, but exact CRT objects/patches and exception applicability remain unverified."
     },
     {
       "id": "appimage-relink",
@@ -17481,7 +17520,42 @@
         "zlib": "zlibVersion at 0x3bbc0 returns string at 0x89b70: 1.3.1",
         "mimalloc": "mi_version at 0x63340: b8 d9 00 00 00 c3 (return 217); v2.1.7 include/mimalloc.h defines MI_MALLOC_VERSION 217"
       },
-      "limitation": "Upstream version identities recovered from matched debug symbols and runtime bytes; exact Alpine APK revisions/patches, image digest and complete relink evidence remain unknown."
+      "limitation": "Upstream version identities recovered from matched debug symbols and runtime bytes; exact Alpine APK revisions/patches, image digest and complete relink evidence remain unknown.",
+      "compiler_startup": {
+        "component": "GNU CRT startup code",
+        "observed_symbols": {
+          "__EH_FRAME_BEGIN__": "0xbcc28",
+          "__TMC_END__": "0xe3900",
+          "__do_global_dtors_aux": "0x2b1a0",
+          "deregister_tm_clones": "0x2b130",
+          "frame_dummy": "0x2b200",
+          "register_tm_clones": "0x2b160"
+        },
+        "runtime_comment": [
+          "GCC: (Alpine 14.2.0) 14.2.0",
+          "Alpine clang version 19.1.4"
+        ],
+        "reference_sources": [
+          "sources/gcc-14.2.0-crtstuff.c",
+          "sources/gcc-14.2.0-COPYING3",
+          "sources/gcc-14.2.0-COPYING.RUNTIME"
+        ],
+        "reference_notices": [
+          {
+            "text": "17b9f4c14d694081978108a8cdec4d1a0096b7d3370fbcd3a3535ed07a361cd0",
+            "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/libgcc/crtstuff.c :: copyright/license header"
+          },
+          {
+            "text": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+            "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING3"
+          },
+          {
+            "text": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+            "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING.RUNTIME"
+          }
+        ],
+        "limitation": "Symbols in the matched debug asset and compiler comments establish a GNU-style CRT input requiring audit, not an exact object/source identity. Upstream GCC 14.2.0 reference source, GPLv3 and GCC exception 3.1 are included conservatively. Exact Alpine CRT object hashes/patches and eligibility under the exception remain unresolved."
+      }
     },
     "nsis_tauri_utils": {
       "dll_sha256": "0eed48313a7f904d7cc1977b70000ab3f11f18cadc8e6a69b807d288ca71f9db",

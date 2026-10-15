@@ -52,6 +52,16 @@ bin directory. The inventory records the original digest and excluded paths;
 tar ownership and times are normalized. This is a source-only repack, not an
 upstream release archive or a modified mimalloc implementation.
 
+gcc-14.2.0-crtstuff.c, gcc-14.2.0-COPYING3 and gcc-14.2.0-COPYING.RUNTIME
+are unmodified upstream reference files. The matched runtime debug symbols
+include GNU-style CRT startup functions, and its compiler comments include
+Alpine GCC 14.2.0. These observations do not identify the exact selected CRT
+objects or downstream patches. The reference source retains its copyright,
+GPLv3-or-later notice and GCC Runtime Library Exception 3.1. This is not a
+complete GCC source distribution or proof of the shipped object's provenance.
+The exception's Target Code permission depends on its stated conditions;
+establish those for the actual build before removing the provenance blocker.
+
 LGPL relinking status and required verification
 ----------------------------------------------
 The relevant LGPL 2.1 section 6(a) work is the standalone AppImage launcher

@@ -42,6 +42,14 @@ your own use or reverse engineering it to debug those modifications. The full
 LGPL-2.1 text and libfuse notices are reproduced below. The available source
 bundle is not yet a verified section 6(a) relinking kit.
 
+GNU-style compiler startup routines are also present in the AppImage runtime.
+The inventory includes upstream GCC 14.2.0 reference copyright, GPLv3 terms
+and Runtime Library Exception 3.1; reference source is in the source ZIP.
+The exception permits certain combinations with independent modules under
+their own terms, subject to its Eligible Compilation Process requirements.
+Exact CRT object provenance and applicability remain unresolved; these
+reference notices do not certify the build or relicense CodeConvoy's files.
+
 The Windows installer uses NSIS 3.09 and its LZMA decoder. Its source is
 available as nsis-3.09-src.tar.bz2 in THIRD-PARTY-SOURCES.zip, together with
 the CPL-1.0 terms and linking exception in the notices below. CodeConvoy

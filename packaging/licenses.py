@@ -106,6 +106,13 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
         if (component is None or component["version"].split()[0] != version
                 or not any(s["path"] == component.get("source") for s in catalog["sources"])):
             raise ValueError(f"Missing AppImage version/source evidence: {name}")
+    startup = native["appimage"]["compiler_startup"]
+    component = next((c for c in catalog["components"] if c["name"] == startup["component"]), None)
+    if (component is None or not startup["reference_notices"] or not startup["reference_sources"]
+            or any(n not in component["notices"] for n in startup["reference_notices"])
+            or any(not any(s["path"] == path for s in catalog["sources"])
+                   for path in startup["reference_sources"])):
+        raise ValueError("Missing AppImage compiler startup source/license evidence")
     plugin = native["nsis_tauri_utils"]
     if plugin["dll_sha256"] != catalog["windows_installer_plugins"]["$PLUGINSDIR/nsis_tauri_utils.dll"]:
         raise ValueError("Plugin provenance does not match the pinned installer DLL")

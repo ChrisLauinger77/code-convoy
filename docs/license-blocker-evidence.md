@@ -2,8 +2,11 @@
 
 Audit date: 2026-10-15. **Publication remains blocked.** This record distinguishes
 recovered evidence from missing evidence; it is not a legal clearance. The
-project's MIT license is unchanged. Final candidate results and the exact tested
-revision are recorded in [PR 68](https://github.com/ChrisLauinger77/code-convoy/pull/68).
+project's MIT license is unchanged. PR checks, interim artifact evidence and the
+exact tested revisions are recorded in [PR 68](https://github.com/ChrisLauinger77/code-convoy/pull/68).
+Per maintainer direction, the next release candidate and final six-format
+verification will run from `main` after merge; no further branch release build
+is part of this handoff.
 
 ## 1. AppImage static-library provenance: partially resolved
 
@@ -14,8 +17,8 @@ has SHA-256 `1f3c4a8439e344d74b61bfd0610b89e8499453791bbc3c5b4ae38c181fe54942`.
 Both files have GNU build ID `a87aaf5da1bf2ef30becedd1aa58e217818fb503`;
 the debug asset's CRC32 `dd5771c8` matches the launcher's `.gnu_debuglink`.
 This ties the symbols to the actual redistributed runtime, rather than merely
-to a similarly named release. Reproduce with `readelf -n`, `objcopy
---dump-section .gnu_debuglink=debuglink runtime` and the debug file's CRC32.
+to a similarly named release. Reproduce with `readelf -n`,
+`readelf -x .gnu_debuglink runtime` and the debug file's CRC32.
 
 `readelf --debug-dump=info runtime-x86_64.debug` and `nm` identify the following;
 `objdump -d` of the **runtime** confirms the version-function bytes:
@@ -37,8 +40,21 @@ prebuilt Windows binaries, preserving every remaining file's bytes and all
 licenses; its original archive hash, transformation and exclusions are recorded.
 No unrelated native executables are added through the source bundle.
 
+The same matched symbols also expose GNU-style compiler startup code:
+`deregister_tm_clones` (`0x2b130`), `register_tm_clones` (`0x2b160`),
+`__do_global_dtors_aux` (`0x2b1a0`) and `frame_dummy` (`0x2b200`). The runtime's
+`.comment` contains Alpine GCC 14.2.0 and clang 19.1.4 strings. This is evidence
+of an additional CRT input, not proof of the exact selected object or patch set.
+The unmodified upstream [GCC 14.2.0 reference source](https://github.com/gcc-mirror/gcc/blob/releases/gcc-14.2.0/libgcc/crtstuff.c),
+its copyright, GPLv3 text and [Runtime Library Exception 3.1](https://github.com/gcc-mirror/gcc/blob/releases/gcc-14.2.0/COPYING.RUNTIME)
+are now included conservatively. The exception permits certain Target Code
+combinations with Independent Modules under their own terms when its Eligible
+Compilation Process conditions hold. It does not automatically relicense
+CodeConvoy, nor establish that these exact shipped objects meet those conditions.
+The reference files are not a complete GCC source or relinking kit.
+
 **Still blocking:** base versions do not establish exact Alpine APK revisions,
-downstream patches or the original image digest. The
+downstream patches, selected CRT objects or the original image digest. The
 [Docker recipe](https://github.com/AppImage/type2-runtime/blob/dd6cebedcbddde9c82f89b011e8e1d40b6e43868/scripts/docker/Dockerfile)
 uses mutable `alpine:3.21` and unpinned packages; original build logs have expired.
 Do not infer the selected revisions from today's APK index or build date.
@@ -172,6 +188,7 @@ archive metadata. Existing final-package byte comparisons remain in place for
 all six formats, as do checksum, provenance and native-payload gates.
 
 Inventory checks now tie the native evidence to the pinned runtime/plugin hashes
-and reject removal of recovered AppImage sources or observed plugin notices.
+and reject removal of recovered AppImage sources, CRT reference source/terms
+or observed plugin notices.
 All five blocker IDs remain enforced by `licenses.py release-ready` and the
 publisher. There are no new package formats, channels or runtime substitutions.
