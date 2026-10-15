@@ -1,0 +1,82 @@
+name: Feature request
+description: Suggest an improvement or new capability for CodeConvoy
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea! Search [existing issues](https://github.com/ChrisLauinger77/code-convoy/issues?q=is%3Aissue) first. If a request already covers your use case, please add context there instead of opening a duplicate.
+        This report is public; never include credentials or other secrets.
+  - type: checkboxes
+    id: existing-issues
+    attributes:
+      label: Existing requests
+      options:
+        - label: I searched existing issues for this request.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this feature solve?
+      description: Describe your use case and what is difficult or missing today.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like CodeConvoy to do?
+      description: Describe the desired behavior. Technical implementation details are not needed.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      options:
+        - Agent backends / backend settings
+        - New convoy draft / task context / attachments
+        - Repository registration / groups
+        - Scheduling / concurrency
+        - Isolated worktrees
+        - Review / Apply / Discard
+        - Retry / follow-up
+        - Runs / results / Activity output
+        - History / persistence / export
+        - Notifications
+        - Keyboard / accessibility / themes
+        - Packaging / distribution
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Is this specific to a coding-agent backend?
+      options:
+        - All backends
+        - OpenAI Codex CLI
+        - GitHub Copilot CLI
+        - OpenCode
+        - Claude Code
+        - Not applicable
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Is this platform-specific?
+      options:
+        - Cross-platform
+        - Linux
+        - macOS
+        - Windows
+        - Not sure
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds
+      description: How do you handle this today, and what other approaches have you considered?
+  - type: markdown
+    attributes:
+      value: |
+        CodeConvoy's core purpose is to run one task across multiple local repositories using the coding agent of your choice. Requests may be redesigned or declined if they fall outside that scope (for example IDE, chat, cloud or multi-agent workflow features, or provider account management) or require unsafe behavior, such as silently modifying repository state or handling provider credentials.

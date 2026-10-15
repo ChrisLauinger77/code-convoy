@@ -1,0 +1,156 @@
+name: Bug report
+description: Report a reproducible problem with CodeConvoy
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem! Please search [existing issues](https://github.com/ChrisLauinger77/code-convoy/issues?q=is%3Aissue) first and try the [latest release](https://github.com/ChrisLauinger77/code-convoy/releases/latest) where practical.
+        This report is public. Never paste API keys, agent CLI authentication tokens, credentials or other secrets. Remove private repository names, paths and source code you do not want to publish.
+  - type: checkboxes
+    id: existing-issues
+    attributes:
+      label: Existing issues
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+  - type: input
+    id: build
+    attributes:
+      label: CodeConvoy version / build
+      description: Copy the version and revision shown in About CodeConvoy.
+      placeholder: 0.10.0 (a1b2c3d)
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS version and environment
+      description: >-
+        Include OS version and architecture; on Linux, also include desktop and Wayland/X11.
+        Examples (not support guarantees): Debian 14 (forky), GNOME, Wayland, x86_64;
+        macOS 27, Apple Silicon; Windows 11 24H2, x86_64.
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Installation / package type
+      description: If you select Other, describe it in the additional context field.
+      options:
+        - Windows installer (NSIS)
+        - Windows portable ZIP / Scoop
+        - Linux DEB
+        - Linux RPM
+        - Linux AppImage
+        - macOS DMG / Homebrew cask
+        - Built from source
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Agent CLI detection / backend settings
+        - New convoy draft / task context / attachments
+        - Repository registration / groups
+        - Dirty-tree review / Git baseline
+        - Scheduling / concurrency / cancellation
+        - Isolated worktrees
+        - Review / Apply / Discard
+        - Retry / follow-up
+        - Runs / results / Activity output
+        - History / persistence / export
+        - Notifications
+        - Keyboard / accessibility / themes
+        - Installation / packaging
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Coding-agent backend
+      description: Optional for problems unrelated to a specific backend.
+      options:
+        - OpenAI Codex CLI
+        - GitHub Copilot CLI
+        - OpenCode
+        - Claude Code
+        - Not applicable
+  - type: input
+    id: backend-version
+    attributes:
+      label: Agent CLI version and installation method
+      description: Strongly recommended for backend problems. Run the CLI's version command (for example `codex --version` or `claude --version`) and mention how you installed it.
+      placeholder: Claude Code 2.1.0, installed with npm
+  - type: dropdown
+    id: execution-mode
+    attributes:
+      label: Execution mode
+      options:
+        - Direct
+        - Isolated worktree
+        - Not applicable
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest sequence that triggers the problem, including the number of repositories and convoys involved and whether it happens every time.
+      placeholder: |
+        1. Register…
+        2. Start a convoy with…
+        3. Observe…
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Did this work in an earlier CodeConvoy version?
+      options:
+        - "Yes"
+        - "No"
+        - Not sure
+        - First version I tried
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics / Activity output
+      description: >-
+        Relevant CodeConvoy diagnostics or Raw Activity output. Review it before pasting:
+        agent output can contain source code, repository paths and prompts. DO NOT include
+        API keys, authentication tokens, credentials, private keys or passwords.
+      render: text
+  - type: textarea
+    id: context
+    attributes:
+      label: Screenshots / additional context
+      description: Drag images into this field if helpful, after removing private details. Include the last known working version or other installation details where relevant.
