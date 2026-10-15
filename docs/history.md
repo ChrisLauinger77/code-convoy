@@ -87,8 +87,10 @@ existing meaning: remove eligible terminal history regardless of retention polic
 They share the same protected deletion and atomic save path. Selection alone does
 not protect an otherwise removable convoy.
 
-Deleted history may not be recoverable. There is no backup, restore, storage
-overview or automatic worktree cleanup feature.
+Deleted history may not be recoverable. There is no built-in backup/restore or
+automatic worktree cleanup. [Storage Overview](storage.md) measures known storage;
+[Manage Worktrees](worktree-cleanup.md) provides separately verified, explicitly
+confirmed cleanup. Neither reconstructs removed history.
 
 ## Export before cleanup
 
@@ -142,6 +144,9 @@ sharing violations can fail safely. Native Windows/macOS and power-loss testing
 remain release-candidate checks, not inferred from Linux tests.
 
 ## Data-format compatibility
+
+See the [1.x compatibility policy](compatibility.md) for the broader settings,
+export, operating-system and external CLI boundaries.
 
 The application version, internal state format and public export schema are
 independent. Preparing application version 1.0.0 does not require changing either

@@ -2,7 +2,13 @@
 
 CodeConvoy uses one egui UI thread and a small Tokio runtime. The unit of work is a task configuration applied to a set of existing repository roots. A run is a saved snapshot of that configuration plus one job per repository.
 
-Backend status: Codex and Copilot are implemented and user-verified end-to-end on Linux and macOS. Linux testing used two concurrent real repositories each; successful macOS testing was also confirmed by the user. OpenCode is the third supported backend, with source/fixture checks and macOS UI validation; authenticated E2E is unverified. Claude Code is the fourth supported backend, validated against official documentation/SDK source, fixtures and the native macOS UI; authenticated E2E is unverified.
+Backend status: Codex, Copilot and Claude Code have user-verified authenticated
+execution on Linux and macOS. Claude also has an authenticated Linux Auto-mode
+probe with disposable repositories; see [Claude validation](claude-validation.md)
+for exact versions and policy limitations. OpenCode has source/fixture checks
+and macOS UI validation; authenticated E2E remains unverified. These observations
+do not establish compatibility with every CLI version or platform. See
+[1.x compatibility](compatibility.md) and [platform evidence](platform-validation.md).
 
 ## Modules
 

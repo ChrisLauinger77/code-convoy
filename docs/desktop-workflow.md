@@ -1,7 +1,9 @@
 # Desktop workflow and settings
 
-CodeConvoy 0.6.0 integrates with the desktop while keeping the application's
-existing job ownership and safe shutdown behavior.
+CodeConvoy integrates with the desktop while preserving job ownership and safe
+shutdown. These controls were introduced in 0.6.0; dated validation below records
+the original checks. Use the [platform matrix](platform-validation.md) for later
+evidence and remaining desktop limits.
 
 ## Settings
 
@@ -111,7 +113,7 @@ intact. Cmd+Q, app-menu Quit and Dock Quit send explicit Quit actions; window-cl
 preferences cannot turn them into minimization. Native notification delivery still
 requires a suitable app bundle and OS permission.
 
-**Windows 10/11:** tray-icon uses the notification area and existing UI message
+**Windows:** tray-icon uses the notification area and existing UI message
 loop. Creation verifies native icon registration before enabling minimize-to-tray;
 close-to-tray rechecks registration. Explorer's TaskbarCreated handling belongs to
 the maintained library. Taskbar access remains available during shell/tray loss.
