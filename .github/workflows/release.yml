@@ -105,6 +105,13 @@ jobs:
       - run: python packaging/release.py windows
       - name: Verify executable metadata, installer, portable archive and uninstall
         run: ./packaging/windows-smoke.ps1
+      - name: Retain Windows linker and helper evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-crt-evidence
+          path: target/packaging/windows-crt/*
+          if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages-windows
