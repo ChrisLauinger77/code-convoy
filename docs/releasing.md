@@ -4,7 +4,9 @@
 
 `Cargo.toml` is the version authority. About, Windows resources, package
 metadata, bundle versions and final filenames derive from it. For this release
-it is `0.10.0`, with tag `v0.10.0`, without a prerelease suffix.
+it is `1.0.0`, with the prospective tag `v1.0.0`, without a prerelease suffix.
+This metadata prepares a candidate; [readiness blockers](release-readiness.md)
+must be resolved before the maintainer authorizes any tag or publication.
 
 `docs/release-notes.md` contains only the current release and its changes since
 the immediately previous version. Replace the previous release's content during
@@ -215,7 +217,8 @@ The common bundle/installer identifier is
 
 The Windows setup is per-user (`currentUser`), requests no elevation, supplies
 Start Menu integration and an uninstaller, and does not remove user state.
-The ZIP contains `CodeConvoy.exe` and `LICENSE.txt`; the release build statically
+The ZIP contains `CodeConvoy.exe`, `LICENSE.txt` and the four third-party
+notice/source files described above; the release build statically
 links the MSVC CRT. Both use the same normal per-user state location. Release GUI builds
 hide their console; debug builds keep it. A native startup error dialog preserves
 visibility when state loading or application startup fails. Child processes use
@@ -255,6 +258,8 @@ python3 -m unittest discover -s packaging -p 'test_*.py'
 paths out of release diagnostics, and selects a static CRT on Windows. It does
 not change global environment settings. Package assembly expects the repository's
 normal `target/` directory; do not override `CARGO_TARGET_DIR` for these commands.
+Use the audited Rust 1.99.0 compiler for package assembly: a different compiler's
+standard-library code must not be shipped with this version's notice evidence.
 
 On Linux, install the README's source prerequisites plus packaging/test-only
 packages: `binutils libegl1-mesa-dev libdbus-1-3 libfontconfig1
@@ -263,14 +268,14 @@ squashfs-tools xvfb xauth openbox wmctrl dbus-x11`. Use Ubuntu 24.04 for release
 packaging; a newer host can produce binaries rejected by the ABI gate.
 
 Review [dependency licensing and notices](../CONTRIBUTING.md#dependencies-and-licensing)
-before distributing packages. The existing project-license payload checks are
-not a complete third-party license audit.
+before distributing packages. The automated project/third-party payload checks
+do not resolve the remaining source and license obligations in the audit.
 
 ```sh
 python3 packaging/build.py
 python3 packaging/build.py --probe
 python3 packaging/release.py linux
-xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-0.10.0-x86_64.AppImage
+xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-1.0.0-x86_64.AppImage
 ```
 
 On Windows, from a development shell with Python, Rust MSVC and Windows SDK:

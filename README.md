@@ -189,7 +189,7 @@ A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
-`./CodeConvoy-0.10.0-x86_64.AppImage --appimage-extract-and-run`.
+`./CodeConvoy-1.0.0-x86_64.AppImage --appimage-extract-and-run`.
 
 X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
 `libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,

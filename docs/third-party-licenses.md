@@ -147,8 +147,8 @@ Installer evidence: [NSIS licenses and linking exception](https://nsis.sourcefor
 
 ## Verification record
 
-Local required Rust checks and the packaging regression suite have passed during
-implementation. Final PR-head validation and fresh candidate artifact evidence
-will be recorded here after the package build completes. Older candidate bytes
+Local 1.0.0 formatting, strict Clippy, locked Rust tests (602 passed, 10 ignored),
+release build and 55 packaging tests passed. Fresh candidate artifact evidence
+will be recorded here after the platform package build completes. Older candidate bytes
 were used only to inspect installer layout, not to claim notice delivery by this
 change. No tag or public release has been created.
