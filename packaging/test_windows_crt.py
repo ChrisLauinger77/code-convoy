@@ -52,6 +52,9 @@ class WindowsCrtTests(unittest.TestCase):
             expected = crt.checksum(archive)
             real_checksum = crt.checksum
             def link(command, **kwargs):
+                self.assertIn("/VERBOSE:LIB", command)
+                self.assertIn("/VERBOSE", command)
+                self.assertIn(f"/MAP:{root / 'link.map'}", command)
                 kwargs["stdout"].write(b"Loaded C:\\VC\\libcmt.lib(startup.obj)\n")
                 return SimpleNamespace(returncode=0)
             def checksum(path):
@@ -75,9 +78,10 @@ class WindowsCrtTests(unittest.TestCase):
                      "environment": {k: "fixture" for k in
                                      ("VCTOOLSVERSION", "VCTOOLSINSTALLDIR", "WINDOWSSDKVERSION", "WINDOWSSDKDIR", "LIB")}}
         (directory / "link.log").write_text("Loaded C:\\VC\\libcmt.lib(startup.obj)\n", encoding="utf-8")
+        (directory / "link.map").write_text("map fixture", encoding="utf-8")
         (directory / "response-0.rsp").write_bytes(b"object.obj /OUT:CodeConvoy.exe")
         crt.write_json(directory / "invocation.json", {"exit_code": 0,
-                       "command": [toolchain["linker"]["path"], "@C:\\link.rsp", "/VERBOSE:LIB"],
+                       "command": [toolchain["linker"]["path"], "@C:\\link.rsp", "/VERBOSE:LIB", "/VERBOSE", "/MAP:link.map"],
                        "response_files": [{"original_path": r"C:\link.rsp", "name": "response-0.rsp",
                                            "sha256": crt.checksum(directory / "response-0.rsp")}]})
         crt.write_json(directory / "toolchain.json", toolchain)

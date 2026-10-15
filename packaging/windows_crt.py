@@ -15,7 +15,7 @@ CRT_NAMES = {"libcmt.lib", "libvcruntime.lib", "libucrt.lib", "libcpmt.lib",
              "msvcrt.lib", "vcruntime.lib", "ucrt.lib", "msvcprt.lib",
              "oldnames.lib", "legacy_stdio_definitions.lib"}
 INPUTS = ("Cargo.toml", "Cargo.lock", "packaging/build.py", "packaging/windows_crt.py")
-CAPTURE_FILES = ("link.log", "invocation.json", "toolchain.json", "selected-libraries.json")
+CAPTURE_FILES = ("link.log", "link.map", "invocation.json", "toolchain.json", "selected-libraries.json")
 
 
 def checksum(path):
@@ -120,7 +120,10 @@ def capture_link(arguments):
             name = f"response-{len(response_files)}.rsp"
             shutil.copyfile(source, directory / name)
             response_files.append({"name": name, "original_path": str(source), "sha256": checksum(source)})
-    command = [os.environ["CODECONVOY_REAL_LINKER"], *arguments, "/VERBOSE:LIB"]
+    # MSVC 14.51's :LIB alone reports searches without selected members.
+    # Retain it, request full detail too, and keep a map of retained symbols.
+    command = [os.environ["CODECONVOY_REAL_LINKER"], *arguments, "/VERBOSE:LIB", "/VERBOSE",
+               f"/MAP:{directory / 'link.map'}"]
     # Exclusive creation rejects an unexpected second invocation. A failed or
     # skipped link must never reuse an earlier successful report.
     with (directory / "link.log").open("xb") as log:
@@ -201,6 +204,8 @@ def verify(binary, directory=EVIDENCE, *, source_commit=None):
     invocation = json.loads((directory / "invocation.json").read_text())
     if (invocation.get("exit_code") != 0 or not invocation.get("command")
             or invocation["command"][0] != linker["path"] or "/VERBOSE:LIB" not in invocation["command"]
+            or "/VERBOSE" not in invocation["command"]
+            or not any(a.startswith("/MAP:") for a in invocation["command"])
             or json.loads((directory / "toolchain.json").read_text()) != toolchain):
         raise ValueError("Incomplete or failed Windows linker capture")
     for response in invocation.get("response_files", []):
