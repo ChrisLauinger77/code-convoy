@@ -101,11 +101,14 @@ def materials(root=ROOT, evidence=EVIDENCE):
     for key, text in sorted(texts.items()):
         sections.append(f"\n{'=' * 72}\nNotice {key}\n{'=' * 72}\n{text}\n")
     archive = io.BytesIO()
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zipped:
+    # Source archives are already compressed. Store them without a second
+    # compression pass, so verifier output is independent of the host zlib.
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zipped:
         for name, data in [("README.txt", (evidence / "SOURCE-README.txt").read_bytes())] + [
                 (item["path"].removeprefix("sources/"), (evidence / item["path"]).read_bytes()) for item in catalog["sources"]]:
             info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = 3  # Identical ZIP metadata on Windows and Unix.
+            info.compress_type = zipfile.ZIP_STORED
             info.external_attr = 0o100644 << 16
             zipped.writestr(info, data)
     return {FILES[0]: "".join(sections).encode(), FILES[1]: (json.dumps(catalog, indent=2, ensure_ascii=False) + "\n").encode(),

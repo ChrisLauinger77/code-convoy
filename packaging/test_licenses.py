@@ -100,6 +100,8 @@ class LicenseEvidence(unittest.TestCase):
         self.assertEqual(first, licenses.materials(self.root, self.evidence))
         with zipfile.ZipFile(io.BytesIO(first["THIRD-PARTY-SOURCES.zip"])) as source:
             self.assertIsNone(source.testzip())
+            self.assertTrue(all(info.create_system == 3 and info.compress_type == zipfile.ZIP_STORED
+                                for info in source.infolist()))
             self.assertEqual(source.read("option-ext-0.2.0.crate"),
                              (self.evidence / "sources/option-ext-0.2.0.crate").read_bytes())
         self.assertIn(b"UNRESOLVED RELEASE OBLIGATIONS", first["THIRD-PARTY-NOTICES.txt"])
