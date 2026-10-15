@@ -1,5 +1,20 @@
 # Cross-platform release verification
 
+## Third-party license delivery
+
+The **1.0.0 PR 5 candidate**, source `9f0801e`, passed all platform jobs in
+[run 38757563994](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38757563994)
+on 2026-10-15. All six final package notice/source payloads, aggregate checksums
+and candidate provenance were independently verified. Each final Linux artifact
+requires at most GLIBC 2.39. The [license audit](third-party-licenses.md#verification-record)
+records exact hashes, and the [readiness report](release-readiness.md#final-verification)
+records the fresh Ubuntu/Debian/Fedora, Windows and macOS checks and limits.
+
+Licensing blockers remain independent of runtime results. Earlier candidates
+below predate this notice bundle; their dated evidence is preserved. Packaging
+checks do not certify complete legal compliance or replace native desktop
+verification. PR 5 remains **Not Ready** for release approval.
+
 ## Linux glibc 2.39 baseline
 
 This focused infrastructure change follows readiness PR 3 and does not start

@@ -27,9 +27,15 @@ install -m755 %{project_root}/target/release/codeconvoy %{buildroot}/usr/bin/cod
 install -m644 %{project_root}/packaging/codeconvoy.desktop %{buildroot}/usr/share/applications/codeconvoy.desktop
 install -m644 %{project_root}/assets/codeconvoy-256.png %{buildroot}/usr/share/icons/hicolor/256x256/apps/codeconvoy.png
 install -m644 %{project_root}/LICENSE %{buildroot}/usr/share/licenses/code-convoy/LICENSE
+install -m644 %{project_root}/target/packaging/licenses/THIRD-PARTY-* %{buildroot}/usr/share/licenses/code-convoy/
+install -m644 %{project_root}/target/packaging/licenses/RUST-STDLIB-LICENSES.html %{buildroot}/usr/share/licenses/code-convoy/
 
 %files
 /usr/bin/codeconvoy
 /usr/share/applications/codeconvoy.desktop
 /usr/share/icons/hicolor/256x256/apps/codeconvoy.png
 %license /usr/share/licenses/code-convoy/LICENSE
+%license /usr/share/licenses/code-convoy/THIRD-PARTY-NOTICES.txt
+%license /usr/share/licenses/code-convoy/THIRD-PARTY-INVENTORY.json
+%license /usr/share/licenses/code-convoy/THIRD-PARTY-SOURCES.zip
+%license /usr/share/licenses/code-convoy/RUST-STDLIB-LICENSES.html

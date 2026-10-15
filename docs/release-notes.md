@@ -1,84 +1,58 @@
-# CodeConvoy 0.10.0 — Quality & Polish
+# CodeConvoy 1.0.0 — Stable release candidate preparation
 
-## Changes since 0.9.0
+## Changes since 0.10.0
 
-This release refines existing workflows, keyboard operation, responsiveness and
-release packaging. It adds no agent backend or scheduling feature. State format 1,
-repository safeguards, retained worktrees and explicit validation remain intact.
+These notes prepare the first stable release. **Publication is not approved:**
+third-party licensing obligations and required native checks remain open in the
+[readiness report](release-readiness.md). No release or RC tag is needed to build
+a candidate through the existing first-stage workflow.
 
-### Claude Code compatibility
+### Repository and process safety
 
-- Claude's permission selector now includes **Auto**, passed as
-  `--permission-mode auto`. Existing permissions and the `dontAsk` default are
-  unchanged. Activity reports Claude's actual mode; Manual fallback is also
-  recorded in the final job summary for Auto jobs. Auto availability diagnostics
-  follow each job's saved mode and do not appear on legacy-mode jobs.
-  Unsupported invocations retain their CLI
-  error, with no automatic retry or unrestricted-permission substitution. Auto
-  remains subject to CLI, account/model and organization support; see the
-  [authenticated Linux evidence and limitations](claude-validation.md#auto-permission-mode--2026-10-14).
-- Accept the specific UI-render notification emitted after a successful result
-  by Claude 2.1.300. Trailing execution records, errors and unknown notification
-  shapes still fail completion.
+- Preserve saved state when history-retention settings are malformed instead of
+  accepting values that could silently alter retention behavior.
+- Extend isolated-job repository protection to the actual checkout. Cancel
+  Activity sends and binding replies without allowing an abandoned bind to
+  authorize Git creation.
+- Keep Unix process identity anchored while supervising descendants, including
+  launchers that exit before children or children that close their output
+  streams. Failed or uncertain termination retains repository protection.
+  Linux and macOS regressions cover cancellation, shutdown and group identity.
+- Expand upgrade fixtures and native process/path tests, including Windows
+  locked files and junctions. Historical unfinished work remains interrupted;
+  CodeConvoy does not resume old agent processes.
 
-### Interface and keyboard use
+### Backend and desktop compatibility
 
-- Settings and library dialogs fit the minimum 780×560 window, including long
-  names and diagnostics. Toolbars wrap and destructive confirmations keep safe
-  initial focus.
-- Empty Diff and output states distinguish unchanged, unknown and unavailable
-  results. Review errors remain actionable; agent outcome stays separate from Git
-  changes and human result resolution.
-- Modal focus stays within the active dialog and returns to its opener. Escape
-  respects popup priority; held or modified activation keys cannot accidentally
-  confirm destructive actions.
-- Populated fields retain accessible names and focus is more visible. Tests cover
-  three themes and 100%, 150% and 200% scaling. Orca, VoiceOver and NVDA operation
-  has not been certified; native screen-reader testing remains necessary.
+- Add Claude Code **Auto** permission mode using `--permission-mode auto`.
+  Existing saved modes retain their behavior. Unsupported versions and policy
+  restrictions remain explicit; CodeConvoy never substitutes unrestricted
+  permissions. See [the authenticated Linux evidence](claude-validation.md#auto-permission-mode--2026-10-14)
+  and its account/model/organization limitations.
+- Accept Claude 2.1.300's specific post-result UI notification while continuing
+  to reject trailing execution/error records and unknown completion shapes.
+- Find macOS validation toolchains from desktop launches and use a monochrome
+  status-area tray glyph with theme-appropriate contrast.
 
-### Responsiveness and platforms
+### Packaging, documentation and licensing
 
-- Background messages wake the UI directly; idle repaint polling is removed and
-  saves have an explicit deadline. Repository busy-state checks are shared within
-  each frame without changing authoritative execution locks.
-- Evicted session logs release their allocated buffers. On the recorded Linux
-  fixture, full-window layout fell from 4.808 to 0.957 ms and retained log-buffer
-  capacity from about 128 MiB to 32 MiB. These are local measurements, not hardware
-  guarantees; startup and idle memory were effectively unchanged.
-- Wayland uses the existing native Adwaita frame. The performance fixture now
-  initializes macOS Quit handling consistently with the regular application.
-- New native regressions cover literal arguments and Unicode paths, process-tree
-  cleanup on cancellation/future drop, Windows locked files and junctions, and
-  missing Linux tray/notification services on a private D-Bus session.
+- Build Linux candidates on Ubuntu 24.04. The intended minimum binary ABI is
+  glibc **2.39**, for Ubuntu 24.04 LTS, Debian 13 Stable and newer compatible
+  distributions. Every final DEB/RPM/AppImage ELF, including the AppImage
+  runtime, is checked. This alone does not certify desktop compatibility.
+- Preserve the six existing package formats and source-commit/checksum-based
+  two-stage release process. Candidate builds do not publish or create tags.
+- Include offline third-party notices, an inventory, Rust library notices and
+  available source archives in each package. The exact MPL `option-ext` source
+  is included without changing CodeConvoy's MIT license. Final-package checks
+  reject missing notices and unreviewed native components. Publication remains
+  blocked on the documented unresolved licensing obligations.
+- Add first-use, contribution, security-reporting and compatibility guidance.
+  GitHub private vulnerability reporting is enabled. Existing data/worktree
+  ownership protections and explicit cleanup remain unchanged.
 
-### Packaging and upgrades
-
-- Linux candidates now build on Ubuntu 24.04, with glibc 2.39 as the intended
-  minimum supported binary ABI for Ubuntu 24.04 LTS, Debian 13 Stable and newer
-  compatible glibc distributions. Final DEB, RPM and AppImage ELF requirements,
-  including the AppImage runtime, are measured and rejected above 2.39. DEB
-  dependencies still use the executable's measured minimum. Older published
-  packages are unchanged; native distribution compatibility remains subject to
-  the exact-candidate evidence in the platform matrix. Packaged startup tests
-  await the window manager's completed startup callback to avoid launching
-  during its initialization.
-- Windows installed/portable packages and the macOS bundle include the license.
-  Packaging verifies archive contents, bundle metadata and icons. Artifact names
-  and package-manager executable/app paths remain unchanged.
-- Publication rejects incomplete, duplicate, malformed or incorrect checksum
-  manifests before creating a draft; it never repairs downloaded checksums.
-- Legacy 0.1 and representative 0.9 saves are tested through load/save/reload.
-  Repository groups, templates, backend options, validation, notifications, tray,
-  history retention and retained ownership metadata survive. Unfinished work is
-  interrupted on restart and never resumed automatically.
-
-macOS remains ad-hoc signed without notarization; Windows remains unsigned.
-Ordinary Storage cleanup on Windows still refuses removal without stable
-filesystem identity proof. Desktop activation, tray hosts and notification
-presentation remain subject to platform policies.
-
-See the [quality-release validation record](quality-release-validation.md),
-[performance measurements](performance-validation.md),
-[accessibility limits](accessibility-validation.md) and
-[native platform checklist](platform-validation.md). These notes prepare 0.10.0;
-publication requires a separately approved, tested release candidate.
+The source-build minimum remains Rust 1.95; candidate builds use pinned Rust
+1.99.0. macOS remains ad-hoc signed without notarization, and Windows remains
+unsigned. Ordinary Windows Storage cleanup still refuses deletion without the
+required stable filesystem identity proof. Native desktop, notifications and
+screen-reader limitations remain documented in the [platform matrix](platform-validation.md).

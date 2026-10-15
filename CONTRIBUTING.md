@@ -149,16 +149,19 @@ expression, license files and bundled assets in its actual source. Include
 target-specific/transitive dependencies, fonts, native libraries and packaging
 tools. Preserve required notices when redistributing them. The AppImage runtime
 and `linuxdeploy` pins live in `packaging/appimage-tools.json`; their upstream
-licenses need review when pins or payloads change. The project has no automated
-license-compliance gate; passing Rust or packaging tests is not a license audit.
+licenses need review when pins or payloads change. Run
+`python3 packaging/licenses.py check` and the packaging tests after any change.
+The inventory gate detects unreviewed lockfile, feature and toolchain changes;
+it does not replace review of license terms and actual bundled contents.
 
 The current graph includes `epaint_default_fonts` with OFL/Ubuntu font license
 terms in addition to MIT/Apache, Unicode-licensed crates, and `option-ext` under
 MPL-2.0. The font crate embeds its font bytes in the application. Packaging
-currently installs the project `LICENSE`; that is not a complete third-party
-notice inventory. Before 1.0 publication, review the actual redistributed
-dependencies/fonts/runtime and carry their required notices into the packages.
-This documentation change does not certify license compliance or alter payloads.
+installs the project `LICENSE` and the reviewed third-party notice/source bundle.
+Follow [the inventory update procedure](docs/third-party-licenses.md#updating-the-audit)
+when dependencies or packaging inputs change. Resolve the documented native
+source/license blockers before publication; do not remove blockers merely to
+make the release gate pass. Passing checks is not certification of compliance.
 
 ## Pull requests and releases
 

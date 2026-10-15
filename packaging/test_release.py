@@ -9,6 +9,7 @@ from unittest.mock import patch
 import zipfile
 
 import release
+import licenses
 
 
 class ReleaseGates(unittest.TestCase):
@@ -21,7 +22,7 @@ class ReleaseGates(unittest.TestCase):
         self.assertTrue(notes.startswith(f"# CodeConvoy {release.version()} — "))
 
     def test_deb_uses_measured_requirement_and_refuses_missing_measurement(self):
-        with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"), patch.object(licenses, "prepare", return_value=Path("notices")):
             work = Path(temporary)
             with self.assertRaisesRegex(ValueError, "measured glibc"):
                 release.package(work, work, "codeconvoy", "deb")
@@ -38,30 +39,35 @@ class ReleaseGates(unittest.TestCase):
             exe.write_bytes(b"fixture executable")
             archive = directory / "portable.zip"
             license_text = (release.ROOT / "LICENSE").read_bytes()
+            valid = {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": license_text, **licenses.materials()}
             for contents in (
                 {"CodeConvoy.exe": exe.read_bytes()},
-                {"CodeConvoy.exe": b"wrong binary", "LICENSE.txt": license_text},
-                {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": b"wrong license"},
-                {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": license_text, "debug.log": b"log"},
-                {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": license_text},
+                {**valid, "CodeConvoy.exe": b"wrong binary"},
+                {**valid, "LICENSE.txt": b"wrong license"},
+                {**valid, "debug.log": b"log"},
+                {k: v for k, v in valid.items() if k != "THIRD-PARTY-NOTICES.txt"},
+                {**valid, "THIRD-PARTY-SOURCES.zip": b"missing source"},
+                valid,
             ):
                 with self.subTest(files=list(contents)):
                     with zipfile.ZipFile(archive, "w") as zipped:
                         for name, data in contents.items():
                             zipped.writestr(name, data)
-                    if contents == {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": license_text}:
+                    if contents == valid:
                         release.verify_windows_zip(archive, exe)
                     else:
                         with self.assertRaisesRegex(ValueError, "ZIP failed"):
                             release.verify_windows_zip(archive, exe)
 
     def test_installer_and_app_ship_license_as_resource(self):
-        with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"), patch.object(licenses, "prepare", return_value=Path("notices")):
             work = Path(temporary)
             for format_name in ("app", "nsis"):
                 release.package(work, work, "codeconvoy", format_name)
                 config = json.loads((work / "packager.json").read_text())
                 self.assertIn({"src": "LICENSE", "target": "LICENSE.txt"}, config["resources"])
+                for name in licenses.FILES:
+                    self.assertIn({"src": str(Path("notices") / name), "target": name}, config["resources"])
 
     def test_tag_must_match_cargo_exactly(self):
         release.check_tag("v" + release.version())

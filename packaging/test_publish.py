@@ -33,6 +33,7 @@ class PublisherGates(unittest.TestCase):
                        for path in self.directory.iterdir()],
         }
         for patcher in (patch.object(publish, "DIST", self.directory),
+                        patch.object(publish, "require_release_ready"),
                         patch.dict(publish.os.environ, {"RELEASE_TAG": self.tag, "GH_REPO": self.repository})):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -61,6 +62,12 @@ class PublisherGates(unittest.TestCase):
     def test_complete_draft_is_verified_and_published_by_id(self):
         publish.main()
         self.assertTrue(self.published)
+
+    def test_unresolved_license_obligations_prevent_even_draft_creation(self):
+        with patch.object(publish, "require_release_ready", side_effect=ValueError("source obligation unresolved")):
+            with self.assertRaisesRegex(ValueError, "source obligation"):
+                publish.main()
+        self.commands.assert_not_called()
 
     def test_incomplete_checksum_manifest_never_creates_a_draft(self):
         manifest = self.directory / "SHA256SUMS"
