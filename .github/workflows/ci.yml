@@ -44,6 +44,7 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo test --locked --bin codeconvoy software_adapter_initializes_egui_renderer -- --ignored --nocapture
       - run: cargo build --locked --release --bin codeconvoy
+        if: runner.os != 'Windows' || !inputs.windows_crt_audit
       # An opt-in diagnostic run, not a release candidate. Keep release pins.
       - name: Install audited Windows release tools
         if: runner.os == 'Windows' && inputs.windows_crt_audit

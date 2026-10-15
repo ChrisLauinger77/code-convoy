@@ -15,6 +15,7 @@ CRT_NAMES = {"libcmt.lib", "libvcruntime.lib", "libucrt.lib", "libcpmt.lib",
              "msvcrt.lib", "vcruntime.lib", "ucrt.lib", "msvcprt.lib",
              "oldnames.lib", "legacy_stdio_definitions.lib"}
 INPUTS = ("Cargo.toml", "Cargo.lock", "packaging/build.py", "packaging/windows_crt.py")
+CAPTURE_FILES = ("link.log", "invocation.json", "toolchain.json", "selected-libraries.json")
 
 
 def checksum(path):
@@ -27,7 +28,8 @@ def write_json(path, value):
 
 
 def output(command, *, env=None):
-    return subprocess.run([str(a) for a in command], check=True, cwd=ROOT, env=env,
+    return subprocess.run(command if isinstance(command, str) else [str(a) for a in command],
+                          check=True, cwd=ROOT, env=env,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.decode("utf-8", errors="replace")
 
 
@@ -72,8 +74,10 @@ def msvc_environment(env):
     vcvars = Path(instance["installationPath"]) / "VC/Auxiliary/Build/vcvarsall.bat"
     # Import the documented developer environment internally. Never print or
     # persist its complete output: the inherited environment can contain secrets.
-    result = output([env.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c",
-                     f"call {command_path(vcvars)} x64 >nul && set"], env=env)
+    # cmd.exe parses command text, not C argv quoting (which escapes quotes with
+    # backslashes). Quote these validated installation paths as cmd literals.
+    result = output(f'{command_path(env.get("COMSPEC", "cmd.exe"))} /d /s /c '
+                    f'"call {command_path(vcvars)} x64 >nul && set"', env=env)
     selected = {key.upper(): value for key, value in env.items()}
     for line in result.splitlines():
         key, separator, value = line.partition("=")
@@ -111,6 +115,14 @@ def capture_link(arguments):
         result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT)
     write_json(directory / "invocation.json", {"command": command, "exit_code": result.returncode,
                                                "response_files": response_files})
+    if result.returncode == 0:
+        # Rust may remove generated import archives immediately after this
+        # wrapper exits. Hash every selected archive while it still exists.
+        selected = loaded_libraries((directory / "link.log").read_text(encoding="utf-8", errors="replace"))
+        write_json(directory / "selected-libraries.json", [
+            {"path": path, "sha256": checksum(path), "members": members,
+             "crt_family": PureWindowsPath(path).name.lower() in CRT_NAMES}
+            for path, members in selected.items()])
     sys.stdout.buffer.write((directory / "link.log").read_bytes())
     return result.returncode
 
@@ -135,10 +147,7 @@ def build(command, env, target=None):
     invocation = json.loads((EVIDENCE / "invocation.json").read_text())
     if invocation["exit_code"] != 0:
         raise ValueError("CRT evidence records a failed linker invocation")
-    selected = loaded_libraries((EVIDENCE / "link.log").read_text(encoding="utf-8", errors="replace"))
-    libraries = [{"path": path, "sha256": checksum(path), "members": members,
-                  "crt_family": PureWindowsPath(path).name.lower() in CRT_NAMES}
-                 for path, members in selected.items()]
+    libraries = json.loads((EVIDENCE / "selected-libraries.json").read_text(encoding="utf-8"))
     binary = ROOT / "target" / (target or "") / "release/codeconvoy.exe"
     report = {
         "schema": 1, "status": "captured", "license_assessment": "unresolved",
@@ -148,7 +157,7 @@ def build(command, env, target=None):
         "runner": {key: env.get(key.upper(), "") for key in ("ImageOS", "ImageVersion", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")},
         "inputs": {name: checksum(ROOT / name) for name in INPUTS},
         "toolchain": toolchain, "libraries": libraries,
-        "evidence": {name: checksum(EVIDENCE / name) for name in ("link.log", "invocation.json", "toolchain.json")},
+        "evidence": {name: checksum(EVIDENCE / name) for name in CAPTURE_FILES},
     }
     write_json(EVIDENCE / "provenance.json", report)
     verify(binary)
@@ -174,7 +183,7 @@ def verify(binary, directory=EVIDENCE, *, source_commit=None):
             or any(not toolchain.get("environment", {}).get(key) for key in
                    ("VCTOOLSVERSION", "VCTOOLSINSTALLDIR", "WINDOWSSDKVERSION", "WINDOWSSDKDIR", "LIB"))):
         raise ValueError("Incomplete Windows CRT toolchain identity")
-    for name in ("link.log", "invocation.json", "toolchain.json"):
+    for name in CAPTURE_FILES:
         if report.get("evidence", {}).get(name) != checksum(directory / name):
             raise ValueError(f"Missing or altered Windows CRT evidence: {name}")
     invocation = json.loads((directory / "invocation.json").read_text())
@@ -191,7 +200,8 @@ def verify(binary, directory=EVIDENCE, *, source_commit=None):
         raise ValueError("Incomplete linker response file capture")
     selected = loaded_libraries((directory / "link.log").read_text(encoding="utf-8", errors="replace"))
     libraries = report.get("libraries", [])
-    if (len(libraries) != len(selected) or {p["path"]: p["members"] for p in libraries} != selected
+    if (libraries != json.loads((directory / "selected-libraries.json").read_text(encoding="utf-8"))
+            or len(libraries) != len(selected) or {p["path"]: p["members"] for p in libraries} != selected
             or any(not re.fullmatch(r"[0-9a-f]{64}", p.get("sha256", "")) for p in libraries)):
         raise ValueError("Selected Windows linker inputs differ from raw diagnostics")
     return report

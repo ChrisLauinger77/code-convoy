@@ -1,8 +1,10 @@
 """Fail-closed provenance checks; these fixtures make no legal assessment."""
 import copy
+import io
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -31,6 +33,30 @@ class WindowsCrtTests(unittest.TestCase):
             with self.subTest(char=char), self.assertRaises(ValueError):
                 crt.command_path("C:\\path" + char)
 
+    def test_generated_archive_is_hashed_before_rustc_removes_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive, response = root / "temporary.lib", root / "link.rsp"
+            archive.write_bytes(b"ephemeral import archive")
+            response.write_bytes(b"link arguments")
+            expected = crt.checksum(archive)
+            real_checksum = crt.checksum
+            def link(command, **kwargs):
+                kwargs["stdout"].write(b"Loaded C:\\VC\\libcmt.lib(startup.obj)\n")
+                return SimpleNamespace(returncode=0)
+            def checksum(path):
+                return real_checksum(archive if str(path) == r"C:\VC\libcmt.lib" else path)
+            with patch.dict(crt.os.environ, {"CODECONVOY_CRT_EVIDENCE": str(root),
+                                            "CODECONVOY_REAL_LINKER": r"C:\VC\link.exe"}), \
+                 patch.object(crt.subprocess, "run", side_effect=link), \
+                 patch.object(crt, "checksum", side_effect=checksum), \
+                 patch.object(crt.sys, "stdout", SimpleNamespace(buffer=io.BytesIO())):
+                self.assertEqual(crt.capture_link(["@" + str(response)]), 0)
+            archive.unlink()  # rustc can remove this as soon as its linker exits.
+            captured = json.loads((root / "selected-libraries.json").read_text())
+            self.assertEqual(captured[0]["sha256"], expected)
+            self.assertEqual((root / "response-0.rsp").read_bytes(), response.read_bytes())
+
     def fixture(self, directory):
         binary = directory / "CodeConvoy.exe"
         binary.write_bytes(b"MZfixture")
@@ -54,8 +80,9 @@ class WindowsCrtTests(unittest.TestCase):
         return binary, report
 
     def save_report(self, directory, report):
+        crt.write_json(directory / "selected-libraries.json", report["libraries"])
         report["evidence"] = {name: crt.checksum(directory / name)
-                              for name in ("link.log", "invocation.json", "toolchain.json")}
+                              for name in crt.CAPTURE_FILES}
         crt.write_json(directory / "provenance.json", report)
 
     def test_complete_capture_is_not_legal_approval(self):
@@ -110,6 +137,13 @@ class WindowsCrtTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "missing provenance"):
                 release.windows()
             stage.assert_not_called()
+
+    def test_diagnostic_uses_the_existing_release_toolchain_pins(self):
+        catalog = json.loads((crt.ROOT / "third-party/catalog.json").read_text(encoding="utf-8"))
+        workflow = (crt.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertIn(f'rustup toolchain install {catalog["inputs"]["rust"]} --profile minimal', workflow)
+        self.assertIn(f'cargo +{catalog["inputs"]["rust"]} install --locked --version '
+                      f'{catalog["inputs"]["packager"]} cargo-packager', workflow)
 
     def test_final_package_hashes_and_helper_inspection_are_bound(self):
         with tempfile.TemporaryDirectory() as temp:
