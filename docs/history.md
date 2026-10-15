@@ -123,16 +123,18 @@ behind a periodic writer on the UI thread; conflicting actions wait or report bu
 Those explicit saves and the final exit save can still pause on slow storage.
 
 A missing state file starts an empty application. An empty file, invalid UTF-8,
-truncated JSON, missing core `version`/`next_run`/`runs` fields, invalid records,
+truncated JSON, missing core `version`/`next_run`/`runs` fields, malformed records,
 malformed retention settings, duplicate convoy IDs or an unsupported future version
 is an error. Startup stops; the original file is left unchanged and that Store
 refuses further writes, including retention. Back up the file and use a compatible version or restore a
 known-good backup before restarting. Move the preserved file aside only if you
 intend to start fresh. Exports are reports, not backups or import files.
 
-Legacy optional fields still default normally. A lagging run counter advances past
-the highest retained ID; a missing counter is not guessed. Store loading never writes
-automatically, resumes an agent, invents completion times or deletes a worktree.
+Legacy optional fields still default normally. Readable numeric global and draft
+concurrency settings outside 1–16 are clamped into that range. A lagging run counter
+advances past the highest retained ID; a missing counter is not guessed. Store
+loading never writes automatically, resumes an agent, invents completion times or
+deletes a worktree. A later save can persist the normalized limits and counter.
 The UI subsequently saves explicit recovery observations through its usual worker.
 No partial-entry salvage or automatic destructive migration is attempted.
 

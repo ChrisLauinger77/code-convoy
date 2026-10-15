@@ -19,7 +19,7 @@ package payload or CI/release workflow changes are included.
 | Contributor setup | Added Linux/macOS/Windows prerequisites, exact checks, disposable UI fixture instructions, dependency review and best-effort support expectations. Documented manifest minimum Rust 1.95 separately from stable CI and release Rust 1.99.0. |
 | Release instructions | Matched local Linux prerequisites to the existing release job, including EGL/libdbus/fontconfig. The manual candidate → annotated-tag publication architecture is unchanged. |
 | OSS files | Reviewed MIT LICENSE and existing public issue forms; added CONTRIBUTING, SECURITY and a PR template. Clarified original icon licensing versus bundled application fonts. |
-| Compatibility | Added intended 1.x settings/history, export, OS and external-CLI policy. Internal recovery formats can evolve; downgrade and backup limits remain explicit. |
+| Compatibility | Added intended 1.x settings/history, export, OS and external-CLI policy. Internal recovery formats can evolve; downgrade and backup limits remain explicit. Review clarified that readable out-of-range concurrency settings are clamped, and a later save can persist normalized limits/counters; malformed or unsupported records still fail loading. |
 
 Current controls and guards were checked in `src/ui/library.rs`,
 `repository_sections.rs`, `shortcuts.rs`, `validation.rs`, `worktree_settings.rs`,

@@ -13,12 +13,22 @@ upgrades. Application version, internal state version and export schema version
 are independent. Current state remains `version: 1`; no reset or migration is
 required merely to label an application release 1.0.
 
-New optional fields use safe defaults. Unsupported versions, invalid records and
-unknown enum values fail explicitly and preserve the original file rather than
-silently resetting data. Older completion observations remain Unknown when they
-were never recorded. Unfinished agents/validations recover as interrupted or
-cancelled; no process is resumed. Saved worktree observations never replace fresh
-ownership and Git checks. See [data-format details](history.md#data-format-compatibility).
+New optional fields use safe defaults. Unsupported state versions, malformed
+records and unknown enum values fail explicitly and preserve the original file
+rather than silently resetting data.
+
+Some readable settings are normalized instead of rejected. Successfully decoded
+`global_concurrency` and `draft.concurrency` integers outside **1–16** are clamped
+to that range on load (for example, 0 becomes 1 and 99 becomes 16). Wrong types,
+negative values and integer overflow fail decoding. A lagging `next_run` counter
+advances past the highest retained convoy ID. Loading does not write the file, but
+a later save can persist these normalized values; the original values are not
+guaranteed to survive a successful load/save cycle.
+
+Older completion observations remain Unknown when they were never recorded.
+Unfinished agents/validations recover as interrupted or cancelled; no process is
+resumed. Saved worktree observations never replace fresh ownership and Git checks.
+See [data-format details](history.md#data-format-compatibility).
 
 Internal JSON fields, worktree ownership manifests, journals and location bindings
 are application-managed recovery data. They may evolve with compatible loading or
