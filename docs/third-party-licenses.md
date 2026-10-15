@@ -18,7 +18,7 @@ separately records normal dependency edges. The other 74 entries are explicit
 exclusions for these release targets. This does not imply every object survives
 linking, or that every listed crate is in every package.
 
-The collection contains **342 distinct notice texts**, deduplicated by
+The collection contains **358 distinct notice texts**, deduplicated by
 their content hashes in [texts.json](../third-party/texts.json). It retains
 upstream copyright statements, notices, font licenses and protocol XML copyright
 blocks. When a crate omits a license file, the evidence refers to its exact
@@ -26,7 +26,7 @@ blocks. When a crate omits a license file, the evidence refers to its exact
 branch. Notice text is decoded as UTF-8 (removing a BOM where present); source
 archives retain their original bytes.
 
-The inventory also identifies **47 assets, runtimes, packaging and supplemental
+The inventory also identifies **64 assets, runtimes, packaging and supplemental
 Rust library components**,
 with unresolved versions expressly marked. Rust's separate standard-library
 report covers **141 out-of-tree entries** plus in-tree exceptions; its complete
@@ -71,7 +71,8 @@ No expiring download or future written offer is relied upon. See Mozilla's
 [MPL sections 3.1–3.4](https://www.mozilla.org/en-US/MPL/2.0/).
 
 The same source ZIP contains the pinned AppImage runtime source, libfuse 3.15.0,
-its upstream runtime patch/build recipe, squashfuse 0.5.2 and official NSIS 3.09
+its upstream runtime patch/build recipe, squashfuse 0.5.2, musl 1.2.5, zstd 1.5.6,
+zlib 1.3.1, mimalloc 2.1.7 source, nsis-tauri-utils 0.2.1 and official NSIS 3.09
 source. Each archive has a recorded digest and origin. The available AppImage
 source is **not claimed to be a complete LGPL relinking kit**.
 
@@ -91,7 +92,7 @@ The files are accessible offline, without launching CodeConvoy:
 Read `THIRD-PARTY-NOTICES.txt`, `THIRD-PARTY-INVENTORY.json` and
 `RUST-STDLIB-LICENSES.html`; unpack `THIRD-PARTY-SOURCES.zip` with an ordinary
 archive manager. All platforms receive the same conservative bundle. This adds
-roughly 9 MB before package compression; source archives account for most of it.
+roughly 16 MB before package compression; source archives account for most of it.
 
 ## Unresolved release obligations
 
@@ -99,12 +100,17 @@ These are tracked in `catalog.json:release_blockers`; `publish.py` checks them
 before creating even a draft release. Non-publishing candidate builds remain
 available for inspection. Removing a blocker requires new evidence and review.
 
+The [follow-up evidence record](license-blocker-evidence.md) documents the deeper
+investigation, exact binary/debug identities, newly recovered sources/notices
+and remaining requirements. All five blockers remain; upstream base versions
+and 17 plugin dependency versions are now established, with explicit limits.
+
 1. **AppImage static-library versions.** The exact runtime recipe uses mutable
    Alpine 3.21 packages for musl, zstd, zlib and mimalloc. Its 2025 build log is
-   expired (GitHub returns 410). The included reference notices are labelled
-   with reference versions, not asserted to identify the shipped binaries.
-   Obtain exact build provenance and matching notices. The upstream LICENSE
-   lists several dependencies but omits mimalloc, which its Makefile links.
+   expired (GitHub returns 410). Matching debug symbols and version-function
+   bytes now identify musl 1.2.5, zstd 1.5.6, zlib 1.3.1 and mimalloc 2.1.7;
+   matching notices/source are included. Exact Alpine APK revisions and patches
+   remain unknown. The upstream LICENSE omits mimalloc, which its Makefile links.
 2. **AppImage LGPL relinking.** The runtime statically links patched libfuse.
    LGPL-2.1 section 6 requires more than adding a license text. Verify a complete
    corresponding source/build or object/relink set for the shipped runtime,
@@ -114,18 +120,23 @@ available for inspection. Removing a blocker requires new evidence and review.
 3. **`dispatch` 0.2.0 notice.** Its crate and pinned upstream revision declare
    MIT and identify Steven Sheldon, but contain no copyright/license file.
    Obtain authoritative notice evidence; no copyright wording has been invented.
+   Upstream issue #18 was closed by its reporter without a notice or response.
 4. **NSIS plugins.** The prebuilt ApplicationID archive contains only DLL/PDB
    files. The linked source identifies Mike Anchor/Mozilla/Connectify
-   contributions without a clear license grant. Establish the exact binary's
-   source/license. The `nsis-tauri-utils` 0.2.1 root MIT/Apache texts are included,
-   but its prebuilt DLL's transitive dependencies and build toolchain remain to
-   be established; the source tag has no Cargo.lock. Plugin hashes prevent an
+   contributions without a clear license grant; these copyright headers are now
+   included. Establish the exact binary's source/license. `nsis-tauri-utils`
+   0.2.1 matches upstream's release digest; its source and notices for 17 observed
+   crate versions are included. Its complete dependency graph, Rust 1.71.1
+   standard library and native toolchain remain unresolved; the tag has no
+   Cargo.lock. Plugin hashes prevent an
    unnoticed binary substitution during future candidate builds.
 5. **Windows CRT.** Record the actual hosted toolset/SDK runtime versions and
    review applicable Microsoft redistribution rights for statically linked
    runtime code. The application MIT license does not grant those rights.
    Microsoft's [redistribution guidance](https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files)
-   points distributors to the applicable Visual Studio/SDK license terms.
+   points distributors to the applicable Visual Studio/SDK license terms. The
+   reference runner actually used a VS 2026 image; installed-tool lists do not
+   prove which static libraries were selected by the linker.
 
 Primary AppImage evidence: [runtime source/tag](https://github.com/AppImage/type2-runtime/tree/20251108),
 [libfuse terms](https://github.com/libfuse/libfuse/blob/fuse-3.15.0/LICENSE),
@@ -158,7 +169,12 @@ Installer evidence: [NSIS licenses and linking exception](https://nsis.sourcefor
    final formats. Update the verification record and resolve remaining blockers
    before running `python3 packaging/licenses.py release-ready`.
 
-## Verification record
+## Earlier candidate verification record
+
+This records the candidate before the follow-up evidence and deterministic ZIP
+checks. It is historical, not verification of the current head. The fresh
+candidate SHA, workflow run and all-six-format inspection are recorded in
+[PR 68](https://github.com/ChrisLauinger77/code-convoy/pull/68).
 
 Verification date: **2026-10-15**. Local 1.0.0 formatting, strict Clippy, locked
 Rust tests (**602 passed, 10 ignored**), release build and **58 packaging tests**

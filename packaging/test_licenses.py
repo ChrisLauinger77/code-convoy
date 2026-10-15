@@ -1,6 +1,7 @@
 """License coverage, source identity and final-artifact regression tests."""
 import copy
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -107,6 +108,26 @@ class LicenseEvidence(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing Rust in-tree library notices"):
             self.check()
 
+    def test_observed_plugin_dependencies_cannot_lose_notice_coverage(self):
+        self.catalog["components"] = [c for c in self.catalog["components"]
+                                      if c["name"] != "nsis-tauri-utils embedded: ring"]
+        with self.assertRaisesRegex(ValueError, "Missing observed installer dependency"):
+            self.check()
+
+    def test_native_provenance_cannot_describe_another_binary(self):
+        for component, key in (("appimage", "runtime_sha256"), ("nsis_tauri_utils", "dll_sha256")):
+            record = self.catalog["native_provenance"][component]
+            original = record[key]
+            record[key] = "0" * 64
+            with self.subTest(component=component), self.assertRaisesRegex(ValueError, "provenance does not match"):
+                self.check()
+            record[key] = original
+
+    def test_identified_appimage_source_cannot_be_omitted(self):
+        self.catalog["sources"] = [s for s in self.catalog["sources"] if 'mimalloc' not in s["path"]]
+        with self.assertRaisesRegex(ValueError, "Missing AppImage version/source"):
+            self.check()
+
     def test_no_missing_notice_can_hide_by_dropping_its_blocker(self):
         self.catalog["crates"][0]["unresolved"] = "fixture-obligation"
         self.catalog["release_blockers"] = []
@@ -124,8 +145,65 @@ class LicenseEvidence(unittest.TestCase):
                              (self.evidence / "sources/option-ext-0.2.0.crate").read_bytes())
         self.assertIn(b"UNRESOLVED RELEASE OBLIGATIONS", first["THIRD-PARTY-NOTICES.txt"])
 
+    def test_source_zip_ignores_inventory_order_and_filesystem_metadata(self):
+        first = licenses.materials(self.root, self.evidence)["THIRD-PARTY-SOURCES.zip"]
+        self.catalog["sources"].reverse()
+        self.check()
+        for item in self.catalog["sources"]:
+            path = self.evidence / item["path"]
+            os.utime(path, (1700000000, 1700000000))
+            path.chmod(0o755)
+        self.assertEqual(first, licenses.materials(self.root, self.evidence)["THIRD-PARTY-SOURCES.zip"])
+        with zipfile.ZipFile(io.BytesIO(first)) as archive:
+            self.assertEqual(archive.namelist(), sorted(archive.namelist()))
+            self.assertEqual(archive.comment, b"")
+            for info in archive.infolist():
+                self.assertEqual(info.date_time, (1980, 1, 1, 0, 0, 0))
+                self.assertEqual((info.create_system, info.create_version, info.extract_version), (3, 20, 20))
+                self.assertEqual(info.external_attr, 0o100644 << 16)
+                self.assertEqual((info.internal_attr, info.flag_bits, info.volume), (0, 0, 0))
+                self.assertEqual((info.extra, info.comment), (b"", b""))
+                if info.filename != "README.txt":
+                    self.assertEqual(archive.read(info), (self.evidence / "sources" / info.filename).read_bytes())
+
+    def test_source_zip_portable_golden_bytes_preserve_binary_and_line_endings(self):
+        # This fixed digest runs on Windows, Linux and macOS. A same-host repeat
+        # alone would miss platform-dependent ZIP headers or text conversion.
+        entries = [("z.bin", bytes(range(256))), ("README.txt", b"line one\r\nline two\n\x00\xff")]
+        expected = "92c32ed875aaba4578f986262a5f4ba279769c75b07262e0679c148b8c229be8"
+        for ordered in (entries, list(reversed(entries))):
+            data = licenses.source_bundle(ordered)
+            self.assertEqual(licenses.digest(data), expected)
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                for name, contents in entries:
+                    self.assertEqual(archive.read(name), contents)
+
+    def test_source_zip_rejects_ambiguous_and_nonportable_names(self):
+        for names in (("a", "a"), ("README.txt", "readme.txt"), ("../source",),
+                      ("nested/source",), ("nested\\source",), ("C:source",),
+                      ("source\x00hidden",), ("é.txt",), ("source.",), ("CON.txt",)):
+            with self.subTest(names=names), self.assertRaisesRegex(ValueError, "portable basenames"):
+                licenses.source_bundle((name, b"source") for name in names)
+
 
 class FinalLicensePayload(unittest.TestCase):
+    def test_final_source_zip_repacking_cannot_hide_changed_metadata(self):
+        expected = licenses.source_bundle([("source.txt", b"same source bytes")])
+        # Both ZIPs extract to identical source. Only the final archive metadata
+        # differs; comparing staging files or extracted contents would miss it.
+        changed = io.BytesIO()
+        with zipfile.ZipFile(changed, "w") as archive:
+            archive.writestr("source.txt", b"same source bytes")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "THIRD-PARTY-SOURCES.zip"
+            with patch.object(licenses, "materials", return_value={path.name: expected}):
+                path.write_bytes(expected)
+                licenses.verify_directory(root)
+                path.write_bytes(changed.getvalue())
+                with self.assertRaisesRegex(ValueError, "omits or alters"):
+                    licenses.verify_directory(root)
+
     def test_packaging_rejects_a_compiler_with_different_stdlib_notices(self):
         wrong = subprocess.CompletedProcess([], 0, "rustc 1.98.0 (fixture)\n")
         with patch.object(licenses.subprocess, "run", return_value=wrong):

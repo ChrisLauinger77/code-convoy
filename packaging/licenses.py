@@ -21,6 +21,35 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def source_bundle(entries):
+    """Canonical ZIP bytes, independent of host metadata, locale and zlib.
+
+    Entry names are deliberately portable ASCII basenames. Source archives keep
+    their original bytes (including their own upstream metadata and licenses).
+    """
+    entries = list(entries)
+    names = [name for name, _ in entries]
+    if (any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name) or name.endswith(".")
+            or re.fullmatch(r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?", name, re.I)
+            for name in names)
+            or len({name.lower() for name in names}) != len(names)):
+        raise ValueError("Source bundle names must be unique portable basenames")
+    archive = io.BytesIO()
+    # ZIP_STORED avoids a dependency on the host's compression implementation.
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED, allowZip64=False) as zipped:
+        zipped.comment = b""
+        for name, data in sorted(entries):
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.create_version = info.extract_version = 20
+            info.compress_type = zipfile.ZIP_STORED
+            info.external_attr = 0o100644 << 16
+            info.internal_attr = info.flag_bits = info.volume = 0
+            info.extra = info.comment = b""
+            zipped.writestr(info, data)
+    return archive.getvalue()
+
+
 def dependency_inputs(manifest):
     return {key: manifest[key] for key in ("dependencies", "dev-dependencies", "build-dependencies", "target", "features")
             if key in manifest}
@@ -68,6 +97,23 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
         if (path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(evidence.resolve())
                 or digest(path.read_bytes()) != item["sha256"]):
             raise ValueError(f"Missing or altered license/source evidence: {item['path']}")
+    native = catalog["native_provenance"]
+    runtime = json.loads((root / "packaging/appimage-tools.json").read_text())["runtime"]
+    if native["appimage"]["runtime_sha256"] != runtime["sha256"]:
+        raise ValueError("AppImage version provenance does not match the pinned runtime")
+    for name, version in native["appimage"]["versions"].items():
+        component = next((c for c in catalog["components"] if c["name"] == name), None)
+        if (component is None or component["version"].split()[0] != version
+                or not any(s["path"] == component.get("source") for s in catalog["sources"])):
+            raise ValueError(f"Missing AppImage version/source evidence: {name}")
+    plugin = native["nsis_tauri_utils"]
+    if plugin["dll_sha256"] != catalog["windows_installer_plugins"]["$PLUGINSDIR/nsis_tauri_utils.dll"]:
+        raise ValueError("Plugin provenance does not match the pinned installer DLL")
+    for package in plugin["visible_registry_packages"]:
+        if not any(c["name"] == "nsis-tauri-utils embedded: " + package["name"]
+                   and c["version"] == package["version"] and c.get("checksum") == package["checksum"]
+                   and c["notices"] for c in catalog["components"]):
+            raise ValueError(f"Missing observed installer dependency notices: {package['name']}")
     # This is the exact registry source compiled into the application, not an
     # online source offer that can expire or be replaced after distribution.
     mpl = next(p for p in catalog["crates"] if p["name"] == "option-ext")
@@ -120,19 +166,10 @@ def materials(root=ROOT, evidence=EVIDENCE):
     sections.append("\nFULL NOTICE TEXTS (identified by SHA-256 above)\n")
     for key, text in sorted(texts.items()):
         sections.append(f"\n{'=' * 72}\nNotice {key}\n{'=' * 72}\n{text}\n")
-    archive = io.BytesIO()
-    # Source archives are already compressed. Store them without a second
-    # compression pass, so verifier output is independent of the host zlib.
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zipped:
-        for name, data in [("README.txt", (evidence / "SOURCE-README.txt").read_bytes())] + [
-                (item["path"].removeprefix("sources/"), (evidence / item["path"]).read_bytes()) for item in catalog["sources"]]:
-            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
-            info.create_system = 3  # Identical ZIP metadata on Windows and Unix.
-            info.compress_type = zipfile.ZIP_STORED
-            info.external_attr = 0o100644 << 16
-            zipped.writestr(info, data)
+    archive = source_bundle([("README.txt", (evidence / "SOURCE-README.txt").read_bytes())] + [
+        (item["path"].removeprefix("sources/"), (evidence / item["path"]).read_bytes()) for item in catalog["sources"]])
     return {FILES[0]: "".join(sections).encode(), FILES[1]: (json.dumps(catalog, indent=2, ensure_ascii=False) + "\n").encode(),
-            FILES[2]: archive.getvalue(), FILES[3]: (evidence / FILES[3]).read_bytes()}
+            FILES[2]: archive, FILES[3]: (evidence / FILES[3]).read_bytes()}
 
 
 def prepare():

@@ -35,3 +35,54 @@ a new public release artifact or a replacement for the license terms.
 rust-1.99.0-library-Cargo.lock records the standard library's separate dependency
 versions/checksums, recovered from the verified Rust source distribution. Its
 notices supplement COPYRIGHT-library.html where that report omits entries.
+
+Additional AppImage source evidence
+----------------------------------
+The matching upstream runtime-x86_64.debug has the same GNU build ID and the
+CRC32 required by the runtime's .gnu_debuglink. Its DWARF identifies musl 1.2.5
+and libfuse 3.15.0. Its symbols locate runtime version functions reporting zstd
+1.5.6, zlib 1.3.1 and mimalloc 2.1.7. See native_provenance in the inventory for
+digests, offsets and references. These upstream source versions are included.
+They do not identify the exact Alpine package revisions or downstream patches.
+
+musl-1.2.5.tar.gz, zstd-1.5.6.tar.gz and zlib-1.3.1.tar.gz preserve upstream
+archive bytes. mimalloc-2.1.7-source.tar.gz preserves every source and license
+file byte but omits four unrelated prebuilt Windows executables from upstream's
+bin directory. The inventory records the original digest and excluded paths;
+tar ownership and times are normalized. This is a source-only repack, not an
+upstream release archive or a modified mimalloc implementation.
+
+LGPL relinking status and required verification
+----------------------------------------------
+The relevant LGPL 2.1 section 6(a) work is the standalone AppImage launcher
+linked with libfuse, not the separate CodeConvoy executable in its filesystem.
+The supplied launcher source is the work that uses the library; the library
+archive plus patches/libfuse/mount.c.diff contain the known library change.
+Read LGPL2.txt and LICENSE inside libfuse's archive, and the launcher LICENSE.
+No written source offer is substituted for the included materials.
+
+To complete verification, recover the original Alpine APK revisions/patches
+and build inputs, prepare a clean x86-64 Linux build environment, and follow
+the launcher's BUILD.md and scripts/build-runtime.sh. Its Dockerfile currently
+downloads mutable packages, so running it alone does not prove correspondence.
+Then change libfuse, rebuild/relink the launcher with the modified library and
+use the existing appimagetool --runtime-file mechanism with the extracted
+AppDir. Verify extraction, FUSE startup and normal exit of the rebuilt image.
+Retain commands, input hashes and results. This modified-library relink has
+NOT been performed successfully for this candidate; publication remains blocked.
+Recipients may modify the runtime for their own use and reverse engineer it
+to debug those modifications; CodeConvoy imposes no additional restrictions.
+
+nsis-tauri-utils-0.2.1.tar.gz is the exact upstream tagged source with its MIT
+and Apache notices. The release DLL matches upstream's published SHA-1. The
+inventory and notices also cover 17 crate versions recovered from DLL strings.
+The tag has no Cargo.lock, so neither this archive nor a new Cargo resolution
+establishes the complete original dependency graph. Its embedded compiler is
+Rust 1.71.1, not CodeConvoy's Rust 1.99.0. Remaining plugin source/license and
+toolchain evidence gaps remain release blockers.
+
+The outer ZIP has sorted portable names, 1980-01-01 timestamps, Unix regular
+file mode 0644, fixed ZIP 2.0 metadata, no comments/extra fields, and no second
+compression pass. Host file times, permissions and operating system do not
+change its bytes. Final-package checks compare the actual ZIP bytes, including
+metadata, with the audited bundle.

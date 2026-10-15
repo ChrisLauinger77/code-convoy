@@ -1,5 +1,10 @@
 # CodeConvoy 1.0.0 — Final readiness report
 
+PR 68 follow-up: [native license evidence and deterministic source bundles](license-blocker-evidence.md).
+All five publication blockers remain enforced. The fresh candidate revision and
+verification results are recorded in [PR 68](https://github.com/ChrisLauinger77/code-convoy/pull/68);
+the candidate record below describes the earlier implementation.
+
 **Recommendation: Not Ready.** Metadata is prepared for 1.0.0 and the existing
 first-stage workflow can build candidates without tags. Known third-party
 licensing obligations and missing native desktop evidence prevent release

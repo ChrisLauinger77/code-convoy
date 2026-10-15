@@ -37,12 +37,26 @@ for the available runtime/library source and patch. Source/relink completeness
 and several native component identities remain unresolved below. This candidate
 bundle is audit evidence, NOT a certification of complete license compliance.
 Public release is blocked until the listed obligations have been resolved.
+CodeConvoy imposes no restriction on modifying the LGPL-covered runtime for
+your own use or reverse engineering it to debug those modifications. The full
+LGPL-2.1 text and libfuse notices are reproduced below. The available source
+bundle is not yet a verified section 6(a) relinking kit.
 
 The Windows installer uses NSIS 3.09 and its LZMA decoder. Its source is
 available as nsis-3.09-src.tar.bz2 in THIRD-PARTY-SOURCES.zip, together with
 the CPL-1.0 terms and linking exception in the notices below. CodeConvoy
 provides no additional warranties on behalf of these contributors. Any
 different terms for CodeConvoy's own files are offered by CodeConvoy alone.
+
+The installer plugin's ring dependency includes code from BoringSSL/OpenSSL:
+This product includes software developed by the OpenSSL Project for use in the
+OpenSSL Toolkit (http://www.openssl.org/).
+This product includes cryptographic software written by Eric Young
+(eay@cryptsoft.com). This product includes software written by Tim Hudson
+(tjh@cryptsoft.com).
+The complete upstream notices and conditions appear below. Additional plugin
+dependencies and toolchain obligations remain unresolved; the recovered list
+is not represented as a complete binary inventory.
 
 Agent CLIs, Git, host graphics/desktop libraries, macOS frameworks and Windows
 system DLLs are installed separately and are not bundled by CodeConvoy. The
