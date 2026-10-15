@@ -134,13 +134,17 @@ and 17 plugin dependency versions are now established, with explicit limits.
    standard library and native toolchain remain unresolved; the tag has no
    Cargo.lock. Plugin hashes prevent an
    unnoticed binary substitution during future candidate builds.
-5. **Windows CRT.** Record the actual hosted toolset/SDK runtime versions and
-   review applicable Microsoft redistribution rights for statically linked
-   runtime code. The application MIT license does not grant those rights.
-   Microsoft's [redistribution guidance](https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files)
-   points distributors to the applicable Visual Studio/SDK license terms. The
-   reference runner actually used a VS 2026 image; installed-tool lists do not
-   prove which static libraries were selected by the linker.
+5. **Windows CRT.** Windows packaging now requires an application-bound
+   `/VERBOSE:LIB` capture of the selected toolset/SDK libraries, hashes and
+   archive members. Final installer/helper PE inspection and final package
+   hashes are retained separately from the six candidate assets. The capture
+   is evidence, not redistribution approval. Applicable static-code grants,
+   hosted build entitlement, recipient conditions and the older prebuilt
+   helpers' runtime provenance still require confirmation. See the Windows
+   section of [the evidence record](license-blocker-evidence.md#5-windows-static-crt-unresolved)
+   for actual observations, Microsoft references and the repeatable checks.
+   The application remains MIT; that license does not grant rights to Microsoft
+   runtime code. The `windows-crt` publication guard remains active.
 
 Primary AppImage evidence: [runtime source/tag](https://github.com/AppImage/type2-runtime/tree/20251108),
 [libfuse terms](https://github.com/libfuse/libfuse/blob/fuse-3.15.0/LICENSE),

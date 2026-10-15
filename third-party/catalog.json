@@ -15399,11 +15399,12 @@
     },
     {
       "name": "Microsoft static C runtime / Windows SDK support code",
-      "version": "UNRESOLVED; hosted Windows toolset",
+      "version": "Application: MSVC 14.51.36231 / SDK 10.0.26100.0; prebuilt installer runtime inputs unresolved",
       "license": "Microsoft Visual Studio / SDK redistributable terms",
       "scope": "Windows application and installer",
       "notices": [],
-      "unresolved": "windows-crt"
+      "unresolved": "windows-crt",
+      "evidence": "evidence/windows-crt-38785562437.zip"
     },
     {
       "name": "Rust standard library and compiler-builtins",
@@ -16548,6 +16549,12 @@
       "sha256": "5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27",
       "origin": "https://static.rust-lang.org/dist/2026-10-01/rustc-1.99.0-x86_64-unknown-linux-gnu.tar.xz",
       "archive_sha256": "77171ba2a0345fdf2abc4fedda55d6de078dae7a68527c28be8c77dcc9604bd5"
+    },
+    {
+      "path": "evidence/windows-crt-38785562437.zip",
+      "sha256": "e2224cd608658761f567b73d1d6b0f40bce971abec951e6ce678faf575011031",
+      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38785562437",
+      "scope": "Repository audit evidence only; exact native linker/PE diagnostic bytes. No Microsoft library/object files or release binaries. Not added to the end-user source bundle."
     }
   ],
   "release_blockers": [
@@ -16569,7 +16576,7 @@
     },
     {
       "id": "windows-crt",
-      "detail": "The reference hosted image uses Visual Studio 2026; its installed tools do not identify the actual linked CRT/SDK objects. Confirm the static-library distribution grant and conditions under the applicable edition/SDK terms, separately for CodeConvoy and prebuilt installer plugins. A runtime end-user EULA or DLL REDIST list alone is insufficient."
+      "detail": "CI 38785562437 captures the application final link and packaged bytes: MSVC 14.51.36231 libcmt/libvcruntime and SDK 10.0.26100.0 libucrt, including selected member identities and archive hashes. The SDK REDIST list explicitly covers publicly released um/ucrt static-library paths. Confirm applicable VC static-library grant, hosted-build licensing basis, any overriding component terms and recipient/distributor conditions for installer and ZIP. Prebuilt installer runtime inputs remain separately unresolved; application evidence does not cover them. No legal approval is inferred from successful linking or absent CRT DLL imports."
     }
   ],
   "windows_installer_plugins": {
@@ -17668,7 +17675,71 @@
       "terms": "https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/",
       "terms_docx_sha256": "dd2ab92a7c2bb90dd509e16572707a34b13bc0bc09b9199d115f25594ac39053",
       "redistribution_list": "https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution",
-      "limitation": "Installed runner image is not evidence of which LIB objects were linked. Exact application and prebuilt plugin CRT/SDK inputs and applicable static-code redistribution grant still require confirmation."
+      "limitation": "The earlier reference_candidate/runner_image fields describe historical evidence. application_link_audit now proves the new application CRT inputs and package hashes, not prebuilt helper runtime provenance or fulfilment of Microsoft distribution conditions. SDK static-library directory coverage is documented; VC toolset grant, applicable hosted-build basis and recipient terms still require confirmation.",
+      "sdk_license": "https://aka.ms/WinSDKLicenseURL",
+      "sdk_license_rtf_sha256": "dd07eb178e00c6bba4148457fc00ff77cd4887eb521d504186fe59c9ec8bbe62",
+      "sdk_package_license_reference": "https://www.nuget.org/packages/Microsoft.Windows.SDK.CPP/10.0.26100.1",
+      "sdk_redistribution_list": "https://learn.microsoft.com/en-us/legal/windows-sdk/redist#static-lib-files",
+      "static_library_guidance": "https://www.microsoft.com/licensing/guidance/Visual-Studio",
+      "application_link_audit": {
+        "workflow_run": 38785562437,
+        "workflow_url": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38785562437",
+        "kind": "Non-publishing CI diagnostic; not a release candidate",
+        "source_commit": "acb9ff6646d07b18e7ce75ae3435652db0d2180f",
+        "evidence": "evidence/windows-crt-38785562437.zip",
+        "runner": {
+          "ImageOS": "win25-vs2026",
+          "ImageVersion": "20261007.264.1",
+          "GITHUB_RUN_ID": "38785562437",
+          "GITHUB_RUN_ATTEMPT": "1"
+        },
+        "toolchain": {
+          "visual_studio": {
+            "instanceId": "d2e552a4",
+            "installationPath": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise",
+            "installationVersion": "18.10.12224.181",
+            "productId": "Microsoft.VisualStudio.Product.Enterprise",
+            "isPrerelease": false
+          },
+          "environment": {
+            "VCTOOLSVERSION": "14.51.36231",
+            "VCTOOLSINSTALLDIR": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\",
+            "WINDOWSSDKVERSION": "10.0.26100.0\\",
+            "WINDOWSSDKDIR": "C:\\Program Files (x86)\\Windows Kits\\10\\",
+            "LIB": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\ATLMFC\\lib\\x64;C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\lib\\x64;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8.1\\lib\\um\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.26100.0\\ucrt\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\\\lib\\10.0.26100.0\\\\um\\x64"
+          },
+          "linker": {
+            "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\link.exe",
+            "sha256": "a8c42e25c91ca2453e1110540ac08f0fc12d7539454a11b9af8baeecb469837d",
+            "version": "Microsoft (R) Incremental Linker Version 14.51.36260.0"
+          }
+        },
+        "application_sha256": "a44e9de355a0701eeb812563fa6a6f50aba5796a4bea713c78a97a0c457da15b",
+        "selected_archives": 17,
+        "crt_archives": [
+          {
+            "path": "C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.26100.0\\ucrt\\x64\\libucrt.lib",
+            "sha256": "ea2ffa5d9b1ebc3fa76f34c364471750db8951b341dbccbc1bef628ef1a20e39",
+            "distinct_loaded_member_names": 243
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\lib\\x64\\libcmt.lib",
+            "sha256": "d4cc4c224455825dec1669f9ad6a9872a4f5b37ed1daae1fd0b9044d7650d908",
+            "distinct_loaded_member_names": 39
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\lib\\x64\\libvcruntime.lib",
+            "sha256": "f0a898588ecb26fe4c7530b2495a6fe5e768856309a33391702a3cbcb72b0589",
+            "distinct_loaded_member_names": 26
+          }
+        ],
+        "packages": {
+          "CodeConvoy-1.0.0-windows-x86_64-setup.exe": "c91332c8622bf892feba8d0838861fc80e4cf07aec1954731d226fce5dd3a831",
+          "CodeConvoy-1.0.0-windows-x86_64.zip": "a969c1cb11f9a0021c0bfc3fa1ff1744a43c77d2142098aac35956d4f0462fe1"
+        },
+        "independent_verification": "Downloaded final installer and ZIP pass existing byte/notice/source/plugin checks against the source revision with native CRLF checkout bytes. All eight PE hashes and raw diagnostic hashes match. Complete selected member lists, response file and retained-symbol map are in the evidence archive.",
+        "license_assessment": "unresolved"
+      }
     }
   }
 }

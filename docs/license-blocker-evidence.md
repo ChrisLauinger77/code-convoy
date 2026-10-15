@@ -152,28 +152,242 @@ cannot establish what that old DLL contains. The `nsis-plugins` gate remains.
 
 ## 5. Windows static CRT: unresolved
 
-The application uses `+crt-static`. The earlier successful candidate's actual
-runner was `windows-2025-vs2026`, image `20260925.250.1`, as recorded by GitHub;
-assuming Visual Studio 2022 because the OS label says Windows 2025 is incorrect.
-The [image manifest](https://github.com/actions/runner-images/blob/win25-vs2026/20260925.250/images/windows/Windows2025-VS2026-Readme.md)
-identifies installed software, not which library objects Rust's linker selected.
+### Capture and final-package verification
 
-The applicable edition/component terms must be established. Microsoft's
-[VS 2026 Enterprise/Professional terms](https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/)
-refer distribution to its [REDIST list](https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution)
-and impose conditions; the [V14 runtime EULA](https://visualstudio.microsoft.com/license-terms/vs2026-ga-visualcpp-v14-redist-runtime/)
-is an end-user license and is not by itself a distributor's grant. The downloaded
-Enterprise terms' original DOCX SHA-256 is recorded in the inventory. Microsoft's
-[licensing guidance](https://www.microsoft.com/licensing/guidance/Visual-Studio)
-discusses linked library code, but that general guidance alone does not identify
-this build's libraries or establish this distributor's applicable rights.
+`packaging/build.py` retains `+crt-static`, the existing Rust version and release
+flags. On Windows it selects the installed stable x64 MSVC developer environment
+through `vswhere` / `vcvarsall`, then wraps only the application's final link with
+`/VERBOSE:LIB`, full `/VERBOSE` detail and `/MAP`. It does not install or update
+MSVC or the SDK. Microsoft's
+[linker diagnostic documentation](https://learn.microsoft.com/en-us/cpp/build/reference/verbose-print-progress-messages?view=msvc-170)
+describes library paths and selected member identities. Merely searching a
+library or finding a symbol is not counted as loading an archive member. When
+MSVC prints only a basename on `Loaded`, it must match the immediately active
+absolute `Searching` path. Missing, mismatched or ended search context fails;
+there is no fallback lookup through installed libraries.
 
-**Still blocking:** record selected release CRT/UCRT/SDK library versions and
-hashes from the actual link, establish the applicable hosted toolset/SDK grant
-and distribution conditions, and separately cover the older prebuilt plugin
-CRTs. Do not ship Microsoft source or proprietary object files on the assumption
-that CodeConvoy's MIT license grants permission. No application license or
-installer terms are changed to manufacture a compliance claim.
+The capture records the VS instance/edition, toolset, SDK, linker banner/hash,
+Rust/Cargo versions, source revision, runner identity, linker arguments/response
+files, a retained-symbol map, selected archive paths/hashes and member names. Archive hashing happens
+inside the wrapper, before Rust removes temporary import libraries. These are
+binary input identities, not recovered Microsoft source or a claim that every
+selected member survives linker garbage collection. No Microsoft `.lib`/`.obj`
+files are copied into the evidence or source bundle.
+
+`provenance.json` binds the capture to the application SHA-256 and build inputs.
+Missing, failed, stale or altered capture fails Windows packaging. The existing
+final installer extraction and ZIP byte comparisons remain mandatory. Native
+`dumpbin /headers /imports` inspection records each installer/helper separately;
+`packages.json` binds both final package hashes to the application and inspection
+evidence. An absent CRT DLL import does not establish which static CRT was used.
+All reports deliberately retain `license_assessment: unresolved`.
+
+The first-stage release workflow retains `windows-crt-evidence` separately from
+`packages-windows`; aggregation still consumes exactly the existing six formats.
+The existing CI workflow has an opt-in `windows_crt_audit` input, using the same
+Rust/packager pins for a Windows packaging/install/uninstall diagnostic. This is
+not a release candidate. Release candidates continue to be built from `main`
+after merge. CI artifacts expire: retain the reviewed evidence with the release
+records before expiry. The reviewed diagnostic below is also retained in the
+repository, with its archive hash enforced by the existing catalog checker.
+
+### Verified native diagnostic, 2026-10-15
+
+[CI run 38785562437](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38785562437)
+built source `acb9ff6646d07b18e7ce75ae3435652db0d2180f`. This is the final
+implementation revision; subsequent documentation/catalog evidence records do
+not describe a rebuilt release candidate. The runner was
+`win25-vs2026/20261007.264.1`, with these actual selected tools:
+
+| Tool | Observed identity |
+| --- | --- |
+| Visual Studio | Enterprise, installation `18.10.12224.181`, non-prerelease |
+| VC toolset | `14.51.36231` |
+| MSVC linker | `14.51.36260.0` |
+| Windows SDK | `10.0.26100.0` |
+| Rust / Cargo | `1.99.0` / `1.99.0`; LLVM `23.1.1` |
+| cargo-packager | Existing pinned `0.11.8` |
+
+The SDK identity above is the selected directory version. Its library hashes
+identify the exact audited bytes; the capture does not infer an SDK installer
+servicing revision from that directory name.
+
+The trace records 17 archives with loaded members. Its three selected CRT
+archives are below. Counts are distinct member **names**, not a claim that every
+loaded object survives optimization. The map independently contains retained
+symbols from all three libraries.
+
+| Selected archive | Distinct loaded member names | SHA-256 |
+| --- | ---: | --- |
+| `libcmt.lib` | 39 | `d4cc4c224455825dec1669f9ad6a9872a4f5b37ed1daae1fd0b9044d7650d908` |
+| `libvcruntime.lib` | 26 | `f0a898588ecb26fe4c7530b2495a6fe5e768856309a33391702a3cbcb72b0589` |
+| `libucrt.lib` | 243 | `ea2ffa5d9b1ebc3fa76f34c364471750db8951b341dbccbc1bef628ef1a20e39` |
+
+The first two are under
+`C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\lib\x64`;
+the third is under
+`C:\Program Files (x86)\Windows Kits\10\lib\10.0.26100.0\ucrt\x64`.
+Examples of selected members include `exe_main.obj` / `chkstk.obj`,
+`memcpy.obj` / `frame.obj`, and `strnlen.obj` / `round.obj`, respectively.
+The remaining Loaded records identify SDK `kernel32.lib`, `ntdll.lib`,
+`user32.lib`, the `windows_x86_64_msvc` import library, Rust compiler-builtins,
+and generated import archives. Direct object/rlib inputs are additionally
+recorded in the original response file; the 17 archives are not a count of all
+Rust dependencies.
+
+[The retained evidence archive](../third-party/evidence/windows-crt-38785562437.zip)
+contains the complete trace, symbol map, original response file, selected
+archive/member identities, toolchain/provenance JSON, eight PE inspections and
+final package manifest. All 17 entries preserve the downloaded bytes; the
+archive contains no application binaries or Microsoft `.lib`/`.obj` files.
+It is repository audit evidence, not a new release format or an addition to the
+end-user source bundle. Its SHA-256 is
+`e2224cd608658761f567b73d1d6b0f40bce971abec951e6ce678faf575011031`.
+
+| Final diagnostic artifact | SHA-256 |
+| --- | --- |
+| `CodeConvoy.exe` in both packages | `a44e9de355a0701eeb812563fa6a6f50aba5796a4bea713c78a97a0c457da15b` |
+| `CodeConvoy-1.0.0-windows-x86_64-setup.exe` | `c91332c8622bf892feba8d0838861fc80e4cf07aec1954731d226fce5dd3a831` |
+| `CodeConvoy-1.0.0-windows-x86_64.zip` | `a969c1cb11f9a0021c0bfc3fa1ff1744a43c77d2142098aac35956d4f0462fe1` |
+
+Independent local extraction verified both downloaded final packages against
+that exact source revision: application bytes, all notice/source material,
+pinned plugins, every PE hash and raw inspection hash, and the provenance chain
+passed. The reference checkout reproduced the native CRLF bytes recorded for
+the four build inputs and project `LICENSE`; no production check was relaxed
+to accommodate Linux line endings.
+
+### Prebuilt helper scope
+
+These helpers are not rebuilt by the application link. The pinned DLLs already
+in the audit have no VC/UCRT DLL imports. Their PE linker fields are 14.0 for
+ApplicationID, 14.36 for nsis-tauri-utils and 6.0 for StartMenu/System/nsDialogs.
+These fields do not establish a complete compiler version or static-library
+identity. The fresh native audit independently records their hashes, PE headers
+and imports; plugin hashes must still match the existing inventory.
+
+The already bundled `nsis-3.09-src.tar.bz2` supplies additional CRT-specific
+context: `SCons/Config/ms:152` disables default libraries for the stub, and
+`SConstruct:707` defaults plugin builds to `nodeflib=True`. StartMenu and
+nsDialogs retain that default; `Contrib/System/SConscript` explicitly sets it
+false. The GNU stub configuration likewise uses `-nostdlib`. This is evidence
+against assuming that every NSIS binary necessarily embeds Microsoft's CRT,
+but it is not an exact-binary build trace. The build-only `makensis` compiler's
+runtime settings must not be confused with those of the redistributed stub.
+No NSIS source, plugin, license or tool version is changed here.
+
+The final native inspection covered the setup stub, application, uninstaller
+and all five extracted plugins. The ApplicationID and nsis-tauri-utils hashes
+match the existing inventory; none of the eight inspected PEs imports a VC/UCRT
+runtime DLL. The full per-binary imports and hashes are preserved in
+`packaged-binaries.json`. This does not settle the helpers' static runtime
+provenance, including the System plugin whose source permits default libraries.
+
+### Redistribution assessment
+
+Confirmed reference terms and guidance:
+
+- Microsoft [CRT documentation](https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features?view=msvc-170)
+  distinguishes SDK `libucrt.lib`, VC `libvcruntime.lib` and static startup
+  `libcmt.lib`. Debug variants are not redistributable. Even dynamic CRT builds
+  retain statically linked startup code; changing linking is not a license fix.
+- Microsoft [licensing guidance](https://www.microsoft.com/licensing/guidance/Visual-Studio)
+  permits distribution of linked output for `.lib` code identified as
+  distributable, rather than redistribution of the library itself. This supports
+  retaining static linking, conditional on identifying the applicable grant.
+- [VS 2026 Enterprise/Professional terms](https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/),
+  under “Distributable Code”, refer to the
+  [REDIST list](https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution).
+  They require significant application functionality, protective recipient and
+  distributor terms, and indemnification subject to the stated exception. They
+  restrict unreleased components, misleading trademark use and imposing an
+  excluded source license on Microsoft code. Trial/Insiders restrictions and
+  separate component terms also matter. The original downloaded terms' SHA-256
+  remains recorded in the catalog.
+- The official [SDK 26100 package](https://www.nuget.org/packages/Microsoft.Windows.SDK.CPP/10.0.26100.1)
+  links to [Microsoft's SDK license](https://aka.ms/WinSDKLicenseURL), still titled
+  Windows 10 SDK. The retrieved RTF SHA-256 is
+  `dd07eb178e00c6bba4148457fc00ff77cd4887eb521d504186fe59c9ec8bbe62`.
+  Its distributable-code terms require linked `.lib` output, preserved notices,
+  an application copyright notice, protective recipient terms and distribution
+  on Microsoft operating systems, as well as significant application
+  functionality and indemnification; other terms accompanying components control.
+  Crucially, the referenced [SDK REDIST list](https://learn.microsoft.com/en-us/legal/windows-sdk/redist#static-lib-files)
+  explicitly covers static `.lib` files in publicly released SDK `um` and
+  `ucrt` directories, including x64. This establishes published static-library
+  coverage for those SDK paths, subject to the conditions; it does not cover
+  the separate VC toolset directory or prove fulfilment of recipient terms.
+- The [redistribution guidance](https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files)
+  directs distributors to the applicable license. The
+  [V14 runtime EULA](https://visualstudio.microsoft.com/license-terms/vs2026-ga-visualcpp-v14-redist-runtime/)
+  is not itself proof of a distributor's grant. An installed Enterprise instance
+  does not prove a trial restriction applies, nor establish the maintainer's
+  entitlement or the hosted service's applicable agreement.
+
+The current packages preserve the project's copyright/license file and existing
+third-party notices. This investigation has not established that shipping the
+complete VS or SDK agreement is mandatory, or that doing so would satisfy the
+recipient-agreement requirement. The needed recipient wording and notice
+placement must be assessed under the confirmed applicable terms; no Microsoft
+runtime code is relabeled as MIT.
+
+**Still needed before resolving this blocker:**
+
+1. Confirm the applicable grant for the selected VC toolset libraries and the
+   licensing basis for hosted builds. SDK static-library path coverage is now
+   documented, but confirm that no differing in-installation component terms
+   override the public SDK terms. The VS DLL REDIST list alone does not settle
+   static-library coverage for `libcmt.lib` / `libvcruntime.lib`.
+2. Have the maintainer confirm the applicable recipient/distributor conditions
+   and how both NSIS and portable ZIP distribution satisfy them. Determine any
+   required notice/terms text from that confirmed basis. A notice file alone
+   cannot be assumed to satisfy an agreement requirement. No new EULA, assent
+   screen or restriction on CodeConvoy's MIT source is invented here.
+3. Establish CRT provenance and redistribution coverage for prebuilt installer
+   binaries separately. In particular, the pinned `nsis-tauri-utils` DLL was
+   built with Rust 1.71.1 and static CRT settings; the application's new trace
+   does not cover it. This overlaps the existing plugin blocker; no plugin is
+   replaced or otherwise re-audited in this task.
+
+These are unresolved applicability/fulfilment questions, not a finding that
+static linking or MIT-licensed CodeConvoy source is prohibited. The Windows CRT
+publication guard stays active. The other four publication blockers are unchanged.
+
+### Repeat after a runner or toolchain update
+
+Run the opt-in Windows CI diagnostic, then compare actual selected archive
+versions/hashes/member lists, linker/SDK identities and helper hashes/imports
+with the reviewed record. Recheck grants/conditions for changed inputs, including
+security servicing of a statically linked runtime. After merge, capture and
+retain new evidence from the ordinary `main` candidate and verify final package
+hashes again. A green capture is technical evidence only, never automatic legal
+approval. Keep the existing toolchain pins and publication guards in place.
+
+### Validation for the CRT capture change
+
+Local `cargo fmt --check`, strict all-target/all-feature Clippy, all-feature
+Rust tests (602 passed, 10 ignored), and `cargo build --release` passed.
+All 78 packaging tests pass, including malformed/stale capture, temporary
+archive lifetime, active search-path binding, final-package hash binding and
+inspection failure propagation. The license inventory check passes with 457
+locked crates and five unresolved obligations. `release-ready` still rejects
+all five blocker IDs, including `windows-crt`.
+
+The native diagnostic passed release compilation, linker capture, final NSIS
+and ZIP inspection, and the existing Windows installation smoke test:
+executable metadata, per-user registration, Start Menu shortcut, identical
+installed/portable executables, installed notice/source bytes, uninstall and
+user-data preservation. Independent downloaded-artifact verification also
+passed as described above. These checks do not establish interactive desktop,
+file-dialog or desktop cancellation behavior.
+
+The linked CI run passed on Linux, macOS and Windows. Windows also passed the
+ignored software-adapter/egui startup check; this is not an interactive desktop
+test. The Windows release build ran inside the audited packaging step, so CI
+skipped only its redundant final release-build invocation. No first-stage
+release candidate was dispatched from this branch. After merge,
+the usual `main` candidate must carry its own fresh provenance and final
+package hashes; this diagnostic is not a substitute for that release record.
 
 ## Reproducible source ZIP and gates
 
