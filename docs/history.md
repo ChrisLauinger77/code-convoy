@@ -87,8 +87,10 @@ existing meaning: remove eligible terminal history regardless of retention polic
 They share the same protected deletion and atomic save path. Selection alone does
 not protect an otherwise removable convoy.
 
-Deleted history may not be recoverable. There is no backup, restore, storage
-overview or automatic worktree cleanup feature.
+Deleted history may not be recoverable. There is no built-in backup/restore or
+automatic worktree cleanup. [Storage Overview](storage.md) measures known storage;
+[Manage Worktrees](worktree-cleanup.md) provides separately verified, explicitly
+confirmed cleanup. Neither reconstructs removed history.
 
 ## Export before cleanup
 
@@ -121,16 +123,18 @@ behind a periodic writer on the UI thread; conflicting actions wait or report bu
 Those explicit saves and the final exit save can still pause on slow storage.
 
 A missing state file starts an empty application. An empty file, invalid UTF-8,
-truncated JSON, missing core `version`/`next_run`/`runs` fields, invalid records,
+truncated JSON, missing core `version`/`next_run`/`runs` fields, malformed records,
 malformed retention settings, duplicate convoy IDs or an unsupported future version
 is an error. Startup stops; the original file is left unchanged and that Store
 refuses further writes, including retention. Back up the file and use a compatible version or restore a
 known-good backup before restarting. Move the preserved file aside only if you
 intend to start fresh. Exports are reports, not backups or import files.
 
-Legacy optional fields still default normally. A lagging run counter advances past
-the highest retained ID; a missing counter is not guessed. Store loading never writes
-automatically, resumes an agent, invents completion times or deletes a worktree.
+Legacy optional fields still default normally. Readable numeric global and draft
+concurrency settings outside 1–16 are clamped into that range. A lagging run counter
+advances past the highest retained ID; a missing counter is not guessed. Store
+loading never writes automatically, resumes an agent, invents completion times or
+deletes a worktree. A later save can persist the normalized limits and counter.
 The UI subsequently saves explicit recovery observations through its usual worker.
 No partial-entry salvage or automatic destructive migration is attempted.
 
@@ -142,6 +146,9 @@ sharing violations can fail safely. Native Windows/macOS and power-loss testing
 remain release-candidate checks, not inferred from Linux tests.
 
 ## Data-format compatibility
+
+See the [1.x compatibility policy](compatibility.md) for the broader settings,
+export, operating-system and external CLI boundaries.
 
 The application version, internal state format and public export schema are
 independent. Preparing application version 1.0.0 does not require changing either

@@ -2,7 +2,9 @@
 
 Original CodeConvoy artwork, created for this project: a code chevron connected
 to three repository nodes. Copyright 2026 CodeConvoy contributors; MIT, like
-the application. No third-party artwork or fonts are used.
+the application. No third-party artwork or fonts are used to create the icon.
+The application separately embeds egui's default fonts; see
+[dependency licensing](../CONTRIBUTING.md#dependencies-and-licensing).
 
 `generate_icons.py` is the editable geometric source. Regenerate with Python
 and Pillow 12.3.0. PNGs serve the application and Linux desktop; ICO serves

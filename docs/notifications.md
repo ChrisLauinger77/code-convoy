@@ -81,7 +81,7 @@ See [desktop settings and recovery](desktop-workflow.md).
   removes the notification and completes its response listener, including when
   Notification Center's Clear All never sends a dismissal callback. Expiration
   does not activate a convoy or report a delivery failure; results remain in history.
-- **Windows 10/11:** `tauri-winrt-notification` 0.8.1 supplies standalone native
+- **Windows:** `tauri-winrt-notification` 0.8.1 supplies standalone native
   WinRT toasts and in-process activation callbacks. It is a native API wrapper;
   it adds no Tauri framework, WebView or web frontend. Both installer and portable
   builds register their display name under the current user's
@@ -134,8 +134,11 @@ untracked Direct observations without changing HEAD or the real index. Headless
 egui tests verify focus/minimized inputs, restore-before-focus commands and existing
 Review navigation. No authenticated agent is needed.
 
-Native notification smoke tests remain **unperformed** on all three platforms.
-Before publishing 0.4.0, use disposable repositories and fixture agents to check:
+Visible native notification delivery and click routing remain **unverified** in
+the [platform matrix](platform-validation.md#current-verification-matrix).
+Private-D-Bus unavailable-service checks have passed on Linux, but do not prove
+banner presentation. For a release candidate, use disposable repositories and
+fixture agents to check:
 
 - Linux GNOME/Wayland and X11: success while unfocused/minimized; silence while
   focused; failure while focused; one alert for a multi-repository mixed run;
@@ -146,13 +149,13 @@ Before publishing 0.4.0, use disposable repositories and fixture agents to check
   minimized restore, clear-all/dismiss, one-hour expiration without activation or
   error, and About and Quit still working. Bare binary
   failure should remain a notification diagnostic without affecting execution.
-- Windows 10 and 11 installed and portable: CodeConvoy sender identity, permission
+- Windows 11 installed and portable: CodeConvoy sender identity, permission
   settings/Do Not Disturb, body click while another convoy is selected, banner and
   Notification Center click behavior, minimized restore and foreground restrictions.
 - Everywhere: toggle each filter during a run, remove history before clicking,
   leave an isolated result unavailable, quit with visible notifications, restart
   terminal/interrupted history, and verify that no completion alerts replay.
 
-Native macOS/Windows builds, package candidate installation and the above desktop
-checks are release gates still requiring their respective hosts. Linux source
-validation results are recorded in [release notes](release-notes.md).
+Hosted macOS/Windows builds and package checks are recorded in the platform
+matrix. The interactive notification checks above still require their respective
+desktops; a hosted build is not notification-delivery evidence.

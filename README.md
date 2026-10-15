@@ -27,7 +27,32 @@ or overlapping groups, preserving existing commands by default. Overwrite requir
 explicit confirmation; assignment never runs validation. See
 [validation configuration](docs/validation.md).
 
-![image](assets/screenshot.png)
+![CodeConvoy on macOS showing a multi-repository convoy and Activity output](assets/screenshot.png)
+
+## Documentation
+
+New here? Follow [Getting started](docs/getting-started.md) from installation
+through the first convoy, Git review, manual validation and history.
+
+| Topic | Guide |
+| --- | --- |
+| Packages, requirements and upgrading | [Installation](#installation) |
+| Groups, filtering, templates and attachments | [Task context](docs/task-context.md) |
+| Worktree location, tray and window lifecycle | [Desktop workflow](docs/desktop-workflow.md) |
+| Result review, comparison and copying | [Visibility and review](docs/visibility.md) |
+| Validation commands, presets and bulk assignment | [Manual validation](docs/validation.md) |
+| History, retention and reports | [History](docs/history.md) · [Markdown/JSON export](docs/history-export.md) |
+| Storage measurement and safe cleanup | [Storage Overview](docs/storage.md) · [Managed worktrees](docs/worktree-cleanup.md) |
+| Keyboard and alerts | [Shortcuts](#keyboard-shortcuts) · [Notifications](docs/notifications.md) |
+| Upgrade and external CLI boundaries | [1.x compatibility](docs/compatibility.md) |
+| Platform evidence and remaining checks | [Verification matrix](docs/platform-validation.md) |
+| Build, contribute and report issues | [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Releasing](docs/releasing.md) |
+
+The guides describe the current source. Published packages can predate these
+changes; use their release notes and the dated verification records for exact
+version/platform evidence. Preparing 1.0 does not itself publish a new release.
+
+## Agent support
 
 | Backend            | Status    | Authenticated E2E status                                                                        |
 | ------------------ | --------- | ----------------------------------------------------------------------------------------------- |
@@ -336,7 +361,7 @@ automation, commits or pushes.
 
 Requirements:
 
-- Rust 1.95 or later and Cargo.
+- Rust and Cargo (manifest minimum 1.95; development CI uses stable and release builds pin 1.99.0). See [toolchain and build instructions](CONTRIBUTING.md#build-prerequisites).
 - Git on `PATH`.
 - A working desktop graphics environment.
 - The CLI for the agent you want to use, already installed and authenticated using its own login flow. Its executable must be in the desktop application's `PATH` or a common installation folder, or supply its absolute path in the UI. No agent CLI is required for CodeConvoy to start; availability is checked automatically, and **Check CLI** refreshes the selected agent.
@@ -344,7 +369,7 @@ Requirements:
 On Debian/Ubuntu, the native source-build prerequisites are:
 
 ```sh
-sudo apt install build-essential pkg-config libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev
+sudo apt install build-essential pkg-config libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev dbus
 cargo run --locked
 ```
 
@@ -358,9 +383,10 @@ The executable is `target/release/codeconvoy` (`codeconvoy.exe` on Windows).
 Windows source builds need the MSVC C++ build tools and Windows SDK; macOS needs
 Xcode Command Line Tools. Packaging additionally needs the tools listed in the
 [release procedure](docs/releasing.md); those are not application runtime
-requirements. Native macOS UI and Universal DMG checks have passed, and Codex,
-Copilot and Claude execution is user-verified on macOS. Windows interactive runtime
-verification and authenticated OpenCode execution remain outstanding.
+requirements. See [Contributing](CONTRIBUTING.md) for clean-checkout instructions
+on all three platforms, required checks and disposable native UI fixtures.
+Authenticated OpenCode execution remains unverified. Native desktop and
+exact-package evidence is tracked in the [platform matrix](docs/platform-validation.md).
 
 ### Windows VMs and graphics
 
@@ -380,6 +406,10 @@ The old `egui_glow requires OpenGL 2.0+` startup dialog means the OpenGL rendere
 **Browse…** uses the desktop's folder picker: an XDG Desktop Portal on Linux, an NSOpenPanel sheet on macOS, and the native Windows file dialog in folder mode. Linux needs a FileChooser-capable portal backend (such as GTK/GNOME/KDE) and runtime `libdbus`; `zenity` is the fallback when the portal is unavailable. Manual path entry remains available. See [folder-picker implementation and validation](docs/folder-picker-validation.md).
 
 ## First run
+
+For a guided walkthrough including groups, validation and history, start with
+[Getting started](docs/getting-started.md). The reference below covers detailed
+execution and result-safety behavior.
 
 1. Enter a task and select Codex, GitHub Copilot CLI, OpenCode, or Claude Code.
 2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. OpenCode offers its own model, agent, variant and permission controls. Claude offers model, effort, turn limit and tool permissions. Model and reasoning support depends on the selected CLI/model.
@@ -464,6 +494,8 @@ Retry and follow-up provenance are informational links to a previous convoy, wit
 The execution controls stay visible while the task and repository pane scrolls. **Appearance** follows the system theme by default and saves dark/light overrides across restarts. Older state without a saved choice uses System. Output and diffs render only visible lines, with Copy actions for the full retained text. Diff headers, additions, and removals have distinct styling; wide lines scroll horizontally.
 
 Keyboard navigation uses egui's Tab / Shift+Tab focus traversal, with task, backend settings, repositories, then execution controls in order. Use arrows within menus and Enter / Space to activate controls. In the convoy list, Up/Down and Home/End reach history beyond the visible rows. Numeric fields become editable when focused. Dialogs keep focus inside, open on a safe action or an editable field, and return focus to their available launcher when closed. Escape dismisses an open menu before its dialog. Path entry supports paste. No file chooser is required.
+
+### Keyboard shortcuts
 
 Application shortcuts use **Command (⌘) on macOS** and **Ctrl on Linux/Windows**.
 Open **Settings → Keyboard Shortcuts…** for the in-app reference.
@@ -683,6 +715,11 @@ A lock prevents two instances sharing the same state directory. On Unix the dire
 
 ## Development
 
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for platform prerequisites, disposable
+UI testing, issue reporting and dependency-license review. See
+[SECURITY.md](SECURITY.md) for vulnerability reporting and the
+[compatibility policy](docs/compatibility.md) for intended 1.x boundaries.
+
 The [CI workflow](.github/workflows/ci.yml) runs on pull requests targeting `main`
 and manual dispatch. Changes consisting entirely of `**/*.md` files skip
 CI; changes that also include other files still run it. CI uses stable Rust and
@@ -708,7 +745,12 @@ The `test-support` feature builds a deterministic local test executable. It is n
 cargo test --all-features --test copilot installed_copilot_accepts_the_exact_command_flags -- --ignored --nocapture
 ```
 
-Read [the architecture](docs/architecture.md) for module boundaries and implementation tradeoffs. Claude is the fourth and final backend for the v0.1.0 cycle. The v0.2 task-context changes add only backend-owned attachment validation/transport and optional Activity summaries; no additional backend is added. Authenticated OpenCode E2E and Windows runtime verification remain outstanding; Claude execution is user-verified on macOS.
+Read [the architecture](docs/architecture.md) for module boundaries and implementation
+tradeoffs. The four backends keep their own CLI contracts. Authenticated OpenCode
+E2E remains unverified; Claude has Linux/macOS user evidence and an authenticated
+Linux Auto probe in [its validation record](docs/claude-validation.md).
+Windows package/process checks have passed in hosted CI; interactive desktop
+checks remain separate in the [platform matrix](docs/platform-validation.md).
 
 ## License
 
