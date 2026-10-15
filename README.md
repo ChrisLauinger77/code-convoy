@@ -754,4 +754,8 @@ checks remain separate in the [platform matrix](docs/platform-validation.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+CodeConvoy's own code and original artwork are MIT licensed. See [LICENSE](LICENSE).
+Third-party components retain their own terms. Packages carry offline notices,
+an inventory and applicable source archives; see [third-party licensing](docs/third-party-licenses.md)
+for their locations and unresolved release obligations. The audit does not yet
+certify complete license compliance.

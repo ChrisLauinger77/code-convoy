@@ -1,5 +1,13 @@
 # Cross-platform release verification
 
+## Third-party license delivery
+
+The [PR 5 license audit](third-party-licenses.md) separately records final-package
+notice/source inspection. Its publication blockers remain independent of the
+runtime results below. Earlier candidates predate the new notice bundle and
+cannot establish its presence. Packaging checks do not certify complete legal
+compliance or replace native desktop verification.
+
 ## Linux glibc 2.39 baseline
 
 This focused infrastructure change follows readiness PR 3 and does not start

@@ -3,6 +3,8 @@ import json
 import os
 import subprocess
 
+from licenses import require_release_ready
+
 from release import DIST, ROOT, artifact_names, check_tag, checksum, run, verify_checksums, version
 
 def main():
@@ -12,6 +14,9 @@ def main():
     # Require all six recorded digests. Never repair or regenerate a downloaded
     # manifest before publication: an incomplete one must reject the candidate.
     verify_checksums(DIST)
+    # Candidate builds may collect audit evidence. Publishing is separate and
+    # must not turn an explicitly unresolved source/license obligation green.
+    require_release_ready()
     names = artifact_names(version()) + ["SHA256SUMS"]
     run("gh", "release", "create", tag, "--verify-tag", "--draft", "--title", f"CodeConvoy {tag}",
         "--notes-file", ROOT / "docs/release-notes.md", *[DIST / name for name in names])

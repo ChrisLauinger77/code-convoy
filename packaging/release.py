@@ -13,6 +13,8 @@ import sys
 import tomllib
 import zipfile
 
+import licenses
+
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
 IDENTIFIER = "io.github.chrislauinger77.code-convoy"
@@ -101,15 +103,19 @@ def fresh_work(platform):
 
 def package(work, binary_dir, binary, format_name, *, glibc=None):
     config = json.loads((ROOT / "packaging/packager.json").read_text())
+    bundle = licenses.prepare()
     if format_name == "deb":
         if not glibc or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", glibc):
             raise ValueError("DEB packaging requires the executable's measured glibc minimum")
         config["deb"]["depends"] = [
             f"libc6 (>= {glibc})" if dependency == "libc6" else dependency
             for dependency in config["deb"]["depends"]]
+        config["deb"]["files"].update({str(bundle / name): f"usr/share/doc/code-convoy/{name}"
+                                        for name in licenses.FILES})
     if format_name in ("app", "nsis"):
         # licenseFile displays installer terms; resources actually ship the text.
         config["resources"] = [{"src": "LICENSE", "target": "LICENSE.txt"}]
+        config["resources"].extend({"src": str(bundle / name), "target": name} for name in licenses.FILES)
     config.update(version=version(), description=metadata()["description"], homepage=metadata()["homepage"],
                   binaries=[{"path": binary, "main": True}], binariesDir=str(binary_dir),
                   outDir=str(work / "packages"))
@@ -142,10 +148,12 @@ def verify_mac_app(app):
     resources = app / "Contents/Resources"
     if (resources / "LICENSE.txt").read_bytes() != (ROOT / "LICENSE").read_bytes():
         raise ValueError("Application bundle license is missing or differs from LICENSE")
+    licenses.verify_directory(resources)
     icon = resources / info["CFBundleIconFile"]
     if not icon.is_file() or icon.stat().st_size == 0:
         raise ValueError("Application bundle icon is missing or empty")
     binary = app / "Contents/MacOS" / info["CFBundleExecutable"]
+    licenses.verify_binaries(app, {f"Contents/MacOS/{info['CFBundleExecutable']}"})
     verify_architectures(run("/usr/bin/lipo", "-archs", binary, capture_output=True, text=True).stdout)
     run("/usr/bin/codesign", "--verify", "--deep", "--strict", "--all-architectures", "--verbose=2", app)
     signature = run("/usr/bin/codesign", "--display", "--verbose=4", app, capture_output=True, text=True).stderr
@@ -216,20 +224,25 @@ def windows():
     shutil.copy2(ROOT / "target/release/codeconvoy.exe", exe)
     verify_windows_exe(exe)
     output = package(work, binaries, "CodeConvoy", "nsis")
-    shutil.copy2(one_file(output, "*.exe"), DIST / f"CodeConvoy-{version()}-windows-x86_64-setup.exe")
+    installer = DIST / f"CodeConvoy-{version()}-windows-x86_64-setup.exe"
+    shutil.copy2(one_file(output, "*.exe"), installer)
+    licenses.verify_windows_installer(installer, work, exe)
     archive = DIST / f"CodeConvoy-{version()}-windows-x86_64.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zipped:
         zipped.write(exe, "CodeConvoy.exe")
         zipped.write(ROOT / "LICENSE", "LICENSE.txt")
+        for name in licenses.FILES:
+            zipped.write(licenses.BUNDLE / name, name)
     verify_windows_zip(archive, exe)
 
 
 def verify_windows_zip(archive, exe):
+    expected = {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": (ROOT / "LICENSE").read_bytes(),
+                **licenses.materials()}
     with zipfile.ZipFile(archive) as zipped:
-        if (sorted(zipped.namelist()) != ["CodeConvoy.exe", "LICENSE.txt"]
+        if (sorted(zipped.namelist()) != sorted(expected)
                 or zipped.testzip() is not None
-                or zipped.read("CodeConvoy.exe") != exe.read_bytes()
-                or zipped.read("LICENSE.txt") != (ROOT / "LICENSE").read_bytes()):
+                or any(zipped.read(name) != data for name, data in expected.items())):
             raise ValueError("Portable ZIP failed verification")
 
 

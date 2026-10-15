@@ -244,6 +244,7 @@ class LinuxAbi(unittest.TestCase):
                  patch.object(linux, "package", return_value=output), patch.object(linux, "run", side_effect=run), \
                  patch.object(linux, "verify_linux_payload"), patch.object(linux, "download_tools", return_value={
                      "linuxdeploy": "linuxdeploy", "appimagetool": "appimagetool", "runtime": "runtime"}), \
+                 patch.object(linux.licenses, "verify_appimage_runtime"), \
                  patch.object(linux, "verify_artifacts", side_effect=ValueError("final ELF rejected")) as gate:
                 with self.assertRaisesRegex(ValueError, "final ELF rejected"):
                     linux.package_linux()

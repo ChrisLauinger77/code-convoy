@@ -1,0 +1,6 @@
+# License evidence is checksum-addressed and must retain its audited bytes on
+# Windows too. This does not change line-ending policy for application source.
+third-party/** -text
+# Preserve the compiler distribution's original HTML, including its whitespace.
+third-party/RUST-STDLIB-LICENSES.html -whitespace
+packaging/appimage-tools.json text eol=lf

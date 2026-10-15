@@ -19,6 +19,9 @@ remain in Git history; preserve separate historical validation records.
 3. Download those packages and complete the outstanding desktop checks in
    [quality-release-validation.md](quality-release-validation.md) and the native
    [platform checklist](platform-validation.md), particularly Linux and Windows.
+   Also review [third-party licensing](third-party-licenses.md). Candidate
+   packages carry the license audit evidence even while obligations are open;
+   the publisher refuses to create a release while recorded blockers remain.
 4. When satisfied with the packages, copy the exact `git tag` and `git push`
    commands from the candidate run's summary or **Print the exact commands to
    publish this candidate** step. The annotated tag includes `Candidate-Run:`
@@ -62,6 +65,26 @@ not move a published tag. A new release requires a new version/tag.
 
 Normal CI runs checks/builds only. A manual release workflow run cannot publish,
 even when its selected ref is a tag. The workflow never creates a Git tag.
+
+### Third-party package contents
+
+All six final formats include `THIRD-PARTY-NOTICES.txt`,
+`THIRD-PARTY-INVENTORY.json`, `THIRD-PARTY-SOURCES.zip` and
+`RUST-STDLIB-LICENSES.html`, alongside CodeConvoy's MIT license. These are
+resources inside the existing packages, not additional release asset formats.
+The source bundle includes the exact locked MPL crate and the available
+AppImage/NSIS sources. See the [audit](third-party-licenses.md) for remaining
+source/relink and attribution gaps.
+
+Packaging requires the audited Rust compiler version. Final DEB/RPM/AppImage
+payloads are extracted by the existing ABI gate and checked against the notice
+bundle; additional native binaries require inventory review. The AppImage
+runtime is byte-checked against the pinned runtime except its documented MD5
+field. macOS resources and native contents are checked in the signed app and
+again inside the mounted final DMG. Windows verifies the final ZIP and extracts
+the final NSIS installer with the runner's `7z`, including hashes of its embedded
+plugins; the existing install/uninstall test also checks the installed notices.
+Checksums, candidate provenance and the two-stage architecture remain intact.
 
 ## Homebrew and Scoop updates
 

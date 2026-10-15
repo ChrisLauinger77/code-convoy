@@ -1,0 +1,45 @@
+CodeConvoy third-party notices
+=============================
+
+CodeConvoy's original code and artwork remain MIT licensed (see LICENSE or
+LICENSE.txt). The MIT grant does not replace the terms of third-party code,
+fonts, data, libraries or installer components. No additional restrictions are
+imposed on recipients' rights under those licenses.
+
+This bundle conservatively includes notices for all four release targets,
+including build-time/generated-code inputs. Inclusion is not a claim that all
+listed components occur in every binary. THIRD-PARTY-INVENTORY.json records
+versions, license expressions, source identities, target coverage and gaps.
+OR expressions retain their upstream alternatives; they do not require taking
+every alternative. self_cell's Apache-2.0 alternative is used. No GPL or LGPL
+alternative is selected for otherwise MIT/Apache dual-licensed Rust crates.
+
+Unmodified option-ext 0.2.0 is covered by MPL-2.0. Its complete corresponding
+source is included as option-ext-0.2.0.crate in THIRD-PARTY-SOURCES.zip. The
+archive matches Cargo.lock's checksum; unpack it with a gzip/tar-capable tool.
+The covered source remains under MPL-2.0. CodeConvoy is a larger work with
+separate MIT-licensed source files; linking option-ext does not relicense those
+files. Preserve the MPL text and source notices when redistributing.
+
+Embedded Hack, Noto Emoji, Ubuntu and emoji-icon-font assets are unmodified.
+Their copyright, font naming and redistribution conditions follow below.
+Unicode data notices accompany the crates that include them. Additional Rust
+standard-library copyright/Unicode/compiler-builtins notices and component
+versions are in RUST-STDLIB-LICENSES.html, readable offline in a browser.
+
+The AppImage launcher is a separate runtime containing statically linked
+third-party libraries, including LGPL-2.1 libfuse. See THIRD-PARTY-SOURCES.zip
+for the available runtime/library source and patch. Source/relink completeness
+and several native component identities remain unresolved below. This candidate
+bundle is audit evidence, NOT a certification of complete license compliance.
+Public release is blocked until the listed obligations have been resolved.
+
+The Windows installer uses NSIS 3.09 and its LZMA decoder. Its source is
+available as nsis-3.09-src.tar.bz2 in THIRD-PARTY-SOURCES.zip, together with
+the CPL-1.0 terms and linking exception in the notices below. CodeConvoy
+provides no additional warranties on behalf of these contributors. Any
+different terms for CodeConvoy's own files are offered by CodeConvoy alone.
+
+Agent CLIs, Git, host graphics/desktop libraries, macOS frameworks and Windows
+system DLLs are installed separately and are not bundled by CodeConvoy. The
+packaging checks reject additional bundled native binaries pending review.

@@ -10,6 +10,8 @@ Expand-Archive "dist/CodeConvoy-$version-windows-x86_64.zip" $portable
 if ((Get-FileHash "$portable/LICENSE.txt").Hash -ne (Get-FileHash 'LICENSE').Hash) {
     throw 'Portable archive license is missing or incorrect'
 }
+python packaging/licenses.py verify $portable
+if ($LASTEXITCODE -ne 0) { throw 'Portable third-party materials failed verification' }
 $info = (Get-Item "$portable/CodeConvoy.exe").VersionInfo
 if ($info.ProductName -ne 'CodeConvoy' -or $info.ProductVersion -ne $version) {
     throw "Unexpected executable identity: $($info.ProductName) $($info.ProductVersion)"
@@ -32,6 +34,12 @@ try {
     if ((Get-FileHash "$installed/LICENSE.txt").Hash -ne (Get-FileHash 'LICENSE').Hash) {
         throw 'Installed license is missing or incorrect'
     }
+    python packaging/licenses.py verify $installed
+    if ($LASTEXITCODE -ne 0) { throw 'Installed third-party materials failed verification' }
+    $nativeFiles = @(Get-ChildItem $installed -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { $_.Name } | Sort-Object)
+    if (($nativeFiles -join ',') -ne 'CodeConvoy.exe,uninstall.exe') {
+        throw "Unreviewed installed native components: $($nativeFiles -join ',')"
+    }
     # User data shares this per-user parent directory; uninstall must leave it.
     New-Item -ItemType Directory -Path "$installed/data" | Out-Null
     Set-Content "$installed/data/preservation-fixture.txt" 'keep user state'
@@ -44,6 +52,9 @@ try {
 }
 if (Test-Path "$installed/CodeConvoy.exe") { throw 'Uninstall left the application executable' }
 if (Test-Path "$installed/LICENSE.txt") { throw 'Uninstall left the packaged license' }
+foreach ($name in @('THIRD-PARTY-NOTICES.txt', 'THIRD-PARTY-INVENTORY.json', 'THIRD-PARTY-SOURCES.zip', 'RUST-STDLIB-LICENSES.html')) {
+    if (Test-Path "$installed/$name") { throw "Uninstall left third-party material: $name" }
+}
 if (Test-Path $uninstallKey) { throw 'Uninstall left its registration' }
 if ((Get-Content "$installed/data/preservation-fixture.txt") -ne 'keep user state') {
     throw 'Uninstall did not preserve the user-data directory'

@@ -6,6 +6,7 @@ import urllib.request
 
 from release import ROOT, DIST, checksum, fresh_work, one_file, package, run, version
 from linux_abi import glibc_label, inspect_glibc, verify_artifacts
+import licenses
 
 
 def verify_linux_payload(appdir):
@@ -76,6 +77,7 @@ def package_linux():
     image = DIST / f"CodeConvoy-{version()}-x86_64.AppImage"
     run(tools["appimagetool"], "--appimage-extract-and-run", "--runtime-file", tools["runtime"], appdir, image, env=env)
     image.chmod(0o755)
+    licenses.verify_appimage_runtime(image, tools["runtime"])
     verify_artifacts([deb, rpm, image], work)
     # Exercise the same AppRun/runtime with the project's real process/Git layer.
     # This probe image is an intermediate test artifact, never a public download.

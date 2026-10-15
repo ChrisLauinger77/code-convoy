@@ -126,7 +126,7 @@ def inspect_payload(root):
     return requirements
 
 
-def inspect_artifact(artifact, work):
+def inspect_artifact(artifact, work, *, payload_check=None):
     """Extract and read the finished bytes, independently of the staging tree."""
     artifact = artifact.resolve(strict=True)
     requirements = []
@@ -157,6 +157,8 @@ def inspect_artifact(artifact, work):
         else:
             raise ValueError(f"Unsupported Linux artifact: {artifact.name}")
         requirements.extend(inspect_payload(payload))
+        if payload_check is not None:
+            payload_check(payload, artifact.suffix)
     # inspect_payload requires a measured GLIBC requirement on the main ELF.
     maximum = max(value for _, value in requirements if value)
     report = f"{artifact.name}: maximum required GLIBC {glibc_label(maximum)} (ceiling {glibc_label(MAX_GLIBC)})\n"
@@ -169,7 +171,8 @@ def inspect_artifact(artifact, work):
 
 
 def verify_artifacts(artifacts, work):
-    report = "\n".join(inspect_artifact(artifact, work) for artifact in artifacts)
+    from licenses import verify_linux_payload
+    report = "\n".join(inspect_artifact(artifact, work, payload_check=verify_linux_payload) for artifact in artifacts)
     (work / "glibc-requirements.txt").write_text(report, encoding="utf-8")
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a", encoding="utf-8") as output:
