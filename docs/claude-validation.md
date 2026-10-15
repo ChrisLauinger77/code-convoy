@@ -84,7 +84,7 @@ still fail; a notification alone cannot establish success. This narrow exception
 uses installed-CLI evidence, not a claim that the private notification is a stable
 documented SDK contract. Future shape changes fail conservatively and may require
 a compatibility update. The real Auto and disabled-Auto tests both passed after
-this correction.
+this correction. The later background-turn correction is recorded below.
 
 Final local validation after the decoder and review fixes:
 
@@ -104,6 +104,92 @@ draft/preferences/history/reuse and unchanged templates, plus the narrowly
 accepted trailing notification and rejected malformed/error variants. The full
 suite reran existing scheduler, worktree, cancellation and supervision regressions.
 No Windows/macOS build or native Auto UI verification was performed in this task.
+
+## Background-task follow-up results — 2026-10-15
+
+The maintainer supplied a raw stream from CodeConvoy **1.0.0
+(9f0801ee01af)**, Claude Code **2.1.300**, model **claude-opus-5-5**, Auto mode,
+and reported process exit zero. Both result records have the existing success
+shape. The incompatibility is the assumption that one invocation emits only one
+result, not a changed success-field schema or Auto permission rejection:
+
+1. A `task_started` event identifies a background Bash task and its `run_id`.
+2. A successful result with `result_index: 0` ends the initial turn.
+3. `task_updated`, `task_notification` and an empty `background_tasks_changed`
+   snapshot report completion of that same task.
+4. A second `system/init` with the same session precedes more tool activity.
+5. A successful result with `result_index: 1` has an `origin` identifying
+   `kind: task-notification`, `producer: session-task`, and that task's `runId`.
+
+The first `task_updated` after the initial result sets the old decoder's sticky
+protocol-error flag. The second result is parsed, but cannot clear that flag.
+The existing UI-render exception does not cover this sequence. The repeated init,
+recoverable tool error, failed MCP-server availability entry and rate-limit
+metadata are not terminal failures in the supplied trace.
+
+The current official [Python SDK ResultMessage documentation](https://code.claude.com/docs/en/agent-sdk/python#resultmessage)
+also describes results for injected background-task turns, their `origin`, and
+one result per notification when several notifications are answered together.
+The supplied print-mode trace establishes that this occurs with CodeConvoy's
+existing invocation too. This is observed with 2.1.300; no claim is made that this
+version introduced the behavior. CLI arguments and permission selection do not
+change.
+
+`tests/fixtures/claude-auto-background.jsonl` is a reduced, sanitized replay of
+that stream. It preserves the event order and correlation fields, both results,
+the repeated init, Auto/model/version metadata and a recovered tool failure.
+Repository paths, task/session/tool IDs, commands, outputs and prose are replaced;
+opaque signatures, account/plugin details and unrelated payloads are omitted.
+It contains no executable reproduction of the original task. The regression
+failed with the old decoder and passes with the fix, including byte-wise UTF-8
+input and an unterminated final JSON line.
+
+Completion now tracks background tasks within the Claude decoder only. A matching
+completed notification and same-session re-init authorize a follow-up; its result
+must identify the notified run and advance the result index by one. Each result
+independently passes the existing success checks. Pending tasks/answers, queued
+turns, earlier failures, bad correlations, duplicates, explicit errors, invalid
+JSON and unconfirmed endings cannot be erased by a later success. Coalesced
+notifications require all attributed results in notification order; an empty
+zero-turn placeholder cannot finish the batch. Snapshots cannot clear obligations.
+The existing UI-render exception and ordinary single-result behavior are retained.
+Scheduler, cancellation, process supervision, Git/worktree handling, other
+backends, settings and CLI arguments are unchanged.
+
+Deterministic regressions cover every truncated prefix of the fixture, missing
+start/notification/init/result, altered session/task/run/origin/index fields,
+failed/interrupted/malformed earlier and final results, nonzero exit, explicit
+errors during either turn, unsolicited trailing output, sequential and coalesced
+notifications, early notifications, and correlation-memory bounds. Existing
+failure, permission, persistence and buffer-limit tests remain enabled.
+
+Compatibility limits: this recognizes the observed `session-task` continuation
+shape, not arbitrary injected turns, peer messages or future result origins.
+Continuation support requires the observed IDs, explicit background marker,
+repeated init and result indices; older/different continuation shapes fail
+conservatively. Missing IDs are not guessed. Correlation is bounded to 128 pending
+tasks and 256 bytes per identifier. Notifications received before the initial
+result also require an attributed follow-up; an initial result alone cannot prove
+they were answered. These bounds do not change process ownership or cancellation.
+No new authenticated reproduction of the original long-running task or native
+Windows/macOS execution is claimed.
+
+Final local verification on Linux after the implementation and error-guard tests:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features` | 608 passed, 0 failed, 10 opt-in tests ignored (excluding seven nested fixture-test summaries) |
+| `cargo build --release` | Passed on Linux |
+| `cargo test --all-features --test claude -- --include-ignored --nocapture --test-threads=1` | All 26 passed, including installed Claude 2.1.300 help/version and authenticated Auto/disabled-Auto checks |
+
+The authenticated checks used existing CLI authentication and disposable Git
+repositories. Auto wrote the requested fixture file and reported `auto`; the
+local disabled-Auto setting reported `default`, with the existing warning retained.
+These are fresh ordinary single-turn checks, not an authenticated reproduction
+of the background-task sequence. That sequence is verified by the supplied trace
+and deterministic replay. No account authentication files were read or edited.
 
 ## Contract evidence
 

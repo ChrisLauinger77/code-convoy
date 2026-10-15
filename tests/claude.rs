@@ -522,6 +522,310 @@ fn errors_malformed_incomplete_duplicate_and_post_result_records_fail_closed() {
 }
 
 #[test]
+fn observed_auto_background_follow_up_finishes_with_a_second_success_result() {
+    let fixture = include_str!("fixtures/claude-auto-background.jsonl").trim_end();
+    for chunk_size in [1, 37, fixture.len()] {
+        let mut output = auto_output();
+        let mut decoded = String::new();
+        for chunk in fixture.as_bytes().chunks(chunk_size) {
+            decoded.push_str(&output.push(Stream::Stdout, chunk));
+        }
+        decoded.push_str(&output.finish());
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+        assert_eq!(output.interpret(status(1)).0, JobStatus::Failed);
+        assert_eq!(decoded.matches("[Claude result]\n").count(), 2);
+        assert!(decoded.contains("Grüße 🌍 — background fixture verified."));
+        assert!(decoded.contains("\"runId\":\"background-run\""));
+        assert!(
+            output
+                .take_activity()
+                .unwrap()
+                .contains("permission mode: auto")
+        );
+    }
+}
+
+fn background_events() -> Vec<Value> {
+    include_str!("fixtures/claude-auto-background.jsonl")
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+fn background_outcome(events: &[Value]) -> JobStatus {
+    let mut output = auto_output();
+    for event in events {
+        output.push(Stream::Stdout, &line(event));
+    }
+    output.finish();
+    output.interpret(status(0)).0
+}
+
+#[test]
+fn background_follow_up_requires_complete_correlated_turns() {
+    let events = background_events();
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+    // Includes exit after the first success, notification, re-init, tools and
+    // final assistant text. None can stand in for the follow-up result.
+    for end in 0..events.len() {
+        assert_eq!(
+            background_outcome(&events[..end]),
+            JobStatus::Failed,
+            "prefix {end}"
+        );
+    }
+    for missing in [4, 8, 10, 12, 20] {
+        let mut incomplete = events.clone();
+        incomplete.remove(missing);
+        assert_eq!(
+            background_outcome(&incomplete),
+            JobStatus::Failed,
+            "missing {missing}"
+        );
+    }
+    // The task update and UI task-list snapshots are informational, not the
+    // evidence that authorizes a follow-up turn or completes it.
+    let without_snapshots: Vec<_> = events
+        .iter()
+        .filter(|event| {
+            !matches!(
+                event["subtype"].as_str(),
+                Some("background_tasks_changed" | "task_updated")
+            )
+        })
+        .cloned()
+        .collect();
+    assert_eq!(background_outcome(&without_snapshots), JobStatus::Succeeded);
+    for (index, pointer, value) in [
+        (4, "/is_backgrounded", json!(false)),
+        (4, "/task_id", json!(null)),
+        (4, "/run_id", json!("")),
+        (4, "/session_id", json!("different")),
+        (9, "/task_id", json!("different")),
+        (9, "/run_id", json!("different")),
+        (9, "/patch/status", json!("failed")),
+        (10, "/status", json!("failed")),
+        (10, "/status", json!("stopped")),
+        (10, "/task_id", json!("different")),
+        (10, "/run_id", json!("different")),
+        (10, "/session_id", json!("different")),
+        (
+            11,
+            "/tasks",
+            json!([{"task_id":"unknown","run_id":"unknown"}]),
+        ),
+        (11, "/tasks", json!(null)),
+        (12, "/session_id", json!("different")),
+        (13, "/session_id", json!("different")),
+        (20, "/origin/kind", json!("human")),
+        (20, "/origin/producer", json!("unknown")),
+        (20, "/origin/runId", json!("different")),
+        (20, "/origin", json!(null)),
+        (20, "/session_id", json!("different")),
+        (20, "/result_index", json!(0)),
+        (20, "/result_index", json!(2)),
+        (20, "/result_index", json!(null)),
+        (8, "/result_index", json!(null)),
+        (8, "/result_index", json!(u64::MAX)),
+    ] {
+        let mut changed = events.clone();
+        *changed[index].pointer_mut(pointer).unwrap() = value;
+        assert_eq!(
+            background_outcome(&changed),
+            JobStatus::Failed,
+            "event {index} {pointer}"
+        );
+    }
+}
+
+#[test]
+fn background_results_cannot_erase_failure_or_authorize_unrelated_output() {
+    let events = background_events();
+    for index in [9, 10, 11, 12] {
+        for (key, value) in [
+            ("error", json!("failed")),
+            ("errors", json!(["failed"])),
+            ("is_error", json!(true)),
+        ] {
+            let mut changed = events.clone();
+            changed[index][key] = value;
+            assert_eq!(background_outcome(&changed), JobStatus::Failed);
+        }
+    }
+    for index in [8, 20] {
+        for (key, value) in [
+            ("subtype", json!("error_during_execution")),
+            ("is_error", json!(true)),
+            ("is_error", json!("false")),
+            ("result", json!(null)),
+            ("duration_ms", json!(-1)),
+            ("duration_api_ms", json!(null)),
+            ("num_turns", json!(null)),
+            ("terminal_reason", json!("aborted_tools")),
+            ("terminal_reason", json!("aborted_streaming")),
+            ("stop_reason", json!("max_tokens")),
+            ("stop_reason", json!("pause_turn")),
+            ("api_error_status", json!(401)),
+            ("errors", json!(["failed"])),
+            ("deferred_tool_use", json!({"name":"Bash"})),
+            ("queued_turn_count", json!(1)),
+            ("queued_turn_count", json!("0")),
+        ] {
+            let mut changed = events.clone();
+            changed[index][key] = value;
+            assert_eq!(
+                background_outcome(&changed),
+                JobStatus::Failed,
+                "result {index} {key}"
+            );
+        }
+    }
+    for index in [9, 13, 20, 21] {
+        for extra in [
+            json!({"type":"error","error":"failed"}),
+            json!({"type":"system","subtype":"error"}),
+            json!({"type":"assistant","error":"failed"}),
+            events[8].clone(),
+            events[10].clone(),
+            events[20].clone(),
+        ] {
+            let mut changed = events.clone();
+            changed.insert(index, extra);
+            assert_eq!(
+                background_outcome(&changed),
+                JobStatus::Failed,
+                "extra event at {index}"
+            );
+        }
+        let mut output = auto_output();
+        for event in &events[..index] {
+            output.push(Stream::Stdout, &line(event));
+        }
+        output.push(Stream::Stdout, b"{malformed JSON}\n");
+        for event in &events[index..] {
+            output.push(Stream::Stdout, &line(event));
+        }
+        output.finish();
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+    }
+    for extra in [
+        json!({"type":"assistant","message":{}}),
+        json!({"type":"system","subtype":"unknown"}),
+        events[11].clone(),
+    ] {
+        let mut changed = events.clone();
+        changed.push(extra);
+        assert_eq!(background_outcome(&changed), JobStatus::Failed);
+    }
+}
+
+#[test]
+fn background_notifications_require_all_results_in_notification_order() {
+    let original = background_events();
+    let mut second_start = original[4].clone();
+    second_start["task_id"] = json!("second-task");
+    second_start["run_id"] = json!("second-run");
+    let mut second_notification = original[10].clone();
+    second_notification["task_id"] = json!("second-task");
+    second_notification["run_id"] = json!("second-run");
+    let mut second_result = original[20].clone();
+    second_result["origin"]["runId"] = json!("second-run");
+
+    // Launch order is deliberately the opposite of notification/result order.
+    let mut events = original[..4].to_vec();
+    events.push(second_start.clone());
+    events.extend_from_slice(&original[4..11]);
+    events.push(second_notification.clone());
+    events.extend_from_slice(&original[11..20]);
+    let mut placeholder = original[20].clone();
+    placeholder["num_turns"] = json!(0);
+    placeholder["result"] = json!("");
+    events.push(placeholder);
+    assert_eq!(background_outcome(&events), JobStatus::Failed);
+    second_result["result_index"] = json!(2);
+    events.push(second_result.clone());
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+    let last = events.len() - 1;
+    events.swap(last - 1, last);
+    assert_eq!(background_outcome(&events), JobStatus::Failed);
+
+    let mut empty_answer = original.clone();
+    empty_answer[20]["num_turns"] = json!(0);
+    empty_answer[20]["result"] = json!("");
+    assert_eq!(background_outcome(&empty_answer), JobStatus::Failed);
+
+    // A second independent follow-up needs a fresh init and matching result.
+    let mut sequential = original[..8].to_vec();
+    sequential.push(second_start);
+    sequential.extend_from_slice(&original[8..]);
+    sequential.push(second_notification);
+    sequential.push(original[12].clone());
+    sequential.push(second_result);
+    assert_eq!(background_outcome(&sequential), JobStatus::Succeeded);
+}
+
+#[test]
+fn early_background_notification_still_needs_an_attributed_answer() {
+    let original = background_events();
+    let mut events = original[..8].to_vec();
+    events.extend_from_slice(&original[9..12]);
+    events.push(original[8].clone());
+    assert_eq!(background_outcome(&events), JobStatus::Failed);
+    events.extend_from_slice(&original[12..]);
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+}
+
+#[test]
+fn background_correlation_is_bounded_and_cannot_be_cleared_by_later_output() {
+    let original = background_events();
+    for length in [256, 257] {
+        let run = "x".repeat(length);
+        let mut events = original.clone();
+        for index in [4, 9, 10] {
+            events[index]["run_id"] = json!(run);
+        }
+        events[20]["origin"]["runId"] = json!(run);
+        assert_eq!(
+            background_outcome(&events),
+            if length == 256 {
+                JobStatus::Succeeded
+            } else {
+                JobStatus::Failed
+            }
+        );
+    }
+    for count in [128, 129] {
+        let mut events = original[..4].to_vec();
+        for n in 0..count {
+            let mut start = original[4].clone();
+            start["task_id"] = json!(format!("task-{n}"));
+            start["run_id"] = json!(format!("run-{n}"));
+            events.push(start);
+        }
+        events.extend_from_slice(&original[5..9]);
+        for n in 0..count {
+            let mut notification = original[10].clone();
+            notification["task_id"] = json!(format!("task-{n}"));
+            notification["run_id"] = json!(format!("run-{n}"));
+            events.push(notification);
+            events.push(original[12].clone());
+            let mut result = original[20].clone();
+            result["origin"]["runId"] = json!(format!("run-{n}"));
+            result["result_index"] = json!(n + 1);
+            events.push(result);
+        }
+        assert_eq!(
+            background_outcome(&events),
+            if count == 128 {
+                JobStatus::Succeeded
+            } else {
+                JobStatus::Failed
+            }
+        );
+    }
+}
+
+#[test]
 fn observed_ui_render_notification_can_follow_result_but_cannot_hide_errors_or_execution() {
     let notification = json!({"type":"system", "subtype":"ui_invalidate", "event":"ui.render", "prompts_screened":true});
     for with_ids in [false, true] {
