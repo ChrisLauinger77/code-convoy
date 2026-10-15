@@ -160,8 +160,55 @@ Installer evidence: [NSIS licenses and linking exception](https://nsis.sourcefor
 
 ## Verification record
 
-Local 1.0.0 formatting, strict Clippy, locked Rust tests (602 passed, 10 ignored),
-release build and the packaging tests passed. Fresh candidate artifact evidence
-will be recorded here after the platform package build completes. Older candidate bytes
-were used only to inspect installer layout, not to claim notice delivery by this
-change. No tag or public release has been created.
+Verification date: **2026-10-15**. Local 1.0.0 formatting, strict Clippy, locked
+Rust tests (**602 passed, 10 ignored**), release build and **58 packaging tests**
+passed. The separately enabled private-D-Bus regression also passed.
+[CI 38757557996](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38757557996)
+passed on Linux, macOS and Windows.
+
+The fresh non-publishing
+[candidate 38757563994](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38757563994)
+passed validation, all three native build/package jobs and aggregation. Both CI
+and candidate tested implementation commit
+`9f0801ee01af24f05a5763913cb2cf82b727d8dc`; the subsequent documentation-only
+commit records the evidence and does not represent another candidate.
+Publication and external package-repository updates were skipped.
+
+`candidate.verify_run` and `select_artifact` verified the successful first-attempt
+manual run, repository, workflow, exact source and non-expired `release-assets`
+artifact **11986990820**. All six downloaded files passed the original aggregate
+`SHA256SUMS` through `release.verify_checksums`; the manifest was not regenerated.
+Their bytes also matched the separately downloaded platform artifacts used for
+independent inspection.
+
+| Final artifact | Maximum required GLIBC | SHA-256 |
+| --- | --- | --- |
+| `code-convoy_1.0.0_amd64.deb` | 2.39 | `47a627145f035b032edb8f526e625956c4b9efae02a593dc8939682fb750d29c` |
+| `code-convoy-1.0.0-1.x86_64.rpm` | 2.39 | `ad0a8e9b0a55748eb1b6dc78b3af4926de5eee2b9e1e42efd7bac6fb5c277d7b` |
+| `CodeConvoy-1.0.0-x86_64.AppImage` | 2.39 | `8dd741bda5ef692e43fced4d0078fd1bd761da1eeed13a499e81178838730c12` |
+| `CodeConvoy-1.0.0-windows-x86_64-setup.exe` | Not applicable | `a88f08ce4087ee8a30708601eab65a8a138ea482514a15dc1e2a14a6764aa725` |
+| `CodeConvoy-1.0.0-windows-x86_64.zip` | Not applicable | `db0f162b776c8d30ba858fff6d40d38dd04a70ad9a08ae2e298f8f45d6bcda52` |
+| `CodeConvoy-1.0.0-macos-universal.dmg` | Not applicable | `ea275701796d745752d9405ea49e77f48ccbf3678410e7e3f9b68bca120f8f80` |
+
+Independent local inspection extracted all three Linux archives, the Windows
+installer/ZIP and the final macOS DMG. Every package contains the same exact four
+notice/source files. The AppImage runtime matches the pinned upstream binary,
+apart from its documented MD5 field, and has no versioned GLIBC requirement.
+No additional native library was found in the Linux payloads or macOS app.
+The installer application matches the ZIP and all five embedded plugin hashes
+match the audit. Windows' pre-existing project MIT file has CRLF line endings;
+its normalized text matches the repository, while all new material is identical
+byte for byte across platforms. The bundled source archives contain no ELF,
+PE or Mach-O executable entries.
+
+The native macOS job verified both architectures and signatures in the mounted
+final DMG; local extraction independently verified its resources and 1.0.0
+metadata. Windows verified installed notice bytes, per-user installation,
+startup, Start Menu identity and uninstall with user-data preservation. Linux
+passed APT installation/startup/removal on Ubuntu 24.04 and Debian 13, DNF on
+Fedora 44, AppImage extraction, the hosted Ubuntu FUSE check and disposable
+Git/process probes. These runtime checks and their limitations are detailed in
+the [readiness report](release-readiness.md#final-verification).
+
+The five unresolved obligations above still block `licenses.py release-ready`
+and publication. No tag or public release has been created.

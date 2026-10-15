@@ -102,7 +102,38 @@ Local 1.0.0 validation on Debian forky/sid, Rust 1.96.1 and Python 3.14.8:
   test-support feature enabled; no visible notification or tray interaction is
   implied.
 
-Fresh candidate and exact final-artifact results will be recorded after the
-platform package build completes. Earlier 0.10.0 package references are
-diagnostic evidence only. The handoff stops at this draft PR and waits for
-maintainer approval.
+[CI 38757557996](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38757557996)
+and non-publishing
+[candidate 38757563994](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38757563994)
+passed on implementation commit `9f0801ee01af24f05a5763913cb2cf82b727d8dc`.
+The candidate repeated native formatting, strict Clippy, Rust tests and release
+builds with Rust 1.99.0; validation ran all 58 packaging tests. All platform
+package jobs and aggregation passed, while publication/downstream updates were
+skipped. The final documentation-only commit records these results, without
+changing the tested implementation or claiming another candidate.
+
+All six final artifacts were downloaded and inspected. The original checksum
+manifest and exact candidate provenance passed verification; aggregate bytes
+matched the independently inspected platform outputs. Each Linux package's
+maximum required GLIBC version is **2.39**. Exact hashes, artifact identity and
+notice-delivery evidence are in the
+[license audit](third-party-licenses.md#verification-record).
+
+| Platform / final candidate | Passed checks | Limits |
+| --- | --- | --- |
+| Ubuntu 24.04 LTS | Dependency-resolving APT install; installed and extracted-AppImage Xvfb startup/window/normal close; removal; disposable Git/process probe. Hosted AppImage FUSE startup/normal close also passed. | Shared runner kernel and virtual desktop; native Wayland/XWayland, hardware graphics, clipboard/dialogs and interactive task/Quit evidence remain absent. |
+| Debian 13 Stable | APT install, installed and extracted-AppImage Xvfb startup/window/normal close, removal and disposable Git/process probe. | Same container/desktop limits; no Debian FUSE check. |
+| Fedora 44 RPM | DNF install with ordinary generated dependencies, installed and extracted-AppImage Xvfb startup/window/normal close, removal and Git/process probe. | No native Fedora desktop or FUSE check. Generated dependencies include GLIBC 2.39 and the existing Wayland soname capabilities. |
+| Windows 2025 runner | Native build/tests; installer/portable metadata and notices; per-user installation, fresh startup, Start Menu identity, uninstall and user-data preservation. Separate CI software-renderer regression passed. | No fresh interactive Windows desktop, clipboard/dialog or accessibility walkthrough. |
+| macOS 26 ARM runner | ARM/Intel release builds, universal bundle, ad-hoc signature verification, final mounted-DMG resources and metadata, fresh packaged startup. | Intel execution, notarization, full interactive desktop and accessibility evidence remain absent. |
+
+The Linux userspaces used glibc `2.39-0ubuntu8.9`, `2.41-12+deb13u4` and
+`2.43-8.fc44`, respectively, sharing kernel `6.17.0-1022-azure`. Their Git versions
+were 2.43.0, 2.47.3 and 2.56.0. GUI fixtures used isolated state, an unprivileged
+user, private Xvfb/Openbox and software graphics. The separate fixture probe
+exercised real Git/process code, not an authenticated agent task in the GUI.
+No full distribution compatibility claim follows from these checks.
+
+Earlier 0.10.0 package references were diagnostic evidence only; the table above
+uses the new 1.0.0 candidate. **Not Ready** remains the release recommendation.
+The handoff stops at this draft PR and waits for maintainer approval.
