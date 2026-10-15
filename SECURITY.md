@@ -2,17 +2,14 @@
 
 ## Reporting a suspected vulnerability
 
-Do not publish exploit details, private repositories, credentials or unredacted
-logs in a public issue. As checked on 2026-10-15, this repository does **not** have
-GitHub private vulnerability reporting enabled, and no dedicated private security
-contact is documented.
+Use GitHub's private vulnerability reporting to
+[report a vulnerability privately](https://github.com/ChrisLauinger77/code-convoy/security/advisories/new).
+You can also open the repository's **Security → Advisories → Report a vulnerability**
+form while signed in to GitHub. Private reporting is enabled for this repository.
 
-Until a private route is available, open a minimal
-[contact request](https://github.com/ChrisLauinger77/code-convoy/issues/new/choose)
-using the bug-report form. State only that you need a private security-reporting
-channel; use “withheld pending private contact” in required reproduction/details
-fields. Wait for a maintainer to establish a private channel before sending
-sensitive details. Do not attach a proof of concept publicly.
+Do not publish exploit details, private repositories, credentials or unredacted
+logs in a public issue. Keep vulnerability details and proof-of-concept material
+in the private report.
 
 A private report should include the affected version/revision, OS/package type,
 backend CLI version where relevant, impact, and a minimal reproduction using

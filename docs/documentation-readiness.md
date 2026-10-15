@@ -28,6 +28,11 @@ and the existing history/storage/worktree guides. Build guidance follows
 `packaging/build.py` and the existing disposable examples. Historical platform
 records retain their original dates, revisions and unperformed checks.
 
+After maintainer approval on 2026-10-15, GitHub private vulnerability reporting
+was enabled. A fresh repository API read confirmed `enabled: true`. SECURITY.md
+now links the private advisory form instead of the temporary public contact-request
+fallback. No vulnerability report or advisory was created.
+
 ## Validation
 
 Environment: Linux (Debian forky/sid), Rust 1.96.1, Python 3.14.8, Git 2.53.0.
@@ -57,10 +62,6 @@ produced. Markdown-only changes skip automatic CI under the existing path filter
 
 ## Remaining readiness decisions
 
-- **Security reporting:** GitHub's repository API reported private vulnerability
-  reporting disabled on the audit date. SECURITY.md documents a public request
-  for private contact without sensitive details. No private address or reporting
-  feature is invented; enabling a private channel remains a maintainer decision.
 - **Third-party notices:** package scripts verify/distribute the project MIT
   license, but no complete third-party notice inventory is maintained. In
   particular, `epaint_default_fonts` 0.36.2 embeds fonts with separate license
