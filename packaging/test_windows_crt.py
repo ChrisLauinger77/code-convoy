@@ -88,7 +88,7 @@ class WindowsCrtTests(unittest.TestCase):
                      "visual_studio": {"installationVersion": "18 fixture"},
                      "environment": {k: "fixture" for k in
                                      ("VCTOOLSVERSION", "VCTOOLSINSTALLDIR", "WINDOWSSDKVERSION", "WINDOWSSDKDIR", "LIB")}}
-        (directory / "link.log").write_text("Loaded C:\\VC\\libcmt.lib(startup.obj)\n", encoding="utf-8")
+        (directory / "link.log").write_text("Loaded C:\\VC\\msvcrt.lib(startup.obj)\n", encoding="utf-8")
         (directory / "link.map").write_text("map fixture", encoding="utf-8")
         (directory / "response-0.rsp").write_bytes(b"object.obj /OUT:CodeConvoy.exe")
         crt.write_json(directory / "invocation.json", {"exit_code": 0,
@@ -100,7 +100,10 @@ class WindowsCrtTests(unittest.TestCase):
                   "target": "x86_64-pc-windows-msvc", "binary_sha256": crt.checksum(binary),
                   "inputs": {name: crt.checksum(crt.ROOT / name) for name in crt.INPUTS},
                   "rustc": "rustc fixture", "cargo": "cargo fixture", "toolchain": toolchain,
-                  "libraries": [{"path": r"C:\VC\libcmt.lib", "sha256": "b" * 64, "members": ["startup.obj"]}]}
+                  "libraries": [{"path": r"C:\VC\msvcrt.lib", "sha256": "b" * 64, "members": ["startup.obj"]}]}
+        inspection = "8664 machine (x64)\n" + "".join(" " + n + "\n" for n in crt.windows_runtime.policy()["crt_imports"]["x64"])
+        (directory / "application-pe.txt").write_text(inspection)
+        report.update(crt="dynamic", imports=crt.pe_imports(inspection), pe_sha256=crt.checksum(directory / "application-pe.txt"))
         self.save_report(directory, report)
         return binary, report
 

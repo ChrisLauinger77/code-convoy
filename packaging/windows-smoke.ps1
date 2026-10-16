@@ -43,6 +43,13 @@ if ($info.ProductName -ne 'CodeConvoy' -or $info.ProductVersion -ne $version) {
 }
 $running = $null
 try {
+    $running = Start-Process "$portable/CodeConvoy.exe" -PassThru
+    Start-Sleep -Seconds 3
+    if ($running.HasExited) { throw 'Portable application could not start with the installed runtime' }
+    if (!$running.CloseMainWindow() -or !$running.WaitForExit(15000)) {
+        throw 'Portable application did not close normally'
+    }
+    $running = $null
     # NSIS requires the unquoted /D= argument last, including embedded spaces.
     $installer = Start-Process $setup -ArgumentList "/S /D=$installed" -Wait -PassThru
     if ($installer.ExitCode -ne 0) { throw "Installer failed: $($installer.ExitCode)" }

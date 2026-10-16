@@ -6,6 +6,8 @@
   "changes": [
     "Add independent helper search directory",
     "Rename three Tauri helper calls and two shortcut calls",
-    "Consume and check shortcut helper status"
+    "Consume and check shortcut helper status",
+    "Check externally supplied runtime prerequisites before helper calls, upgrades and removal",
+    "Reject invalid helper results without bypassing process checks"
   ]
 }

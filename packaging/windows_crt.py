@@ -15,7 +15,8 @@ EVIDENCE = ROOT / "target/packaging/windows-crt"
 CRT_NAMES = {"libcmt.lib", "libvcruntime.lib", "libucrt.lib", "libcpmt.lib",
              "msvcrt.lib", "vcruntime.lib", "ucrt.lib", "msvcprt.lib",
              "oldnames.lib", "legacy_stdio_definitions.lib"}
-INPUTS = ("Cargo.toml", "Cargo.lock", "packaging/build.py", "packaging/windows_crt.py")
+INPUTS = ("Cargo.toml", "Cargo.lock", "packaging/build.py", "packaging/windows_crt.py",
+          "packaging/windows_runtime.py", "packaging/windows-runtime.json")
 CAPTURE_FILES = ("link.log", "link.map", "invocation.json", "toolchain.json", "selected-libraries.json")
 
 
@@ -23,13 +24,17 @@ def pe_imports(text):
     return sorted(set(re.findall(r"^\s+([\w.-]+\.dll)\s*$", text, re.I | re.M)))
 
 
-def check_dynamic_imports(imports):
+def check_dynamic_imports(imports, architecture=None):
     names = {name.lower() for name in imports}
     if "vcruntime140.dll" not in names or not any(
             n == "ucrtbase.dll" or n.startswith("api-ms-win-crt-") for n in names):
         raise ValueError("Missing dynamic VC/UCRT imports")
     if any(n.startswith(("msvcp", "msvcr")) for n in names):
         raise ValueError("Unexpected additional Microsoft C/C++ runtime import")
+    if architecture:
+        actual = sorted(n for n in names if re.search(r"msvcp|msvcr|vcruntime|ucrtbase|api-ms-win-crt", n))
+        if actual != windows_runtime.policy()["crt_imports"][architecture]:
+            raise ValueError("Dynamic CRT imports differ from the reviewed runtime prerequisite policy")
 
 
 def check_dynamic_libraries(selected):
@@ -188,7 +193,8 @@ def build(command, env, target=None):
     if EVIDENCE.exists():
         shutil.rmtree(EVIDENCE)
     EVIDENCE.mkdir(parents=True)
-    env, toolchain = msvc_environment(env)
+    runtime = windows_runtime.policy()
+    env, toolchain = msvc_environment(env, toolset=runtime["msvc"], sdk=runtime["windows_sdk"])
     write_json(EVIDENCE / "toolchain.json", toolchain)
     env["CODECONVOY_REAL_LINKER"] = toolchain["linker"]["path"]
     env["CODECONVOY_CRT_EVIDENCE"] = str(EVIDENCE)
@@ -207,7 +213,7 @@ def build(command, env, target=None):
     inspection = output([Path(toolchain["linker"]["path"]).with_name("dumpbin.exe"), "/headers", "/imports", binary], env=env)
     (EVIDENCE / "application-pe.txt").write_text(inspection, encoding="utf-8")
     imports = pe_imports(inspection)
-    check_dynamic_imports(imports)
+    check_dynamic_imports(imports, "x64")
     check_dynamic_libraries(p["path"] for p in libraries)
     windows_runtime.capture_system(EVIDENCE)
     report = {
@@ -273,7 +279,7 @@ def verify(binary, directory=EVIDENCE, *, source_commit=None):
     if (report.get("crt") != "dynamic" or report.get("pe_sha256") != checksum(inspection)
             or report.get("imports") != pe_imports(inspection.read_text())):
         raise ValueError("Missing or altered application dynamic CRT inspection")
-    check_dynamic_imports(report["imports"])
+    check_dynamic_imports(report["imports"], "x64")
     check_dynamic_libraries(selected)
     return report
 

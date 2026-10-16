@@ -155,7 +155,7 @@ def check_identity(text, expected):
     if expected["crt"] == "none" and runtime:
         raise ValueError("Unexpected dynamic CRT dependency in CRT-independent helper")
     if expected["crt"] == "dynamic":
-        crt.check_dynamic_imports(imports)
+        crt.check_dynamic_imports(imports, "x86")
     return imports
 
 
@@ -319,7 +319,7 @@ def configure(config, work):
         raise ValueError("Runtime test hook is forbidden in production template")
     prerequisites = work / "prerequisites.nsh"
     prerequisites.write_text(windows_runtime.render_prerequisites(), encoding="utf-8-sig")
-    template = template.replace("@CODECONVOY_PREREQUISITES@", prerequisites.resolve().as_posix())
+    template = template.replace("@CODECONVOY_PREREQUISITES@", str(prerequisites.resolve()))
     rendered = work / "installer.nsi"
     rendered.write_text(template.replace("@CODECONVOY_HELPERS@", path), encoding="utf-8")
     config["nsis"]["template"] = str(rendered.resolve())
@@ -347,6 +347,9 @@ def native_tests():
     makensis = Path(env["LOCALAPPDATA"]) / ".cargo-packager/NSIS/makensis.exe"
     subprocess.run([str(makensis), str(script)], env=env, check=True)
     subprocess.run(["pwsh", "-NoProfile", "-File", str(ROOT / "packaging/nsis/native-tests.ps1")], check=True)
+    windows_runtime.native_prerequisite_tests(makensis, OUTPUT / "plugins", work / "prerequisites ü 安装")
+    if crt.EVIDENCE.exists():
+        shutil.copyfile(work / "prerequisites ü 安装/results.json", crt.EVIDENCE / "prerequisite-tests.json")
 
 
 if __name__ == "__main__":

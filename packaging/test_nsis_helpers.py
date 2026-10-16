@@ -22,12 +22,13 @@ class NsisHelpers(unittest.TestCase):
             binary = b"MZfixture" + name.encode()
             (root / "plugins" / name).write_bytes(binary)
             record = {"sha256": helpers.crt.checksum(root / "plugins" / name), "evidence": {},
-                      "imports": ["KERNEL32.dll"], "crt": expected["crt"]}
+                      "imports": (["KERNEL32.dll", "VCRUNTIME140.dll", "api-ms-win-crt-runtime-l1-1-0.dll", "api-ms-win-crt-string-l1-1-0.dll"]
+                                  if expected["crt"] == "dynamic" else ["KERNEL32.dll"]), "crt": expected["crt"]}
             for build in ("first", "second"):
                 directory = root / build / name
                 directory.mkdir(parents=True)
                 (directory / name).write_bytes(binary)
-                library = r"C:\VC\libcmt.lib" if expected["crt"] == "static" else r"C:\SDK\ole32.lib"
+                library = r"C:\VC\msvcrt.lib" if expected["crt"] == "dynamic" else r"C:\SDK\ole32.lib"
                 (directory / "link.log").write_text(f"Loaded {library}(fixture.obj)\n")
                 (directory / "link.map").write_text("retained symbols")
                 crt.write_json(directory / "invocation.json", {"exit_code": 0, "command": [r"C:\VC\link.exe", "/VERBOSE", "/VERBOSE:LIB", "/Brepro"]})
@@ -36,8 +37,8 @@ class NsisHelpers(unittest.TestCase):
                 crt.write_json(directory / "toolchain.json", {"linker": {"path": r"C:\VC\link.exe", "sha256": "c" * 64, "version": "fixture"},
                                "compiler": {"sha256": "b" * 64}, "environment": {
                                    "VCTOOLSVERSION": spec["msvc"], "WINDOWSSDKVERSION": spec["windows_sdk"]}})
-                crt.write_json(directory / "rustflags.json", ["--cfg", "windows_raw_dylib", "-C", "target-feature=+crt-static"])
-                (directory / "pe.txt").write_text("14C machine (x86)\n KERNEL32.dll\n" + "".join(
+                crt.write_json(directory / "rustflags.json", ["--cfg", "windows_raw_dylib", "-C", "target-feature=-crt-static"])
+                (directory / "pe.txt").write_text("14C machine (x86)\n" + "".join(" " + name + "\n" for name in record["imports"]) + "".join(
                     f" {n} {n:X} 00001000 {symbol}\n" for n, symbol in enumerate(expected["exports"], 1)))
                 record["evidence"][build] = {p.name: crt.checksum(p) for p in directory.iterdir() if p.name != name}
             report["binaries"][name] = record
@@ -79,7 +80,7 @@ class NsisHelpers(unittest.TestCase):
                     helpers.verify(root)
 
     def test_unexpected_export_architecture_or_dynamic_crt_fails(self):
-        expected = {"exports": ["Set"]}
+        expected = {"exports": ["Set"], "crt": "none"}
         valid = "14C machine (x86)\n 1 1 00001000 Set\n KERNEL32.dll\n"
         self.assertEqual(helpers.check_identity(valid, expected), ["KERNEL32.dll"])
         for text in (valid.replace("14C", "8664"), valid.replace(" Set", " Download"), valid + " VCRUNTIME140.dll\n"):
@@ -125,6 +126,19 @@ class NsisHelpers(unittest.TestCase):
         header = '; Derived from cargo-packager 0.11.8; see UPSTREAM.json and LICENSE files.\n!addplugindir /x86-unicode "@CODECONVOY_HELPERS@"\n'
         self.assertTrue(text.startswith(header))
         text = text.removeprefix(header)
+        text = text.replace('!include "@CODECONVOY_PREREQUISITES@"\n', '')
+        text = text.replace('Function un.onInit\n  ${GetOptions} $CMDLINE "/P" $PassiveMode\n  IfErrors +2 0\n    StrCpy $PassiveMode 1\n  Call un.RequireWindowsRuntime\n', 'Function un.onInit\n')
+        text = text.replace('\n  Call RequireWindowsRuntime\n\n', '\n')
+        text = text.replace('  Call RequireWindowsRuntime\n', '')
+        text = text.replace('        Call ${PREFIX}RequireWindowsRuntime\n', '')
+        text = text.replace('  Call ${PREFIX}RequireWindowsRuntime\n', '')
+        text = text.replace('!macro CheckIfAppIsRunning PREFIX', '!macro CheckIfAppIsRunning')
+        for suffix in (' ""', ' "un."'):
+            text = text.replace('!insertmacro CheckIfAppIsRunning' + suffix, '!insertmacro CheckIfAppIsRunning')
+        for message, extra in [('validate the installed version', '  ${AndIf} $R0 != "-1"\n'), ('check running processes', '')]:
+            text = text.replace('  ${If} $R0 != "0"\n  ${AndIf} $R0 != "1"\n' + extra +
+                '    SetErrorLevel 1603\n    Abort "Could not ' + message + '. Repair the x86 Visual C++ Runtime and retry."\n  ${EndIf}\n', '')
+        text = text.replace('${If} $R0 == "0"', '${If} $R0 = 0')
         status = '  Pop $R0\n  ${If} $R0 != 0\n    Abort "Could not assign application shortcut identity."\n  ${EndIf}\n'
         self.assertEqual(text.count(status), 2)
         text = text.replace(status, "").replace("CodeConvoyAppId::Set", "ApplicationID::Set").replace("codeconvoy_utils::", "nsis_tauri_utils::")

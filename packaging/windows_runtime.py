@@ -41,6 +41,7 @@ def render_prerequisites(spec=None):
 def capture_system(directory):
     """Record the runner's real files; these files are never copied to artifacts."""
     import subprocess
+    import base64
     script = r'''
 $ErrorActionPreference = 'Stop'
 $files = foreach ($arch in @('x64', 'x86')) {
@@ -56,7 +57,39 @@ $files = foreach ($arch in @('x64', 'x86')) {
 }
 ConvertTo-Json -Depth 4 -InputObject @($files)
 '''
-    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
-                            check=True, capture_output=True, text=True)
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                             base64.b64encode(script.encode("utf-16-le")).decode("ascii")],
+                            capture_output=True, text=True)
+    if result.returncode:
+        raise ValueError("Cannot inspect system runtime files: " + result.stderr)
     (directory / "system-runtime-files.json").write_text(
         json.dumps(json.loads(result.stdout), indent=2) + "\n")
+
+
+def native_prerequisite_tests(makensis, helpers, work):
+    import copy
+    import subprocess
+    work.mkdir(parents=True, exist_ok=True)
+    template = (ROOT / "packaging/nsis/prerequisite-tests.nsi").read_text()
+    for name in ("tests", "newer", "older", "changed"):
+        spec = copy.deepcopy(policy())
+        if name == "newer":
+            spec["minimum_vc_version"] = [14, 0, 0, 0]
+        elif name == "older":
+            spec["minimum_vc_version"] = [14, 99, 65535, 0]
+        include = work / f"{name}.nsh"
+        include.write_text(render_prerequisites(spec), encoding="utf-8-sig")
+        script = template
+        for token, path in (("@OUTPUT@", work / f"prerequisite-{name}.exe"),
+                            ("@HELPERS@", helpers), ("@PREREQUISITES@", include)):
+            value = str(path.resolve())
+            if any(c in value for c in '$"\r\n'):
+                raise ValueError("Unsupported NSIS prerequisite fixture path")
+            script = script.replace(token, value)
+        if name == "changed":
+            script = "!define LOSE_RUNTIME\n" + script
+        path = work / f"{name}.nsi"
+        path.write_text(script, encoding="utf-8-sig")
+        subprocess.run([str(makensis), str(path)], check=True)
+    subprocess.run(["pwsh", "-NoProfile", "-File", str(ROOT / "packaging/nsis/prerequisite-tests.ps1"),
+                    "-Work", str(work)], check=True)
