@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "rust": "1.99.0",
+  "target": "i686-pc-windows-msvc",
+  "msvc": "14.51.36231",
+  "windows_sdk": "10.0.26100.0",
+  "upstream": {
+    "revision": "c3a4447060a260c5e4e09d94284948c4f864da02",
+    "source": "sources/nsis-tauri-utils-0.2.1.tar.gz",
+    "patches": [
+      {
+        "path": "pluginapi-stack-safety.patch",
+        "file": "crates/pluginapi/src/lib.rs",
+        "before_sha256": "55d378d8ffdeac55b586d2d58b103d1da9b022f6010437caab77dd2197c189fa",
+        "after_sha256": "7e55ee796372dd445d737ed368662808d618ac61a07a9efeeb361f80a80d4707",
+        "reason": "Validate local stack pointers, allocation and UTF-16 bounds; consume invalid-Unicode nodes; native regression tests"
+      }
+    ]
+  },
+  "binaries": {
+    "CodeConvoyAppId.dll": {
+      "exports": [
+        "Set"
+      ],
+      "crt": "none"
+    },
+    "codeconvoy_utils.dll": {
+      "exports": [
+        "FindProcess",
+        "KillProcess",
+        "SemverCompare"
+      ],
+      "crt": "static"
+    }
+  },
+  "source_patch": {
+    "name": "windows-sys",
+    "version": "0.48.0",
+    "archive": "sources/windows-sys-0.48.0.crate",
+    "checksum": "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9",
+    "file": "src/lib.rs",
+    "before_sha256": "e5567f0c006a0fc45611d094303635675cbb8fc79352ee47e03037437918aaff",
+    "after_sha256": "8501f577839d588b570b9f09da6fb93f93ea2b4648039975633b59cf8c6625a3"
+  }
+}

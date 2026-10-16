@@ -56,13 +56,22 @@ The Runtime Library Exception assessment concerns C compilation using GCC
 without plugins or LTO. It is documented evidence and interpretation, not legal
 approval. See the repository's AppImage validation record for results and gaps.
 
-nsis-tauri-utils-0.2.1.tar.gz is the exact upstream tagged source with its MIT
-and Apache notices. The release DLL matches upstream's published SHA-1. The
-inventory and notices also cover 17 crate versions recovered from DLL strings.
-The tag has no Cargo.lock, so neither this archive nor a new Cargo resolution
-establishes the complete original dependency graph. Its embedded compiler is
-Rust 1.71.1, not CodeConvoy's Rust 1.99.0. Remaining plugin source/license and
-toolchain evidence gaps remain release blockers.
+codeconvoy-nsis-helpers-1.zip contains the original shortcut identity helper,
+the reduced Tauri process/version helper, exact Cargo.lock, recorded source patches,
+template, license notices and build recipe. Unpack it into an empty directory;
+read third-party/nsis/README.txt. The separate semver-1.0.18.crate,
+windows-sys-0.48.0.crate and windows-targets-0.48.5.crate archives are the exact
+checksum-verified dependency sources. Place them in third-party/sources when
+reconstructing the kit outside the repository. The builder applies the one
+recorded windows-sys stable-compiler patch, verifying both source hashes.
+nsis-tauri-utils-0.2.1.tar.gz retains the upstream tagged source and MIT/Apache
+notices for the process/version/ABI modules. Process and version source remain
+unchanged; the kit records the stack safety patch and original/modified hashes.
+Its original prebuilt
+DLL and the old ApplicationID DLL are not distributed. The new source build
+uses Rust 1.99.0 and separately captures x86 CRT inputs. Windows CRT publication
+obligations remain unresolved; no Microsoft build tools or license grants are
+supplied by this source kit.
 
 The outer ZIP has sorted portable names, 1980-01-01 timestamps, Unix regular
 file mode 0644, fixed ZIP 2.0 metadata, no comments/extra fields, and no second

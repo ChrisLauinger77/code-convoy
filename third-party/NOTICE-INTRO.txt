@@ -55,15 +55,14 @@ the CPL-1.0 terms and linking exception in the notices below. CodeConvoy
 provides no additional warranties on behalf of these contributors. Any
 different terms for CodeConvoy's own files are offered by CodeConvoy alone.
 
-The installer plugin's ring dependency includes code from BoringSSL/OpenSSL:
-This product includes software developed by the OpenSSL Project for use in the
-OpenSSL Toolkit (http://www.openssl.org/).
-This product includes cryptographic software written by Eric Young
-(eay@cryptsoft.com). This product includes software written by Tim Hudson
-(tjh@cryptsoft.com).
-The complete upstream notices and conditions appear below. Additional plugin
-dependencies and toolchain obligations remain unresolved; the recovered list
-is not represented as a complete binary inventory.
+The installer uses CodeConvoy's original MIT-licensed shortcut identity helper
+and a reduced, source-built nsis-tauri-utils helper under MIT OR Apache-2.0.
+Their source/build kit, exact dependency source archives, lockfile and notices
+are supplied in THIRD-PARTY-SOURCES.zip. The original ApplicationID and Tauri
+prebuilt DLLs are not included. The unused downloader and its HTTP/TLS stack
+are excluded from the rebuilt helper. Windows CRT redistribution obligations
+remain unresolved separately; these source licenses do not grant rights to
+Microsoft runtime code.
 
 Agent CLIs, Git, host graphics/desktop libraries, macOS frameworks and Windows
 system DLLs are installed separately and are not bundled by CodeConvoy. The

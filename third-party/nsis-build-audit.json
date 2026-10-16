@@ -1,0 +1,197 @@
+{
+  "schema": 1,
+  "spec": {
+    "schema": 1,
+    "rust": "1.99.0",
+    "target": "i686-pc-windows-msvc",
+    "msvc": "14.51.36231",
+    "windows_sdk": "10.0.26100.0",
+    "upstream": {
+      "revision": "c3a4447060a260c5e4e09d94284948c4f864da02",
+      "source": "sources/nsis-tauri-utils-0.2.1.tar.gz",
+      "patches": [
+        {
+          "path": "pluginapi-stack-safety.patch",
+          "file": "crates/pluginapi/src/lib.rs",
+          "before_sha256": "55d378d8ffdeac55b586d2d58b103d1da9b022f6010437caab77dd2197c189fa",
+          "after_sha256": "7e55ee796372dd445d737ed368662808d618ac61a07a9efeeb361f80a80d4707",
+          "reason": "Validate local stack pointers, allocation and UTF-16 bounds; consume invalid-Unicode nodes; native regression tests"
+        }
+      ]
+    },
+    "binaries": {
+      "CodeConvoyAppId.dll": {
+        "exports": [
+          "Set"
+        ],
+        "crt": "none"
+      },
+      "codeconvoy_utils.dll": {
+        "exports": [
+          "FindProcess",
+          "KillProcess",
+          "SemverCompare"
+        ],
+        "crt": "static"
+      }
+    },
+    "source_patch": {
+      "name": "windows-sys",
+      "version": "0.48.0",
+      "archive": "sources/windows-sys-0.48.0.crate",
+      "checksum": "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9",
+      "file": "src/lib.rs",
+      "before_sha256": "e5567f0c006a0fc45611d094303635675cbb8fc79352ee47e03037437918aaff",
+      "after_sha256": "8501f577839d588b570b9f09da6fb93f93ea2b4648039975633b59cf8c6625a3"
+    }
+  },
+  "inputs": {
+    "packaging/nsis/helper-tests.nsi": "e0ccc344a3e159a6b1244b29c3596f5e49fae85d428d492d746a580b425502e8",
+    "packaging/nsis/installer.nsi": "8c4ffcfa92f9645fcf50094f3f57972a79b21ba4712047ed090301852d41fcf8",
+    "packaging/nsis/LICENSE_APACHE-2.0": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+    "packaging/nsis/LICENSE_MIT": "ef497d10d31e3a85c5c0a6bc598dcdfb5c717b6e085bbc0376f02618a8e31cb2",
+    "packaging/nsis/native-tests.ps1": "8ecb21d47a03062a90f871f570c4265c70c7c529f5dba835c6b2f1cec7985de8",
+    "packaging/nsis/test-process.cpp": "51063ac7bd02c2d37a64d6959a55e5f6a0826526b1f9f82414146f9ee7ac8ea1",
+    "packaging/nsis/UPSTREAM.json": "b33182c79bbd6937f54d5d44edd5d7a5fb21a805fa31f0beb50d5eff96730426",
+    "packaging/nsis_helpers.py": "ab2d72f245b961c60d8bd0ca469268100bba2f582481e54f80df698bacd1a83f",
+    "packaging/windows_crt.py": "b8c35fe4e16d797567cb1e7bc773b46406701511cde988cee7225781e1d93892",
+    "third-party/nsis/appid.cpp": "81a8a17032a10ec6c5e25fedb400751a0b2cf04b284e14ae155d240d27cb3218",
+    "third-party/nsis/appid.def": "a5ac56fe6d49af329a34e59a708fbd9f09edc0a5bd3889814b5fccfb2e00dd98",
+    "third-party/nsis/Cargo.lock": "e434e7a08cbf9239731f19762f5a7c71c0647a25a7e54985094c05354dbd1e2d",
+    "third-party/nsis/Cargo.toml": "0b341b1e7e1d12779e74d749d00946bdc5b63f2f9050c5c3b0318a7af7cc43bb",
+    "third-party/nsis/crates/codeconvoy-utils/Cargo.toml": "fb075e94208499990b7ac67cdad5514174d3693efbdd25125f5e15d152d2c97c",
+    "third-party/nsis/crates/codeconvoy-utils/src/lib.rs": "e95ab645e2017ced37446a7fd43e1a3ca4a19685b3ece93477f26473edaaa8a2",
+    "third-party/nsis/crates/nsis-process/Cargo.toml": "b9c6217b95bbca8e783811beb4ab67694ec2eab976086e0e5691ae2670b13d96",
+    "third-party/nsis/crates/nsis-process/src/lib.rs": "fbbeca9df211c54eaa2a9e0a47e9252376b5a3eb2fc662579776ee2fe4e87981",
+    "third-party/nsis/crates/nsis-semvercompare/Cargo.toml": "53050c8b536a224ee4dd7de1c5a1eb88c5be987d05c58a01d03251e7d61ff70a",
+    "third-party/nsis/crates/nsis-semvercompare/src/lib.rs": "e664f4e1b8bb654dab343bf40fc74f5fbad8786a76cccc922b01dabf53e41871",
+    "third-party/nsis/crates/pluginapi/Cargo.toml": "804bf78e52a9573f644068ef3bed1ae9cb60a5594f99289019e374989a25e215",
+    "third-party/nsis/crates/pluginapi/src/lib.rs": "7e55ee796372dd445d737ed368662808d618ac61a07a9efeeb361f80a80d4707",
+    "third-party/nsis/dependencies.json": "b02f93d69a4e26debd59df2dfbd790790ba01ab4f3042fb494c9eb96d1fd5db8",
+    "third-party/nsis/inputs.json": "78031267eafbed5606de991ca8cfdcca0b29b1794c47504339e4360106b19e07",
+    "third-party/nsis/LICENSE-CodeConvoy": "37438906c0a4475ff6029c83d6ab7c9a62c4b8042b32a51182258a717bccb803",
+    "third-party/nsis/LICENSE_APACHE-2.0": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+    "third-party/nsis/LICENSE_MIT": "1c1020fa10a6bf318717e82c911bcc54ebdfb9bb280460ae332bcb2f82f57fbe",
+    "third-party/nsis/pluginapi-stack-safety.patch": "1952e243b262be4616ac1b9bd46e374ee6e163a96db1ccc59eee3647c512b314",
+    "third-party/nsis/README.txt": "3543285df76eae8021f0b661e2906d71932e6befe4a8007a87d91665b8657099",
+    "third-party/nsis/windows-sys-stable-raw-dylib.patch": "eff3d4452a11485b15bb67ea3d16819fc7d61ce98c289212bd7973deb9aebcdf"
+  },
+  "packages": [
+    {
+      "name": "semver",
+      "version": "1.0.18",
+      "checksum": "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
+    },
+    {
+      "name": "windows-sys",
+      "version": "0.48.0",
+      "checksum": "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9"
+    },
+    {
+      "name": "windows-targets",
+      "version": "0.48.5",
+      "checksum": "9a2fa6e2155d7247be68c096456083145c183cbbbc2764150dda45a87197940c"
+    },
+    {
+      "name": "windows_aarch64_gnullvm",
+      "version": "0.48.5",
+      "checksum": "2b38e32f0abccf9987a4e3079dfb67dcd799fb61361e53e2882c3cbaf0d905d8"
+    },
+    {
+      "name": "windows_aarch64_msvc",
+      "version": "0.48.5",
+      "checksum": "dc35310971f3b2dbbf3f0690a219f40e2d9afcf64f9ab7cc1be722937c26b4bc"
+    },
+    {
+      "name": "windows_i686_gnu",
+      "version": "0.48.5",
+      "checksum": "a75915e7def60c94dcef72200b9a8e58e5091744960da64ec734a6c6e9b3743e"
+    },
+    {
+      "name": "windows_i686_msvc",
+      "version": "0.48.5",
+      "checksum": "8f55c233f70c4b27f66c523580f78f1004e8b5a8b659e05a4eb49d4166cca406"
+    },
+    {
+      "name": "windows_x86_64_gnu",
+      "version": "0.48.5",
+      "checksum": "53d40abd2583d23e4718fddf1ebec84dbff8381c07cae67ff7768bbf19c6718e"
+    },
+    {
+      "name": "windows_x86_64_gnullvm",
+      "version": "0.48.5",
+      "checksum": "0b7b52767868a23d5bab768e390dc5f5c55825b6d30b86c844ff2dc7414044cc"
+    },
+    {
+      "name": "windows_x86_64_msvc",
+      "version": "0.48.5",
+      "checksum": "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
+    }
+  ],
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-pc-windows-msvc\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+  "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)\n",
+  "source_commit": "43130610f94f486acd68231eef7f801bcb914458",
+  "license_assessment": "windows-crt-unresolved",
+  "binaries": {
+    "CodeConvoyAppId.dll": {
+      "sha256": "3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29",
+      "imports": [
+        "KERNEL32.dll",
+        "ole32.dll"
+      ],
+      "crt": "none",
+      "evidence": {
+        "first": {
+          "link.log": "5b368a820d0214d18a89a2c445f41b7312540a5b0e7188145c2c4d5cf6dd6540",
+          "link.map": "f5642602a6dd60c19465cbd66515b325763a3ee6ba511dcc44ed0e7d2aaaedf9",
+          "invocation.json": "b9873f56e95284fffa3cd026c0d1fdbba271b86aefdc97aa2fd6dcd4874297a4",
+          "toolchain.json": "09326dfb502e858e14c74c19922ce379aa60e520c42be0876b9b6fe83de8872a",
+          "selected-libraries.json": "8ac982d9d441e3f875af41df13f2bfdb89eeb2b3d3cf8185648e4ecfff2848f8",
+          "pe.txt": "f9db769161bed56f6fa3c4273b056ccec571b93558c632a8300cf634ec2a7f0c",
+          "build-command.json": "6e35b6540f2cb579c1ce9b03ec6c4c8add958cb700ed4ea300231c050fc3d1af"
+        },
+        "second": {
+          "link.log": "12ec7830a873fd3cbd400ae435ad4a42e63759f2be0ee1dfeb1e6f7638f8cc5e",
+          "link.map": "f5642602a6dd60c19465cbd66515b325763a3ee6ba511dcc44ed0e7d2aaaedf9",
+          "invocation.json": "993403e031f017744e92282297160df6747ae067e6dcc13bb17d3e82716f9b49",
+          "toolchain.json": "09326dfb502e858e14c74c19922ce379aa60e520c42be0876b9b6fe83de8872a",
+          "selected-libraries.json": "8ac982d9d441e3f875af41df13f2bfdb89eeb2b3d3cf8185648e4ecfff2848f8",
+          "pe.txt": "e68638416a309299e528acb8aeaa1835c179317f50745040b5c982c05614af53",
+          "build-command.json": "d077146400a061b6a8095f6ccc777cb4b616df755b0e29cf2083cf9d2957fac6"
+        }
+      }
+    },
+    "codeconvoy_utils.dll": {
+      "sha256": "218b7639ee9647cf34f26ad907c7a3f245be5a7360fa75e176fed231d62e22b2",
+      "imports": [
+        "KERNEL32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "kernel32.dll",
+        "ntdll.dll"
+      ],
+      "crt": "static",
+      "evidence": {
+        "first": {
+          "link.log": "05e4c9d748c1f12d6ad7d6a1ce7f2955051723adb372afa7a3a1884de092284c",
+          "link.map": "108a35b24ff48502c05011d63e0c0d46e13a1005c91ea0fe0484300c56dd8d05",
+          "invocation.json": "2d2265d787423b74a30b8a72cc73897adcd655924407061d9b89b3c63e9ff00b",
+          "toolchain.json": "09326dfb502e858e14c74c19922ce379aa60e520c42be0876b9b6fe83de8872a",
+          "selected-libraries.json": "788a019e6b897ce22fb37a17e5e239065dd553b4991179ae03973990485fd0fe",
+          "pe.txt": "9220118632d081ddbb8e1554c16e0db5f673ac69ca3fcb24f1415bf394226613",
+          "build-command.json": "00b1226e4a82f3650b5137bf2b63bbaa1c949ea00fbd34c094c362c059109724",
+          "rustflags.json": "654b821b6d82e31d6bd2bfba9e5ab4b92e40b8216101c437bdb4d1ee68da2fff"
+        },
+        "second": {
+          "link.log": "0fe5679090d6f36fdefc058f29ed2a39b49ca1b813e042d4130ad67fef5fdab1",
+          "link.map": "108a35b24ff48502c05011d63e0c0d46e13a1005c91ea0fe0484300c56dd8d05",
+          "invocation.json": "6718ba1a8db8f3e1b5a2c301e20aabd66b1732849283d15fdc57333bb7d332ed",
+          "toolchain.json": "09326dfb502e858e14c74c19922ce379aa60e520c42be0876b9b6fe83de8872a",
+          "selected-libraries.json": "59865ef9d216a416dd3042b3a5507daf0ed8936df46eee048a9e1fce3ed51258",
+          "pe.txt": "c355e5800dd1ffd2a068b2b74500f237591f03e9b52b2cfd6f747623a9251a95",
+          "build-command.json": "ed79c1cc0d19fcdb0a3f25096353a3911894c9f7cecfb2483bf30f3b6ac9ebe3",
+          "rustflags.json": "654b821b6d82e31d6bd2bfba9e5ab4b92e40b8216101c437bdb4d1ee68da2fff"
+        }
+      }
+    }
+  }
+}

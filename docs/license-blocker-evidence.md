@@ -4,7 +4,9 @@ Audit date: 2026-10-15; dispatch follow-up: 2026-10-16.
 **Historical follow-up:** the AppImage sections below describe the original
 upstream binary. The replacement runtime, relinking demonstration and current
 disposition are recorded in [AppImage runtime validation](appimage-runtime-validation.md).
-Windows/NSIS evidence and the reviewed dispatch resolution below are unchanged.
+The NSIS plugin section is also historical: the replacement and its source,
+license and binary evidence are in [NSIS helper validation](nsis-helper-validation.md).
+The Windows CRT obligation remains unresolved; the dispatch resolution is unchanged.
 Publication remains blocked. This record distinguishes
 recovered evidence from missing evidence; it is not a legal clearance. The
 project's MIT license is unchanged. PR checks, interim artifact evidence and the

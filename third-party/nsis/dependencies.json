@@ -1,0 +1,129 @@
+[
+  {
+    "name": "semver",
+    "version": "1.0.18",
+    "checksum": "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918",
+    "license": "MIT OR Apache-2.0",
+    "notices": [
+      {
+        "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+        "origin": "https://static.crates.io/crates/semver/semver-1.0.18.crate :: semver-1.0.18/LICENSE-APACHE"
+      },
+      {
+        "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "origin": "https://static.crates.io/crates/semver/semver-1.0.18.crate :: semver-1.0.18/LICENSE-MIT"
+      }
+    ],
+    "source_revision": "c1fcafc1862753d93ff0cbc0c7a928cedb1a96d1",
+    "included": true,
+    "source": "sources/semver-1.0.18.crate"
+  },
+  {
+    "name": "windows-sys",
+    "version": "0.48.0",
+    "checksum": "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9",
+    "license": "MIT OR Apache-2.0",
+    "notices": [
+      {
+        "text": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b",
+        "origin": "https://static.crates.io/crates/windows-sys/windows-sys-0.48.0.crate :: windows-sys-0.48.0/license-apache-2.0"
+      },
+      {
+        "text": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+        "origin": "https://static.crates.io/crates/windows-sys/windows-sys-0.48.0.crate :: windows-sys-0.48.0/license-mit"
+      }
+    ],
+    "source_revision": "406944152ef28d3273236edc958c2bfbf825775d",
+    "included": true,
+    "source": "sources/windows-sys-0.48.0.crate"
+  },
+  {
+    "name": "windows-targets",
+    "version": "0.48.5",
+    "checksum": "9a2fa6e2155d7247be68c096456083145c183cbbbc2764150dda45a87197940c",
+    "license": "MIT OR Apache-2.0",
+    "notices": [
+      {
+        "text": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b",
+        "origin": "https://static.crates.io/crates/windows-targets/windows-targets-0.48.5.crate :: windows-targets-0.48.5/license-apache-2.0"
+      },
+      {
+        "text": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+        "origin": "https://static.crates.io/crates/windows-targets/windows-targets-0.48.5.crate :: windows-targets-0.48.5/license-mit"
+      }
+    ],
+    "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+    "included": true,
+    "source": "sources/windows-targets-0.48.5.crate"
+  },
+  {
+    "name": "windows_aarch64_gnullvm",
+    "version": "0.48.5",
+    "checksum": "2b38e32f0abccf9987a4e3079dfb67dcd799fb61361e53e2882c3cbaf0d905d8",
+    "license": "MIT OR Apache-2.0",
+    "notices": [],
+    "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+    "included": false,
+    "source": null
+  },
+  {
+    "name": "windows_aarch64_msvc",
+    "version": "0.48.5",
+    "checksum": "dc35310971f3b2dbbf3f0690a219f40e2d9afcf64f9ab7cc1be722937c26b4bc",
+    "license": "MIT OR Apache-2.0",
+    "notices": [],
+    "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+    "included": false,
+    "source": null
+  },
+  {
+    "name": "windows_i686_gnu",
+    "version": "0.48.5",
+    "checksum": "a75915e7def60c94dcef72200b9a8e58e5091744960da64ec734a6c6e9b3743e",
+    "license": "MIT OR Apache-2.0",
+    "notices": [],
+    "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+    "included": false,
+    "source": null
+  },
+  {
+    "name": "windows_i686_msvc",
+    "version": "0.48.5",
+    "checksum": "8f55c233f70c4b27f66c523580f78f1004e8b5a8b659e05a4eb49d4166cca406",
+    "license": "MIT OR Apache-2.0",
+    "notices": [],
+    "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+    "included": false,
+    "source": null
+  },
+  {
+    "name": "windows_x86_64_gnu",
+    "version": "0.48.5",
+    "checksum": "53d40abd2583d23e4718fddf1ebec84dbff8381c07cae67ff7768bbf19c6718e",
+    "license": "MIT OR Apache-2.0",
+    "notices": [],
+    "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+    "included": false,
+    "source": null
+  },
+  {
+    "name": "windows_x86_64_gnullvm",
+    "version": "0.48.5",
+    "checksum": "0b7b52767868a23d5bab768e390dc5f5c55825b6d30b86c844ff2dc7414044cc",
+    "license": "MIT OR Apache-2.0",
+    "notices": [],
+    "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+    "included": false,
+    "source": null
+  },
+  {
+    "name": "windows_x86_64_msvc",
+    "version": "0.48.5",
+    "checksum": "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538",
+    "license": "MIT OR Apache-2.0",
+    "notices": [],
+    "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+    "included": false,
+    "source": null
+  }
+]
