@@ -103,7 +103,9 @@ class WindowsCrtTests(unittest.TestCase):
                   "libraries": [{"path": r"C:\VC\msvcrt.lib", "sha256": "b" * 64, "members": ["startup.obj"]}]}
         inspection = "8664 machine (x64)\n" + "".join(" " + n + "\n" for n in crt.windows_runtime.policy()["crt_imports"]["x64"])
         (directory / "application-pe.txt").write_text(inspection)
-        report.update(crt="dynamic", imports=crt.pe_imports(inspection), pe_sha256=crt.checksum(directory / "application-pe.txt"))
+        (directory / "system-runtime-files.json").write_text("[]")
+        report.update(crt="dynamic", imports=crt.pe_imports(inspection), pe_sha256=crt.checksum(directory / "application-pe.txt"),
+                      system_runtime_sha256=crt.checksum(directory / "system-runtime-files.json"))
         self.save_report(directory, report)
         return binary, report
 

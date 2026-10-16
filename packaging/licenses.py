@@ -99,6 +99,10 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
                 or digest(path.read_bytes()) != item["sha256"]):
             raise ValueError(f"Missing or altered license/source evidence: {item['path']}")
     native = catalog["native_provenance"]
+    runtime_policy = json.loads((root / "packaging/windows-runtime.json").read_text())
+    recorded_policy = native["windows_crt"].get("dynamic_runtime_policy", {})
+    if any(recorded_policy.get(key) != value for key, value in runtime_policy.items()):
+        raise ValueError("Windows runtime prerequisite policy differs from the reviewed inventory")
     runtime = json.loads((root / "packaging/appimage-tools.json").read_text())["runtime"]
     if (native["appimage"]["runtime_sha256"] != runtime["sha256"]
             or native["appimage"]["source_revision"] != runtime["source_revision"]):

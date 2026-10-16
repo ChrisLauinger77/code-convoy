@@ -219,6 +219,7 @@ def build(command, env, target=None):
     report = {
         "imports": imports, "crt": "dynamic",
         "pe_sha256": checksum(EVIDENCE / "application-pe.txt"),
+        "system_runtime_sha256": checksum(EVIDENCE / "system-runtime-files.json"),
         "schema": 1, "status": "captured", "license_assessment": "unresolved",
         "source_commit": output(["git", "rev-parse", "HEAD"]).strip(),
         "target": "x86_64-pc-windows-msvc", "binary_sha256": checksum(binary),
@@ -279,6 +280,8 @@ def verify(binary, directory=EVIDENCE, *, source_commit=None):
     if (report.get("crt") != "dynamic" or report.get("pe_sha256") != checksum(inspection)
             or report.get("imports") != pe_imports(inspection.read_text())):
         raise ValueError("Missing or altered application dynamic CRT inspection")
+    if report.get("system_runtime_sha256") != checksum(directory / "system-runtime-files.json"):
+        raise ValueError("Missing or altered system runtime version evidence")
     check_dynamic_imports(report["imports"], "x64")
     check_dynamic_libraries(selected)
     return report

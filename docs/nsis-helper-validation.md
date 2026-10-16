@@ -201,3 +201,48 @@ an old cached helper, silently accept changed hashes or publish from diagnostics
 No application Rust code or application dependency versions changed. Linux/macOS
 packaging implementation, AppImage/LGPL evidence, dispatch resolution and the
 existing Windows CRT obligation are unchanged. No merge, tag or release was made.
+
+## Dynamic CRT migration and prerequisite validation
+
+The preceding sections record PR 73's static-CRT baseline. The subsequent 1.0.0
+change selects `-C target-feature=-crt-static` independently for the application
+and utility helper. The original AppId implementation, exports and binary remain
+unchanged. The utility retains all three exports, existing source dependencies,
+process/SemVer behavior and the Windows GlobalAlloc/GlobalFree stack interface.
+
+`packaging/windows-runtime.json` records the observed CRT import lists and
+prerequisite versions. The application imports VCRUNTIME140.dll plus UCRT heap,
+locale, math, runtime, stdio and string l1-1-0 interfaces. The x86 utility imports
+VCRUNTIME140.dll plus UCRT runtime and string l1-1-0 interfaces. Neither imports
+VCRUNTIME140_1.dll or MSVCP140.dll. All other imports remain ordinary Windows API
+dependencies. AppId imports only KERNEL32.dll and ole32.dll.
+
+Both Rust outputs still embed startup/support members from msvcrt.lib and use
+vcruntime.lib/ucrt.lib import libraries. Builds reject libcmt.lib,
+libvcruntime.lib, libucrt.lib and libcpmt.lib; changing linkage does not eliminate
+Microsoft code or the publication blocker. See the
+[licensing distinction](license-blocker-evidence.md#7-dynamic-crt-and-user-supplied-prerequisites).
+
+The NSIS gate uses actual DLL versions, PE architecture and x86 loadability;
+registry claims cannot establish availability. System32 redirection is handled
+through explicit SysWOW64/Sysnative paths. Checks run before the utility helper
+and repeat before version/process operations. Missing prerequisites produce
+Microsoft's official download-page guidance and error 1603. Silent/passive
+operation has no blocking dialog. Uninstall requires x86 only; it must still
+perform process checks. Invalid plugin results fail safely rather than being
+interpreted as no running process.
+
+The native fixture compiles the same prerequisite include with private test
+paths. That substitution is compile-time only and is not exposed in the shipped
+installer. It copies genuine system runtime files into a disposable directory,
+withholds private copies for missing/stale cases, and changes test version
+thresholds for older/newer cases. It never deletes system DLLs, uninstalls a real
+runtime or changes real runtime registration. The fixture DLL copies are removed
+and never uploaded or packaged. Registry cases use isolated test keys in both
+views; the production checker deliberately ignores registry claims altogether.
+
+The simple portable ZIP gains no launcher or runtime files. It requires the x64
+runtime before startup. Packaging rejects separate VC/UCRT DLLs and VC redist
+installers; the existing closed native payload allowlist also rejects unexpected
+or renamed binaries. The windows-crt publication guard and two-stage release
+architecture remain unchanged.
