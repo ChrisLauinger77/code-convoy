@@ -13,7 +13,16 @@ struct Task {
     id: String,
     run: String,
     session: String,
-    notified: bool,
+    completion: TaskCompletion,
+    start_seen: bool,
+    listed: bool,
+}
+
+#[derive(PartialEq, Eq)]
+enum TaskCompletion {
+    Pending,
+    Notified,
+    Answered,
 }
 
 impl Task {
@@ -26,7 +35,11 @@ impl Task {
 
 impl Continuation {
     pub(super) fn complete(&self) -> bool {
-        self.tasks.is_empty() && !self.answering && !self.queued_turns_pending
+        self.tasks
+            .iter()
+            .all(|task| task.completion == TaskCompletion::Answered)
+            && !self.answering
+            && !self.queued_turns_pending
     }
 
     // False is sticky in the caller. Neither a later success nor a matching
@@ -40,10 +53,15 @@ impl Continuation {
             // never authorize turns without the existing task correlation.
             self.queued_turns_pending = queued > 0;
         }
+        if previous.is_some_and(|previous| {
+            event.get("session_id").is_some() && event["session_id"] != previous["session_id"]
+        }) {
+            return false;
+        }
+        if let Some(valid) = self.background_event(event) {
+            return valid;
+        }
         if let Some(previous) = previous {
-            if event.get("session_id").is_some() && event["session_id"] != previous["session_id"] {
-                return false;
-            }
             if event["type"] == "result" {
                 return self.finish_turn(event, previous);
             }
@@ -62,26 +80,17 @@ impl Continuation {
                 return match event["subtype"].as_str() {
                     Some("task_updated") => {
                         event["patch"]["status"] == "completed"
-                            && self
-                                .tasks
-                                .iter()
-                                .any(|task| task.matches(event) && !task.notified)
+                            && self.tasks.iter().any(|task| {
+                                task.matches(event) && task.completion == TaskCompletion::Pending
+                            })
                     }
                     Some("task_notification") => self.notify(event),
-                    Some("background_tasks_changed") if !self.tasks.is_empty() => {
-                        event["tasks"].as_array().is_some_and(|tasks| {
-                            // A snapshot cannot discharge an outstanding task or
-                            // authorize a new one; only its result does that.
-                            tasks.iter().all(|entry| {
-                                self.tasks.iter().any(|task| {
-                                    !task.notified
-                                        && entry["task_id"] == task.id
-                                        && entry["run_id"] == task.run
-                                })
-                            })
-                        })
-                    }
-                    Some("init") if self.tasks.iter().any(|task| task.notified) => {
+                    Some("init")
+                        if self
+                            .tasks
+                            .iter()
+                            .any(|task| task.completion == TaskCompletion::Notified) =>
+                    {
                         self.answering = true;
                         true
                     }
@@ -101,35 +110,94 @@ impl Continuation {
                     .iter()
                     .all(|task| event["session_id"] == task.session);
         }
-        if event["type"] == "system" {
-            if event["subtype"] == "task_started" && event["is_backgrounded"] == true {
-                let (Some(id), Some(run), Some(session)) = (
-                    identifier(&event["task_id"]),
-                    identifier(&event["run_id"]),
-                    identifier(&event["session_id"]),
-                ) else {
-                    return false;
-                };
-                // Bound retained correlation data as well as individual JSON records.
-                // Task IDs survive resume; each outstanding run ID must be unique.
-                if self.tasks.len() >= 128 || self.tasks.iter().any(|task| task.run == run) {
-                    return false;
-                }
-                self.tasks.push(Task {
-                    id: id.into(),
-                    run: run.into(),
-                    session: session.into(),
-                    notified: false,
-                });
-            } else if event["subtype"] == "task_notification"
-                && self
-                    .tasks
-                    .iter()
-                    .any(|task| event["task_id"] == task.id || event["run_id"] == task.run)
-            {
-                return self.notify(event);
-            }
+        if event["type"] == "system"
+            && event["subtype"] == "task_notification"
+            && self
+                .tasks
+                .iter()
+                .any(|task| event["task_id"] == task.id || event["run_id"] == task.run)
+        {
+            return self.notify(event);
         }
+        true
+    }
+
+    fn background_event(&mut self, event: &Value) -> Option<bool> {
+        if event["type"] != "system" {
+            return None;
+        }
+        let started = event["subtype"] == "task_started" && event["is_backgrounded"] == true;
+        let promoted =
+            event["subtype"] == "task_updated" && event["patch"]["is_backgrounded"] == true;
+        let snapshot = event["subtype"] == "background_tasks_changed";
+        if !started && !promoted && !snapshot {
+            return None;
+        }
+        if identifier(&event["session_id"]).is_none()
+            || !event["error"].is_null()
+            || !event["errors"].is_null()
+            || (event.get("is_error").is_some() && event["is_error"] != false)
+            || (promoted
+                && (!event["patch"]["error"].is_null()
+                    || (event["patch"].get("status").is_some()
+                        && !matches!(
+                            event["patch"]["status"].as_str(),
+                            Some("pending" | "running" | "completed" | "paused")
+                        ))))
+        {
+            return Some(false);
+        }
+        if !snapshot {
+            return Some(self.register(event, &event["session_id"], started, false));
+        }
+        let Some(tasks) = event["tasks"].as_array().filter(|tasks| tasks.len() <= 128) else {
+            return Some(false);
+        };
+        // SDK snapshots may precede their start/update bookends. Merge positive
+        // membership evidence, but never clear an obligation when a run leaves.
+        for task in &mut self.tasks {
+            task.listed = tasks.iter().any(|entry| entry["run_id"] == task.run);
+        }
+        self.tasks
+            .retain(|task| task.listed || task.completion != TaskCompletion::Answered);
+        Some(
+            tasks
+                .iter()
+                .all(|task| self.register(task, &event["session_id"], false, true)),
+        )
+    }
+
+    fn register(&mut self, event: &Value, session: &Value, started: bool, listed: bool) -> bool {
+        let (Some(id), Some(run), Some(session)) = (
+            identifier(&event["task_id"]),
+            identifier(&event["run_id"]),
+            identifier(session),
+        ) else {
+            return false;
+        };
+        if let Some(task) = self.tasks.iter_mut().find(|task| task.run == run) {
+            if task.id != id
+                || task.session != session
+                || (started && (task.start_seen || task.completion == TaskCompletion::Answered))
+            {
+                return false;
+            }
+            task.start_seen |= started;
+            task.listed |= listed;
+            return true;
+        }
+        // Task IDs survive resume; bound independently retained run identities.
+        if self.tasks.len() >= 128 {
+            return false;
+        }
+        self.tasks.push(Task {
+            id: id.into(),
+            run: run.into(),
+            session: session.into(),
+            completion: TaskCompletion::Pending,
+            start_seen: started,
+            listed,
+        });
         true
     }
 
@@ -137,7 +205,7 @@ impl Continuation {
         let Some(index) = self
             .tasks
             .iter()
-            .position(|task| task.matches(event) && !task.notified)
+            .position(|task| task.matches(event) && task.completion == TaskCompletion::Pending)
         else {
             return false;
         };
@@ -145,7 +213,7 @@ impl Continuation {
             return false;
         }
         let mut task = self.tasks.remove(index);
-        task.notified = true;
+        task.completion = TaskCompletion::Notified;
         // Notification order, not launch order, determines result order.
         // Even a notification before the initial result needs an attributed
         // answer; the initial human-prompt result cannot prove it was handled.
@@ -154,7 +222,11 @@ impl Continuation {
     }
 
     fn finish_turn(&mut self, event: &Value, previous: &Value) -> bool {
-        let Some(index) = self.tasks.iter().position(|task| task.notified) else {
+        let Some(index) = self
+            .tasks
+            .iter()
+            .position(|task| task.completion == TaskCompletion::Notified)
+        else {
             return false;
         };
         let task = &self.tasks[index];
@@ -170,10 +242,19 @@ impl Continuation {
         {
             return false;
         }
-        self.tasks.remove(index);
+        if self.tasks[index].listed {
+            // Membership can lag the result. Retain the answered identity until
+            // it leaves the level, so a late snapshot cannot reopen the answer.
+            self.tasks[index].completion = TaskCompletion::Answered;
+        } else {
+            self.tasks.remove(index);
+        }
         // The SDK can coalesce notifications into one answer, with a result
         // for each notification. All of them are still required and validated.
-        self.answering = self.tasks.iter().any(|task| task.notified);
+        self.answering = self
+            .tasks
+            .iter()
+            .any(|task| task.completion == TaskCompletion::Notified);
         // A coalesced zero-turn placeholder is not the answer to the batch.
         self.answering || event["num_turns"] != 0 || event["result"] != ""
     }

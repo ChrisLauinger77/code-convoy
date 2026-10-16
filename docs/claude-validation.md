@@ -152,10 +152,22 @@ undrained queued turns prevent final success. Earlier failures, bad correlations
 duplicates, explicit errors, invalid JSON and unconfirmed endings cannot be erased
 by a later success. Coalesced notifications require all attributed results in
 notification order; an empty
-zero-turn placeholder cannot finish the batch. Snapshots cannot clear obligations.
+zero-turn placeholder cannot finish the batch. Membership removal cannot clear an
+unanswered obligation.
 The existing UI-render exception remains allowed.
 Scheduler, cancellation, process supervision, Git/worktree handling, other
 backends, settings and CLI arguments are unchanged.
+
+Background membership can come from `task_started` with `is_backgrounded: true`,
+`task_updated` with `patch.is_backgrounded: true`, or a full
+`background_tasks_changed` snapshot with session/task/run IDs. Matching evidence
+is merged; a missing background-start bookend does not invalidate an authoritative
+membership snapshot. Snapshot order is independent of start/update bookends.
+Each observed run still requires a completed notification and attributed answer.
+An answered identity stays retained while still listed, so a lagging snapshot
+cannot reopen it; a later level that omits it releases that metadata. Empty levels
+never discharge missing notifications/results. Foreground-only tasks remain
+ordinary activity and consume no background tracking capacity.
 
 A resumed background task may reuse its `task_id` with a new `run_id`, including
 while the previous run's answer is still pending. Each outstanding run ID must be
@@ -181,7 +193,7 @@ be established. The completion diagnostic points to these correlation fields in
 Raw output.
 
 Deterministic regressions cover every truncated prefix of the fixture, missing
-start/notification/init/result, altered session/task/run/origin/index fields,
+membership evidence/notification/init/result, altered session/task/run/origin/index fields,
 failed/interrupted/malformed earlier and final results, nonzero exit, explicit
 errors during either turn, unsolicited trailing output, sequential and coalesced
 notifications, early notifications, and correlation-memory bounds. Existing
@@ -192,10 +204,11 @@ result, ordinary-result queued-turn validation, and the missing-index diagnostic
 
 Compatibility limits: this recognizes the observed `session-task` continuation
 shape, not arbitrary injected turns, peer messages or future result origins.
-Continuation support requires the observed IDs, explicit background marker,
-repeated init and result indices; older/different continuation shapes fail
-conservatively. Missing IDs are not guessed. Correlation is bounded to 128 pending
-runs and 256 bytes per identifier retained from `task_started`; later events
+Continuation support requires the observed IDs, recognized background membership
+evidence, repeated init and result indices; older/different continuation shapes
+fail conservatively. Missing IDs are not guessed. Correlation is bounded to 128
+retained run identities, including answered identities still listed by the SDK,
+and 256 bytes per stored identifier; later events
 remain subject to the existing 1 MiB record limit. Notifications received before
 the initial result also require an attributed follow-up; an initial result alone
 cannot prove they were answered. These bounds do not change process ownership or
@@ -304,6 +317,42 @@ The suite used the same serial execution and local Unix socket access described
 above. Installed/authenticated Claude probes and native Windows/Linux execution
 were not repeated.
 
+### Foreground promotion and membership ordering — 2026-10-16
+
+The next review identified foreground tasks that later become background work.
+The published [SDK 0.3.292 declarations](https://unpkg.com/@anthropic-ai/claude-agent-sdk@0.3.292/sdk.d.ts)
+document `patch.is_backgrounded` and a full background-membership level whose
+ordering is independent of the start/update bookends. The decoder now merges
+these membership sources by exact session/task/run identity, while keeping
+completion obligations independent of membership removal. Pending, notified and
+answered states prevent repeated levels from duplicating obligations or reopening
+an answer that membership has not yet removed. Repeated background starts for a
+retained run and conflicting identities still fail; the same 128-entry/256-byte
+bounds apply.
+
+A synthetic foreground-to-background regression failed before this correction
+and passes afterward. Four tests in `tests/claude/background_membership.rs` cover
+promotion before/after the first result, event-prefix truncation, foreground-only
+volume, missing start bookends with authoritative snapshots, repeated and lagging
+levels, retained-metadata release across 130 resumed runs, missing completion and
+malformed/error-bearing evidence. The 128/129-run tests now exercise both level
+and start-only streams, including reused task IDs. The captured fixture is
+unchanged. No authenticated reproduction, new dependency, CLI flag, permission,
+shared process, scheduler, persistence or other-backend change is claimed.
+
+Verification on macOS after the membership correction:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features -- --test-threads=1` | 625 passed, 0 failed, 9 opt-in tests ignored (excluding eight nested fixture-test summaries) |
+| `cargo build --release` | Passed |
+
+The suite used the same serial execution and local Unix socket access described
+above. Installed/authenticated Claude probes and native Windows/Linux execution
+were not repeated.
+
 ## Contract evidence
 
 The implementation was checked against current official sources, not remembered flags:
@@ -319,6 +368,7 @@ The implementation was checked against current official sources, not remembered 
 | [Official SDK CLI transport](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/transport/subprocess_cli.py) | `_DEFAULT_MAX_BUFFER_SIZE = 1024 * 1024`, used to justify the backend's record bound |
 | [TypeScript SDK 0.3.243 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03243) | A positive `queued_turn_count` means queued sends remain and another turn/result will follow, not that the completed turn failed |
 | [TypeScript SDK 0.3.292 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03292) | Task IDs persist across resume; run IDs distinguish each task's runs |
+| [Published SDK 0.3.292 declarations](https://unpkg.com/@anthropic-ai/claude-agent-sdk@0.3.292/sdk.d.ts) | Foreground promotion via `task_updated.patch.is_backgrounded`; full background membership independent of edge ordering; matching run IDs on each event source |
 
 These are rolling documentation/source references inspected on the recorded date, not a claim about an installed Claude release. `tests/fixtures/claude-help-contract.txt` is explicitly synthetic. The shared fixture's version string is also synthetic and only tests display; no Claude semantic-version parser or minimum-version claim is made. Check CLI cannot prove account/model entitlement or validate every hidden flag on an older binary. A rejected invocation fails visibly.
 

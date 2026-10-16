@@ -8,6 +8,9 @@ use codeconvoy::{
 use serde_json::{Value, json};
 use std::{path::Path, process::ExitStatus};
 
+#[path = "claude/background_membership.rs"]
+mod background_membership;
+
 fn task() -> TaskConfig {
     TaskConfig {
         agent: AgentId::Claude,
@@ -925,7 +928,7 @@ fn background_follow_up_requires_complete_correlated_turns() {
             "prefix {end}"
         );
     }
-    for missing in [4, 8, 10, 12, 20] {
+    for missing in [8, 10, 12, 20] {
         let mut incomplete = events.clone();
         incomplete.remove(missing);
         assert_eq!(
@@ -934,8 +937,8 @@ fn background_follow_up_requires_complete_correlated_turns() {
             "missing {missing}"
         );
     }
-    // The task update and UI task-list snapshots are informational, not the
-    // evidence that authorizes a follow-up turn or completes it.
+    // A completion update is not an answer. Explicit background starts also
+    // supply membership evidence when no level snapshots are available.
     let without_snapshots: Vec<_> = events
         .iter()
         .filter(|event| {
@@ -948,7 +951,6 @@ fn background_follow_up_requires_complete_correlated_turns() {
         .collect();
     assert_eq!(background_outcome(&without_snapshots), JobStatus::Succeeded);
     for (index, pointer, value) in [
-        (4, "/is_backgrounded", json!(false)),
         (4, "/task_id", json!(null)),
         (4, "/run_id", json!("")),
         (4, "/session_id", json!("different")),
@@ -1062,7 +1064,6 @@ fn background_results_cannot_erase_failure_or_authorize_unrelated_output() {
     for extra in [
         json!({"type":"assistant","message":{}}),
         json!({"type":"system","subtype":"unknown"}),
-        events[11].clone(),
     ] {
         let mut changed = events.clone();
         changed.push(extra);
@@ -1135,6 +1136,7 @@ fn background_correlation_is_bounded_and_cannot_be_cleared_by_later_output() {
         for index in [4, 9, 10] {
             events[index]["run_id"] = json!(run);
         }
+        events[3]["tasks"][0]["run_id"] = json!(run);
         events[20]["origin"]["runId"] = json!(run);
         assert_eq!(
             background_outcome(&events),
@@ -1153,7 +1155,14 @@ fn background_correlation_is_bounded_and_cannot_be_cleared_by_later_output() {
                 format!("task-{n}")
             }
         };
-        let mut events = original[..4].to_vec();
+        let mut events = original[..3].to_vec();
+        let entries: Vec<_> = (0..count)
+            .map(|n| json!({"task_id":task_id(n), "run_id":format!("run-{n}")}))
+            .collect();
+        events.push(
+            json!({"type":"system", "subtype":"background_tasks_changed",
+            "session_id":"fixture", "tasks":entries}),
+        );
         for n in 0..count {
             let mut start = original[4].clone();
             start["task_id"] = json!(task_id(n));
@@ -1180,6 +1189,16 @@ fn background_correlation_is_bounded_and_cannot_be_cleared_by_later_output() {
                 JobStatus::Failed
             },
             "pending runs {count}, reused task ID: {reuse_task_id}"
+        );
+        events.retain(|event| event["subtype"] != "background_tasks_changed");
+        assert_eq!(
+            background_outcome(&events),
+            if count == 128 {
+                JobStatus::Succeeded
+            } else {
+                JobStatus::Failed
+            },
+            "edge-only pending runs {count}, reused task ID: {reuse_task_id}"
         );
     }
 }
