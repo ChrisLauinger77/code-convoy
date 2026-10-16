@@ -1,0 +1,24 @@
+[package]
+name = "nsis-semvercompare"
+version = "0.2.0"
+
+  [package.authors]
+  workspace = true
+
+  [package.edition]
+  workspace = true
+
+  [package.license]
+  workspace = true
+
+[lib]
+crate-type = [ "rlib", "cdylib" ]
+
+[dependencies]
+semver = "=1.0.18"
+
+  [dependencies.pluginapi]
+  workspace = true
+
+  [dependencies.windows-sys]
+  workspace = true
