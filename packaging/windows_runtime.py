@@ -50,7 +50,7 @@ $files = foreach ($arch in @('x64', 'x86')) {
     $path = Join-Path $env:SystemRoot "$folder/$name"
     if (Test-Path $path) {
       $v = (Get-Item $path).VersionInfo
-      @{ architecture=$arch; name=$name; path=$path; sha256=(Get-FileHash $path).Hash.ToLower();
+      @{ architecture=$arch; name=$name; path=$path; sha256=(Get-FileHash $path).Hash.ToLower(); product_version=$v.ProductVersion;
          version=@($v.FileMajorPart,$v.FileMinorPart,$v.FileBuildPart,$v.FilePrivatePart) }
     }
   }

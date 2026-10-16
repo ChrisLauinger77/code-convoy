@@ -15375,7 +15375,7 @@
       "scope": "Windows application and installer",
       "notices": [],
       "unresolved": "windows-crt",
-      "evidence": "evidence/windows-crt-38785562437.zip"
+      "evidence": "evidence/windows-dynamic-crt-38919332474.zip"
     },
     {
       "name": "Rust standard library and compiler-builtins",
@@ -16350,7 +16350,7 @@
     },
     {
       "path": "sources/codeconvoy-nsis-helpers-1.zip",
-      "sha256": "e742cfc829903ded515555c7c4814e04f4114ba0aaf1ebf319132ccd4f0009c3",
+      "sha256": "bef30a8876e918a127e7a39b4e963564ac7349fbf1b310cade5a1b769338ece4",
       "origin": "CodeConvoy original shortcut helper, modified upstream source kit and pinned build recipe; see nsis/README.txt"
     },
     {
@@ -16403,6 +16403,11 @@
       "path": "nsis-build-evidence.zip",
       "sha256": "01b27a6d7b9471df1bff4ddb710dd4378514a17741139b41b51dab18a1dcfe37",
       "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38916756095"
+    },
+    {
+      "path": "evidence/windows-dynamic-crt-38919332474.zip",
+      "sha256": "e246ba88023ed4cd631ec94311f4c781424a310c7ec17196a30875e8ad6dfdf4",
+      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38919332474"
     }
   ],
   "release_blockers": [
@@ -17546,7 +17551,7 @@
         "minimum_vc_version": [
           14,
           51,
-          36260,
+          36247,
           0
         ],
         "minimum_ucrt_version": [
@@ -17583,6 +17588,154 @@
           ]
         },
         "distribution": "User supplied only; no separately bundled runtime DLLs, redistributable installers or automatic download"
+      },
+      "dynamic_application_link_audit": {
+        "workflow_run": 38919332474,
+        "workflow_url": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38919332474",
+        "source_commit": "ebf180f6ba28b0ca61ac72fb286456dcbf8496dd",
+        "kind": "Non-publishing diagnostic reference; runtime floor subsequently corrected",
+        "evidence": "evidence/windows-dynamic-crt-38919332474.zip",
+        "runner": {
+          "ImageOS": "win25-vs2026",
+          "ImageVersion": "20261007.264.1",
+          "GITHUB_RUN_ID": "38919332474",
+          "GITHUB_RUN_ATTEMPT": "1"
+        },
+        "toolchain": {
+          "visual_studio": {
+            "instanceId": "d2e552a4",
+            "installationPath": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise",
+            "installationVersion": "18.10.12224.181",
+            "productId": "Microsoft.VisualStudio.Product.Enterprise",
+            "isPrerelease": false
+          },
+          "environment": {
+            "VCTOOLSVERSION": "14.51.36231",
+            "VCTOOLSINSTALLDIR": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\",
+            "WINDOWSSDKVERSION": "10.0.26100.0\\",
+            "WINDOWSSDKDIR": "C:\\Program Files (x86)\\Windows Kits\\10\\",
+            "LIB": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\ATLMFC\\lib\\x64;C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\lib\\x64;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8.1\\lib\\um\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.26100.0\\ucrt\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\\\lib\\10.0.26100.0\\\\um\\x64"
+          },
+          "linker": {
+            "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\link.exe",
+            "sha256": "a8c42e25c91ca2453e1110540ac08f0fc12d7539454a11b9af8baeecb469837d",
+            "version": "Microsoft (R) Incremental Linker Version 14.51.36260.0"
+          }
+        },
+        "application_sha256": "1c5752e304c309a6e4dd819a2d335148f950c6eedb6d35d0b66bfe2f2bfc8d35",
+        "imports": [
+          "KERNEL32.dll",
+          "USER32.dll",
+          "VCRUNTIME140.dll",
+          "advapi32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "api-ms-win-core-winrt-l1-1-0.dll",
+          "api-ms-win-crt-heap-l1-1-0.dll",
+          "api-ms-win-crt-locale-l1-1-0.dll",
+          "api-ms-win-crt-math-l1-1-0.dll",
+          "api-ms-win-crt-runtime-l1-1-0.dll",
+          "api-ms-win-crt-stdio-l1-1-0.dll",
+          "api-ms-win-crt-string-l1-1-0.dll",
+          "bcryptprimitives.dll",
+          "combase.dll",
+          "comctl32.dll",
+          "dwmapi.dll",
+          "dxgi.dll",
+          "gdi32.dll",
+          "imm32.dll",
+          "kernel32.dll",
+          "ntdll.dll",
+          "ole32.dll",
+          "oleaut32.dll",
+          "opengl32.dll",
+          "setupapi.dll",
+          "shell32.dll",
+          "shlwapi.dll",
+          "uiautomationcore.dll",
+          "user32.dll",
+          "uxtheme.dll"
+        ],
+        "crt_archives": [
+          {
+            "path": "C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.26100.0\\ucrt\\x64\\ucrt.lib",
+            "sha256": "7ef4eac926bf597d2f243f16cdfed7e0db22cb3ca34a1d7e088a84c994a03d66",
+            "distinct_loaded_member_names": 6
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\lib\\x64\\msvcrt.lib",
+            "sha256": "d3f725923c6dd639bb5e5c52f3122c6fe084471f7ab0ef5f27d054f56b4d8a7e",
+            "distinct_loaded_member_names": 34
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\lib\\x64\\vcruntime.lib",
+            "sha256": "d772e963458246dd6dd5a7969c0f08e461ccb8b64cb54e9a67317cafffc22ec9",
+            "distinct_loaded_member_names": 2
+          }
+        ],
+        "observed_system_runtimes": [
+          {
+            "architecture": "x64",
+            "name": "vcruntime140.dll",
+            "path": "C:\\Windows\\System32\\vcruntime140.dll",
+            "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+            "version": [
+              14,
+              51,
+              36247,
+              0
+            ]
+          },
+          {
+            "architecture": "x64",
+            "name": "vcruntime140_1.dll",
+            "path": "C:\\Windows\\System32\\vcruntime140_1.dll",
+            "sha256": "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e",
+            "version": [
+              14,
+              51,
+              36247,
+              0
+            ]
+          },
+          {
+            "architecture": "x64",
+            "name": "ucrtbase.dll",
+            "path": "C:\\Windows\\System32\\ucrtbase.dll",
+            "sha256": "2db258f5adb1e8fd08ef95c0340f131fd2e0b6d1bf55bd67bdf7f6aac9e9e091",
+            "version": [
+              10,
+              0,
+              26100,
+              33438
+            ]
+          },
+          {
+            "architecture": "x86",
+            "name": "vcruntime140.dll",
+            "path": "C:\\Windows\\SysWOW64\\vcruntime140.dll",
+            "sha256": "2fa6efc053203460a23d3a25158f227d895d2dadc63acc1a372da97c3a4281c3",
+            "version": [
+              14,
+              51,
+              36247,
+              0
+            ]
+          },
+          {
+            "architecture": "x86",
+            "name": "ucrtbase.dll",
+            "path": "C:\\Windows\\SysWOW64\\ucrtbase.dll",
+            "sha256": "cb5322f7e7242ba7301108a8cf547b6456c168e3a908f9a14aa0525c2d02f7fc",
+            "version": [
+              10,
+              0,
+              26100,
+              33438
+            ]
+          }
+        ],
+        "validation": "Application release link and portable startup/normal close passed; helper clean builds and Rust tests passed. Final installer and ZIP byte/provenance checks independently passed. Installer correctly rejected the initial 14.51.36260 DLL threshold; actual VCRUNTIME140 files are 14.51.36247.0. Final corrected prerequisite and installer results are recorded in docs/nsis-helper-validation.md.",
+        "license_assessment": "unresolved"
       }
     },
     "nsis_replacements": {
@@ -17640,12 +17793,12 @@
         "packaging/nsis/native-tests.ps1": "8ecb21d47a03062a90f871f570c4265c70c7c529f5dba835c6b2f1cec7985de8",
         "packaging/nsis/prerequisite-tests.nsi": "b402e81fd5cc3ef405c1161990d39bad261904dea7cf5ad808c87bd66cb3a12d",
         "packaging/nsis/prerequisite-tests.ps1": "092e5e0f8820b863c731305ef412a3d9d79a16585ec2407b105f8d0c0a9c1819",
-        "packaging/nsis/prerequisites.nsh": "64cdc1ee036cca886d8446b14aa2377759c8b465732a2b6cf0f5ca24a2153582",
+        "packaging/nsis/prerequisites.nsh": "a58f7be32c71f27e4997caaf5f2c1978be61729cc3e374165fcf3b77cbb3df68",
         "packaging/nsis/test-process.cpp": "51063ac7bd02c2d37a64d6959a55e5f6a0826526b1f9f82414146f9ee7ac8ea1",
         "packaging/nsis_helpers.py": "07f2b6099f4a543eecaa3306dbb6fe0e8657e4b1c3171abc8753d8d99461dc1e",
-        "packaging/windows-runtime.json": "af4993a5cec058a49af1421d8c1795fe9cfb09394c6f70829f6fe673fc8220ce",
+        "packaging/windows-runtime.json": "5475bb1b77b810987b489a7b81d9831264298a12c812395f147bdf0066ad8dc6",
         "packaging/windows_crt.py": "14fae31b77ad5f080c22d8af7909b24b5a8c2b3ae82cf50b4db006092f83f279",
-        "packaging/windows_runtime.py": "acdad7920046a751ee86f2cc5f819d892d418385d4fd14adcf28dd6236727aa2",
+        "packaging/windows_runtime.py": "7358f51ddb4ab51c8e5695068b6ef494f5034a245c83c6926182b1cbf7ddd031",
         "third-party/nsis/Cargo.lock": "e434e7a08cbf9239731f19762f5a7c71c0647a25a7e54985094c05354dbd1e2d",
         "third-party/nsis/Cargo.toml": "0b341b1e7e1d12779e74d749d00946bdc5b63f2f9050c5c3b0318a7af7cc43bb",
         "third-party/nsis/LICENSE-CodeConvoy": "37438906c0a4475ff6029c83d6ab7c9a62c4b8042b32a51182258a717bccb803",

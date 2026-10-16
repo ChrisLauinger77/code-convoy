@@ -121,7 +121,7 @@ FunctionEnd
 Function ${PREFIX}RequireWindowsRuntime
   Call ${PREFIX}CheckWindowsRuntime
   ${If} $CrtMissing != ""
-    StrCpy $CrtMissing "Missing, outdated or unusable Microsoft runtime:$\r$\n$CrtMissing$\r$\n$\r$\nInstall or repair Microsoft Visual C++ v14 Redistributable @VC_VERSION@ or newer for the architecture(s) above, then retry. Keep Windows updated for the Universal CRT.$\r$\n$\r$\n@DOWNLOAD_PAGE@$\r$\n$\r$\nCodeConvoy does not download or install these prerequisites."
+    StrCpy $CrtMissing "Missing, outdated or unusable Microsoft runtime:$\r$\n$CrtMissing$\r$\n$\r$\nInstall or repair the latest Microsoft Visual C++ v14 Redistributable for the architecture(s) above (VCRUNTIME140.dll @VC_VERSION@ or newer), then retry. Keep Windows updated for the Universal CRT.$\r$\n$\r$\n@DOWNLOAD_PAGE@$\r$\n$\r$\nCodeConvoy does not download or install these prerequisites."
     ; Also works with redirected stderr; no console is created for GUI users.
     System::Call 'kernel32::AttachConsole(i -1)'
     System::Call 'kernel32::GetStdHandle(i -12)p.r0'

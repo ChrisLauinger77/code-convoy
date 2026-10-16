@@ -231,7 +231,7 @@ Start Menu integration and an uninstaller, and does not remove user state.
 The ZIP contains `CodeConvoy.exe`, `LICENSE.txt` and the four third-party
 notice/source files described above; the release build dynamically
 links the MSVC CRT. The application/ZIP require the user-supplied x64 Visual C++
-v14 Runtime 14.51.36260.0 or newer; installer process checks also require x86.
+v14 Runtime (`VCRUNTIME140.dll` 14.51.36247.0 or newer); installer process checks also require x86.
 Obtain prerequisites from Microsoft’s official
 [download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
 No runtime DLL, redistributable installer or downloader is bundled. NSIS checks

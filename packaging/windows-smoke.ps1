@@ -91,7 +91,8 @@ try {
         throw "Unreviewed installed native components: $($nativeFiles -join ',')"
     }
     # User data shares this per-user parent directory; uninstall must leave it.
-    New-Item -ItemType Directory -Path "$installed/data" | Out-Null
+    # Portable startup may already have created this application data folder.
+    New-Item -ItemType Directory -Force -Path "$installed/data" | Out-Null
     Set-Content "$installed/data/preservation-fixture.txt" 'keep user state'
     # Exercise upgrade/downgrade selection with synthetic prior registration
     # versions. /P traverses PageReinstall and its SemverCompare call.

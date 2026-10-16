@@ -704,9 +704,12 @@ The implementation supplies no separate Microsoft runtime DLL, redistributable
 installer, downloader or additional portable launcher. Users install Microsoft's
 v14 runtime independently from its
 [official download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
-The reviewed prerequisite floor is 14.51.36260.0 for both architectures, aligned
-with the selected MSVC 14.51 toolset/linker. This is a supported deployment floor,
-not a claim to have measured the oldest DLL exporting each required symbol.
+The reviewed VCRUNTIME140.dll file-version floor is 14.51.36247.0 for both
+architectures, established from the native system files that run the application
+and helper built with MSVC 14.51.36231. The linker has a separate component
+version, 14.51.36260.0; it is not the DLL file version or Redistributable package
+version. This is a tested deployment floor, not a claim to have measured the
+oldest DLL exporting each required symbol.
 Windows supplies the UCRT; its checked floor is 10.0.10240.0, with Windows updates
 required for supported Windows 10/11 systems. The existing product support matrix
 is not expanded by this CRT change.

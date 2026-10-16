@@ -261,10 +261,81 @@ extra DLLs to copy into the package.
 | `codeconvoy_utils.dll` (x86) | `KERNEL32.dll`, `VCRUNTIME140.dll`, `api-ms-win-core-synch-l1-2-0.dll`, `api-ms-win-crt-runtime-l1-1-0.dll`, `api-ms-win-crt-string-l1-1-0.dll`, `kernel32.dll`, `ntdll.dll` |
 | `CodeConvoyAppId.dll` (x86, unchanged) | `KERNEL32.dll`, `ole32.dll` |
 
-The configured minimum is VC v14 **14.51.36260.0**, independently for x64 and
+The configured minimum is VC v14 **14.51.36247.0**, independently for x64 and
 x86, plus the Windows UCRT **10.0.10240.0** or newer. This conservative deployment
-floor follows the recorded build toolset; it is not a measured oldest-export
-compatibility promise. The installer needs both architectures, removal needs
-x86, and the portable application needs only x64. `VCRUNTIME140_1.dll` and
+floor uses the native runtime DLL version verified with the recorded build
+toolset; it is not a measured oldest-export compatibility promise. The
+14.51.36260.0 linker component version is not used as a runtime DLL threshold.
+The installer needs both architectures, removal needs x86, and the portable application needs only x64. `VCRUNTIME140_1.dll` and
 `MSVCP140.dll` are not direct dependencies of either Rust output and are not
 added to the prerequisite policy.
+
+### Files changed for the dynamic CRT work
+
+| Area | Files |
+| --- | --- |
+| Release linkage and native evidence | `packaging/build.py`, `packaging/windows_crt.py`, `packaging/nsis_helpers.py`, `third-party/nsis/inputs.json` |
+| Prerequisite policy and existing installer | `packaging/windows-runtime.json`, `packaging/windows_runtime.py`, `packaging/nsis/prerequisites.nsh`, `packaging/nsis/installer.nsi`, `packaging/nsis/UPSTREAM.json` |
+| Packaging and runtime regression checks | `packaging/licenses.py`, `packaging/release.py`, `packaging/windows-smoke.ps1`, `packaging/nsis/prerequisite-tests.nsi`, `packaging/nsis/prerequisite-tests.ps1`, `packaging/test_windows_runtime.py`, `packaging/test_windows_crt.py`, `packaging/test_nsis_helpers.py`, `packaging/test_licenses.py` |
+| Inventory and reproducible source kit | `third-party/catalog.json`, `third-party/nsis/README.txt`, `third-party/nsis-build-audit.json`, `third-party/nsis-build-evidence.zip`, `third-party/sources/codeconvoy-nsis-helpers-1.zip`, `third-party/evidence/windows-dynamic-crt-38919332474.zip` |
+| CI and stable input bytes | `.github/workflows/ci.yml`, `.gitattributes` |
+| User guidance and assessment | `README.md`, `docs/releasing.md`, `docs/third-party-licenses.md`, `docs/license-blocker-evidence.md`, this document |
+
+Application Rust code, backends, dependencies, scheduler, worktrees, Linux/macOS
+packaging and the two-stage release workflow are unchanged. Validation commits
+are confined to the authorized `codex/windows-dynamic-crt-validation` branch;
+there is no release tag, PR, merge or publication from this work.
+
+### Validation limits
+
+The hosted Windows job is automated native execution on Windows Server 2025;
+it does not certify interactive operation on Windows 10/11. Missing-runtime
+fixtures exercise the shipped checker with private file paths while the host's
+real runtimes remain installed. Older/newer cases vary the required version,
+not Microsoft's installed binaries. The x86 host checks x64 file version and PE
+architecture but cannot load x64 DLLs; the actual x64 application startup test
+provides the positive loading check. The gate is not a complete Windows image
+integrity validator.
+
+Interactive prerequisite-message presentation, wizard choices, taskbar behavior,
+and clean consumer Windows desktops remain untested. Maintenance tests simulate
+prior version registration using the same executable bytes, as in the existing
+smoke suite. Silent uninstall uses `_?=` so its process can be awaited, leaving
+uninstaller self-deletion outside this check. No genuine system DLL, runtime
+installation or real runtime registry key is removed for testing.
+
+### Retained dynamic linker reference
+
+[CI diagnostic 38919332474](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38919332474)
+built source `ebf180f6ba28b0ca61ac72fb286456dcbf8496dd` with Rust 1.99.0,
+VS Enterprise 18.10.12224.181, MSVC 14.51.36231, LINK 14.51.36260.0 and SDK
+10.0.26100.0 on image `win25-vs2026/20261007.264.1`. Its application link,
+portable startup/normal close, two matching helper builds and helper Rust tests
+passed. Independent extraction verified both package contents, all eight native
+PE hashes, sources/notices and linker provenance against that exact revision.
+
+That diagnostic's installer rejected the original DLL minimum of 14.51.36260.0:
+the actual x86 and x64 VCRUNTIME140.dll files are 14.51.36247.0. The corrected
+policy uses the verified runtime-file floor; linker, DLL and Redistributable
+package version numbers must not be conflated. Microsoft recommends the latest
+[compatible v14 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+for the selected toolset. The observed UCRT files are 10.0.26100.33438.
+This reference proves the link and package identities, not a passing installer
+run; the final corrected run is recorded separately below.
+
+The [retained archive](../third-party/evidence/windows-dynamic-crt-38919332474.zip)
+contains 20 original diagnostic files: provenance, toolchain, linker trace/map,
+response file, selected libraries, system runtime hashes/versions and final PE
+inspections/package manifest. It contains no executable or Microsoft DLL,
+library or object file. SHA-256:
+`e246ba88023ed4cd631ec94311f4c781424a310c7ec17196a30875e8ad6dfdf4`.
+The catalog retains this reference separately from the earlier static audit.
+
+The application selects 34 distinct msvcrt.lib member names (including startup,
+TLS, exception/security support and allocation support); the utility's exact
+members are retained in its two-build evidence. These counts describe linker
+selection, not a claim that all loaded objects survive optimization. Both use
+vcruntime.lib and ucrt.lib import libraries; neither selects libcmt.lib,
+libvcruntime.lib, libucrt.lib or libcpmt.lib. The application also uses SDK
+kernel32/ntdll/user32 import archives and the existing windows.0.52.0 import
+archive. AppId still uses SDK kernel32/ole32 imports and UUID data.
