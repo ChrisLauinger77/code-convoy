@@ -296,7 +296,7 @@ def build():
     verify()
     subprocess.run(["cargo", "test", "--locked", "--manifest-path", str(KIT / "Cargo.toml"),
                     "--target", spec["target"], "--target-dir", str(OUTPUT / "tests"),
-                    "-p", "nsis-semvercompare"], env=env, check=True)
+                    "-p", "nsis-semvercompare", "-p", "pluginapi"], env=env, check=True)
     print("Two clean NSIS helper builds match; Windows CRT publication obligation remains unresolved.")
 
 

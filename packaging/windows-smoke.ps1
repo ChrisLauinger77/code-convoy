@@ -56,14 +56,17 @@ try {
     $shortcuts = Get-ChildItem ([Environment]::GetFolderPath('StartMenu')) -Recurse -Filter 'CodeConvoy.lnk'
     if (!$shortcuts) { throw 'Start Menu shortcut is missing' }
     $shell = New-Object -ComObject Shell.Application
-    $wscript = New-Object -ComObject WScript.Shell
     foreach ($shortcut in @($shortcuts.FullName) + @($desktopShortcut)) {
         if (!(Test-Path $shortcut)) { throw "Missing shortcut: $shortcut" }
         $folder = $shell.Namespace((Split-Path $shortcut))
-        if ($folder.ParseName((Split-Path $shortcut -Leaf)).ExtendedProperty('System.AppUserModel.ID') -ne 'io.github.chrislauinger77.code-convoy') {
+        $item = $folder.ParseName((Split-Path $shortcut -Leaf))
+        if ($item.ExtendedProperty('System.AppUserModel.ID') -ne 'io.github.chrislauinger77.code-convoy') {
             throw "Incorrect shortcut AppUserModelID: $shortcut"
         }
-        $actualTarget = $wscript.CreateShortcut($shortcut).TargetPath
+        # Read the Shell's Unicode target property; WScript.Shell's legacy
+        # TargetPath reader replaces characters outside the active code page.
+        # https://learn.microsoft.com/en-us/windows/win32/properties/props-system-link-targetparsingpath
+        $actualTarget = $item.ExtendedProperty('System.Link.TargetParsingPath')
         if ((Get-LongPath $actualTarget) -ne (Get-LongPath "$installed\CodeConvoy.exe")) {
             throw "Incorrect shortcut target: '$actualTarget'; expected '$installed\CodeConvoy.exe'"
         }

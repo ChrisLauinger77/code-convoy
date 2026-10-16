@@ -17,9 +17,16 @@ https://learn.microsoft.com/en-us/windows/win32/shell/appids
 https://learn.microsoft.com/en-us/windows/win32/properties/props-system-appusermodel-id
 https://learn.microsoft.com/en-us/windows/win32/shell/links
 
-The crates/nsis-process, nsis-semvercompare and pluginapi runtime source files
-are byte-for-byte upstream nsis-tauri-utils 0.2.1 at revision
-c3a4447060a260c5e4e09d94284948c4f864da02. See LICENSE_MIT and LICENSE_APACHE-2.0.
+The crates/nsis-process and nsis-semvercompare runtime sources are byte-for-byte
+upstream nsis-tauri-utils 0.2.1 at revision
+c3a4447060a260c5e4e09d94284948c4f864da02. pluginapi derives from that same source;
+pluginapi-stack-safety.patch records the CodeConvoy 2026-10-16 modification:
+validate local stack pointers and GlobalAlloc, use the correct UTF-16 element
+size and bounded copies, and release a consumed node on invalid Unicode too.
+Native unit tests cover null/empty stacks, invalid capacities, truncation,
+Unicode and invalid-surrogate ownership. inputs.json records pre/post hashes.
+The host still owns pointer validity and must call synchronously on one thread.
+See LICENSE_MIT and LICENSE_APACHE-2.0; the original license terms are retained.
 The original source archive is included separately. The modified workspace
 keeps only these crates and a facade reexporting their functions. The unused
 downloader and its HTTP/TLS stack are excluded. Manifests pin semver 1.0.18 and

@@ -99,13 +99,25 @@ class NsisHelpers(unittest.TestCase):
             self.assertNotIn("nsis_tauri_utils::", template)
             self.assertEqual(config["nsis"]["installMode"], "currentUser")
 
-    def test_original_upstream_runtime_modules_are_unchanged(self):
+    def test_upstream_runtime_modules_and_exact_stack_safety_patch(self):
+        import difflib
         import tarfile
+        spec = json.loads((helpers.KIT / "inputs.json").read_text())
         with tarfile.open(helpers.ROOT / "third-party/sources/nsis-tauri-utils-0.2.1.tar.gz") as upstream:
             for name in ("nsis-process", "nsis-semvercompare", "pluginapi"):
                 relative = f"crates/{name}/src/lib.rs"
                 original = upstream.extractfile("nsis-tauri-utils-nsis_tauri_utils-v0.2.1/" + relative).read()
-                self.assertEqual((helpers.KIT / relative).read_bytes(), original)
+                current = (helpers.KIT / relative).read_bytes()
+                if name != "pluginapi":
+                    self.assertEqual(current, original)
+                else:
+                    patch = spec["upstream"]["patches"][0]
+                    self.assertEqual(patch["file"], relative)
+                    self.assertEqual(hashlib.sha256(original).hexdigest(), patch["before_sha256"])
+                    self.assertEqual(hashlib.sha256(current).hexdigest(), patch["after_sha256"])
+                    expected = "".join(difflib.unified_diff(original.decode().splitlines(True),
+                        current.decode().splitlines(True), fromfile="a/" + relative, tofile="b/" + relative))
+                    self.assertEqual((helpers.KIT / patch["path"]).read_text(), expected)
 
     def test_template_preserves_every_other_upstream_instruction(self):
         directory = helpers.ROOT / "packaging/nsis"
