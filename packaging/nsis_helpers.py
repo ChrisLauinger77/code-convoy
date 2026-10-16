@@ -29,6 +29,48 @@ def locked_packages(kit=KIT):
             for p in tomllib.loads((kit / "Cargo.lock").read_text())["package"] if p.get("source")]
 
 
+def source_entries(root=ROOT):
+    return [(name, (root / name).read_bytes()) for name in inputs(root)]
+
+
+def verify_catalog(catalog, texts, root=ROOT, evidence=None):
+    """Source/notice gates also run offline, on platforms that cannot build PE."""
+    from licenses import source_bundle
+    evidence = evidence or root / "third-party"
+    record = catalog["native_provenance"]["nsis_replacements"]
+    kit = evidence / "nsis"
+    spec = json.loads((kit / "inputs.json").read_text())
+    if record["inputs"] != inputs(root) or record["spec"] != spec:
+        raise ValueError("NSIS helper sources/build inputs changed: review provenance")
+    archive = next((s for s in catalog["sources"] if s["path"] == record["source_archive"]), None)
+    if archive is None or (evidence / archive["path"]).read_bytes() != source_bundle(source_entries(root)):
+        raise ValueError("Incomplete NSIS helper source/build kit")
+    packages = json.loads((kit / "dependencies.json").read_text())
+    identities = lambda ps: [(p["name"], p["version"], p["checksum"]) for p in ps]
+    if identities(packages) != identities(locked_packages(kit)) or record["dependencies"] != packages:
+        raise ValueError("Incomplete locked NSIS dependency inventory")
+    for package in packages:
+        if not package["included"]:
+            if not package["name"].startswith("windows_"):
+                raise ValueError("Unexpected NSIS dependency exclusion")
+            continue
+        if not package["notices"] or any(n["text"] not in texts for n in package["notices"]):
+            raise ValueError("Missing NSIS dependency notices")
+        if not any(s["path"] == package["source"] and s["sha256"] == package["checksum"] for s in catalog["sources"]):
+            raise ValueError("Missing locked NSIS dependency source")
+        component = next((c for c in catalog["components"] if c["name"] == "CodeConvoy NSIS helper dependency: " + package["name"]), None)
+        if (component is None or component["version"] != package["version"] or component.get("checksum") != package["checksum"]
+                or component["notices"] != package["notices"]):
+            raise ValueError("Missing NSIS dependency inventory/notice coverage")
+    if set(record["binaries"]) != set(spec["binaries"]):
+        raise ValueError("Missing NSIS replacement binary inventory")
+    for name, checksum in record["binaries"].items():
+        if catalog["windows_installer_plugins"].get("$PLUGINSDIR/" + name) != checksum:
+            raise ValueError("NSIS replacement provenance does not match pinned installer DLL")
+    if OLD_PLUGINS & catalog["windows_installer_plugins"].keys():
+        raise ValueError("Old NSIS prebuilt plugin restored")
+
+
 def pe_exports(text):
     return sorted(re.findall(r"^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(\w+)\s*$", text, re.M))
 
@@ -44,7 +86,10 @@ def check_identity(text, expected):
 
 def check_link(directory, expected):
     invocation = json.loads((directory / "invocation.json").read_text())
-    if invocation["exit_code"] != 0 or not all(flag in invocation["command"] for flag in ("/VERBOSE", "/VERBOSE:LIB", "/Brepro")):
+    toolchain = json.loads((directory / "toolchain.json").read_text())
+    if (invocation["exit_code"] != 0 or not invocation["command"]
+            or invocation["command"][0] != toolchain["linker"]["path"]
+            or not all(flag in invocation["command"] for flag in ("/VERBOSE", "/VERBOSE:LIB", "/Brepro"))):
         raise ValueError("Missing successful deterministic helper linker invocation")
     selected = crt.loaded_libraries((directory / "link.log").read_text(encoding="utf-8", errors="replace"),
                                     require_crt=expected["crt"] == "static")
@@ -54,6 +99,8 @@ def check_link(directory, expected):
         raise ValueError("Helper linker inventory differs from raw selection evidence")
     if expected["crt"] == "none" and any(PureWindowsPath(p).name.lower() in crt.CRT_NAMES for p in selected):
         raise ValueError("Shortcut helper unexpectedly includes CRT code")
+    if any(PureWindowsPath(p).name.lower().startswith("windows.0.") for p in selected):
+        raise ValueError("Unexpected prebuilt Windows import archive")
     for response in invocation.get("response_files", []):
         if not re.fullmatch(r"response-\d+\.rsp", response["name"]) or crt.checksum(directory / response["name"]) != response["sha256"]:
             raise ValueError("Missing helper linker response evidence")
@@ -67,6 +114,7 @@ def verify(directory=OUTPUT):
     report = json.loads((directory / "provenance.json").read_text())
     if (report.get("schema") != 1 or report.get("inputs") != inputs()
             or report.get("spec") != spec or report.get("packages") != locked_packages()
+            or not report.get("rustc", "").startswith(f"rustc {spec['rust']} ")
             or report.get("license_assessment") != "windows-crt-unresolved"):
         raise ValueError("Missing, stale or mismatched NSIS helper provenance")
     if set(report.get("binaries", {})) != set(spec["binaries"]):
@@ -80,9 +128,15 @@ def verify(directory=OUTPUT):
                 if Path(path).name != path or crt.checksum(capture / path) != checksum:
                     raise ValueError("Missing or altered NSIS linker evidence")
             required = {*crt.CAPTURE_FILES, "pe.txt"}
+            if spec["binaries"][name]["crt"] == "static":
+                required.add("rustflags.json")
             if not required <= record["evidence"][build].keys():
                 raise ValueError("Incomplete NSIS linker evidence")
             check_link(capture, spec["binaries"][name])
+            if "rustflags.json" in required:
+                flags = json.loads((capture / "rustflags.json").read_text())
+                if "windows_raw_dylib" not in flags or "target-feature=+crt-static" not in flags:
+                    raise ValueError("Unexpected helper CRT/import-library configuration")
             check_identity((capture / "pe.txt").read_text(), spec["binaries"][name])
             toolchain = json.loads((capture / "toolchain.json").read_text())
             environment = toolchain["environment"]
@@ -112,9 +166,10 @@ def build():
     if OUTPUT.exists():
         shutil.rmtree(OUTPUT)
     (OUTPUT / "plugins").mkdir(parents=True)
+    revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=False)
     report = {"schema": 1, "spec": spec, "inputs": inputs(), "packages": locked_packages(),
               "rustc": rustc, "cargo": crt.output(["cargo", "--version"], env=env),
-              "source_commit": crt.output(["git", "rev-parse", "HEAD"]).strip(),
+              "source_commit": revision.stdout.strip() if revision.returncode == 0 else None,
               "license_assessment": "windows-crt-unresolved", "binaries": {}}
     for build_name in ("first", "second"):
         work = OUTPUT / build_name
@@ -135,11 +190,12 @@ def build():
             else:
                 wrapper = capture / "link.cmd"
                 wrapper.write_text(f"@{crt.command_path(sys.executable)} {crt.command_path(Path(crt.__file__))} link %*\n")
-                flags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/Brepro",
+                flags = ["--cfg", "windows_raw_dylib", "-C", "target-feature=+crt-static", "-C", "link-arg=/Brepro",
                          f"--remap-path-prefix={Path.home()}=/build-home",
                          f"--remap-path-prefix={env.get('CARGO_HOME', Path.home() / '.cargo')}=/cargo",
                          f"--remap-path-prefix={ROOT}=."]
                 link_env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(flags)
+                crt.write_json(capture / "rustflags.json", flags)
                 command = ["cargo", "rustc", "--locked", "--release", "--manifest-path", str(KIT / "Cargo.toml"),
                            "--target", spec["target"], "--target-dir", str(work / "cargo"),
                            "-p", "codeconvoy-utils", "--", "-C", f"linker={wrapper}"]
@@ -155,6 +211,8 @@ def build():
             if record["sha256"] != checksum:
                 raise ValueError(f"Independent clean helper builds differ: {name}")
             evidence = [*crt.CAPTURE_FILES, "pe.txt", "build-command.json", *[p.name for p in capture.glob("response-*.rsp")]]
+            if expected["crt"] == "static":
+                evidence.append("rustflags.json")
             record["evidence"][build_name] = {p: crt.checksum(capture / p) for p in evidence}
             shutil.copyfile(capture / name, OUTPUT / "plugins" / name)
     crt.write_json(OUTPUT / "provenance.json", report)
@@ -178,10 +236,34 @@ def configure(config, work):
     config["nsis"]["template"] = str(rendered.resolve())
 
 
+def native_tests():
+    verify()
+    spec = json.loads((KIT / "inputs.json").read_text())
+    env, toolchain = crt.msvc_environment(os.environ.copy(), architecture="x64_x86",
+                                        toolset=spec["msvc"], sdk=spec["windows_sdk"])
+    work = ROOT / "target/packaging/nsis-tests"
+    work.mkdir(parents=True, exist_ok=True)
+    compiler = Path(toolchain["linker"]["path"]).with_name("cl.exe")
+    subprocess.run([str(compiler), "/nologo", "/GS-", "/Zl", str(ROOT / "packaging/nsis/test-process.cpp"),
+                    f"/Fo{work / 'process.obj'}", f"/Fe{work / 'CodeConvoyNsisFixture.exe'}", "/link",
+                    "/ENTRY:start", "/SUBSYSTEM:WINDOWS", "/NODEFAULTLIB", "kernel32.lib"], env=env, check=True)
+    template = (ROOT / "packaging/nsis/helper-tests.nsi").read_text(encoding="utf-8")
+    for token, path in (("@OUTPUT@", work / "helper-tests.exe"), ("@HELPERS@", OUTPUT / "plugins")):
+        value = path.as_posix()
+        if any(c in value for c in '$"\r\n'):
+            raise ValueError("Unsupported native NSIS test path")
+        template = template.replace(token, value)
+    script = work / "helper-tests.nsi"
+    script.write_text(template, encoding="utf-8-sig")
+    makensis = Path(env["LOCALAPPDATA"]) / ".cargo-packager/NSIS/makensis.exe"
+    subprocess.run([str(makensis), str(script)], env=env, check=True)
+    subprocess.run(["pwsh", "-NoProfile", "-File", str(ROOT / "packaging/nsis/native-tests.ps1")], check=True)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "link-no-crt":
         sys.exit(crt.capture_link(sys.argv[2:], require_crt=False))
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "verify"))
+    parser.add_argument("command", choices=("build", "verify", "test"))
     args = parser.parse_args()
-    build() if args.command == "build" else verify()
+    {"build": build, "verify": verify, "test": native_tests}[args.command]()

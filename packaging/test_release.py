@@ -60,7 +60,8 @@ class ReleaseGates(unittest.TestCase):
                             release.verify_windows_zip(archive, exe)
 
     def test_installer_and_app_ship_license_as_resource(self):
-        with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"), patch.object(licenses, "prepare", return_value=Path("notices")):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"), \
+                patch("nsis_helpers.configure"), patch.object(licenses, "prepare", return_value=Path("notices")):
             work = Path(temporary)
             for format_name in ("app", "nsis"):
                 release.package(work, work, "codeconvoy", format_name)
