@@ -152,9 +152,21 @@ turns, earlier failures, bad correlations, duplicates, explicit errors, invalid
 JSON and unconfirmed endings cannot be erased by a later success. Coalesced
 notifications require all attributed results in notification order; an empty
 zero-turn placeholder cannot finish the batch. Snapshots cannot clear obligations.
-The existing UI-render exception and ordinary single-result behavior are retained.
+The existing UI-render exception remains allowed.
 Scheduler, cancellation, process supervision, Git/worktree handling, other
 backends, settings and CLI arguments are unchanged.
+
+Tracked background notifications must report `status: completed`. A `failed`,
+`killed`, `stopped` or other non-completed status permanently fails completion
+validation, even if Claude later handles it and emits a successful follow-up.
+Untracked notifications remain ordinary activity before the first result and
+during an authorized answer; while waiting after a result, they fail correlation.
+The queued-turn check now also applies to ordinary single-turn runs: every result
+must have an absent or integer-zero `queued_turn_count`; nonzero or malformed
+values fail. An initial result may omit `result_index` for single-turn
+compatibility, but a continuation then fails because consecutive indices cannot
+be established. The completion diagnostic points to these correlation fields in
+Raw output.
 
 Deterministic regressions cover every truncated prefix of the fixture, missing
 start/notification/init/result, altered session/task/run/origin/index fields,
@@ -162,17 +174,22 @@ failed/interrupted/malformed earlier and final results, nonzero exit, explicit
 errors during either turn, unsolicited trailing output, sequential and coalesced
 notifications, early notifications, and correlation-memory bounds. Existing
 failure, permission, persistence and buffer-limit tests remain enabled.
+Review follow-up tests also pin untracked-notification handling at each turn
+boundary, sticky failed/killed/stopped notifications before and after the first
+result, ordinary-result queued-turn validation, and the missing-index diagnostic.
 
 Compatibility limits: this recognizes the observed `session-task` continuation
 shape, not arbitrary injected turns, peer messages or future result origins.
 Continuation support requires the observed IDs, explicit background marker,
 repeated init and result indices; older/different continuation shapes fail
 conservatively. Missing IDs are not guessed. Correlation is bounded to 128 pending
-tasks and 256 bytes per identifier. Notifications received before the initial
-result also require an attributed follow-up; an initial result alone cannot prove
-they were answered. These bounds do not change process ownership or cancellation.
+tasks and 256 bytes per identifier retained from `task_started`; later events
+remain subject to the existing 1 MiB record limit. Notifications received before
+the initial result also require an attributed follow-up; an initial result alone
+cannot prove they were answered. These bounds do not change process ownership or
+cancellation.
 No new authenticated reproduction of the original long-running task or native
-Windows/macOS execution is claimed.
+Windows/macOS Claude execution is claimed.
 
 Final local verification on Linux after the implementation and error-guard tests:
 
@@ -190,6 +207,24 @@ local disabled-Auto setting reported `default`, with the existing warning retain
 These are fresh ordinary single-turn checks, not an authenticated reproduction
 of the background-task sequence. That sequence is verified by the supplied trace
 and deterministic replay. No account authentication files were read or edited.
+
+PR #70 review follow-up verification on macOS, 2026-10-16:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features -- --test-threads=1` | 616 passed, 0 failed, 9 opt-in tests ignored (excluding eight nested fixture-test summaries) |
+| `cargo build --release` | Passed |
+
+The sandboxed suite could not create a temporary Unix socket in an existing
+storage test; the final suite ran outside that sandbox. A parallel run then hit
+the fixture startup timeout in
+`cancellation_racing_leader_failure_stops_descendants_but_preserves_a_peer`;
+that test passed alone and in the complete serial run. The review follow-up
+changes diagnostics, documentation, comments and tests, not completion rules.
+Installed/authenticated Claude probes were not rerun. The declared minimum Rust
+version is 1.95, which supports the existing `Option::is_none_or` call.
 
 ## Contract evidence
 

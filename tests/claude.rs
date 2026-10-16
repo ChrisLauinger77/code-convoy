@@ -562,6 +562,98 @@ fn background_outcome(events: &[Value]) -> JobStatus {
 }
 
 #[test]
+fn untracked_task_notifications_are_activity_until_a_result_requires_correlation() {
+    let notification = json!({"type":"system", "subtype":"task_notification",
+        "task_id":"untracked-task", "run_id":"untracked-run",
+        "session_id":"fixture", "status":"completed"});
+    let mut output = Claude.output();
+    output.push(Stream::Stdout, &line(&notification));
+    output.push(Stream::Stdout, &line(&success()));
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+    output.push(Stream::Stdout, &line(&notification));
+    output.finish();
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+
+    let original = background_events();
+    // An unrelated notification is also ordinary activity during the answer,
+    // but cannot authorize another turn while waiting after a result.
+    for (index, expected) in [
+        (8, JobStatus::Succeeded),
+        (9, JobStatus::Failed),
+        (12, JobStatus::Failed),
+        (13, JobStatus::Succeeded),
+        (21, JobStatus::Failed),
+    ] {
+        let mut events = original.clone();
+        events.insert(index, notification.clone());
+        assert_eq!(background_outcome(&events), expected, "event {index}");
+    }
+}
+
+#[test]
+fn failed_tracked_notifications_cannot_be_repaired_by_successful_follow_up_results() {
+    let original = background_events();
+    for status in ["completed", "failed", "killed", "stopped"] {
+        for before_result in [true, false] {
+            let mut notification = original[10].clone();
+            notification["status"] = json!(status);
+            let mut events = original[..8].to_vec();
+            events.extend(if before_result {
+                [notification, original[8].clone()]
+            } else {
+                [original[8].clone(), notification]
+            });
+            events.extend_from_slice(&original[12..]);
+            assert_eq!(
+                background_outcome(&events),
+                if status == "completed" {
+                    JobStatus::Succeeded
+                } else {
+                    JobStatus::Failed
+                },
+                "{status} notification before initial result: {before_result}"
+            );
+        }
+    }
+}
+
+#[test]
+fn single_turn_results_require_no_queued_turns() {
+    assert_eq!(background_outcome(&[success()]), JobStatus::Succeeded);
+    for (count, expected) in [
+        (json!(0), JobStatus::Succeeded),
+        (json!(1), JobStatus::Failed),
+        (json!(-1), JobStatus::Failed),
+        (json!(null), JobStatus::Failed),
+        (json!("0"), JobStatus::Failed),
+        (json!(false), JobStatus::Failed),
+    ] {
+        let mut result = success();
+        result["queued_turn_count"] = count.clone();
+        assert_eq!(background_outcome(&[result]), expected, "count {count}");
+    }
+}
+
+#[test]
+fn missing_initial_result_index_allows_a_single_turn_but_fails_follow_up_with_a_hint() {
+    let mut events = background_events();
+    events[8].as_object_mut().unwrap().remove("result_index");
+    assert_eq!(
+        background_outcome(&[events[8].clone()]),
+        JobStatus::Succeeded
+    );
+    let mut output = auto_output();
+    for event in events {
+        output.push(Stream::Stdout, &line(&event));
+    }
+    output.finish();
+    let (outcome, message) = output.interpret(status(0));
+    assert_eq!(outcome, JobStatus::Failed);
+    assert!(message.contains("uncorrelated background follow-up"));
+    assert!(message.contains("consecutive result_index"));
+}
+
+#[test]
 fn background_follow_up_requires_complete_correlated_turns() {
     let events = background_events();
     assert_eq!(background_outcome(&events), JobStatus::Succeeded);

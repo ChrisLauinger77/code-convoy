@@ -81,6 +81,8 @@ impl Continuation {
             }
         }
 
+        // Follow-up results return through finish_turn above; this check only
+        // validates the initial result, whose index remains optional.
         if event["type"] == "result" {
             return (event.get("result_index").is_none()
                 || event["result_index"].as_u64() == Some(0))

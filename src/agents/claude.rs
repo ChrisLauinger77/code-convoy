@@ -465,7 +465,7 @@ impl AgentOutput for ClaudeOutput {
             (
                 JobStatus::Failed,
                 format!(
-                    "Claude Code completion was not confirmed ({status}). Expected valid success results with is_error=false for every turn, no unfinished background follow-up, and no execution/protocol errors. Inspect output for interrupted execution, turn limits, authentication, model, permission or CLI errors."
+                    "Claude Code completion was not confirmed ({status}). Expected valid success results with is_error=false for every turn, no unfinished or uncorrelated background follow-up, and no execution/protocol errors. For background follow-ups, check session/task/run IDs and consecutive result_index values in Raw output. Inspect output for interrupted execution, turn limits, authentication, model, permission or CLI errors."
                 ),
             )
         };
