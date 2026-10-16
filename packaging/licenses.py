@@ -272,6 +272,8 @@ def verify_windows_installer(archive, work, exe):
     with tempfile.TemporaryDirectory(prefix="final-installer-", dir=work) as temporary:
         payload = Path(temporary)
         subprocess.run(["7z", "x", "-y", f"-o{payload}", str(archive)], check=True, stdout=subprocess.PIPE)
+        from windows_runtime import reject_bundled_runtimes
+        reject_bundled_runtimes(p.relative_to(payload).as_posix() for p in payload.rglob("*") if p.is_file())
         verify_directory(payload)
         if ((payload / "CodeConvoy.exe").read_bytes() != exe.read_bytes()
                 or (payload / "LICENSE.txt").read_bytes() != (ROOT / "LICENSE").read_bytes()):

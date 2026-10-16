@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+import windows_runtime
 
 ROOT = Path(__file__).resolve().parent.parent
 EVIDENCE = ROOT / "target/packaging/windows-crt"
@@ -208,6 +209,7 @@ def build(command, env, target=None):
     imports = pe_imports(inspection)
     check_dynamic_imports(imports)
     check_dynamic_libraries(p["path"] for p in libraries)
+    windows_runtime.capture_system(EVIDENCE)
     report = {
         "imports": imports, "crt": "dynamic",
         "pe_sha256": checksum(EVIDENCE / "application-pe.txt"),

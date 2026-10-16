@@ -14,6 +14,7 @@ import tomllib
 import zipfile
 
 import windows_crt as crt
+import windows_runtime
 
 ROOT = Path(__file__).resolve().parent.parent
 KIT = ROOT / "third-party/nsis"
@@ -24,7 +25,8 @@ OLD_PLUGINS = {"$PLUGINSDIR/ApplicationID.dll", "$PLUGINSDIR/nsis_tauri_utils.dl
 def inputs(root=ROOT):
     paths = [p for directory in ("third-party/nsis", "packaging/nsis")
              for p in (root / directory).rglob("*") if p.is_file()]
-    paths += [root / p for p in ("packaging/nsis_helpers.py", "packaging/windows_crt.py")]
+    paths += [root / p for p in ("packaging/nsis_helpers.py", "packaging/windows_crt.py",
+                                "packaging/windows_runtime.py", "packaging/windows-runtime.json")]
     return {p.relative_to(root).as_posix(): crt.checksum(p) for p in sorted(paths)}
 
 
@@ -313,6 +315,11 @@ def configure(config, work):
     template = (ROOT / "packaging/nsis/installer.nsi").read_text()
     if template.count("@CODECONVOY_HELPERS@") != 1:
         raise ValueError("Missing independent NSIS helper path")
+    if "CODECONVOY_CRT_FIXTURE" in template:
+        raise ValueError("Runtime test hook is forbidden in production template")
+    prerequisites = work / "prerequisites.nsh"
+    prerequisites.write_text(windows_runtime.render_prerequisites(), encoding="utf-8-sig")
+    template = template.replace("@CODECONVOY_PREREQUISITES@", prerequisites.resolve().as_posix())
     rendered = work / "installer.nsi"
     rendered.write_text(template.replace("@CODECONVOY_HELPERS@", path), encoding="utf-8")
     config["nsis"]["template"] = str(rendered.resolve())

@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "msvc": "14.51.36231",
+  "windows_sdk": "10.0.26100.0",
+  "minimum_vc_version": [
+    14,
+    51,
+    36260,
+    0
+  ],
+  "minimum_ucrt_version": [
+    10,
+    0,
+    10240,
+    0
+  ],
+  "download_page": "https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist",
+  "runtime_files": {
+    "x64": [
+      "vcruntime140.dll",
+      "vcruntime140_1.dll",
+      "ucrtbase.dll"
+    ],
+    "x86": [
+      "vcruntime140.dll",
+      "ucrtbase.dll"
+    ]
+  }
+}

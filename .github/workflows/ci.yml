@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       nsis_helpers_only:
-        description: Build pinned NSIS helpers twice and retain evidence (no publication)
+        description: Capture Windows application and repeatable NSIS helper evidence (no publication)
         type: boolean
         default: false
       windows_crt_audit:
@@ -31,6 +31,7 @@ jobs:
         with:
           python-version: "3.15"
       - run: python packaging/nsis_helpers.py build
+      - run: python packaging/build.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -40,6 +41,7 @@ jobs:
             target/packaging/nsis-helpers/plugins/*
             target/packaging/nsis-helpers/first/*.dll/*
             target/packaging/nsis-helpers/second/*.dll/*
+            target/packaging/windows-crt/*
           if-no-files-found: error
   check:
     if: ${{ !inputs.nsis_helpers_only }}

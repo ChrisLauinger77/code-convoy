@@ -248,6 +248,8 @@ def verify_windows_zip(archive, exe):
     expected = {"CodeConvoy.exe": exe.read_bytes(), "LICENSE.txt": (ROOT / "LICENSE").read_bytes(),
                 **licenses.materials()}
     with zipfile.ZipFile(archive) as zipped:
+        from windows_runtime import reject_bundled_runtimes
+        reject_bundled_runtimes(zipped.namelist())
         if (sorted(zipped.namelist()) != sorted(expected)
                 or zipped.testzip() is not None
                 or any(zipped.read(name) != data for name, data in expected.items())):
