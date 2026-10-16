@@ -30,7 +30,7 @@
         "KillProcess",
         "SemverCompare"
       ],
-      "crt": "static"
+      "crt": "dynamic"
     }
   },
   "source_patch": {

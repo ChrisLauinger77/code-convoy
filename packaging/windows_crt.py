@@ -18,6 +18,27 @@ INPUTS = ("Cargo.toml", "Cargo.lock", "packaging/build.py", "packaging/windows_c
 CAPTURE_FILES = ("link.log", "link.map", "invocation.json", "toolchain.json", "selected-libraries.json")
 
 
+def pe_imports(text):
+    return sorted(set(re.findall(r"^\s+([\w.-]+\.dll)\s*$", text, re.I | re.M)))
+
+
+def check_dynamic_imports(imports):
+    names = {name.lower() for name in imports}
+    if "vcruntime140.dll" not in names or not any(
+            n == "ucrtbase.dll" or n.startswith("api-ms-win-crt-") for n in names):
+        raise ValueError("Missing dynamic VC/UCRT imports")
+    if any(n.startswith(("msvcp", "msvcr")) for n in names):
+        raise ValueError("Unexpected additional Microsoft C/C++ runtime import")
+
+
+def check_dynamic_libraries(selected):
+    names = {PureWindowsPath(p).name.lower() for p in selected}
+    if names & {"libcmt.lib", "libvcruntime.lib", "libucrt.lib", "libcpmt.lib"}:
+        raise ValueError("Unexpected static CRT implementation library")
+    if "msvcrt.lib" not in names:
+        raise ValueError("Missing dynamic CRT startup evidence")
+
+
 def checksum(path):
     with Path(path).open("rb") as source:
         return hashlib.file_digest(source, "sha256").hexdigest()
@@ -182,7 +203,14 @@ def build(command, env, target=None):
         raise ValueError("CRT evidence records a failed linker invocation")
     libraries = json.loads((EVIDENCE / "selected-libraries.json").read_text(encoding="utf-8"))
     binary = ROOT / "target" / (target or "") / "release/codeconvoy.exe"
+    inspection = output([Path(toolchain["linker"]["path"]).with_name("dumpbin.exe"), "/headers", "/imports", binary], env=env)
+    (EVIDENCE / "application-pe.txt").write_text(inspection, encoding="utf-8")
+    imports = pe_imports(inspection)
+    check_dynamic_imports(imports)
+    check_dynamic_libraries(p["path"] for p in libraries)
     report = {
+        "imports": imports, "crt": "dynamic",
+        "pe_sha256": checksum(EVIDENCE / "application-pe.txt"),
         "schema": 1, "status": "captured", "license_assessment": "unresolved",
         "source_commit": output(["git", "rev-parse", "HEAD"]).strip(),
         "target": "x86_64-pc-windows-msvc", "binary_sha256": checksum(binary),
@@ -239,6 +267,12 @@ def verify(binary, directory=EVIDENCE, *, source_commit=None):
             or len(libraries) != len(selected) or {p["path"]: p["members"] for p in libraries} != selected
             or any(not re.fullmatch(r"[0-9a-f]{64}", p.get("sha256", "")) for p in libraries)):
         raise ValueError("Selected Windows linker inputs differ from raw diagnostics")
+    inspection = directory / "application-pe.txt"
+    if (report.get("crt") != "dynamic" or report.get("pe_sha256") != checksum(inspection)
+            or report.get("imports") != pe_imports(inspection.read_text())):
+        raise ValueError("Missing or altered application dynamic CRT inspection")
+    check_dynamic_imports(report["imports"])
+    check_dynamic_libraries(selected)
     return report
 
 
