@@ -197,13 +197,14 @@ class LinuxAbi(unittest.TestCase):
                     elf(args[3], "usr/bin/codeconvoy")
                     return subprocess.CompletedProcess(args, 0)
 
-                with patch.object(abi, "run", side_effect=run):
+                with patch.object(abi, "run", side_effect=run), patch("licenses.verify_appimage_runtime") as identity:
                     if runtime or payload != "2.39":
                         with self.assertRaisesRegex(ValueError, "GLIBC"):
                             abi.inspect_artifact(artifact, work)
                     else:
                         self.assertIn("AppImage runtime", abi.inspect_artifact(artifact, work))
                         self.assertEqual(len(inspected), 2)
+                    identity.assert_called_once_with(artifact)
                 self.assertEqual(inspected[0], artifact)
 
     def test_missing_final_executable_and_bad_extraction_fail(self):
@@ -211,11 +212,21 @@ class LinuxAbi(unittest.TestCase):
             work = Path(temporary).resolve()
             artifact = elf(work, "final.AppImage")
             with patch.object(abi, "inspect_glibc", return_value=None), patch.object(
-                    abi, "run", return_value=subprocess.CompletedProcess([], 0, "not an offset", "")):
+                    abi, "run", return_value=subprocess.CompletedProcess([], 0, "not an offset", "")), \
+                    patch("licenses.verify_appimage_runtime"):
                 with self.assertRaisesRegex(ValueError, "offset"):
                     abi.inspect_artifact(artifact, work)
             with self.assertRaisesRegex(ValueError, "missing its ELF"):
                 abi.inspect_payload(work)
+
+    def test_unreviewed_runtime_is_never_executed_for_extraction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary).resolve()
+            artifact = elf(work, "unknown.AppImage")
+            with patch.object(abi, "run") as run:
+                with self.assertRaisesRegex(ValueError, "runtime differs"):
+                    abi.inspect_artifact(artifact, work)
+                run.assert_not_called()
 
     def test_package_assembly_propagates_final_gate_failure(self):
         with tempfile.TemporaryDirectory() as temporary:

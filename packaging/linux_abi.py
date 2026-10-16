@@ -144,6 +144,8 @@ def inspect_artifact(artifact, work, *, payload_check=None):
                 run("cpio", "--extract", "--make-directories", "--no-absolute-filenames",
                     "--quiet", "--directory", payload, stdin=source)
         elif artifact.suffix == ".AppImage":
+            from licenses import verify_appimage_runtime
+            verify_appimage_runtime(artifact)
             runtime = inspect_glibc(artifact)
             requirements.append(("AppImage runtime", runtime))
             if runtime and runtime > MAX_GLIBC:

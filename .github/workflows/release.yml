@@ -50,7 +50,7 @@ jobs:
       - name: Native build and package dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential binutils pkg-config libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev libegl1-mesa-dev libdbus-1-3 libfontconfig1 rpm rpm2cpio cpio desktop-file-utils file patchelf squashfs-tools xvfb xauth openbox wmctrl dbus-x11
+          sudo apt-get install -y build-essential binutils pkg-config libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev libegl1-mesa-dev libdbus-1-3 libfontconfig1 rpm rpm2cpio cpio desktop-file-utils file patchelf squashfs-tools xvfb xauth openbox wmctrl dbus-x11 bubblewrap
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - run: cargo test --locked --all-features
@@ -59,6 +59,10 @@ jobs:
       - run: cargo install --locked --version "$PACKAGER_VERSION" cargo-packager
       - name: Package and verify DEB, RPM, AppImage and host tools
         run: python packaging/release.py linux
+      - name: Verify runtime clean-build repeatability
+        run: |
+          python third-party/runtime/build-runtime.py build --sources third-party/sources --cache target/appimage-runtime-inputs --work target/runtime-repeat
+          python packaging/appimage_runtime.py target/packaging/linux/runtime-build/out target/runtime-repeat/out
       # Retain verified package bytes for diagnosis if a runtime check fails.
       # Aggregation still requires the entire Linux job to succeed.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

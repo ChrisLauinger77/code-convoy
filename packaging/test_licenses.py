@@ -91,6 +91,14 @@ class LicenseEvidence(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "MPL source archive"):
             self.check()
 
+    def test_runtime_build_and_relink_evidence_must_remain_bound(self):
+        records = self.catalog["native_provenance"]["appimage"]
+        original = copy.deepcopy(self.catalog["files"])
+        for key in ("build_audit", "relink_audit"):
+            self.catalog["files"] = [s for s in original if s["path"] != records[key]]
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "build/relink evidence"):
+                self.check()
+
     def test_stdlib_report_does_not_replace_its_own_lockfile_coverage(self):
         self.catalog["components"] = [c for c in self.catalog["components"]
                                       if c["name"] != "Rust std dependency: addr2line"]
@@ -115,7 +123,8 @@ class LicenseEvidence(unittest.TestCase):
             self.check()
 
     def test_native_provenance_cannot_describe_another_binary(self):
-        for component, key in (("appimage", "runtime_sha256"), ("nsis_tauri_utils", "dll_sha256")):
+        for component, key in (("appimage", "runtime_sha256"), ("appimage", "source_revision"),
+                               ("nsis_tauri_utils", "dll_sha256")):
             record = self.catalog["native_provenance"][component]
             original = record[key]
             record[key] = "0" * 64
@@ -184,7 +193,8 @@ class LicenseEvidence(unittest.TestCase):
                 self.assertEqual((info.internal_attr, info.flag_bits, info.volume), (0, 0, 0))
                 self.assertEqual((info.extra, info.comment), (b"", b""))
                 if info.filename != "README.txt":
-                    self.assertEqual(archive.read(info), (self.evidence / "sources" / info.filename).read_bytes())
+                    item = next(s for s in self.catalog["sources"] if Path(s["path"]).name == info.filename)
+                    self.assertEqual(archive.read(info), (self.evidence / item["path"]).read_bytes())
 
     def test_source_zip_portable_golden_bytes_preserve_binary_and_line_endings(self):
         # This fixed digest runs on Windows, Linux and macOS. A same-host repeat
@@ -237,7 +247,8 @@ class FinalLicensePayload(unittest.TestCase):
             original = b"\x7fELF" + bytes(944632 - 4)
             runtime, image = root / "runtime", root / "image"
             runtime.write_bytes(original)
-            (root / "packaging/appimage-tools.json").write_text(json.dumps({"runtime": {"sha256": licenses.digest(original)}}))
+            (root / "packaging/appimage-tools.json").write_text(json.dumps({"runtime": {
+                "sha256": licenses.digest(original), "size": len(original), "md5_offset": 932096}}))
             packaged = bytearray(original)
             packaged[932096:932112] = b"digest field...."
             image.write_bytes(packaged + b"squashfs")

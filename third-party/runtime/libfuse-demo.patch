@@ -1,0 +1,18 @@
+--- a/lib/fuse_lowlevel.c
++++ b/lib/fuse_lowlevel.c
+@@ -1,4 +1,7 @@
+ /*
++  CodeConvoy recipient relinking demonstration, 2026-10-16:
++  Print a marker from library initialization. LGPL-2.1 unchanged.
++
+   FUSE: Filesystem in Userspace
+   Copyright (C) 2001-2007  Miklos Szeredi <miklos@szeredi.hu>
+ 
+@@ -52,6 +55,7 @@
+ 
+ static __attribute__((constructor)) void fuse_ll_init_pagesize(void)
+ {
++	fputs("CodeConvoy modified libfuse relink demonstration\n", stderr);
+ 	pagesize = getpagesize();
+ }
+ 

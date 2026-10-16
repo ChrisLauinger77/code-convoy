@@ -18,7 +18,7 @@ separately records normal dependency edges. The other 74 entries are explicit
 exclusions for these release targets. This does not imply every object survives
 linking, or that every listed crate is in every package.
 
-The collection contains **362 distinct notice texts**, deduplicated by
+The collection contains **365 distinct notice texts**, deduplicated by
 their content hashes in [texts.json](../third-party/texts.json). It retains
 upstream copyright statements, notices, font licenses and protocol XML copyright
 blocks. When a crate omits a license file, the evidence refers to its exact
@@ -26,7 +26,7 @@ blocks. When a crate omits a license file, the evidence refers to its exact
 branch. Notice text is decoded as UTF-8 (removing a BOM where present); source
 archives retain their original bytes.
 
-The inventory also identifies **65 assets, runtimes, packaging and supplemental
+The inventory also identifies **66 assets, runtimes, packaging and supplemental
 Rust library components**,
 with unresolved versions expressly marked. Rust's separate standard-library
 report covers **141 out-of-tree entries** plus in-tree exceptions; its complete
@@ -51,8 +51,8 @@ or exhaustive inventory. The library lockfile is included in the source ZIP.
 | `epaint_default_fonts` 0.36.2 | Unmodified embedded Hack, Noto Emoji, Ubuntu Light and emoji-icon-font bytes; all four font notices included. Hack includes Bitstream-derived terms; OFL and Ubuntu font naming/reserved-name conditions remain applicable. |
 | Unicode | Unicode-3.0 texts for 18 Unicode-licensed crates, the combined `unicode-ident` expression, and Rust standard-library Unicode exceptions. |
 | `option-ext` 0.2.0 | MPL-2.0 notice and exact unmodified `.crate` source archive; checksum must equal Cargo.lock. |
-| AppImage runtime 20251108 | MIT launcher at `dd6cebedcbddde9c82f89b011e8e1d40b6e43868`; static libfuse, squashfuse, musl, zstd, zlib and mimalloc. Source/version gaps remain below. |
-| GNU-style CRT startup code | Observed in the matched AppImage runtime/debug symbols. GCC 14.2.0 reference source/copyright, GPLv3 and Runtime Library Exception 3.1 included; exact CRT objects and exception applicability remain unresolved. |
+| AppImage runtime 20251108, CodeConvoy build 1 | Same MIT launcher revision `dd6cebedcbddde9c82f89b011e8e1d40b6e43868`; static libraries rebuilt from pinned sources. Exact input manifest and recipient relinking recipe are distributed. See the [verification record](appimage-runtime-validation.md). |
+| Compiler startup code | Source-built musl 1.2.5 CRT and checksum-identified GCC 14.2.0-r4 crtbeginS/crtendS objects. GCC source/Alpine recipe, copyright, GPLv3 and Runtime Library Exception 3.1 are included; the documented C compilation process supports the stated exception interpretation. |
 | NSIS 3.09 | Installer/uninstaller stub, standard plugins, artwork and LZMA decoder; original COPYING and full official source archive included. LZMA's CPL-1.0 linking exception does not relicense CodeConvoy. |
 | Windows additional plugins and static CRT | Identified separately; not assumed to inherit the project's MIT license. Outstanding evidence below. |
 | Original icons, AppRun and application assets | Project MIT. No new third-party artwork added. |
@@ -74,8 +74,10 @@ No expiring download or future written offer is relied upon. See Mozilla's
 The same source ZIP contains the pinned AppImage runtime source, libfuse 3.15.0,
 its upstream runtime patch/build recipe, squashfuse 0.5.2, musl 1.2.5, zstd 1.5.6,
 zlib 1.3.1, mimalloc 2.1.7 source, nsis-tauri-utils 0.2.1 and official NSIS 3.09
-source. Each archive has a recorded digest and origin. The available AppImage
-source is **not claimed to be a complete LGPL relinking kit**.
+source. Each archive has a recorded digest and origin. The AppImage kit now includes the pinned build environment, build scripts,
+modification notices and a recipient patch example. Two clean outputs match;
+stock and modified-library relinking and startup were demonstrated. See the
+[AppImage record](appimage-runtime-validation.md) for scope and legal limits.
 
 ## End-user access
 
@@ -103,7 +105,7 @@ available for inspection. Removing a blocker requires new evidence and review.
 
 The [follow-up evidence record](license-blocker-evidence.md) documents the deeper
 investigation, exact binary/debug identities, newly recovered sources/notices
-and remaining requirements. Four blockers remain. The `dispatch` notice blocker
+and remaining requirements. Two unrelated blockers remain. The `dispatch` notice blocker
 is resolved under the documented interpretation of its explicit MIT declaration:
 the bundle now preserves its original manifest/author metadata and reproduces
 the standard MIT permission, condition and disclaimer, without inventing a
@@ -113,22 +115,17 @@ for maintainer review, not authoritative legal approval. See
 for sources, notice obligations and limits. Upstream AppImage base versions and
 17 plugin dependency versions are established, with their existing limits.
 
-1. **AppImage static-library versions.** The exact runtime recipe uses mutable
-   Alpine 3.21 packages for musl, zstd, zlib and mimalloc. Its 2025 build log is
-   expired (GitHub returns 410). Matching debug symbols and version-function
-   bytes now identify musl 1.2.5, zstd 1.5.6, zlib 1.3.1 and mimalloc 2.1.7;
-   matching notices/source are included. Exact Alpine APK revisions and patches
-   remain unknown. GNU-style CRT startup symbols and GCC 14.2.0 compiler comments
-   also require exact object/patch provenance and confirmation of the runtime
-   exception's conditions. Reference source/terms are included. The upstream
-   LICENSE omits mimalloc, which its Makefile links.
-2. **AppImage LGPL relinking.** The runtime statically links patched libfuse.
-   LGPL-2.1 section 6 requires more than adding a license text. Verify a complete
-   corresponding source/build or object/relink set for the shipped runtime,
-   including the necessary build inputs, and demonstrate relinking. Current
-   archives preserve the known source/patch, but mutable dependencies and absent
-   build evidence prevent claiming this obligation is fully satisfied.
-3. **NSIS plugins.** The prebuilt ApplicationID archive contains only DLL/PDB
+The two AppImage obligations are resolved for the replacement source-built
+runtime under the documented provenance and LGPL-2.1 section 6(a) interpretation.
+The original binary's missing provenance has not been recovered or waived.
+Incomplete provenance was an internal evidence gap, not automatic proof of a
+license violation. The replacement binds actual output to identified sources,
+patches, CRT objects and build tools. Recipients receive the source/relink kit;
+the modified library runs with the same AppDir through both FUSE and extraction.
+Native Ubuntu 24.04, Debian 13 and Wayland desktop checks remain separate platform
+validation gaps. Neither reproducibility nor the demonstration is legal approval.
+
+1. **NSIS plugins.** The prebuilt ApplicationID archive contains only DLL/PDB
    files. The linked source identifies Mike Anchor/Mozilla/Connectify
    contributions without a clear license grant; these copyright headers are now
    included. Establish the exact binary's source/license. `nsis-tauri-utils`
@@ -137,7 +134,7 @@ for sources, notice obligations and limits. Upstream AppImage base versions and
    standard library and native toolchain remain unresolved; the tag has no
    Cargo.lock. Plugin hashes prevent an
    unnoticed binary substitution during future candidate builds.
-4. **Windows CRT.** Windows packaging now requires an application-bound
+2. **Windows CRT.** Windows packaging now requires an application-bound
    `/VERBOSE:LIB` capture of the selected toolset/SDK libraries, hashes and
    archive members. Final installer/helper PE inspection and final package
    hashes are retained separately from the six candidate assets. The capture

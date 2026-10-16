@@ -100,7 +100,8 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
             raise ValueError(f"Missing or altered license/source evidence: {item['path']}")
     native = catalog["native_provenance"]
     runtime = json.loads((root / "packaging/appimage-tools.json").read_text())["runtime"]
-    if native["appimage"]["runtime_sha256"] != runtime["sha256"]:
+    if (native["appimage"]["runtime_sha256"] != runtime["sha256"]
+            or native["appimage"]["source_revision"] != runtime["source_revision"]):
         raise ValueError("AppImage version provenance does not match the pinned runtime")
     for name, version in native["appimage"]["versions"].items():
         component = next((c for c in catalog["components"] if c["name"] == name), None)
@@ -114,6 +115,31 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
             or any(not any(s["path"] == path for s in catalog["sources"])
                    for path in startup["reference_sources"])):
         raise ValueError("Missing AppImage compiler startup source/license evidence")
+    from appimage_runtime import checked_kit
+    kit = checked_kit(root, evidence)
+    included = {Path(s["path"]).name: s["sha256"] for s in catalog["sources"]}
+    required = [*kit["sources"].values(), *kit["compiler_sources"], kit["linux_headers"], *kit["recipe"],
+                {"file": "runtime-inputs.json", "sha256": runtime["manifest_sha256"]}]
+    if any(included.get(s["file"]) != s["sha256"] for s in required):
+        raise ValueError("Incomplete distributed AppImage relinking kit")
+    records = native["appimage"]
+    retained = {s["path"] for s in catalog["files"]}
+    if any(records[key] not in retained for key in ("build_audit", "relink_audit")):
+        raise ValueError("Missing AppImage build/relink evidence record")
+    audit = json.loads((evidence / records["build_audit"]).read_text())
+    if (audit["runtime_sha256"] != runtime["sha256"]
+            or audit["manifest_sha256"] != runtime["manifest_sha256"]
+            or audit["recipient_patch_sha256"] is not None):
+        raise ValueError("Stale AppImage build provenance")
+    if (startup["objects"] != kit["toolchain_objects"]
+            or any(audit["link_inputs"][name]["sha256"] != sha for name, sha in startup["objects"].items())):
+        raise ValueError("AppImage startup objects differ from reviewed toolchain inputs")
+    relink = json.loads((evidence / records["relink_audit"]).read_text())
+    patch = next(p for p in kit["recipe"] if p["file"] == "libfuse-demo.patch")
+    if (relink["manifest_sha256"] != runtime["manifest_sha256"]
+            or relink["recipient_patch_sha256"] != patch["sha256"]
+            or relink["runtime_sha256"] == runtime["sha256"]):
+        raise ValueError("Stale AppImage modified-library relink evidence")
     plugin = native["nsis_tauri_utils"]
     if plugin["dll_sha256"] != catalog["windows_installer_plugins"]["$PLUGINSDIR/nsis_tauri_utils.dll"]:
         raise ValueError("Plugin provenance does not match the pinned installer DLL")
@@ -175,7 +201,7 @@ def materials(root=ROOT, evidence=EVIDENCE):
     for key, text in sorted(texts.items()):
         sections.append(f"\n{'=' * 72}\nNotice {key}\n{'=' * 72}\n{text}\n")
     archive = source_bundle([("README.txt", (evidence / "SOURCE-README.txt").read_bytes())] + [
-        (item["path"].removeprefix("sources/"), (evidence / item["path"]).read_bytes()) for item in catalog["sources"]])
+        (Path(item["path"]).name, (evidence / item["path"]).read_bytes()) for item in catalog["sources"]])
     return {FILES[0]: "".join(sections).encode(), FILES[1]: (json.dumps(catalog, indent=2, ensure_ascii=False) + "\n").encode(),
             FILES[2]: archive, FILES[3]: (evidence / FILES[3]).read_bytes()}
 
@@ -231,19 +257,19 @@ def verify_linux_payload(payload, suffix):
     print(f"Final {suffix} payload: third-party notices, sources and native inventory verified", flush=True)
 
 
-def verify_appimage_runtime(image, runtime):
+def verify_appimage_runtime(image, runtime=None):
     spec = json.loads((ROOT / "packaging/appimage-tools.json").read_text())["runtime"]
-    original = runtime.read_bytes()
-    if digest(original) != spec["sha256"]:
+    if runtime is not None and digest(runtime.read_bytes()) != spec["sha256"]:
         raise ValueError("Unreviewed AppImage runtime")
+    size, offset = spec["size"], spec["md5_offset"]
+    if size < 64 or not 64 <= offset <= size - 16:
+        raise ValueError("Invalid reviewed AppImage runtime layout")
     with image.open("rb") as source:
-        actual = source.read(len(original))
-    # The pinned 20251108 ELF reserves .digest_md5 at this offset (16 bytes).
-    # appimagetool fills this field after assembling the final image. Every
-    # other runtime byte must be the audited, checksum-pinned upstream binary.
-    offset, size = 932096, 16
-    if (len(original) != 944632 or original[offset:offset + size] != bytes(size)
-            or actual[:offset] != original[:offset] or actual[offset + size:] != original[offset + size:]):
+        actual = source.read(size)
+    # appimagetool changes only the reviewed ELF's 16-byte .digest_md5 section.
+    # Normalize that field and verify every other byte before executing it.
+    normalized = actual[:offset] + bytes(16) + actual[offset + 16:]
+    if len(actual) != size or digest(normalized) != spec["sha256"]:
         raise ValueError("Final AppImage runtime differs from the reviewed binary")
 
 

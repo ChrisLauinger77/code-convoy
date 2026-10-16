@@ -5,4 +5,6 @@ third-party/** -text
 third-party/RUST-STDLIB-LICENSES.html -whitespace
 # Preserve these upstream references verbatim, including their whitespace.
 third-party/sources/gcc-14.2.0-* -whitespace
+# Patch context includes required spaces; preserve these checksum-pinned bytes.
+third-party/runtime/*.patch -whitespace
 packaging/appimage-tools.json text eol=lf

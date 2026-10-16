@@ -20,13 +20,15 @@ license/linking exception. The source is available directly in this package.
 Read its COPYING and build instructions. CodeConvoy has not modified that
 module; the exception permits linking separately licensed application code.
 
-To inspect the upstream build recipe, read scripts/build-runtime.sh,
-scripts/docker/Dockerfile, scripts/common/install-dependencies.sh and
-src/runtime/Makefile. It patches libfuse and links it statically. The recipe's
-Alpine packages are not version-pinned. A successful independent relink of the
-shipped runtime has NOT been demonstrated, and this bundle is not represented
-as a complete LGPL corresponding-source/relink kit. That is a release blocker.
-Do not rely on the upstream tag URL alone as fulfillment of that obligation.
+AppImage source/relink build instructions are in runtime-README.txt. The
+standalone build-runtime.py and build-runtime.sh use runtime-inputs.json to
+reconstruct an offline checksum-pinned Alpine build filesystem, build all static
+libraries, and relink the original upstream runtime. libfuse-notice.patch adds
+a dated modification notice; libfuse-demo.patch is a recipient modification
+example and is never applied to the stock runtime. Read the applicable notices
+and LGPL2.txt inside the libfuse archive. Recipients may modify the combined
+runtime for their own use and reverse engineer it to debug those modifications.
+The separate CodeConvoy executable and its MIT license are unchanged.
 
 All source archive checksums and retrieval locations are in the accompanying
 inventory. These files are shipped inside the existing packages; they are not
@@ -36,52 +38,23 @@ rust-1.99.0-library-Cargo.lock records the standard library's separate dependenc
 versions/checksums, recovered from the verified Rust source distribution. Its
 notices supplement COPYRIGHT-library.html where that report omits entries.
 
-Additional AppImage source evidence
-----------------------------------
-The matching upstream runtime-x86_64.debug has the same GNU build ID and the
-CRC32 required by the runtime's .gnu_debuglink. Its DWARF identifies musl 1.2.5
-and libfuse 3.15.0. Its symbols locate runtime version functions reporting zstd
-1.5.6, zlib 1.3.1 and mimalloc 2.1.7. See native_provenance in the inventory for
-digests, offsets and references. These upstream source versions are included.
-They do not identify the exact Alpine package revisions or downstream patches.
-
-musl-1.2.5.tar.gz, zstd-1.5.6.tar.gz and zlib-1.3.1.tar.gz preserve upstream
-archive bytes. mimalloc-2.1.7-source.tar.gz preserves every source and license
-file byte but omits four unrelated prebuilt Windows executables from upstream's
-bin directory. The inventory records the original digest and excluded paths;
-tar ownership and times are normalized. This is a source-only repack, not an
-upstream release archive or a modified mimalloc implementation.
-
-gcc-14.2.0-crtstuff.c, gcc-14.2.0-COPYING3 and gcc-14.2.0-COPYING.RUNTIME
-are unmodified upstream reference files. The matched runtime debug symbols
-include GNU-style CRT startup functions, and its compiler comments include
-Alpine GCC 14.2.0. These observations do not identify the exact selected CRT
-objects or downstream patches. The reference source retains its copyright,
-GPLv3-or-later notice and GCC Runtime Library Exception 3.1. This is not a
-complete GCC source distribution or proof of the shipped object's provenance.
-The exception's Target Code permission depends on its stated conditions;
-establish those for the actual build before removing the provenance blocker.
-
-LGPL relinking status and required verification
-----------------------------------------------
-The relevant LGPL 2.1 section 6(a) work is the standalone AppImage launcher
-linked with libfuse, not the separate CodeConvoy executable in its filesystem.
-The supplied launcher source is the work that uses the library; the library
-archive plus patches/libfuse/mount.c.diff contain the known library change.
-Read LGPL2.txt and LICENSE inside libfuse's archive, and the launcher LICENSE.
-No written source offer is substituted for the included materials.
-
-To complete verification, recover the original Alpine APK revisions/patches
-and build inputs, prepare a clean x86-64 Linux build environment, and follow
-the launcher's BUILD.md and scripts/build-runtime.sh. Its Dockerfile currently
-downloads mutable packages, so running it alone does not prove correspondence.
-Then change libfuse, rebuild/relink the launcher with the modified library and
-use the existing appimagetool --runtime-file mechanism with the extracted
-AppDir. Verify extraction, FUSE startup and normal exit of the rebuilt image.
-Retain commands, input hashes and results. This modified-library relink has
-NOT been performed successfully for this candidate; publication remains blocked.
-Recipients may modify the runtime for their own use and reverse engineer it
-to debug those modifications; CodeConvoy imposes no additional restrictions.
+AppImage compiler startup and system-header provenance
+-----------------------------------------------------
+Source-built musl supplies rcrt1.o, crti.o and crtn.o. The pinned Alpine GCC
+14.2.0-r4 package supplies crtbeginS.o and crtendS.o; exact object hashes are
+in runtime-inputs.json. gcc-14.2.0-alpine-r4.tar.gz retains the Alpine source
+recipe and patches at commit 1a03a2a9c9e77f1a07d48b6f6805e72c8c63c03f.
+gcc-14.2.0-crtstuff.c, COPYING3 and COPYING.RUNTIME retain the upstream source
+and terms. Compiler packages are fetched by exact filename and checksum, not
+resolved afresh. The full GCC source URL and SHA-512 are recorded in the input
+manifest for further inspection. No libgcc, libgcc_eh or libssp_nonshared archive
+member is selected into the reviewed launcher; a new selection fails the build.
+linux-uapi-6.6-r1.tar.gz contains every exact installed Linux UAPI header from
+the pinned package, including inline byte-order code, its Alpine recipe and
+GPLv2/Linux-syscall-note terms. No kernel binary is bundled.
+The Runtime Library Exception assessment concerns C compilation using GCC
+without plugins or LTO. It is documented evidence and interpretation, not legal
+approval. See the repository's AppImage validation record for results and gaps.
 
 nsis-tauri-utils-0.2.1.tar.gz is the exact upstream tagged source with its MIT
 and Apache notices. The release DLL matches upstream's published SHA-1. The
