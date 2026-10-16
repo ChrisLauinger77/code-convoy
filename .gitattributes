@@ -13,3 +13,5 @@ packaging/nsis/** text eol=lf
 packaging/nsis_helpers.py text eol=lf
 packaging/windows_crt.py text eol=lf
 third-party/nsis/*.patch -whitespace
+# Keep the native Windows audit bytes without flagging CRLF as trailing space.
+third-party/nsis-build-audit.json whitespace=cr-at-eol

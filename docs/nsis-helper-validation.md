@@ -15,7 +15,7 @@ cargo-packager **0.11.8** calls only these functions for CodeConvoy:
 | ApplicationID | `Set` on desktop and Start Menu `.lnk` files | Original `CodeConvoyAppId.dll`, one export, project MIT |
 | nsis-tauri-utils 0.2.1 | `FindProcess`, `KillProcess`, `SemverCompare` | `codeconvoy_utils.dll`, reduced upstream facade, MIT OR Apache-2.0 |
 
-The original shortcut implementation uses documented
+The new shortcut helper uses documented
 [ShellLink/property-store APIs](https://learn.microsoft.com/en-us/windows/win32/shell/appids)
 to write `System.AppUserModel.ID` and save the existing link. It retains
 `io.github.chrislauinger77.code-convoy`; neither application startup nor its
@@ -32,7 +32,8 @@ allocation, correctly sized UTF-16 buffers, bounded copies and node release on
 invalid Unicode. Original/modified hashes and the exact patch are retained.
 Native tests cover null/empty stacks, invalid capacities, truncation, Unicode,
 invalid surrogates and ownership. The synchronous NSIS host still owns validity
-of non-null pointers; the adapter is not a concurrent API.
+of non-null pointers; the adapter is not a concurrent API. GitHub CodeQL
+subsequently marked all five PR findings fixed (alerts 1–5); none was dismissed.
 The new facade excludes the unused downloader and its
 HTTP/TLS dependencies. Process name matching, host-PID exclusion, termination
 behavior and success/error codes are unchanged. SemVer uses **1.0.18**, including
@@ -106,7 +107,8 @@ updates. Raw evidence is retained in
 ## Validation and remaining checks
 
 Local Linux checks passed: application formatting, strict Clippy, all Rust tests,
-release build, and helper workspace formatting. A read-only `/tmp/.git` marker
+release build, and helper workspace formatting. The application suite completed
+with **621 passed, 10 ignored**; **101 packaging tests** passed. A read-only `/tmp/.git` marker
 in the execution environment initially caused existing repository-safety tests
 to reject temporary paths; rerunning with `TMPDIR=/var/tmp` passed. No runtime or
 test logic was changed to accommodate that environment.
@@ -142,7 +144,9 @@ only in disposable Windows Actions accounts.
 Interactive maintenance choices, taskbar pinning/grouping, toast activation and
 manual desktop operation remain unperformed. Persisted shortcut identity is
 automatically testable; those shell interactions must not be reported as tested
-from that property check alone.
+from that property check alone. Silent uninstall tests use NSIS `_?=` so the
+caller can wait for completion; the uninstaller’s final self-deletion is not
+exercised in this mode.
 
 Any helper source, dependency, compiler, SDK or template update requires new
 source/notice review, two clean builds, updated binary pins and final installer
