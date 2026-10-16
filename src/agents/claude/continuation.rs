@@ -6,6 +6,7 @@ use serde_json::Value;
 pub(super) struct Continuation {
     tasks: Vec<Task>,
     answering: bool,
+    queued_turns_pending: bool,
 }
 
 struct Task {
@@ -25,12 +26,20 @@ impl Task {
 
 impl Continuation {
     pub(super) fn complete(&self) -> bool {
-        self.tasks.is_empty() && !self.answering
+        self.tasks.is_empty() && !self.answering && !self.queued_turns_pending
     }
 
     // False is sticky in the caller. Neither a later success nor a matching
     // notification can repair malformed, failed or uncorrelated output.
     pub(super) fn observe(&mut self, event: &Value, previous: Option<&Value>) -> bool {
+        if event["type"] == "result"
+            && let Some(queued) = event["queued_turn_count"].as_u64()
+        {
+            // A positive count promises another result, not a failed turn.
+            // Only an explicit zero can discharge it; omission cannot. Counts
+            // never authorize turns without the existing task correlation.
+            self.queued_turns_pending = queued > 0;
+        }
         if let Some(previous) = previous {
             if event.get("session_id").is_some() && event["session_id"] != previous["session_id"] {
                 return false;

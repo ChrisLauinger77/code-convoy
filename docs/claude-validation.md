@@ -147,10 +147,11 @@ input and an unterminated final JSON line.
 Completion now tracks background tasks within the Claude decoder only. A matching
 completed notification and same-session re-init authorize a follow-up; its result
 must identify the notified run and advance the result index by one. Each result
-independently passes the existing success checks. Pending tasks/answers, queued
-turns, earlier failures, bad correlations, duplicates, explicit errors, invalid
-JSON and unconfirmed endings cannot be erased by a later success. Coalesced
-notifications require all attributed results in notification order; an empty
+independently passes the per-turn success checks. Pending tasks/answers and
+undrained queued turns prevent final success. Earlier failures, bad correlations,
+duplicates, explicit errors, invalid JSON and unconfirmed endings cannot be erased
+by a later success. Coalesced notifications require all attributed results in
+notification order; an empty
 zero-turn placeholder cannot finish the batch. Snapshots cannot clear obligations.
 The existing UI-render exception remains allowed.
 Scheduler, cancellation, process supervision, Git/worktree handling, other
@@ -161,10 +162,15 @@ Tracked background notifications must report `status: completed`. A `failed`,
 validation, even if Claude later handles it and emits a successful follow-up.
 Untracked notifications remain ordinary activity before the first result and
 during an authorized answer; while waiting after a result, they fail correlation.
-The queued-turn check now also applies to ordinary single-turn runs: every result
-must have an absent or integer-zero `queued_turn_count`; nonzero or malformed
-values fail. An initial result may omit `result_index` for single-turn
-compatibility, but a continuation then fails because consecutive indices cannot
+
+Every result may omit `queued_turn_count` or report a nonnegative integer. A
+positive count keeps completion pending until a later result explicitly reports
+zero; omitting the field cannot clear an earlier positive count. Counts do not
+authorize untracked turns or replace task/session/run/index correlation. An
+ordinary single-turn result still needs an absent or zero count to complete;
+malformed counts fail permanently, even if a later result reports zero. An
+initial result may omit `result_index` for single-turn compatibility, but a
+continuation then fails because consecutive indices cannot
 be established. The completion diagnostic points to these correlation fields in
 Raw output.
 
@@ -226,6 +232,41 @@ changes diagnostics, documentation, comments and tests, not completion rules.
 Installed/authenticated Claude probes were not rerun. The declared minimum Rust
 version is 1.95, which supports the existing `Option::is_none_or` call.
 
+### Queued follow-up correction — 2026-10-16
+
+The next review identified that a successful intermediate result may report
+`queued_turn_count > 0` when another notification arrives during an answer. The
+[official TypeScript SDK 0.3.243 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03243)
+defines this optional field as the number of queued sends still pending when the
+result was produced, indicating another turn and result will follow. The previous
+decoder incorrectly made a positive count a permanent protocol failure. The
+Claude-local continuation state now retains that pending obligation until an
+explicit zero, while every result still passes the independent success and
+correlation checks. Malformed fields and earlier failures remain sticky.
+
+A fixture-derived regression adds a second tracked notification during the first
+follow-up, then a result with count one and a correlated final result with count
+zero. It failed before the fix and passes afterward. Three new tests cover every
+truncated prefix, initial queued counts, sequential and coalesced answers,
+malformed counts on every result, missing/positive terminal counts, omission
+after an earlier positive count, missing task starts/notifications, invalid
+session/run/index fields and earlier failed/interrupted results. The new sequence
+is synthetic protocol coverage, not an authenticated reproduction. No CLI flags,
+permissions, other backends, shared process handling or scheduling changed.
+
+Verification on macOS after the queued-turn correction:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features -- --test-threads=1` | 619 passed, 0 failed, 9 opt-in tests ignored (excluding eight nested fixture-test summaries) |
+| `cargo build --release` | Passed |
+
+The suite used the same serial execution and local Unix socket access described
+above. Installed/authenticated Claude probes and native Windows/Linux execution
+were not repeated.
+
 ## Contract evidence
 
 The implementation was checked against current official sources, not remembered flags:
@@ -239,6 +280,7 @@ The implementation was checked against current official sources, not remembered 
 | [Stop reasons](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons) | Explicit final token/context truncation and paused turns must not appear complete |
 | [Official SDK message parser](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/message_parser.py) | Actual assistant-error and result-field parsing |
 | [Official SDK CLI transport](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/transport/subprocess_cli.py) | `_DEFAULT_MAX_BUFFER_SIZE = 1024 * 1024`, used to justify the backend's record bound |
+| [TypeScript SDK 0.3.243 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03243) | A positive `queued_turn_count` means queued sends remain and another turn/result will follow, not that the completed turn failed |
 
 These are rolling documentation/source references inspected on the recorded date, not a claim about an installed Claude release. `tests/fixtures/claude-help-contract.txt` is explicitly synthetic. The shared fixture's version string is also synthetic and only tests display; no Claude semantic-version parser or minimum-version claim is made. Check CLI cannot prove account/model entitlement or validate every hidden flag on an older binary. A rejected invocation fails visibly.
 

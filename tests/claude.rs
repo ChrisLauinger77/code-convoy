@@ -561,6 +561,151 @@ fn background_outcome(events: &[Value]) -> JobStatus {
     output.interpret(status(0)).0
 }
 
+fn queued_background_events() -> Vec<Value> {
+    let original = background_events();
+    let mut second_start = original[4].clone();
+    second_start["task_id"] = json!("second-task");
+    second_start["run_id"] = json!("second-run");
+    let mut second_notification = original[10].clone();
+    second_notification["task_id"] = json!("second-task");
+    second_notification["run_id"] = json!("second-run");
+    let mut first_result = original[20].clone();
+    first_result["queued_turn_count"] = json!(1);
+    let mut second_result = original[20].clone();
+    second_result["origin"]["runId"] = json!("second-run");
+    second_result["result_index"] = json!(2);
+
+    let mut events = original[..8].to_vec();
+    events.push(second_start);
+    events.extend_from_slice(&original[8..14]);
+    // The second task finishes while Claude is answering the first notification.
+    events.push(second_notification);
+    events.extend_from_slice(&original[14..20]);
+    events.push(first_result);
+    events.push(original[12].clone());
+    events.push(original[19].clone());
+    events.push(second_result);
+    events
+}
+
+#[test]
+fn queued_background_notifications_drain_across_correlated_results() {
+    let events = queued_background_events();
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+    for end in 0..events.len() {
+        assert_eq!(
+            background_outcome(&events[..end]),
+            JobStatus::Failed,
+            "prefix {end}"
+        );
+    }
+    let mut initially_queued = events.clone();
+    let initial = initially_queued
+        .iter_mut()
+        .find(|event| event["result_index"] == 0)
+        .unwrap();
+    initial["queued_turn_count"] = json!(1);
+    assert_eq!(background_outcome(&initially_queued), JobStatus::Succeeded);
+
+    // A coalesced batch can have a queued, zero-turn intermediate placeholder;
+    // the final attributed result must still contain the completed answer.
+    let first_result = events
+        .iter()
+        .position(|event| event["result_index"] == 1)
+        .unwrap();
+    let mut coalesced = events[..=first_result].to_vec();
+    coalesced[first_result]["num_turns"] = json!(0);
+    coalesced[first_result]["result"] = json!("");
+    coalesced.push(events.last().unwrap().clone());
+    assert_eq!(background_outcome(&coalesced), JobStatus::Succeeded);
+}
+
+#[test]
+fn queued_results_require_valid_counts_and_an_explicit_drain() {
+    let original = queued_background_events();
+    for result_index in 0..=2 {
+        for count in [json!(-1), json!(null), json!("0"), json!(false), json!(0.5)] {
+            let mut events = original.clone();
+            let result = events
+                .iter_mut()
+                .find(|event| event["result_index"] == result_index)
+                .unwrap();
+            result["queued_turn_count"] = count.clone();
+            assert_eq!(
+                background_outcome(&events),
+                JobStatus::Failed,
+                "result {result_index} count {count}"
+            );
+        }
+    }
+    let mut missing_zero = original.clone();
+    missing_zero
+        .last_mut()
+        .unwrap()
+        .as_object_mut()
+        .unwrap()
+        .remove("queued_turn_count");
+    assert_eq!(background_outcome(&missing_zero), JobStatus::Failed);
+    let mut positive_final = original.clone();
+    positive_final.last_mut().unwrap()["queued_turn_count"] = json!(1);
+    assert_eq!(background_outcome(&positive_final), JobStatus::Failed);
+
+    // Optional fields remain compatible, but cannot silently erase a count
+    // reported by an earlier result.
+    let initial = missing_zero
+        .iter_mut()
+        .find(|event| event["result_index"] == 0)
+        .unwrap();
+    initial["queued_turn_count"] = json!(1);
+    let intermediate = missing_zero
+        .iter_mut()
+        .find(|event| event["result_index"] == 1)
+        .unwrap();
+    intermediate
+        .as_object_mut()
+        .unwrap()
+        .remove("queued_turn_count");
+    assert_eq!(background_outcome(&missing_zero), JobStatus::Failed);
+    missing_zero.last_mut().unwrap()["queued_turn_count"] = json!(0);
+    assert_eq!(background_outcome(&missing_zero), JobStatus::Succeeded);
+}
+
+#[test]
+fn queued_counts_cannot_authorize_uncorrelated_turns_or_hide_failures() {
+    let original = queued_background_events();
+    for subtype in ["task_started", "task_notification"] {
+        let events: Vec<_> = original
+            .iter()
+            .filter(|event| !(event["task_id"] == "second-task" && event["subtype"] == subtype))
+            .cloned()
+            .collect();
+        assert_eq!(background_outcome(&events), JobStatus::Failed, "{subtype}");
+    }
+    for result_index in 0..=2 {
+        for (pointer, value) in [
+            ("/is_error", json!(true)),
+            ("/stop_reason", json!("max_tokens")),
+            ("/session_id", json!("unrelated")),
+            ("/result_index", json!(9)),
+        ] {
+            let mut events = original.clone();
+            let result = events
+                .iter_mut()
+                .find(|event| event["result_index"] == result_index)
+                .unwrap();
+            *result.pointer_mut(pointer).unwrap() = value;
+            assert_eq!(
+                background_outcome(&events),
+                JobStatus::Failed,
+                "result {result_index} {pointer}"
+            );
+        }
+    }
+    let mut unrelated = original.clone();
+    unrelated.last_mut().unwrap()["origin"]["runId"] = json!("unrelated");
+    assert_eq!(background_outcome(&unrelated), JobStatus::Failed);
+}
+
 #[test]
 fn untracked_task_notifications_are_activity_until_a_result_requires_correlation() {
     let notification = json!({"type":"system", "subtype":"task_notification",
@@ -760,7 +905,7 @@ fn background_results_cannot_erase_failure_or_authorize_unrelated_output() {
             ("api_error_status", json!(401)),
             ("errors", json!(["failed"])),
             ("deferred_tool_use", json!({"name":"Bash"})),
-            ("queued_turn_count", json!(1)),
+            ("queued_turn_count", json!(-1)),
             ("queued_turn_count", json!("0")),
         ] {
             let mut changed = events.clone();
