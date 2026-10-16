@@ -355,3 +355,91 @@ static-library provenance.
 | --- | ---: | --- |
 | MSVC x64 `msvcrt.lib` | 34 | `d3f725923c6dd639bb5e5c52f3122c6fe084471f7ab0ef5f27d054f56b4d8a7e` |
 | MSVC x86 `msvcrt.lib` | 24 | `5b0626d52414ac346eda0c19d6c4417411a232505748b56abf866df9af2e38d9` |
+
+### Final dynamic CRT validation
+
+Final diagnostic [CI run 38923230998](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38923230998)
+passed on Windows, Linux and macOS using source
+`1f1f62f3bd2166f4a9172d8161bae6cf0d76b54c`. It includes the corrected
+runtime-file floor and the explicit exit from a failed custom maintenance-page
+helper call. `Abort` in that callback would skip the page; the failure path now
+uses `Quit` with status 1603 and respects silent/passive operation.
+
+The final Windows release build, two matching helper builds, both real installer
+smoke tests, portable startup and normal close, helper ABI tests and all 15
+prerequisite cases passed. The native environment has VCRUNTIME140.dll
+14.51.36247.0 in both architectures and UCRT 10.0.26100.33438. Toolchain and image
+versions match the retained reference above. The final complete PE import lists
+and selected CRT archive hashes/member lists also match that reference.
+
+| Validation | Result |
+| --- | --- |
+| Local formatting, strict Clippy and release build | Passed |
+| Local Rust tests, all features | 621 passed; 10 intentionally ignored |
+| Packaging regressions | 107 passed locally and on each CI platform |
+| Final Linux and macOS CI | Passed formatting, strict Clippy, tests and release build |
+| Final Windows CI | Passed native build/packaging/runtime tests, formatting, strict Clippy, all-feature Rust tests and software graphics startup |
+| Installer/ZIP independent verification | Passed against the exact clean CI revision, reconstructing only captured Windows checkout line endings in a disposable source copy |
+| License inventory/publication guard | 457 locked crates checked; release-ready still fails solely for windows-crt |
+
+Native installer checks cover default and Unicode/space-containing per-user
+paths, registration, shortcuts/AppUserModelID, upgrade and downgrade registration,
+the running application, uninstall and user-data preservation. The portable
+executable started and closed normally in each path scenario. These remain
+automated hosted-Windows checks, with the limitations listed above.
+
+| Native prerequisite fixture | Exit status | Utility helper executed |
+| --- | ---: | --- |
+| both architectures installed | 0 | Yes |
+| x64 missing | 1603 | No |
+| x86 missing | 1603 | No |
+| both missing | 1603 | No |
+| x86 UCRT missing | 1603 | No |
+| x64 UCRT missing | 1603 | No |
+| wrong DLL architecture | 1603 | No |
+| newer compatible files | 0 | Yes |
+| older than required version | 1603 | No |
+| runtime removed after initial check | 1603 | No |
+| create fixture uninstaller | 0 | Yes |
+| uninstall x86 missing | 1603 | No |
+| uninstall does not need x64 application runtime | 0 | Yes |
+| stale registry claim Registry32 | 1603 | No |
+| stale registry claim Registry64 | 1603 | No |
+
+Independent verification downloaded the final installer and ZIP, extracted their
+contents, checked all eight native PE hashes and inspection hashes, verified the
+application and both clean helper builds against their linker records, and
+compared every notice/source payload with the exact source revision. There are
+no separate Microsoft runtime DLLs or redist installers, old replacement
+plugins, extra native payloads or portable launcher. The ZIP and installed
+application bytes are identical.
+
+| Final diagnostic item | SHA-256 |
+| --- | --- |
+| `CodeConvoy-1.0.0-windows-x86_64-setup.exe` | `5069b2d4892bc0c115c56ba4457c5f5cffcb6d053c6ecdb8b06c90a9cd6142af` |
+| `CodeConvoy-1.0.0-windows-x86_64.zip` | `1e5201f34b15d151f7a16c02ef915889e91560a35b98e64343068834001eeb3d` |
+| `$PLUGINSDIR/codeconvoy_utils.dll` | `ca1929c770a3ebb88ffb71732dab0772bcf3e4a9d52619359df29ac36b23b935` |
+| `$PLUGINSDIR/CodeConvoyAppId.dll` | `3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29` |
+| `$PLUGINSDIR/nsDialogs.dll` | `4b7d17da290f41ebe244827cc295ce7e580da2f7e9f7cc3efc1abc6898e3c9ed` |
+| `$PLUGINSDIR/StartMenu.dll` | `110545415a59402635e1c9439acba15b44bab268ed02ad2a262ce12604a47855` |
+| `$PLUGINSDIR/System.dll` | `9111099efe9d5c9b391dc132b2faf0a3851a760d4106d5368e30ac744eb42706` |
+| `CodeConvoy.exe` | `f8558791992b0765d5f840dd1e1a56272e36d52f24c7e710e5b5a0a199235002` |
+| `uninstall.exe` | `e2d8c25431e164c9d307e5eab06ed9e3408a02f0decc2049194578005af7767a` |
+| `THIRD-PARTY-SOURCES.zip` | `eb61566a9f3e26f7c5d29482cabb22828a86cd6b985480e48faf196e77ba7b8f` |
+
+These final hashes stay in this external report to avoid a circular reference
+inside the bundled inventory. The retained helper audit from
+[38916756095](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38916756095)
+is a reference build of the same helper source/toolchain and identical DLL
+bytes; the final CI artifact additionally binds two fresh builds to every current
+helper/installer input. Subsequent local edits only finish this validation report.
+A future release candidate must be rebuilt from its own reviewed commit and
+retain its own provenance/checksums through the existing two-stage workflow.
+
+The implementation is ready for maintainer technical review and target-desktop
+verification. Publication remains blocked: user-supplied runtime DLLs do not
+resolve the embedded VC/SDK object-code grant and conditions, recipient/distributor
+terms, hosted-build entitlement or remaining prebuilt NSIS runtime provenance.
+No additional EULA, license grant or compliance approval is inferred. CodeConvoy's
+MIT license and the other resolved licensing decisions are unchanged. No merge,
+tag or release was created during this validation.
