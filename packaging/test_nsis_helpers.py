@@ -1,5 +1,6 @@
 """NSIS helper identity, dependency and provenance regression tests."""
 import copy
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -20,7 +21,8 @@ class NsisHelpers(unittest.TestCase):
         for name, expected in spec["binaries"].items():
             binary = b"MZfixture" + name.encode()
             (root / "plugins" / name).write_bytes(binary)
-            record = {"sha256": helpers.crt.checksum(root / "plugins" / name), "evidence": {}}
+            record = {"sha256": helpers.crt.checksum(root / "plugins" / name), "evidence": {},
+                      "imports": ["KERNEL32.dll"], "crt": expected["crt"]}
             for build in ("first", "second"):
                 directory = root / build / name
                 directory.mkdir(parents=True)
@@ -30,7 +32,8 @@ class NsisHelpers(unittest.TestCase):
                 (directory / "link.map").write_text("retained symbols")
                 crt.write_json(directory / "invocation.json", {"exit_code": 0, "command": [r"C:\VC\link.exe", "/VERBOSE", "/VERBOSE:LIB", "/Brepro"]})
                 crt.write_json(directory / "selected-libraries.json", [{"path": library, "members": ["fixture.obj"], "sha256": "a" * 64}])
-                crt.write_json(directory / "toolchain.json", {"linker": {"path": r"C:\VC\link.exe"},
+                crt.write_json(directory / "build-command.json", ["fixture-build"])
+                crt.write_json(directory / "toolchain.json", {"linker": {"path": r"C:\VC\link.exe", "sha256": "c" * 64, "version": "fixture"},
                                "compiler": {"sha256": "b" * 64}, "environment": {
                                    "VCTOOLSVERSION": spec["msvc"], "WINDOWSSDKVERSION": spec["windows_sdk"]}})
                 crt.write_json(directory / "rustflags.json", ["--cfg", "windows_raw_dylib", "-C", "target-feature=+crt-static"])
@@ -68,6 +71,8 @@ class NsisHelpers(unittest.TestCase):
             report = copy.deepcopy(original); report["inputs"].popitem(); changed.append(report)
             report = copy.deepcopy(original); report["spec"]["upstream"]["revision"] = "0" * 40; changed.append(report)
             report = copy.deepcopy(original); report["binaries"]["CodeConvoyAppId.dll"]["evidence"]["first"].pop("link.log"); changed.append(report)
+            report = copy.deepcopy(original); report["binaries"]["codeconvoy_utils.dll"]["crt"] = "none"; changed.append(report)
+            report = copy.deepcopy(original); report["binaries"]["codeconvoy_utils.dll"]["imports"] = []; changed.append(report)
             for report in changed:
                 crt.write_json(root / "provenance.json", report)
                 with self.assertRaises(ValueError):
@@ -101,6 +106,25 @@ class NsisHelpers(unittest.TestCase):
                 relative = f"crates/{name}/src/lib.rs"
                 original = upstream.extractfile("nsis-tauri-utils-nsis_tauri_utils-v0.2.1/" + relative).read()
                 self.assertEqual((helpers.KIT / relative).read_bytes(), original)
+
+    def test_template_preserves_every_other_upstream_instruction(self):
+        directory = helpers.ROOT / "packaging/nsis"
+        text = (directory / "installer.nsi").read_text()
+        header = '; Derived from cargo-packager 0.11.8; see UPSTREAM.json and LICENSE files.\n!addplugindir /x86-unicode "@CODECONVOY_HELPERS@"\n'
+        self.assertTrue(text.startswith(header))
+        text = text.removeprefix(header)
+        status = '  Pop $R0\n  ${If} $R0 != 0\n    Abort "Could not assign application shortcut identity."\n  ${EndIf}\n'
+        self.assertEqual(text.count(status), 2)
+        text = text.replace(status, "").replace("CodeConvoyAppId::Set", "ApplicationID::Set").replace("codeconvoy_utils::", "nsis_tauri_utils::")
+        upstream = json.loads((directory / "UPSTREAM.json").read_text())
+        self.assertEqual(hashlib.sha256(text.encode()).hexdigest(), upstream["upstream_sha256"])
+
+    def test_nested_source_archive_is_portable_deterministic_and_rejects_escapes(self):
+        entries = [("third-party/nsis/a", b"a"), ("packaging/b", b"b")]
+        self.assertEqual(helpers.source_archive(entries), helpers.source_archive(list(reversed(entries))))
+        for name in ("../outside", "/absolute", "a/../b", "C:/outside", "a\\b"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                helpers.source_archive([(name, b"data")])
 
 
 if __name__ == "__main__":

@@ -125,7 +125,7 @@ class RuntimeInputs(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "release blockers remain"):
             licenses.require_release_ready()
         spec = json.loads((licenses.EVIDENCE / "catalog.json").read_text())
-        self.assertTrue({"nsis-plugins", "windows-crt"} <= {b["id"] for b in spec["release_blockers"]})
+        self.assertIn("windows-crt", {b["id"] for b in spec["release_blockers"]})
         self.assertNotIn("dispatch-notice", {b["id"] for b in spec["release_blockers"]})
 
 

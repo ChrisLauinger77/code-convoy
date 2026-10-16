@@ -15369,37 +15369,6 @@
       "sha256": "f5dc52eef1f3884230520199bac6f36b82d643d86b003ce51bd24b05c6ba7c91"
     },
     {
-      "name": "NSIS ApplicationID plugin",
-      "version": "UNRESOLVED; pinned binary digest",
-      "license": "UNRESOLVED",
-      "scope": "Windows setup",
-      "notices": [
-        {
-          "text": "078a05d6a812b1f63d774b28861b0b2a9df56a572defe120203dd7211bbdb6c3",
-          "origin": "https://github.com/connectiblutz/NSIS-ApplicationID/blob/ad7e5084c69342d8f9fa7c66c6a135ca04e3c284/Set.cpp (copyright headers; license grant still unresolved)"
-        }
-      ],
-      "sha256": "f6851dcbf0a39edecd8a46564bc455e5273736c3dbcb02b954c201c79ccdf117",
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils",
-      "version": "0.2.1",
-      "license": "MIT OR Apache-2.0",
-      "scope": "Windows setup",
-      "notices": [
-        {
-          "text": "1c1020fa10a6bf318717e82c911bcc54ebdfb9bb280460ae332bcb2f82f57fbe",
-          "origin": "https://codeload.github.com/tauri-apps/nsis-tauri-utils/tar.gz/refs/tags/nsis_tauri_utils-v0.2.1 :: nsis-tauri-utils-nsis_tauri_utils-v0.2.1/LICENSE_MIT"
-        },
-        {
-          "text": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
-          "origin": "https://codeload.github.com/tauri-apps/nsis-tauri-utils/tar.gz/refs/tags/nsis_tauri_utils-v0.2.1 :: nsis-tauri-utils-nsis_tauri_utils-v0.2.1/LICENSE_APACHE-2.0"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
       "name": "Microsoft static C runtime / Windows SDK support code",
       "version": "Application: MSVC 14.51.36231 / SDK 10.0.26100.0; prebuilt installer runtime inputs unresolved",
       "license": "Microsoft Visual Studio / SDK redistributable terms",
@@ -16123,324 +16092,6 @@
       "evidence": "Rust 1.99.0 rust-src library/Cargo.lock and vendor directory; generated report fallback for excluded-target crates"
     },
     {
-      "name": "nsis-tauri-utils embedded: base64",
-      "version": "0.21.2",
-      "license": "MIT OR Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "604178f6c5c21f02dc555784810edfb88d34ac2c73b2eae109655649ee73ce3d",
-      "notices": [
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/base64/base64-0.21.2.crate :: base64-0.21.2/LICENSE-APACHE"
-        },
-        {
-          "text": "0dd882e53de11566d50f8e8e2d5a651bcf3fabee4987d70f306233cf39094ba7",
-          "origin": "https://static.crates.io/crates/base64/base64-0.21.2.crate :: base64-0.21.2/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: hashbrown",
-      "version": "0.13.1",
-      "license": "MIT OR Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "33ff8ae62cd3a9102e5637afc8452c55acf3844001bd5374e0b0bd7b6616c038",
-      "notices": [
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/hashbrown/hashbrown-0.13.1.crate :: hashbrown-0.13.1/LICENSE-APACHE"
-        },
-        {
-          "text": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2",
-          "origin": "https://static.crates.io/crates/hashbrown/hashbrown-0.13.1.crate :: hashbrown-0.13.1/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: idna",
-      "version": "0.4.0",
-      "license": "MIT OR Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "7d20d6b07bfbc108882d88ed8e37d39636dcc260e15e30c45e6ba089610b917c",
-      "notices": [
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/idna/idna-0.4.0.crate :: idna-0.4.0/LICENSE-APACHE"
-        },
-        {
-          "text": "76e972ac0f4ddb116e86e10100132a783931a596e7b9872eaa31be15cd4d751d",
-          "origin": "https://static.crates.io/crates/idna/idna-0.4.0.crate :: idna-0.4.0/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: once_cell",
-      "version": "1.18.0",
-      "license": "MIT OR Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d",
-      "notices": [
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/once_cell/once_cell-1.18.0.crate :: once_cell-1.18.0/LICENSE-APACHE"
-        },
-        {
-          "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://static.crates.io/crates/once_cell/once_cell-1.18.0.crate :: once_cell-1.18.0/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: percent-encoding",
-      "version": "2.3.0",
-      "license": "MIT OR Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94",
-      "notices": [
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/percent-encoding/percent-encoding-2.3.0.crate :: percent-encoding-2.3.0/LICENSE-APACHE"
-        },
-        {
-          "text": "76e972ac0f4ddb116e86e10100132a783931a596e7b9872eaa31be15cd4d751d",
-          "origin": "https://static.crates.io/crates/percent-encoding/percent-encoding-2.3.0.crate :: percent-encoding-2.3.0/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: ring",
-      "version": "0.16.20",
-      "license": "ISC AND OpenSSL AND MIT (see upstream ring LICENSE)",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc",
-      "notices": [
-        {
-          "text": "76b39f9b371688eac9d8323f96ee80b3aef5ecbc2217f25377bd4e4a615296a9",
-          "origin": "https://static.crates.io/crates/ring/ring-0.16.20.crate :: ring-0.16.20/LICENSE"
-        },
-        {
-          "text": "0c125a4dab5ab869473e6491db22f6c0a7f8a4de58588d03bb2b16c0c8ebd7de",
-          "origin": "https://static.crates.io/crates/ring/ring-0.16.20.crate :: ring-0.16.20/third_party/fiat/LICENSE"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: rustc-demangle",
-      "version": "0.1.21",
-      "license": "MIT/Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "7ef03e0a2b150c7a90d01faf6254c9c48a41e95fb2a8c2ac1c6f0d2b9aefc342",
-      "notices": [
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/rustc-demangle/rustc-demangle-0.1.21.crate :: rustc-demangle-0.1.21/LICENSE-APACHE"
-        },
-        {
-          "text": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
-          "origin": "https://static.crates.io/crates/rustc-demangle/rustc-demangle-0.1.21.crate :: rustc-demangle-0.1.21/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: rustls",
-      "version": "0.21.6",
-      "license": "Apache-2.0 OR ISC OR MIT",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "1d1feddffcfcc0b33f5c6ce9a29e341e4cd59c3f78e7ee45f4a40c038b1d6cbb",
-      "notices": [
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/rustls/rustls-0.21.6.crate :: rustls-0.21.6/LICENSE-APACHE"
-        },
-        {
-          "text": "7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4",
-          "origin": "https://static.crates.io/crates/rustls/rustls-0.21.6.crate :: rustls-0.21.6/LICENSE-ISC"
-        },
-        {
-          "text": "709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c",
-          "origin": "https://static.crates.io/crates/rustls/rustls-0.21.6.crate :: rustls-0.21.6/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: rustls-webpki",
-      "version": "0.101.3",
-      "license": "ISC",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "261e9e0888cba427c3316e6322805653c9425240b6fd96cee7cb671ab70ab8d0",
-      "notices": [
-        {
-          "text": "5b698ca13897be3afdb7174256fa1574f8c6892b8bea1a66dd6469d3fe27885a",
-          "origin": "https://static.crates.io/crates/rustls-webpki/rustls-webpki-0.101.3.crate :: rustls-webpki-0.101.3/LICENSE"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: sct",
-      "version": "0.7.0",
-      "license": "Apache-2.0/ISC/MIT",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "d53dcdb7c9f8158937a7981b48accfd39a43af418591a5d008c7b22b5e1b7ca4",
-      "notices": [
-        {
-          "text": "772e36c6caff6d6027363b043cd3e8fdcba69301b65291301e7d9f0cbff0d5fe",
-          "origin": "https://static.crates.io/crates/sct/sct-0.7.0.crate :: sct-0.7.0/LICENSE"
-        },
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/sct/sct-0.7.0.crate :: sct-0.7.0/LICENSE-APACHE"
-        },
-        {
-          "text": "7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4",
-          "origin": "https://static.crates.io/crates/sct/sct-0.7.0.crate :: sct-0.7.0/LICENSE-ISC"
-        },
-        {
-          "text": "709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c",
-          "origin": "https://static.crates.io/crates/sct/sct-0.7.0.crate :: sct-0.7.0/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: semver",
-      "version": "1.0.18",
-      "license": "MIT OR Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918",
-      "notices": [
-        {
-          "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://static.crates.io/crates/semver/semver-1.0.18.crate :: semver-1.0.18/LICENSE-APACHE"
-        },
-        {
-          "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://static.crates.io/crates/semver/semver-1.0.18.crate :: semver-1.0.18/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: spin",
-      "version": "0.5.2",
-      "license": "MIT",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d",
-      "notices": [
-        {
-          "text": "6ac8711fb340c62ce0a4ecd463342d3fa0e8e70de697c863a2e1c0c53006003c",
-          "origin": "https://static.crates.io/crates/spin/spin-0.5.2.crate :: spin-0.5.2/LICENSE"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: tinyvec",
-      "version": "1.6.0",
-      "license": "Zlib OR Apache-2.0 OR MIT",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "87cc5ceb3875bb20c2890005a4e226a4651264a5c75edb2421b52861a0a0cb50",
-      "notices": [
-        {
-          "text": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
-          "origin": "https://static.crates.io/crates/tinyvec/tinyvec-1.6.0.crate :: tinyvec-1.6.0/LICENSE-APACHE.md"
-        },
-        {
-          "text": "4736b5d379253afa45744afc79ddb475912b213e939bdf7cb97d9a8b6f700e5f",
-          "origin": "https://static.crates.io/crates/tinyvec/tinyvec-1.6.0.crate :: tinyvec-1.6.0/LICENSE-MIT.md"
-        },
-        {
-          "text": "682b4c81b85e83ce6cc6e1ace38fdd97aeb4de0e972bd2b44aa0916c54af8c96",
-          "origin": "https://static.crates.io/crates/tinyvec/tinyvec-1.6.0.crate :: tinyvec-1.6.0/LICENSE-ZLIB.md"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: unicode-normalization",
-      "version": "0.1.22",
-      "license": "MIT/Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "5c5713f0fc4b5db668a2ac63cdb7bb4469d8c9fed047b1d0292cc7b0ce2ba921",
-      "notices": [
-        {
-          "text": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
-          "origin": "https://static.crates.io/crates/unicode-normalization/unicode-normalization-0.1.22.crate :: unicode-normalization-0.1.22/COPYRIGHT"
-        },
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/unicode-normalization/unicode-normalization-0.1.22.crate :: unicode-normalization-0.1.22/LICENSE-APACHE"
-        },
-        {
-          "text": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
-          "origin": "https://static.crates.io/crates/unicode-normalization/unicode-normalization-0.1.22.crate :: unicode-normalization-0.1.22/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: untrusted",
-      "version": "0.7.1",
-      "license": "ISC",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a",
-      "notices": [
-        {
-          "text": "7abd9b6960dcf7d4d0a48606a5b71bfe37d472db68d70637f3a58a56785f1621",
-          "origin": "https://static.crates.io/crates/untrusted/untrusted-0.7.1.crate :: untrusted-0.7.1/LICENSE.txt"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: ureq",
-      "version": "2.7.1",
-      "license": "MIT/Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "0b11c96ac7ee530603dcdf68ed1557050f374ce55a5a07193ebf8cbc9f8927e9",
-      "notices": [
-        {
-          "text": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-          "origin": "https://static.crates.io/crates/ureq/ureq-2.7.1.crate :: ureq-2.7.1/LICENSE-APACHE"
-        },
-        {
-          "text": "7e5886959f67f8c75063a9d55cd3cb08c5a8cbea9a944fa1df2d4ae038f53721",
-          "origin": "https://static.crates.io/crates/ureq/ureq-2.7.1.crate :: ureq-2.7.1/LICENSE-MIT"
-        },
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/ureq/ureq-2.7.1.crate :: ureq-2.7.1/src/chunked/LICENSE"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
-      "name": "nsis-tauri-utils embedded: url",
-      "version": "2.4.0",
-      "license": "MIT OR Apache-2.0",
-      "scope": "Windows installer plugin; version visible in pinned DLL source paths, not a complete dependency closure",
-      "checksum": "50bff7831e19200a85b17131d085c25d7811bc4e186efdaf54bbd132994a88cb",
-      "notices": [
-        {
-          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "origin": "https://static.crates.io/crates/url/url-2.4.0.crate :: url-2.4.0/LICENSE-APACHE"
-        },
-        {
-          "text": "76e972ac0f4ddb116e86e10100132a783931a596e7b9872eaa31be15cd4d751d",
-          "origin": "https://static.crates.io/crates/url/url-2.4.0.crate :: url-2.4.0/LICENSE-MIT"
-        }
-      ],
-      "unresolved": "nsis-plugins"
-    },
-    {
       "name": "GNU CRT startup code",
       "version": "14.2.0 (Alpine gcc 14.2.0-r4)",
       "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
@@ -16699,7 +16350,7 @@
     },
     {
       "path": "sources/codeconvoy-nsis-helpers-1.zip",
-      "sha256": "b89447558e0843f001ffce188fcb690b043053cc21b7a2244898ced32de3bf06",
+      "sha256": "3d14e924deddf99a48ffd3153c00fc5f38c0b9f6c2d33c69f6a97bd377d1cdd3",
       "origin": "CodeConvoy original shortcut helper, modified upstream source kit and pinned build recipe; see nsis/README.txt"
     },
     {
@@ -16755,10 +16406,6 @@
     }
   ],
   "release_blockers": [
-    {
-      "id": "nsis-plugins",
-      "detail": "ApplicationID source copyright headers are preserved but no grant or exact DLL/source correspondence was found. nsis-tauri-utils 0.2.1 matches the upstream release SHA-1; source and notices for 17 binary-observed crate versions are included. The unlocked build, remaining transitive code, Rust 1.71.1 standard library and static CRT are not completely inventoried."
-    },
     {
       "id": "windows-crt",
       "detail": "CI 38785562437 captures the application final link and packaged bytes: MSVC 14.51.36231 libcmt/libvcruntime and SDK 10.0.26100.0 libucrt, including selected member identities and archive hashes. The SDK REDIST list explicitly covers publicly released um/ucrt static-library paths. Confirm applicable VC static-library grant, hosted-build licensing basis, any overriding component terms and recipient/distributor conditions for installer and ZIP. Prebuilt installer runtime inputs remain separately unresolved; application evidence does not cover them. No legal approval is inferred from successful linking or absent CRT DLL imports."
@@ -17799,103 +17446,6 @@
       },
       "relink_audit": "evidence/appimage-runtime-relink.json"
     },
-    "nsis_tauri_utils": {
-      "dll_sha256": "0eed48313a7f904d7cc1977b70000ab3f11f18cadc8e6a69b807d288ca71f9db",
-      "dll_sha1": "53a7cfaeb6a4a9653d6d5fbff02a3c3b8720130a",
-      "release": "https://github.com/tauri-apps/nsis-tauri-utils/releases/tag/nsis_tauri_utils-v0.2.1",
-      "source_revision": "c3a4447060a260c5e4e09d94284948c4f864da02",
-      "rustc_revision": "eb26296b556cef10fb713a38f3d16b9886080f26",
-      "visible_registry_packages": [
-        {
-          "name": "base64",
-          "version": "0.21.2",
-          "checksum": "604178f6c5c21f02dc555784810edfb88d34ac2c73b2eae109655649ee73ce3d"
-        },
-        {
-          "name": "hashbrown",
-          "version": "0.13.1",
-          "checksum": "33ff8ae62cd3a9102e5637afc8452c55acf3844001bd5374e0b0bd7b6616c038"
-        },
-        {
-          "name": "idna",
-          "version": "0.4.0",
-          "checksum": "7d20d6b07bfbc108882d88ed8e37d39636dcc260e15e30c45e6ba089610b917c"
-        },
-        {
-          "name": "once_cell",
-          "version": "1.18.0",
-          "checksum": "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
-        },
-        {
-          "name": "percent-encoding",
-          "version": "2.3.0",
-          "checksum": "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
-        },
-        {
-          "name": "ring",
-          "version": "0.16.20",
-          "checksum": "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
-        },
-        {
-          "name": "rustc-demangle",
-          "version": "0.1.21",
-          "checksum": "7ef03e0a2b150c7a90d01faf6254c9c48a41e95fb2a8c2ac1c6f0d2b9aefc342"
-        },
-        {
-          "name": "rustls",
-          "version": "0.21.6",
-          "checksum": "1d1feddffcfcc0b33f5c6ce9a29e341e4cd59c3f78e7ee45f4a40c038b1d6cbb"
-        },
-        {
-          "name": "rustls-webpki",
-          "version": "0.101.3",
-          "checksum": "261e9e0888cba427c3316e6322805653c9425240b6fd96cee7cb671ab70ab8d0"
-        },
-        {
-          "name": "sct",
-          "version": "0.7.0",
-          "checksum": "d53dcdb7c9f8158937a7981b48accfd39a43af418591a5d008c7b22b5e1b7ca4"
-        },
-        {
-          "name": "semver",
-          "version": "1.0.18",
-          "checksum": "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
-        },
-        {
-          "name": "spin",
-          "version": "0.5.2",
-          "checksum": "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
-        },
-        {
-          "name": "tinyvec",
-          "version": "1.6.0",
-          "checksum": "87cc5ceb3875bb20c2890005a4e226a4651264a5c75edb2421b52861a0a0cb50"
-        },
-        {
-          "name": "unicode-normalization",
-          "version": "0.1.22",
-          "checksum": "5c5713f0fc4b5db668a2ac63cdb7bb4469d8c9fed047b1d0292cc7b0ce2ba921"
-        },
-        {
-          "name": "untrusted",
-          "version": "0.7.1",
-          "checksum": "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
-        },
-        {
-          "name": "ureq",
-          "version": "2.7.1",
-          "checksum": "0b11c96ac7ee530603dcdf68ed1557050f374ce55a5a07193ebf8cbc9f8927e9"
-        },
-        {
-          "name": "url",
-          "version": "2.4.0",
-          "checksum": "50bff7831e19200a85b17131d085c25d7811bc4e186efdaf54bbd132994a88cb"
-        }
-      ],
-      "limitation": "17 versions recovered from embedded registry source paths; absent strings do not establish absence of code. No original Cargo.lock or complete standard-library/native CRT inventory.",
-      "rustc_version": "1.71.1",
-      "release_note_fix_revision": "92f92648b50fd298590570f43ed00de089609536"
-    },
     "dispatch": {
       "issue": "https://github.com/SSheldon/rust-dispatch/issues/18",
       "observed": "2026-10-15",
@@ -17974,6 +17524,20 @@
         },
         "independent_verification": "Downloaded final installer and ZIP pass existing byte/notice/source/plugin checks against the source revision with native CRLF checkout bytes. All eight PE hashes and raw diagnostic hashes match. Complete selected member lists, response file and retained-symbol map are in the evidence archive.",
         "license_assessment": "unresolved"
+      },
+      "helper_link_audit": {
+        "target": "i686-pc-windows-msvc",
+        "provenance": "nsis-build-audit.json",
+        "evidence": "nsis-build-evidence.zip",
+        "binaries": {
+          "CodeConvoyAppId.dll": "3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29",
+          "codeconvoy_utils.dll": "30a4efad7d854a7eb7adf31cf48dfde6c00d6fdede9ca41674b026e36f55c734"
+        },
+        "linkage": {
+          "CodeConvoyAppId.dll": "No CRT; SDK kernel32/ole32 import libraries and UUID data",
+          "codeconvoy_utils.dll": "Static x86 libcmt/libvcruntime/libucrt; exact archives and members in helper build evidence"
+        },
+        "license_assessment": "unresolved; no change to Windows CRT publication blocker or application CRT linkage"
       }
     },
     "nsis_replacements": {
@@ -18021,7 +17585,7 @@
         "packaging/nsis/installer.nsi": "8c4ffcfa92f9645fcf50094f3f57972a79b21ba4712047ed090301852d41fcf8",
         "packaging/nsis/native-tests.ps1": "8ecb21d47a03062a90f871f570c4265c70c7c529f5dba835c6b2f1cec7985de8",
         "packaging/nsis/test-process.cpp": "51063ac7bd02c2d37a64d6959a55e5f6a0826526b1f9f82414146f9ee7ac8ea1",
-        "packaging/nsis_helpers.py": "34527755eb00190f54fded3dca9cf8e19e2899bc2350768b0894c5a2d6a3fae9",
+        "packaging/nsis_helpers.py": "1e875767d8843bb693601f624d8d95bb8c7ac8a87683ec9fd5fe9b6774c5d6b8",
         "packaging/windows_crt.py": "b8c35fe4e16d797567cb1e7bc773b46406701511cde988cee7225781e1d93892",
         "third-party/nsis/Cargo.lock": "e434e7a08cbf9239731f19762f5a7c71c0647a25a7e54985094c05354dbd1e2d",
         "third-party/nsis/Cargo.toml": "0b341b1e7e1d12779e74d749d00946bdc5b63f2f9050c5c3b0318a7af7cc43bb",
@@ -18179,7 +17743,14 @@
       },
       "audit": "nsis-build-audit.json",
       "evidence": "nsis-build-evidence.zip",
-      "status": "candidate; final payload and native installation validation pending"
+      "status": "source, notices and pinned final installer payload verified; Windows CRT remains unresolved",
+      "payload_verification": {
+        "run": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38895333211",
+        "source_commit": "becfa6e066044b0995edab74e76f4694dd05df9a",
+        "installer_sha256": "592bbac23f0409e6f3d442284e7119cba4a27257526703a6f2dea831f85300f7",
+        "old_helpers_absent": true,
+        "limitation": "Default-path native tests passed; Unicode shortcut path comparison requires follow-up; no overall CI success claimed."
+      }
     }
   }
 }

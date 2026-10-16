@@ -1,6 +1,24 @@
 param([switch]$UnicodePath)
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Run installer tests in a disposable GitHub Actions Windows account.' }
+if (-not ('CodeConvoySmoke.Paths' -as [type])) {
+    Add-Type @'
+using System.Runtime.InteropServices;
+using System.Text;
+namespace CodeConvoySmoke {
+    public static class Paths {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern uint GetLongPathName(string path, StringBuilder result, uint size);
+    }
+}
+'@
+}
+function Get-LongPath([string]$path) {
+    $result = [System.Text.StringBuilder]::new(32768)
+    $size = [CodeConvoySmoke.Paths]::GetLongPathName($path, $result, 32768)
+    if ($size -eq 0 -or $size -ge 32768) { throw "Cannot resolve shortcut path: $path" }
+    return $result.ToString()
+}
 $version = python packaging/release.py version
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read Cargo version' }
 $setup = (Resolve-Path "dist/CodeConvoy-$version-windows-x86_64-setup.exe").Path
@@ -45,7 +63,10 @@ try {
         if ($folder.ParseName((Split-Path $shortcut -Leaf)).ExtendedProperty('System.AppUserModel.ID') -ne 'io.github.chrislauinger77.code-convoy') {
             throw "Incorrect shortcut AppUserModelID: $shortcut"
         }
-        if ($wscript.CreateShortcut($shortcut).TargetPath -ne "$installed\CodeConvoy.exe") { throw 'Incorrect shortcut target' }
+        $actualTarget = $wscript.CreateShortcut($shortcut).TargetPath
+        if ((Get-LongPath $actualTarget) -ne (Get-LongPath "$installed\CodeConvoy.exe")) {
+            throw "Incorrect shortcut target: '$actualTarget'; expected '$installed\CodeConvoy.exe'"
+        }
     }
     if ((Get-FileHash "$installed/CodeConvoy.exe").Hash -ne (Get-FileHash "$portable/CodeConvoy.exe").Hash) {
         throw 'Installed and portable executables differ'

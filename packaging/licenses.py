@@ -140,17 +140,8 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
             or relink["recipient_patch_sha256"] != patch["sha256"]
             or relink["runtime_sha256"] == runtime["sha256"]):
         raise ValueError("Stale AppImage modified-library relink evidence")
-    plugin = native["nsis_tauri_utils"]
-    if "nsis_replacements" in native:
-        from nsis_helpers import verify_catalog
-        verify_catalog(catalog, texts, root, evidence)
-    elif plugin["dll_sha256"] != catalog["windows_installer_plugins"]["$PLUGINSDIR/nsis_tauri_utils.dll"]:
-        raise ValueError("Plugin provenance does not match the pinned installer DLL")
-    for package in plugin["visible_registry_packages"]:
-        if not any(c["name"] == "nsis-tauri-utils embedded: " + package["name"]
-                   and c["version"] == package["version"] and c.get("checksum") == package["checksum"]
-                   and c["notices"] for c in catalog["components"]):
-            raise ValueError(f"Missing observed installer dependency notices: {package['name']}")
+    from nsis_helpers import verify_catalog
+    verify_catalog(catalog, texts, root, evidence)
     # This is the exact registry source compiled into the application, not an
     # online source offer that can expire or be replaced after distribution.
     mpl = next(p for p in catalog["crates"] if p["name"] == "option-ext")

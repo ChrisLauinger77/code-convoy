@@ -1,5 +1,6 @@
 """Build and verify the two narrowly scoped, source-owned NSIS helpers."""
 import argparse
+import hashlib
 import io
 import json
 import os
@@ -88,7 +89,9 @@ def source_archive(entries):
 def verify_catalog(catalog, texts, root=ROOT, evidence=None):
     """Source/notice gates also run offline, on platforms that cannot build PE."""
     evidence = evidence or root / "third-party"
-    record = catalog["native_provenance"]["nsis_replacements"]
+    record = catalog["native_provenance"].get("nsis_replacements")
+    if not record:
+        raise ValueError("Missing reviewed NSIS replacement inventory")
     kit = evidence / "nsis"
     spec = json.loads((kit / "inputs.json").read_text())
     if record["inputs"] != inputs(root) or record["spec"] != spec:
@@ -120,6 +123,22 @@ def verify_catalog(catalog, texts, root=ROOT, evidence=None):
             raise ValueError("NSIS replacement provenance does not match pinned installer DLL")
     if OLD_PLUGINS & catalog["windows_installer_plugins"].keys():
         raise ValueError("Old NSIS prebuilt plugin restored")
+    retained = {entry["path"] for entry in catalog["files"]}
+    if record["audit"] not in retained or record["evidence"] not in retained:
+        raise ValueError("Missing retained NSIS build evidence")
+    audit = json.loads((evidence / record["audit"]).read_text())
+    if (audit["spec"] != spec or {n: p["sha256"] for n, p in audit["binaries"].items()} != record["binaries"]
+            or any(audit["inputs"].get(name) != checksum for name, checksum in record["inputs"].items()
+                   if name.startswith("third-party/nsis/"))):
+        raise ValueError("NSIS retained build describes different source/binary inputs")
+    with zipfile.ZipFile(evidence / record["evidence"]) as archive:
+        if archive.read("provenance.json") != (evidence / record["audit"]).read_bytes():
+            raise ValueError("NSIS retained build evidence does not match its index")
+        for name, binary in audit["binaries"].items():
+            for build in ("first", "second"):
+                for filename, checksum in binary["evidence"][build].items():
+                    if hashlib.sha256(archive.read(f"{build}/{name}/{filename}")).hexdigest() != checksum:
+                        raise ValueError("NSIS retained linker evidence changed")
 
 
 def pe_exports(text):
@@ -150,6 +169,8 @@ def check_link(directory, expected):
         raise ValueError("Helper linker inventory differs from raw selection evidence")
     if expected["crt"] == "none" and any(PureWindowsPath(p).name.lower() in crt.CRT_NAMES for p in selected):
         raise ValueError("Shortcut helper unexpectedly includes CRT code")
+    if expected["crt"] == "none" and any(PureWindowsPath(p).name.lower() not in {"kernel32.lib", "ole32.lib", "uuid.lib"} for p in selected):
+        raise ValueError("Unexpected shortcut helper native input")
     if any(PureWindowsPath(p).name.lower().startswith("windows.0.") for p in selected):
         raise ValueError("Unexpected prebuilt Windows import archive")
     for response in invocation.get("response_files", []):
@@ -178,7 +199,7 @@ def verify(directory=OUTPUT):
             for path, checksum in record["evidence"][build].items():
                 if Path(path).name != path or crt.checksum(capture / path) != checksum:
                     raise ValueError("Missing or altered NSIS linker evidence")
-            required = {*crt.CAPTURE_FILES, "pe.txt"}
+            required = {*crt.CAPTURE_FILES, "pe.txt", "build-command.json"}
             if spec["binaries"][name]["crt"] == "static":
                 required.add("rustflags.json")
             if not required <= record["evidence"][build].keys():
@@ -188,12 +209,16 @@ def verify(directory=OUTPUT):
                 flags = json.loads((capture / "rustflags.json").read_text())
                 if "windows_raw_dylib" not in flags or "target-feature=+crt-static" not in flags:
                     raise ValueError("Unexpected helper CRT/import-library configuration")
-            check_identity((capture / "pe.txt").read_text(), spec["binaries"][name])
+            imports = check_identity((capture / "pe.txt").read_text(), spec["binaries"][name])
+            if imports != record["imports"] or record["crt"] != spec["binaries"][name]["crt"]:
+                raise ValueError("NSIS helper import/CRT inventory differs from captured binary")
             toolchain = json.loads((capture / "toolchain.json").read_text())
             environment = toolchain["environment"]
             if (environment["VCTOOLSVERSION"].rstrip("\\/") != spec["msvc"]
                     or environment["WINDOWSSDKVERSION"].rstrip("\\/") != spec["windows_sdk"]
-                    or not toolchain.get("compiler", {}).get("sha256")):
+                    or not re.fullmatch(r"[0-9a-f]{64}", toolchain.get("compiler", {}).get("sha256", ""))
+                    or not re.fullmatch(r"[0-9a-f]{64}", toolchain.get("linker", {}).get("sha256", ""))
+                    or not toolchain.get("linker", {}).get("version")):
                 raise ValueError("Unexpected helper compiler/SDK")
         if crt.checksum(directory / "plugins" / name) != record["sha256"]:
             raise ValueError("Staged NSIS helper differs from captured binary")
