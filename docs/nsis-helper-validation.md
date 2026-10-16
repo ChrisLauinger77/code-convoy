@@ -24,9 +24,16 @@ relicensed. The helper returns a checked status and releases its COM interfaces
 and consumed NSIS stack nodes. It does not register accounts, pin shortcuts,
 introduce notification features or change uninstall behavior.
 
-The process, SemVer and plugin-ABI source files are byte-identical to Tauri
+The process and SemVer source files are byte-identical to Tauri
 revision `c3a4447060a260c5e4e09d94284948c4f864da02`. Their actual MIT and Apache
-notices are retained. The new facade excludes the unused downloader and its
+notices are retained. A recorded `pluginapi-stack-safety.patch` addresses the
+five PR CodeQL pointer findings with checked local pointer snapshots, checked
+allocation, correctly sized UTF-16 buffers, bounded copies and node release on
+invalid Unicode. Original/modified hashes and the exact patch are retained.
+Native tests cover null/empty stacks, invalid capacities, truncation, Unicode,
+invalid surrogates and ownership. The synchronous NSIS host still owns validity
+of non-null pointers; the adapter is not a concurrent API.
+The new facade excludes the unused downloader and its
 HTTP/TLS dependencies. Process name matching, host-PID exclusion, termination
 behavior and success/error codes are unchanged. SemVer uses **1.0.18**, including
 its ordering of invalid versions and build metadata. No application dependency,
@@ -35,7 +42,7 @@ agent behavior, scheduler or worktree implementation changes.
 The complete helper lockfile includes three source dependencies:
 `semver 1.0.18`, `windows-sys 0.48.0`, and `windows-targets 0.48.5`. The seven
 architecture-specific Windows import-library packages remain identified in the
-lockfile/inventory but are not linked. `windows_raw_dylib` generates imports
+lockfile/inventory but are not linked into the shipped helpers. `windows_raw_dylib` generates imports
 from the pinned bindings. One recorded source patch removes windows-sys's
 obsolete `feature(raw_dylib)` attribute; this compiler feature has been stable
 since Rust 1.71. Original archive, upstream revision and exact before/after
@@ -84,9 +91,9 @@ publication obligation; an import list or successful link is not a license grant
 | Helper | SHA-256 |
 | --- | --- |
 | CodeConvoyAppId.dll | `3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29` |
-| codeconvoy_utils.dll | `30a4efad7d854a7eb7adf31cf48dfde6c00d6fdede9ca41674b026e36f55c734` |
+| codeconvoy_utils.dll | `218b7639ee9647cf34f26ad907c7a3f245be5a7360fa75e176fed231d62e22b2` |
 
-[Native helper run 38894815404](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38894815404)
+[Native helper run 38899118720](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38899118720)
 built each helper twice into separate empty Cargo/native output trees. Both DLLs
 were byte-identical between builds. The shortcut helper also matched the earlier
 independent runner's output. `/Brepro` suppresses timestamp-based PE differences;
@@ -117,7 +124,8 @@ the same checks. The old DLLs were absent before their catalog entries were
 removed. Default-path installation, shortcut identity, maintenance with the
 real application running, uninstall and data preservation passed. Unicode-path
 testing exposed a shortcut path comparison failure; the test now expands Windows
-short paths and reports both targets before comparing. Native revalidation is
+short paths and reads the Shell Unicode target property instead of the legacy
+WScript reader, which returned `??` for the Chinese path. Native revalidation is
 pending; this run is not reported as a successful overall CI run.
 
 The native Windows tests exercise default

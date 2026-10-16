@@ -8,7 +8,16 @@
     "windows_sdk": "10.0.26100.0",
     "upstream": {
       "revision": "c3a4447060a260c5e4e09d94284948c4f864da02",
-      "source": "sources/nsis-tauri-utils-0.2.1.tar.gz"
+      "source": "sources/nsis-tauri-utils-0.2.1.tar.gz",
+      "patches": [
+        {
+          "path": "pluginapi-stack-safety.patch",
+          "file": "crates/pluginapi/src/lib.rs",
+          "before_sha256": "55d378d8ffdeac55b586d2d58b103d1da9b022f6010437caab77dd2197c189fa",
+          "after_sha256": "7e55ee796372dd445d737ed368662808d618ac61a07a9efeeb361f80a80d4707",
+          "reason": "Validate local stack pointers, allocation and UTF-16 bounds; consume invalid-Unicode nodes; native regression tests"
+        }
+      ]
     },
     "binaries": {
       "CodeConvoyAppId.dll": {
@@ -37,15 +46,15 @@
     }
   },
   "inputs": {
-    "packaging/nsis/helper-tests.nsi": "2eeaaee0f9bb99a0934be427b3e6fdd0cf19cfc1ae0d25a17b5d4943a41c991c",
-    "packaging/nsis/installer.nsi": "1b34bd88fccb8e92cec8ccdbe3c47257b37548c5f54542da468de8cebd977953",
-    "packaging/nsis/LICENSE_APACHE-2.0": "eb3d7b5485466acbd81f2b496f595ab637d2792e268206b27d99e793bdb67549",
-    "packaging/nsis/LICENSE_MIT": "2bdd7c5423107520260ab22f47b09bdbc910fd73616ca68e962ebdf0f7a35958",
-    "packaging/nsis/native-tests.ps1": "d5f931c30b7f7e8cca35e4118508b8c468850a1ffcc09f95f0e4d8236bdad207",
-    "packaging/nsis/test-process.cpp": "be481f1549c94ce2ac5560f9daafa2e60230ad316770585a46ecd24113f9bb2e",
-    "packaging/nsis/UPSTREAM.json": "0fb5ae141b0ecfa40d83eca608127be7c3af88e4c0dec922d69c945427f58b96",
-    "packaging/nsis_helpers.py": "85447df01a3cf21fad034fc071d709ead2d2214e75ae8870bc3593da2c6b8c84",
-    "packaging/windows_crt.py": "79600817417e2554289e97655a40d2d91114cd02c8f16250c441f2e2752d4dc1",
+    "packaging/nsis/helper-tests.nsi": "e0ccc344a3e159a6b1244b29c3596f5e49fae85d428d492d746a580b425502e8",
+    "packaging/nsis/installer.nsi": "8c4ffcfa92f9645fcf50094f3f57972a79b21ba4712047ed090301852d41fcf8",
+    "packaging/nsis/LICENSE_APACHE-2.0": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+    "packaging/nsis/LICENSE_MIT": "ef497d10d31e3a85c5c0a6bc598dcdfb5c717b6e085bbc0376f02618a8e31cb2",
+    "packaging/nsis/native-tests.ps1": "8ecb21d47a03062a90f871f570c4265c70c7c529f5dba835c6b2f1cec7985de8",
+    "packaging/nsis/test-process.cpp": "51063ac7bd02c2d37a64d6959a55e5f6a0826526b1f9f82414146f9ee7ac8ea1",
+    "packaging/nsis/UPSTREAM.json": "b33182c79bbd6937f54d5d44edd5d7a5fb21a805fa31f0beb50d5eff96730426",
+    "packaging/nsis_helpers.py": "ab2d72f245b961c60d8bd0ca469268100bba2f582481e54f80df698bacd1a83f",
+    "packaging/windows_crt.py": "b8c35fe4e16d797567cb1e7bc773b46406701511cde988cee7225781e1d93892",
     "third-party/nsis/appid.cpp": "81a8a17032a10ec6c5e25fedb400751a0b2cf04b284e14ae155d240d27cb3218",
     "third-party/nsis/appid.def": "a5ac56fe6d49af329a34e59a708fbd9f09edc0a5bd3889814b5fccfb2e00dd98",
     "third-party/nsis/Cargo.lock": "e434e7a08cbf9239731f19762f5a7c71c0647a25a7e54985094c05354dbd1e2d",
@@ -57,13 +66,14 @@
     "third-party/nsis/crates/nsis-semvercompare/Cargo.toml": "53050c8b536a224ee4dd7de1c5a1eb88c5be987d05c58a01d03251e7d61ff70a",
     "third-party/nsis/crates/nsis-semvercompare/src/lib.rs": "e664f4e1b8bb654dab343bf40fc74f5fbad8786a76cccc922b01dabf53e41871",
     "third-party/nsis/crates/pluginapi/Cargo.toml": "804bf78e52a9573f644068ef3bed1ae9cb60a5594f99289019e374989a25e215",
-    "third-party/nsis/crates/pluginapi/src/lib.rs": "55d378d8ffdeac55b586d2d58b103d1da9b022f6010437caab77dd2197c189fa",
+    "third-party/nsis/crates/pluginapi/src/lib.rs": "7e55ee796372dd445d737ed368662808d618ac61a07a9efeeb361f80a80d4707",
     "third-party/nsis/dependencies.json": "b02f93d69a4e26debd59df2dfbd790790ba01ab4f3042fb494c9eb96d1fd5db8",
-    "third-party/nsis/inputs.json": "fbf5f1b9601170964fb095635575272425b5919992e06d1448d5a9d2590e7af1",
+    "third-party/nsis/inputs.json": "78031267eafbed5606de991ca8cfdcca0b29b1794c47504339e4360106b19e07",
     "third-party/nsis/LICENSE-CodeConvoy": "37438906c0a4475ff6029c83d6ab7c9a62c4b8042b32a51182258a717bccb803",
     "third-party/nsis/LICENSE_APACHE-2.0": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
     "third-party/nsis/LICENSE_MIT": "1c1020fa10a6bf318717e82c911bcc54ebdfb9bb280460ae332bcb2f82f57fbe",
-    "third-party/nsis/README.txt": "5492fcd307375e0451879836f09ca7ff3c3f2a2fe1f35f47450a41d7147f5832",
+    "third-party/nsis/pluginapi-stack-safety.patch": "1952e243b262be4616ac1b9bd46e374ee6e163a96db1ccc59eee3647c512b314",
+    "third-party/nsis/README.txt": "3543285df76eae8021f0b661e2906d71932e6befe4a8007a87d91665b8657099",
     "third-party/nsis/windows-sys-stable-raw-dylib.patch": "eff3d4452a11485b15bb67ea3d16819fc7d61ce98c289212bd7973deb9aebcdf"
   },
   "packages": [
@@ -120,7 +130,7 @@
   ],
   "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-pc-windows-msvc\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
   "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)\n",
-  "source_commit": "1e6b8a93e7e45191e0034197300e67db319af63b",
+  "source_commit": "43130610f94f486acd68231eef7f801bcb914458",
   "license_assessment": "windows-crt-unresolved",
   "binaries": {
     "CodeConvoyAppId.dll": {
@@ -152,7 +162,7 @@
       }
     },
     "codeconvoy_utils.dll": {
-      "sha256": "30a4efad7d854a7eb7adf31cf48dfde6c00d6fdede9ca41674b026e36f55c734",
+      "sha256": "218b7639ee9647cf34f26ad907c7a3f245be5a7360fa75e176fed231d62e22b2",
       "imports": [
         "KERNEL32.dll",
         "api-ms-win-core-synch-l1-2-0.dll",
@@ -162,22 +172,22 @@
       "crt": "static",
       "evidence": {
         "first": {
-          "link.log": "17563dda8ae92ff5e49de15f57aa894a21dcd477b9a07c85b16386ebcd57d354",
-          "link.map": "3190723d1d5e9175876e16698add4cb6ade02edca12cac8efbb6e1d2b4120ed9",
-          "invocation.json": "5f237c1c52dfa684168cce0f1cc30e3b0fcd609c0b883cd428e9e5fc469eb2d5",
+          "link.log": "05e4c9d748c1f12d6ad7d6a1ce7f2955051723adb372afa7a3a1884de092284c",
+          "link.map": "108a35b24ff48502c05011d63e0c0d46e13a1005c91ea0fe0484300c56dd8d05",
+          "invocation.json": "2d2265d787423b74a30b8a72cc73897adcd655924407061d9b89b3c63e9ff00b",
           "toolchain.json": "09326dfb502e858e14c74c19922ce379aa60e520c42be0876b9b6fe83de8872a",
-          "selected-libraries.json": "6fa8808f7502e8cab07356ef4fcd3b1859bff12784b4cb693a330deddbd5d114",
-          "pe.txt": "e9cee23a366ed6433009253baf1038691fe952f50332a29b53830f555e5d7e29",
+          "selected-libraries.json": "788a019e6b897ce22fb37a17e5e239065dd553b4991179ae03973990485fd0fe",
+          "pe.txt": "9220118632d081ddbb8e1554c16e0db5f673ac69ca3fcb24f1415bf394226613",
           "build-command.json": "00b1226e4a82f3650b5137bf2b63bbaa1c949ea00fbd34c094c362c059109724",
           "rustflags.json": "654b821b6d82e31d6bd2bfba9e5ab4b92e40b8216101c437bdb4d1ee68da2fff"
         },
         "second": {
-          "link.log": "47a96f21d97ee0c7ea1edb57198d66b465cf98960f9cc4c1da41205de2354b67",
-          "link.map": "3190723d1d5e9175876e16698add4cb6ade02edca12cac8efbb6e1d2b4120ed9",
-          "invocation.json": "894cefbd788329f3d5fed08cf2b6e25e3b920c3f2e26fda5b1fd72888f7bd684",
+          "link.log": "0fe5679090d6f36fdefc058f29ed2a39b49ca1b813e042d4130ad67fef5fdab1",
+          "link.map": "108a35b24ff48502c05011d63e0c0d46e13a1005c91ea0fe0484300c56dd8d05",
+          "invocation.json": "6718ba1a8db8f3e1b5a2c301e20aabd66b1732849283d15fdc57333bb7d332ed",
           "toolchain.json": "09326dfb502e858e14c74c19922ce379aa60e520c42be0876b9b6fe83de8872a",
-          "selected-libraries.json": "1bc7c7a147657d1cd1330c28bc01793652c3066fc4624db37d19b1ea93e2ffe6",
-          "pe.txt": "c7cf6398778a245955285d8471fd1ca09550ffab933bc8f87e6a4ca1edaa49a4",
+          "selected-libraries.json": "59865ef9d216a416dd3042b3a5507daf0ed8936df46eee048a9e1fce3ed51258",
+          "pe.txt": "c355e5800dd1ffd2a068b2b74500f237591f03e9b52b2cfd6f747623a9251a95",
           "build-command.json": "ed79c1cc0d19fcdb0a3f25096353a3911894c9f7cecfb2483bf30f3b6ac9ebe3",
           "rustflags.json": "654b821b6d82e31d6bd2bfba9e5ab4b92e40b8216101c437bdb4d1ee68da2fff"
         }

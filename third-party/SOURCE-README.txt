@@ -57,7 +57,7 @@ without plugins or LTO. It is documented evidence and interpretation, not legal
 approval. See the repository's AppImage validation record for results and gaps.
 
 codeconvoy-nsis-helpers-1.zip contains the original shortcut identity helper,
-the reduced Tauri process/version helper, exact Cargo.lock, source patch,
+the reduced Tauri process/version helper, exact Cargo.lock, recorded source patches,
 template, license notices and build recipe. Unpack it into an empty directory;
 read third-party/nsis/README.txt. The separate semver-1.0.18.crate,
 windows-sys-0.48.0.crate and windows-targets-0.48.5.crate archives are the exact
@@ -65,7 +65,9 @@ checksum-verified dependency sources. Place them in third-party/sources when
 reconstructing the kit outside the repository. The builder applies the one
 recorded windows-sys stable-compiler patch, verifying both source hashes.
 nsis-tauri-utils-0.2.1.tar.gz retains the upstream tagged source and MIT/Apache
-notices for the unchanged process/version/ABI modules. Its original prebuilt
+notices for the process/version/ABI modules. Process and version source remain
+unchanged; the kit records the stack safety patch and original/modified hashes.
+Its original prebuilt
 DLL and the old ApplicationID DLL are not distributed. The new source build
 uses Rust 1.99.0 and separately captures x86 CRT inputs. Windows CRT publication
 obligations remain unresolved; no Microsoft build tools or license grants are

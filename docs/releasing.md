@@ -201,8 +201,14 @@ redirected-descendant cancellation and unchanged search paths. The probe is
 never distributed and never contacts an agent service. It exercises the process
 and Git layers, not an interactive task through the final GUI binary.
 
-`cargo-packager` downloads its NSIS toolchain/helpers on Windows; its pinned
-version fixes that tool selection. These are installer helpers, not a Tauri
+`cargo-packager` downloads its NSIS toolchain and legacy helper cache on Windows.
+The supported custom template instead references the uniquely named replacement
+helpers built by `packaging/nsis_helpers.py`, outside that cache. The build pins
+Rust 1.99.0 (including the i686 MSVC target), MSVC 14.51.36231 and SDK 10.0.26100.0;
+two clean outputs must match and final extraction checks every plugin hash.
+See [source, license and native validation](nsis-helper-validation.md) before
+updating those pins or the template. The Windows CRT publication blocker remains.
+These are installer helpers, not a Tauri
 runtime or WebView. No Node, Tauri, Electron or JavaScript application dependency
 was added. Rust dependencies introduced by hardening are Windows-only
 `winresource` (build-time icon/version resources) and an explicit dependency on

@@ -16203,7 +16203,7 @@
       "name": "CodeConvoy reduced nsis-tauri-utils helper",
       "version": "0.2.1 CodeConvoy build 1",
       "license": "MIT OR Apache-2.0",
-      "scope": "Windows setup; original process/version runtime source; reduced facade",
+      "scope": "Windows setup; original process/version source, patched stack adapter and reduced facade",
       "notices": [
         {
           "text": "1c1020fa10a6bf318717e82c911bcc54ebdfb9bb280460ae332bcb2f82f57fbe",
@@ -16350,7 +16350,7 @@
     },
     {
       "path": "sources/codeconvoy-nsis-helpers-1.zip",
-      "sha256": "3d14e924deddf99a48ffd3153c00fc5f38c0b9f6c2d33c69f6a97bd377d1cdd3",
+      "sha256": "6f84170885dd5a15f6a3c4cd1717ee1e7cd8d9f85b5721f739255c251993dc98",
       "origin": "CodeConvoy original shortcut helper, modified upstream source kit and pinned build recipe; see nsis/README.txt"
     },
     {
@@ -16396,13 +16396,13 @@
     },
     {
       "path": "nsis-build-audit.json",
-      "sha256": "c633515048ef764252c7eef54d670331f0e37f4e0c719693dab01e43a2af0558",
-      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38894815404"
+      "sha256": "35b9edd799c6535f265318e882a2ad576f577597242d7f96c19b80dc5a24bd9d",
+      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38899118720"
     },
     {
       "path": "nsis-build-evidence.zip",
-      "sha256": "29b48ce707fa0cba7c41913d70f3e87fcac0de8a9308892c7d6fc5d8b9370829",
-      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38894815404"
+      "sha256": "614341fcae7fdaacb9007ea12d822d41ce9ca8cc8bb661d05ba63a276cbba4bc",
+      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38899118720"
     }
   ],
   "release_blockers": [
@@ -16416,7 +16416,7 @@
     "$PLUGINSDIR/System.dll": "9111099efe9d5c9b391dc132b2faf0a3851a760d4106d5368e30ac744eb42706",
     "$PLUGINSDIR/nsDialogs.dll": "4b7d17da290f41ebe244827cc295ce7e580da2f7e9f7cc3efc1abc6898e3c9ed",
     "$PLUGINSDIR/CodeConvoyAppId.dll": "3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29",
-    "$PLUGINSDIR/codeconvoy_utils.dll": "30a4efad7d854a7eb7adf31cf48dfde6c00d6fdede9ca41674b026e36f55c734"
+    "$PLUGINSDIR/codeconvoy_utils.dll": "218b7639ee9647cf34f26ad907c7a3f245be5a7360fa75e176fed231d62e22b2"
   },
   "rust_standard_library_components": [
     {
@@ -17531,7 +17531,7 @@
         "evidence": "nsis-build-evidence.zip",
         "binaries": {
           "CodeConvoyAppId.dll": "3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29",
-          "codeconvoy_utils.dll": "30a4efad7d854a7eb7adf31cf48dfde6c00d6fdede9ca41674b026e36f55c734"
+          "codeconvoy_utils.dll": "218b7639ee9647cf34f26ad907c7a3f245be5a7360fa75e176fed231d62e22b2"
         },
         "linkage": {
           "CodeConvoyAppId.dll": "No CRT; SDK kernel32/ole32 import libraries and UUID data",
@@ -17549,7 +17549,16 @@
         "windows_sdk": "10.0.26100.0",
         "upstream": {
           "revision": "c3a4447060a260c5e4e09d94284948c4f864da02",
-          "source": "sources/nsis-tauri-utils-0.2.1.tar.gz"
+          "source": "sources/nsis-tauri-utils-0.2.1.tar.gz",
+          "patches": [
+            {
+              "path": "pluginapi-stack-safety.patch",
+              "file": "crates/pluginapi/src/lib.rs",
+              "before_sha256": "55d378d8ffdeac55b586d2d58b103d1da9b022f6010437caab77dd2197c189fa",
+              "after_sha256": "7e55ee796372dd445d737ed368662808d618ac61a07a9efeeb361f80a80d4707",
+              "reason": "Validate local stack pointers, allocation and UTF-16 bounds; consume invalid-Unicode nodes; native regression tests"
+            }
+          ]
         },
         "binaries": {
           "CodeConvoyAppId.dll": {
@@ -17585,14 +17594,14 @@
         "packaging/nsis/installer.nsi": "8c4ffcfa92f9645fcf50094f3f57972a79b21ba4712047ed090301852d41fcf8",
         "packaging/nsis/native-tests.ps1": "8ecb21d47a03062a90f871f570c4265c70c7c529f5dba835c6b2f1cec7985de8",
         "packaging/nsis/test-process.cpp": "51063ac7bd02c2d37a64d6959a55e5f6a0826526b1f9f82414146f9ee7ac8ea1",
-        "packaging/nsis_helpers.py": "1e875767d8843bb693601f624d8d95bb8c7ac8a87683ec9fd5fe9b6774c5d6b8",
+        "packaging/nsis_helpers.py": "ab2d72f245b961c60d8bd0ca469268100bba2f582481e54f80df698bacd1a83f",
         "packaging/windows_crt.py": "b8c35fe4e16d797567cb1e7bc773b46406701511cde988cee7225781e1d93892",
         "third-party/nsis/Cargo.lock": "e434e7a08cbf9239731f19762f5a7c71c0647a25a7e54985094c05354dbd1e2d",
         "third-party/nsis/Cargo.toml": "0b341b1e7e1d12779e74d749d00946bdc5b63f2f9050c5c3b0318a7af7cc43bb",
         "third-party/nsis/LICENSE-CodeConvoy": "37438906c0a4475ff6029c83d6ab7c9a62c4b8042b32a51182258a717bccb803",
         "third-party/nsis/LICENSE_APACHE-2.0": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
         "third-party/nsis/LICENSE_MIT": "1c1020fa10a6bf318717e82c911bcc54ebdfb9bb280460ae332bcb2f82f57fbe",
-        "third-party/nsis/README.txt": "5492fcd307375e0451879836f09ca7ff3c3f2a2fe1f35f47450a41d7147f5832",
+        "third-party/nsis/README.txt": "3543285df76eae8021f0b661e2906d71932e6befe4a8007a87d91665b8657099",
         "third-party/nsis/appid.cpp": "81a8a17032a10ec6c5e25fedb400751a0b2cf04b284e14ae155d240d27cb3218",
         "third-party/nsis/appid.def": "a5ac56fe6d49af329a34e59a708fbd9f09edc0a5bd3889814b5fccfb2e00dd98",
         "third-party/nsis/crates/codeconvoy-utils/Cargo.toml": "fb075e94208499990b7ac67cdad5514174d3693efbdd25125f5e15d152d2c97c",
@@ -17602,9 +17611,10 @@
         "third-party/nsis/crates/nsis-semvercompare/Cargo.toml": "53050c8b536a224ee4dd7de1c5a1eb88c5be987d05c58a01d03251e7d61ff70a",
         "third-party/nsis/crates/nsis-semvercompare/src/lib.rs": "e664f4e1b8bb654dab343bf40fc74f5fbad8786a76cccc922b01dabf53e41871",
         "third-party/nsis/crates/pluginapi/Cargo.toml": "804bf78e52a9573f644068ef3bed1ae9cb60a5594f99289019e374989a25e215",
-        "third-party/nsis/crates/pluginapi/src/lib.rs": "55d378d8ffdeac55b586d2d58b103d1da9b022f6010437caab77dd2197c189fa",
+        "third-party/nsis/crates/pluginapi/src/lib.rs": "7e55ee796372dd445d737ed368662808d618ac61a07a9efeeb361f80a80d4707",
         "third-party/nsis/dependencies.json": "b02f93d69a4e26debd59df2dfbd790790ba01ab4f3042fb494c9eb96d1fd5db8",
-        "third-party/nsis/inputs.json": "fbf5f1b9601170964fb095635575272425b5919992e06d1448d5a9d2590e7af1",
+        "third-party/nsis/inputs.json": "78031267eafbed5606de991ca8cfdcca0b29b1794c47504339e4360106b19e07",
+        "third-party/nsis/pluginapi-stack-safety.patch": "1952e243b262be4616ac1b9bd46e374ee6e163a96db1ccc59eee3647c512b314",
         "third-party/nsis/windows-sys-stable-raw-dylib.patch": "eff3d4452a11485b15bb67ea3d16819fc7d61ce98c289212bd7973deb9aebcdf"
       },
       "dependencies": [
@@ -17739,17 +17749,18 @@
       "source_archive": "sources/codeconvoy-nsis-helpers-1.zip",
       "binaries": {
         "CodeConvoyAppId.dll": "3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29",
-        "codeconvoy_utils.dll": "30a4efad7d854a7eb7adf31cf48dfde6c00d6fdede9ca41674b026e36f55c734"
+        "codeconvoy_utils.dll": "218b7639ee9647cf34f26ad907c7a3f245be5a7360fa75e176fed231d62e22b2"
       },
       "audit": "nsis-build-audit.json",
       "evidence": "nsis-build-evidence.zip",
       "status": "source, notices and pinned final installer payload verified; Windows CRT remains unresolved",
-      "payload_verification": {
+      "retired_helpers_absence_verification": {
         "run": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38895333211",
         "source_commit": "becfa6e066044b0995edab74e76f4694dd05df9a",
         "installer_sha256": "592bbac23f0409e6f3d442284e7119cba4a27257526703a6f2dea831f85300f7",
         "old_helpers_absent": true,
-        "limitation": "Default-path native tests passed; Unicode shortcut path comparison requires follow-up; no overall CI success claimed."
+        "limitation": "Default-path native tests passed; Unicode shortcut path comparison requires follow-up; no overall CI success claimed.",
+        "scope": "Historical first candidate, before stack safety patch; proves removal of the retired prebuilt helpers. Current candidate evidence is in docs/nsis-helper-validation.md."
       }
     }
   }
