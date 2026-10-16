@@ -2,9 +2,10 @@
 
 Status: replacement source/notices and the exact candidate payload have been
 verified; `nsis-plugins` is removed from the inventory. `windows-crt` remains a
-publication blocker. Native Unicode-path regression verification is still in
-progress, so this change is not yet ready for merge. No release or tag is
-authorized by this record. AppImage/LGPL and dispatch resolutions are unchanged.
+publication blocker. Native installer and helper regression checks, including
+Unicode paths, passed. The changes are prepared for maintainer review; this
+record authorizes no merge, tag or release. AppImage/LGPL and dispatch resolutions
+are unchanged.
 
 ## Required functionality and implementation
 
@@ -69,7 +70,7 @@ source material shared across formats. Linux/macOS packaging code is unchanged.
 ## Source, build and license evidence
 
 The distributed `codeconvoy-nsis-helpers-1.zip` contains original/reduced source,
-Cargo.lock, dependency inventory, patch, notices, template and build scripts.
+Cargo.lock, dependency inventory, patches, notices, template and build scripts.
 The three original registry source archives accompany it. The existing Rust
 **1.99.0** standard-library notices and separate library lockfile apply to the
 rebuilt helper too. [The kit README](../third-party/nsis/README.txt) gives the
@@ -116,21 +117,53 @@ test logic was changed to accommodate that environment.
 Packaging tests cover helper identity/exports, hashes, two-build comparison,
 source revisions, dependency/source/notice delivery, linker provenance,
 unexpected/stale plugins, source-kit changes, unchanged portable layout and
-publication refusal. The Windows CRT publication blocker remains required.
+publication refusal. The Windows CRT publication blocker remains required;
+`python3 packaging/licenses.py release-ready` fails specifically on `windows-crt`.
+
+[CI with the full Windows diagnostic](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38899421790)
+passed on Linux, macOS and Windows, including formatting, strict Clippy,
+application tests and release builds. Its separately enabled Linux private-D-Bus
+and Windows software-graphics startup checks also passed. The follow-up
+[CodeQL run](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38900088008)
+passed all three analyses (Rust, Python and Actions). The regular
+[PR CI matrix](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38900092120)
+also passed all three platforms on `5168223c5500b59c851a5c5efd0da8720ecfe748`.
+The final follow-up commit contains only this validation document.
 
 The [first candidate run](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38895333211)
-built and extracted the installer, verifying exact notices, sources, application
-bytes and every embedded plugin. A second extraction on Linux, using the exact
-candidate source and hash-reconstructed Windows checkout line endings, passed
-the same checks. The old DLLs were absent before their catalog entries were
-removed. Default-path installation, shortcut identity, maintenance with the
-real application running, uninstall and data preservation passed. Unicode-path
-testing exposed a shortcut path comparison failure; the test now expands Windows
-short paths and reads the Shell Unicode target property instead of the legacy
-WScript reader, which returned `??` for the Chinese path. Native revalidation is
-pending; this run is not reported as a successful overall CI run.
+and independent Linux extraction proved the old DLLs absent before their live
+catalog entries were removed. Its default-path native tests passed, but the
+Unicode target comparison failed. A follow-up showed the legacy WScript reader
+returning `??` for the Chinese path. The test now reads the Shell Unicode target
+property and expands short paths. Neither failed run is claimed as overall CI
+success.
 
-The native Windows tests exercise default
+The [final Windows candidate and native tests](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38899421790)
+passed on source **`3f72875547aacdb4cbb971f750a09dcb5fe214c9`**. Both helpers
+were built twice again and matched the retained independent helper run's hashes.
+The diagnostic artifact is `windows-crt-audit` (ID **12045189343**).
+The exact downloaded installer and ZIP also passed independent Linux extraction
+and byte verification against that source revision. Only checkout line endings
+whose hashes matched the native capture were reconstructed. The complete
+source/notice bundle, eight recorded PE payloads (including the installer),
+helper/application linker evidence and final package hashes matched. The old
+helper DLLs were absent; the portable ZIP contains no helper DLLs.
+
+| Final candidate item | SHA-256 |
+| --- | --- |
+| `CodeConvoy-1.0.0-windows-x86_64-setup.exe` | `f2c0e6531efdf0616ab56c1808051c3052ac7f27ba515817de42911cd08e197f` |
+| `CodeConvoy-1.0.0-windows-x86_64.zip` | `8815d5b3053f83dbc7cc149bef02f870ab8bfac0814bf871d041eb8d1a47e0a3` |
+| `CodeConvoy.exe` in both packages | `c3c026ef1904f72b10cb13aa18017fb4639e63204672795d1502b23a42e5e522` |
+| `THIRD-PARTY-SOURCES.zip` in both packages | `b253fcf0f891ff1bb20b1240b72e80c8a09a3ec760bc1d11c9ea9d4f9c603f31` |
+
+The final hashes live in this external validation record to avoid a circular
+reference inside the bundled inventory. Its `retired_helpers_absence_verification`
+entry deliberately retains the historical first-candidate proof. Subsequent
+commits only change documentation and Git whitespace checking; application
+code, helper/template inputs and bundled source/notices are unchanged. A new
+application build embeds its own Git revision and needs fresh artifact hashes.
+
+The native Windows tests passed for default
 and Unicode/space-containing per-user paths, registration, shortcut targets and
 persisted AppUserModelID, process detection/termination, install while the actual
 CodeConvoy process is running, upgrade/downgrade registration scenarios,
@@ -152,3 +185,19 @@ Any helper source, dependency, compiler, SDK or template update requires new
 source/notice review, two clean builds, updated binary pins and final installer
 verification. Never resolve `windows-crt` through this NSIS workflow, substitute
 an old cached helper, silently accept changed hashes or publish from diagnostics.
+
+## Review map
+
+| Area | Changed files |
+| --- | --- |
+| Helper source and licenses | `third-party/nsis/`: original shortcut helper, reduced Rust workspace, lockfile, two recorded patches, input/dependency manifests and README/licenses |
+| Build and payload verification | `packaging/nsis_helpers.py`, `packaging/windows_crt.py`, NSIS-only integration in `packaging/release.py`, `packaging/licenses.py` |
+| Installer and native tests | `packaging/nsis/`: upstream-derived template, attribution and native fixtures; `packaging/windows-smoke.ps1` |
+| Regression coverage | `packaging/test_nsis_helpers.py`, `test_licenses.py`, `test_release.py`; existing AppImage publication test now expects the remaining CRT blocker |
+| Inventory and evidence | `third-party/catalog.json`, `texts.json`, notice/source introductions, helper audit/evidence, source kit and three dependency archives |
+| Build automation | Windows helper/diagnostic steps in CI and Windows release job; byte-preservation attributes in `.gitattributes` |
+| Maintainer documentation | This record, `docs/third-party-licenses.md`, `docs/license-blocker-evidence.md`, `docs/releasing.md` |
+
+No application Rust code or application dependency versions changed. Linux/macOS
+packaging implementation, AppImage/LGPL evidence, dispatch resolution and the
+existing Windows CRT obligation are unchanged. No merge, tag or release was made.
