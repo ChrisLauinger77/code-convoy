@@ -1,0 +1,88 @@
+Microsoft Distributable Code - CodeConvoy Windows releases
+========================================================
+
+Scope and ownership
+-------------------
+Microsoft Corporation owns the Microsoft startup and support code incorporated
+in these Windows binaries. CodeConvoy.exe (x64, in both the installer and ZIP)
+and codeconvoy_utils.dll (x86, installer only) dynamically use the VC/UCRT, but
+still incorporate startup/support objects selected from msvcrt.lib and Windows
+SDK libraries. CodeConvoyAppId.dll uses SDK import libraries and UUID data without
+a CRT. The recorded toolset is MSVC 14.51.36231 with Windows SDK 10.0.26100.0.
+
+The setup stub, uninstaller and prebuilt NSIS plugins have separately recorded
+provenance gaps for any embedded Microsoft code. An absence of CRT DLL imports
+does not establish that they contain no Microsoft code. The inventory records
+these limits; this notice does not declare every native file's inputs known or
+every observed input licensed as Distributable Code.
+
+VCRUNTIME140.dll and the Windows UCRT are supplied separately by the user or
+operating system. These packages contain no separate Microsoft runtime DLLs or
+redistributable installer. This notice concerns incorporated Microsoft code;
+it does not grant rights to redistribute separately obtained runtime files.
+
+CodeConvoy's original code and artwork remain under the MIT license in
+LICENSE.txt. That grant does not license Microsoft's code. Other third-party
+components retain their own licenses. The Microsoft-specific conditions below
+do not relicense CodeConvoy's source or restrict rights granted for independent
+MIT or other open-source components.
+
+Redistribution conditions
+-------------------------
+Redistribution of Microsoft Distributable Code depends on the applicable
+development-tool/component agreement and its distributable list. Inclusion in
+a linked binary is not itself a redistribution grant. Subject to that grant:
+
+- Distribute authorized, unmodified Microsoft object code with an application
+  providing substantial primary functionality. For SDK .lib inputs, distribute
+  the linked program, not the libraries. SDK code supplied in a setup program
+  must remain within that unmodified setup program.
+- Preserve Microsoft's copyright, patent and trademark notices. SDK terms
+  also require a valid copyright notice for the distributing application.
+- Do not imply Microsoft authorship or endorsement through product naming or
+  branding. SDK Distributable Code is restricted to Microsoft's operating
+  system platform and must not be used in malicious, deceptive or unlawful
+  programs.
+- Do not modify or distribute Microsoft source in a way that subjects it to
+  a license requiring source disclosure/distribution or granting others the
+  right to modify that source (an Excluded License). This does not prohibit
+  independently licensed CodeConvoy source from remaining MIT licensed.
+- The reviewed VS 2026 terms exclude unreleased components, software developed
+  with Insiders Channel Software, and software dependent on unreleased
+  components. The VS distributable list also excludes preview components.
+
+Recipients and distributors
+--------------------------
+Distributors must obtain downstream distributors' and external end users'
+agreement to terms providing Microsoft Distributable Code protection no weaker
+than the applicable Microsoft agreement. Passing on this notice communicates
+conditions; its presence alone does not establish that such agreement occurred
+or that a complete protective set of terms has been provided.
+
+The distributing licensee also owes Microsoft the defense and indemnification
+undertakings specified by its agreement, including related legal costs. The
+reviewed VS 2026 clause excepts claims based solely on Distributable Code; the
+reviewed SDK clause does not state that exception. These are the distributor's
+contractual responsibilities, not an indemnity imposed on ordinary end users
+by this notice. Applicable trade/export laws and controlling component terms
+must also be observed.
+
+This original notice summarizes the relevant distribution conditions. It is
+not a Microsoft license, a substitute for the controlling agreements, or a
+declaration that CodeConvoy's redistribution rights and recipient arrangements
+have been established. The windows-crt publication blocker remains active.
+
+Microsoft references
+--------------------
+Visual Studio 2026 Enterprise/Professional terms, sections II.6-II.7:
+https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/
+Visual Studio 2026 Distributable List:
+https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution
+Windows SDK license, section 2(a):
+https://aka.ms/WinSDKLicenseURL
+Windows SDK REDIST list, including linked static-library output:
+https://learn.microsoft.com/en-us/legal/windows-sdk/redist#static-lib-files
+
+The reviewed identities, evidence and remaining questions are recorded in
+THIRD-PARTY-INVENTORY.json and the CodeConvoy source repository's
+docs/license-blocker-evidence.md. These references were reviewed on 2026-10-16.

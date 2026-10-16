@@ -746,3 +746,163 @@ application's own error dialog.
 Exact import lists, retained build evidence, final hashes and native test results
 are recorded with the [dynamic migration](nsis-helper-validation.md#dynamic-crt-migration-and-prerequisite-validation).
 These are technical evidence, not permission to clear windows-crt or publish.
+
+## 8. Proposed Microsoft Distributable Code notice
+
+Prepared on 2026-10-16 against merged PR 74 (`ca5ade2`). This section adds a
+notice-delivery proposal to section 7; it does not replace its binary evidence
+or close the **windows-crt** blocker. The absence of a proposed notice described
+in the earlier assessments is historical. No completed dependency or native
+binary audit was repeated.
+
+The original [Windows notice](../third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt)
+distinguishes CodeConvoy's MIT code, embedded Microsoft startup/SDK code,
+separately installed runtime DLLs and the remaining prebuilt NSIS uncertainties.
+It identifies the observed application/helper inputs rather than borrowing a
+claim that every EXE/DLL contains the same Microsoft code. Its conditional use
+of Distributable Code does not declare an unverified input redistributable.
+
+### Microsoft references and applicability
+
+The official VS and SDK documents were downloaded again. Their digests match
+section 6, so this proposal does not silently substitute a newer agreement:
+
+| Reference | Role in this proposal |
+| --- | --- |
+| [VS 2026 Enterprise/Professional terms](https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/), [original DOCX](https://visualstudio.microsoft.com/wp-content/uploads/2025/10/Visual_Studio_2026-License-Enterprise_Professional_ENU.docx), II.6–II.7 | Conditional distributor obligations, component precedence and downstream protection. SHA-256 `dd2ab92a7c2bb90dd509e16572707a34b13bc0bc09b9199d115f25594ac39053`. These are the reviewed reference terms, not proof that this is the distributor's controlling licensing channel. |
+| [VS 2026 Distributable List](https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution#visual-c-runtime-files) | Identifies release runtime files and exclusions; still does not expressly name the observed toolset `lib` paths. |
+| [Microsoft licensing guidance](https://www.microsoft.com/licensing/guidance/Visual-Studio#how-certain-software-can-be-distributed-to-others-within-your-applications) | Distinguishes licensing channels and describes linked output from identified distributable libraries. Guidance does not itself identify our `msvcrt.lib` inputs as covered. |
+| [Windows SDK license](https://aka.ms/WinSDKLicenseURL), [resolved RTF](https://download.microsoft.com/download/0/F/F/0FF2B061-47DD-4F55-89B6-FD1D8C44F14D/sdk_license.rtf), 2(a)(i)–(iii) | SDK-specific conditions summarized in the notice. SHA-256 `dd07eb178e00c6bba4148457fc00ff77cd4887eb521d504186fe59c9ec8bbe62`. Its older document title is retained, not treated as evidence of a different binary SDK version. |
+| [SDK REDIST static LIB list](https://learn.microsoft.com/en-us/legal/windows-sdk/redist#static-lib-files) | Conditional coverage of the observed public SDK `um` and `ucrt` directory families. This does not extend that list to the separate MSVC toolset directory. |
+| [CRT library documentation](https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features) | Explains why dynamic linkage still embeds `msvcrt.lib` startup code. Actual selected members/hashes remain those recorded in the dynamic-build evidence. |
+| [V14 runtime end-user terms](https://visualstudio.microsoft.com/license-terms/vs2026-ga-visualcpp-v14-redist-runtime/) | A separate agreement for the external runtime, not the distributor grant for CodeConvoy's embedded code. It is not copied into the packages as a substitute grant. |
+
+The notice distinguishes the SDK's operating-system restriction from broader
+wording in the comparison projects. It also keeps the VS indemnification
+exception separate from the SDK clause. An ordinary recipient is not made the
+distributor's indemnitor. The Excluded License summary concerns Microsoft's
+source; it does not claim that independent MIT code becomes restricted.
+
+### CPython and yt-dlp comparison
+
+The following upstream sources were inspected at fixed revisions on 2026-10-16:
+
+| Project/source | Observed approach and what we adopt |
+| --- | --- |
+| CPython [`PC/crtlicense.txt`](https://github.com/python/cpython/blob/d3ada4509ea9f4d5c7a7a28566049c8891ee6d11/PC/crtlicense.txt) | A dedicated Windows notice separates Microsoft code from Python's own license, describes incorporated code and alerts redistributors to downstream conditions. We adopt that separation and notice structure, not its Python-specific coverage or its assertion that redistribution complies. |
+| CPython [`PC/layout/main.py`](https://github.com/python/cpython/blob/d3ada4509ea9f4d5c7a7a28566049c8891ee6d11/PC/layout/main.py) | The Windows layout ships the build's `LICENSE.txt`. This is a file-delivery comparison, not a legal opinion about every CPython installer or recipient. |
+| yt-dlp [`THIRD_PARTY_LICENSES.txt`](https://github.com/yt-dlp/yt-dlp/blob/897341241f2bfb2439fe0367f4c7c9ccd29a3828/THIRD_PARTY_LICENSES.txt) and [generator](https://github.com/yt-dlp/yt-dlp/blob/897341241f2bfb2439fe0367f4c7c9ccd29a3828/devscripts/generate_third_party_licenses.py) | The generator imports CPython's CRT notice into the aggregate third-party text and labels it Windows-only. Its introduction separately identifies yt-dlp's own Unlicense. We likewise use the existing aggregate notice with an explicit Windows scope. |
+
+The two projects are not independent Microsoft permissions: yt-dlp directly
+reuses CPython's text. Their notices do not identify CodeConvoy's toolset,
+hosted-build agreement or NSIS inputs. Neither is authority that Microsoft
+accepts passive notice delivery for this distributor. Our text is original;
+no Python-specific grant, platform wording, `.pyd` claim or blanket compliance
+assertion was copied. No click-through requirement can be inferred from these
+files, and their presence does not prove that no other agreement process exists.
+
+### Delivery and whether the notice is sufficient
+
+The canonical notice is registered on the existing Microsoft component in
+`catalog.json`, with its complete UTF-8 text in the content-addressed `texts.json`
+map. Its source bytes are pinned in the catalog's existing `files` collection.
+`licenses.py` verifies that all three bindings agree, even while the component
+remains unresolved. The ordinary renderer includes it verbatim in
+`THIRD-PARTY-NOTICES.txt`; no new packaged filename or format is introduced.
+
+The NSIS resource configuration delivers that aggregate file beside
+`CodeConvoy.exe`, and the portable ZIP places it at its root. Both existing
+final-artifact validators compare the complete generated bytes. As before,
+all platforms receive the conservative aggregate, but this notice applies only
+to its identified Windows components. Source archives and unrelated notices
+are unchanged. The project `LICENSE`, installer license page, silent/passive
+operation and runtime prerequisites are unchanged.
+
+**Assessment: the proposal supplies an attributed, component-scoped notice and
+reliable delivery, but it does not by itself satisfy all recipient/distributor
+requirements.** In particular:
+
+- Communicating restrictions is not evidence that a downstream distributor or
+  external end user agreed to them. The current MIT license page covers a
+  different grant, and merely reading an installed file, extracting a ZIP or
+  completing a silent installation does not establish assent.
+- The summarized conditions have not been established as a complete protective
+  sublicense. Review must identify which provisions of the controlling
+  agreement need to protect Microsoft code downstream, including applicable
+  use restrictions, disclaimers, liability protections and statutory exceptions.
+  Importing all IDE/SDK development terms indiscriminately into an end-user
+  agreement would also be unjustified.
+- The reviewed distribution clauses require agreement, but do not prescribe a
+  checkbox or an installer-specific mechanism. No click-through is added. A
+  supported determination must address ordinary installation, unattended
+  deployment, portable delivery and further redistribution; that may be an
+  appropriate existing agreement rather than an installer change.
+
+This is an evidence-based proposal for maintainer/legal review, not a Microsoft
+approval or a final opinion on enforceability. No statement here accepts the
+distributor's contractual undertakings on the maintainer's behalf.
+
+### Exact remaining questions before blocker removal
+
+1. **Grant and governing agreement:** identify the controlling agreement and
+   authorized distributor for the recorded hosted VS Enterprise build, and
+   establish the grant for the selected x64/x86 `msvcrt.lib` startup/support
+   output and other VC inputs. Confirm whether the installed components carry
+   overriding terms. The SDK list provides conditional coverage for its own
+   recorded paths; neither a DLL REDIST entry nor this notice proves VC library
+   coverage. This is an unresolved evidence question, not a finding of an
+   unlicensed build or a demand to buy a separate license without that review.
+2. **Recipient protection and assent:** determine the sufficient protective
+   wording and supported agreement/delivery method for both formats and
+   downstream redistribution. The notice intentionally does not assert that
+   this requirement has been discharged.
+3. **Distributor undertakings:** establish that the actual distributor can and
+   does comply with the applicable contractual obligations, including the
+   separate indemnification commitment. Package presence tests cannot do this.
+4. **Remaining installer inputs:** establish whether the recorded prebuilt
+   NSIS setup/uninstaller/plugins incorporate Microsoft code needing additional
+   rights or notices and, if so, identify them. Their already resolved NSIS
+   source/license status is not reopened and supplies no Microsoft grant.
+
+These are the reasons `windows-crt` stays active. No missing notice-delivery
+mechanism is being used as a proxy for those separate decisions. New terms or
+an authoritative interpretation could resolve more than one question together;
+no new binary audit is requested merely to repeat existing import/link evidence.
+
+### Validation of the notice change
+
+Local validation passed on Linux using Rust 1.96.1:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features` | 621 passed; 10 intentionally ignored |
+| `cargo build --release` | Passed |
+| `python3 -m unittest discover -s packaging -p 'test_*.py'` | 109 passed |
+| `python3 packaging/licenses.py check` | 457 locked crates; one unresolved obligation |
+| Publication guard | Rejected solely for `windows-crt`, as intended |
+| `git diff --check` | Passed |
+
+Packaging regressions exercise actual notice generation/resource configuration,
+portable ZIP byte verification and the final NSIS verifier with a controlled
+extraction fixture. They reject deleting only the Microsoft section or changing
+its attribution while leaving all other notice bytes intact. Catalog regressions
+reject lost component/text/source bindings and source-only hash replacement.
+The resource test supplies a compiler-version fixture and mocks package creation;
+the installer test supplies fixture executables/plugins. These tests verify
+delivery logic, not a new native Windows build or a recipient's legal agreement.
+
+The original source ZIP remains byte-identical
+(`eb61566a9f3e26f7c5d29482cabb22828a86cd6b985480e48faf196e77ba7b8f`),
+all 366 earlier notice texts are unchanged, and existing native provenance and
+the `windows-crt` blocker entry are unchanged. Rust tests use `/var/tmp` for
+temporary repositories to avoid the previously recorded `/tmp/.git` marker.
+No CRT, installer, dependency, workflow or package-format changes were made.
+
+Native Windows packages were not rebuilt for this notice-only change, and
+cross-platform CI was not dispatched. The earlier dynamic-CRT packages do not
+contain the new notice and are not claimed as validation of its delivery.
+The release compiler pin remains 1.99.0; the local Rust checks are source checks,
+not release-toolchain evidence. No commit, push, merge, tag or release was made
+for this proposal.

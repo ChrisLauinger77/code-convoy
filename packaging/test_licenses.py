@@ -89,6 +89,45 @@ class LicenseEvidence(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "altered license/source"):
             self.check()
 
+    def test_microsoft_notice_is_delivered_verbatim_with_blocker_active(self):
+        catalog, texts = self.check()
+        component = next(c for c in catalog["components"] if c["name"] == licenses.MICROSOFT_COMPONENT)
+        notice = next(n for n in component["notices"] if n["path"] == licenses.MICROSOFT_NOTICE)
+        original = (self.evidence / licenses.MICROSOFT_NOTICE).read_bytes()
+        self.assertEqual(original, texts[notice["text"]].encode("utf-8"))
+        material = licenses.materials(self.root, self.evidence)
+        self.assertEqual(material["THIRD-PARTY-NOTICES.txt"].count(original), 1)
+        self.assertEqual(set(material), set(licenses.FILES))  # Existing four-file delivery.
+        self.assertIn(b"CodeConvoy's original code and artwork remain under the MIT license", original)
+        self.assertIn(b"CodeConvoy Windows releases", original)
+        self.assertEqual(component["unresolved"], "windows-crt")
+        self.assertEqual([b["id"] for b in catalog["release_blockers"]], ["windows-crt"])
+
+    def test_microsoft_notice_cannot_lose_its_component_or_source_binding(self):
+        original = copy.deepcopy(self.catalog)
+        for mode in ("component", "notice", "file", "other valid text"):
+            self.catalog = copy.deepcopy(original)
+            component = next(c for c in self.catalog["components"] if c["name"] == licenses.MICROSOFT_COMPONENT)
+            if mode == "component":
+                self.catalog["components"].remove(component)
+            elif mode == "notice":
+                component["notices"] = []
+            elif mode == "file":
+                self.catalog["files"] = [f for f in self.catalog["files"] if f["path"] != licenses.MICROSOFT_NOTICE]
+            else:
+                component["notices"][0]["text"] = self.catalog["crates"][0]["notices"][0]["text"]
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "Microsoft Distributable Code notice binding"):
+                self.check()
+        self.catalog = original
+        source = self.evidence / licenses.MICROSOFT_NOTICE
+        source.write_bytes(source.read_bytes() + b"altered")
+        with self.assertRaisesRegex(ValueError, "altered license/source evidence"):
+            self.check()
+        # Updating just the source-file pin must not replace the delivered text.
+        next(f for f in self.catalog["files"] if f["path"] == licenses.MICROSOFT_NOTICE)["sha256"] = licenses.digest(source.read_bytes())
+        with self.assertRaisesRegex(ValueError, "Microsoft Distributable Code notice binding"):
+            self.check()
+
     def test_mpl_source_cannot_be_removed_or_replaced_by_another_version(self):
         self.catalog["sources"] = [s for s in self.catalog["sources"] if 'option-ext' not in s["path"]]
         with self.assertRaisesRegex(ValueError, "MPL source archive"):
@@ -291,6 +330,9 @@ class FinalLicensePayload(unittest.TestCase):
                     licenses.verify_appimage_runtime(image, runtime)
 
     def test_final_installer_checks_ephemeral_plugins_and_notices(self):
+        materials = licenses.materials()
+        microsoft_notice = (licenses.EVIDENCE / licenses.MICROSOFT_NOTICE).read_bytes()
+        self.assertIn(microsoft_notice, materials["THIRD-PARTY-NOTICES.txt"])
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             exe = root / "main.exe"
@@ -305,17 +347,26 @@ class FinalLicensePayload(unittest.TestCase):
                 (payload / "uninstall.exe").write_bytes(b"MZuninstall")
                 (payload / "LICENSE.txt").write_bytes((licenses.ROOT / "LICENSE").read_bytes())
                 (payload / "$PLUGINSDIR/plugin.dll").write_bytes(plugin if mode != "changed plugin" else b"MZchanged")
-                if mode != "missing notice":
-                    (payload / "notice.txt").write_bytes(b"notice")
+                for name, data in materials.items():
+                    if name == "THIRD-PARTY-NOTICES.txt":
+                        if mode == "missing notice":
+                            continue
+                        if mode == "missing Microsoft notice":
+                            data = data.replace(microsoft_notice, b"")
+                        elif mode == "altered Microsoft notice":
+                            data = data.replace(microsoft_notice, microsoft_notice.replace(
+                                b"Microsoft Corporation", b"Altered Corporation", 1))
+                    (payload / name).write_bytes(data)
                 if mode == "new library":
                     (payload / "$PLUGINSDIR/extra.dll").write_bytes(b"MZextra")
                 return subprocess.CompletedProcess(args, 0)
             with patch.object(licenses, "checked_catalog", return_value=(catalog, {})), \
-                 patch.object(licenses, "materials", return_value={"notice.txt": b"notice"}), \
+                 patch.object(licenses, "materials", return_value=materials), \
                  patch("windows_crt.inspect_installer") as inspect_crt, \
                  patch.object(licenses.subprocess, "run", side_effect=extract):
                 licenses.verify_windows_installer(root / "final.exe", root, exe)
-                for mode in ("changed plugin", "missing notice", "new library"):
+                for mode in ("changed plugin", "missing notice", "missing Microsoft notice",
+                             "altered Microsoft notice", "new library"):
                     with self.subTest(mode=mode), self.assertRaises(ValueError):
                         licenses.verify_windows_installer(root / "final.exe", root, exe)
                 if licenses.os.name == "nt":

@@ -64,6 +64,14 @@ are excluded from the rebuilt helper. Windows CRT redistribution obligations
 remain unresolved separately; these source licenses do not grant rights to
 Microsoft runtime code.
 
+For Windows releases, the Microsoft Distributable Code notice below identifies
+the embedded startup/SDK code separately from CodeConvoy's MIT-licensed code,
+summarizes redistribution and recipient/distributor conditions, and links the
+controlling references. Find it under "Microsoft Distributable Code - CodeConvoy
+Windows releases" in the full notice texts. It concerns Windows components
+only, even though this conservative notice bundle accompanies all platforms.
+Providing the notice does not resolve the windows-crt publication blocker.
+
 Agent CLIs, Git, host graphics/desktop libraries, macOS frameworks and Windows
 system DLLs are installed separately and are not bundled by CodeConvoy. The
 packaging checks reject additional bundled native binaries pending review.

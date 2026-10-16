@@ -16,6 +16,8 @@ EVIDENCE = ROOT / "third-party"
 BUNDLE = ROOT / "target/packaging/licenses"
 FILES = ("THIRD-PARTY-NOTICES.txt", "THIRD-PARTY-INVENTORY.json",
          "THIRD-PARTY-SOURCES.zip", "RUST-STDLIB-LICENSES.html")
+MICROSOFT_NOTICE = "MICROSOFT-DISTRIBUTABLE-CODE.txt"
+MICROSOFT_COMPONENT = "Microsoft CRT startup / Windows SDK support code"
 
 
 def digest(data):
@@ -98,6 +100,14 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
         if (path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(evidence.resolve())
                 or digest(path.read_bytes()) != item["sha256"]):
             raise ValueError(f"Missing or altered license/source evidence: {item['path']}")
+    # An unresolved grant must not allow the reviewed notice to disappear.
+    # Reuse the content-addressed texts and existing final-package byte gates.
+    microsoft = next((c for c in catalog["components"] if c["name"] == MICROSOFT_COMPONENT), {})
+    notice = next((n for n in microsoft.get("notices", []) if n.get("path") == MICROSOFT_NOTICE), {})
+    if (not notice.get("text")
+            or not any(f["path"] == MICROSOFT_NOTICE and f["sha256"] == notice["text"] for f in catalog["files"])
+            or (evidence / MICROSOFT_NOTICE).read_bytes() != texts[notice["text"]].encode("utf-8")):
+        raise ValueError("Missing or altered Microsoft Distributable Code notice binding")
     native = catalog["native_provenance"]
     runtime_policy = json.loads((root / "packaging/windows-runtime.json").read_text())
     recorded_policy = native["windows_crt"].get("dynamic_runtime_policy", {})

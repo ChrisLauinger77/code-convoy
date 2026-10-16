@@ -15373,7 +15373,13 @@
       "version": "Dynamic application/helper: MSVC 14.51.36231 / SDK 10.0.26100.0; prebuilt installer runtime inputs unresolved",
       "license": "Microsoft Visual Studio / SDK redistributable terms",
       "scope": "Windows application and installer",
-      "notices": [],
+      "notices": [
+        {
+          "path": "MICROSOFT-DISTRIBUTABLE-CODE.txt",
+          "text": "900dfbff7301d7bd96598923fc4bed5961645371649a3bbaebea67e55fee0aa3",
+          "origin": "Original CodeConvoy notice; third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt; Microsoft references and assessment in docs/license-blocker-evidence.md section 8"
+        }
+      ],
       "unresolved": "windows-crt",
       "evidence": "evidence/windows-dynamic-crt-38919332474.zip"
     },
@@ -16408,6 +16414,12 @@
       "path": "evidence/windows-dynamic-crt-38919332474.zip",
       "sha256": "e246ba88023ed4cd631ec94311f4c781424a310c7ec17196a30875e8ad6dfdf4",
       "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38919332474"
+    },
+    {
+      "path": "MICROSOFT-DISTRIBUTABLE-CODE.txt",
+      "sha256": "900dfbff7301d7bd96598923fc4bed5961645371649a3bbaebea67e55fee0aa3",
+      "origin": "Original CodeConvoy Windows notice based on the Microsoft references it identifies; reviewed 2026-10-16",
+      "scope": "Included verbatim in THIRD-PARTY-NOTICES.txt through the Microsoft component notice; Windows-only applicability; does not clear windows-crt."
     }
   ],
   "release_blockers": [
