@@ -201,3 +201,245 @@ an old cached helper, silently accept changed hashes or publish from diagnostics
 No application Rust code or application dependency versions changed. Linux/macOS
 packaging implementation, AppImage/LGPL evidence, dispatch resolution and the
 existing Windows CRT obligation are unchanged. No merge, tag or release was made.
+
+## Dynamic CRT migration and prerequisite validation
+
+The preceding sections record PR 73's static-CRT baseline. The subsequent 1.0.0
+change selects `-C target-feature=-crt-static` independently for the application
+and utility helper. The original AppId implementation, exports and binary remain
+unchanged. The utility retains all three exports, existing source dependencies,
+process/SemVer behavior and the Windows GlobalAlloc/GlobalFree stack interface.
+
+`packaging/windows-runtime.json` records the observed CRT import lists and
+prerequisite versions. The application imports VCRUNTIME140.dll plus UCRT heap,
+locale, math, runtime, stdio and string l1-1-0 interfaces. The x86 utility imports
+VCRUNTIME140.dll plus UCRT runtime and string l1-1-0 interfaces. Neither imports
+VCRUNTIME140_1.dll or MSVCP140.dll. All other imports remain ordinary Windows API
+dependencies. AppId imports only KERNEL32.dll and ole32.dll.
+
+Both Rust outputs still embed startup/support members from msvcrt.lib and use
+vcruntime.lib/ucrt.lib import libraries. Builds reject libcmt.lib,
+libvcruntime.lib, libucrt.lib and libcpmt.lib; changing linkage does not eliminate
+Microsoft code or the publication blocker. See the
+[licensing distinction](license-blocker-evidence.md#7-dynamic-crt-and-user-supplied-prerequisites).
+
+The NSIS gate uses actual DLL versions, PE architecture and x86 loadability;
+registry claims cannot establish availability. System32 redirection is handled
+through explicit SysWOW64/Sysnative paths. Checks run before the utility helper
+and repeat before version/process operations. Missing prerequisites produce
+Microsoft's official download-page guidance and error 1603. Silent/passive
+operation has no blocking dialog. Uninstall requires x86 only; it must still
+perform process checks. Invalid or missing plugin results fail safely rather than being
+interpreted as no running process. The final prerequisite/process check runs
+before the installation directory is created.
+
+The native fixture compiles the same prerequisite include with private test
+paths. That substitution is compile-time only and is not exposed in the shipped
+installer. It copies genuine system runtime files into a disposable directory,
+withholds private copies for missing/stale cases, and changes test version
+thresholds for older/newer cases. It never deletes system DLLs, uninstalls a real
+runtime or changes real runtime registration. The fixture DLL copies are removed
+and never uploaded or packaged. Registry cases use isolated test keys in both
+views; the production checker deliberately ignores registry claims altogether.
+
+The simple portable ZIP gains no launcher or runtime files. It requires the x64
+runtime before startup. Packaging rejects separate VC/UCRT DLLs and VC redist
+installers; the existing closed native payload allowlist also rejects unexpected
+or renamed binaries. The windows-crt publication guard and two-stage release
+architecture remain unchanged.
+
+### Exact import inventory for the dynamic binaries
+
+The import names below preserve the spelling of the native PE inspection;
+Windows resolves DLL names case-insensitively. The UCRT API-set contracts resolve
+to the operating system's UCRT implementation (`ucrtbase.dll`); they are not
+extra DLLs to copy into the package.
+
+| Binary | Direct DLL imports |
+| --- | --- |
+| `CodeConvoy.exe` (x64) | `KERNEL32.dll`, `USER32.dll`, `VCRUNTIME140.dll`, `advapi32.dll`, `api-ms-win-core-synch-l1-2-0.dll`, `api-ms-win-core-winrt-l1-1-0.dll`, `api-ms-win-crt-heap-l1-1-0.dll`, `api-ms-win-crt-locale-l1-1-0.dll`, `api-ms-win-crt-math-l1-1-0.dll`, `api-ms-win-crt-runtime-l1-1-0.dll`, `api-ms-win-crt-stdio-l1-1-0.dll`, `api-ms-win-crt-string-l1-1-0.dll`, `bcryptprimitives.dll`, `combase.dll`, `comctl32.dll`, `dwmapi.dll`, `dxgi.dll`, `gdi32.dll`, `imm32.dll`, `kernel32.dll`, `ntdll.dll`, `ole32.dll`, `oleaut32.dll`, `opengl32.dll`, `setupapi.dll`, `shell32.dll`, `shlwapi.dll`, `uiautomationcore.dll`, `user32.dll`, `uxtheme.dll` |
+| `codeconvoy_utils.dll` (x86) | `KERNEL32.dll`, `VCRUNTIME140.dll`, `api-ms-win-core-synch-l1-2-0.dll`, `api-ms-win-crt-runtime-l1-1-0.dll`, `api-ms-win-crt-string-l1-1-0.dll`, `kernel32.dll`, `ntdll.dll` |
+| `CodeConvoyAppId.dll` (x86, unchanged) | `KERNEL32.dll`, `ole32.dll` |
+
+The configured minimum is VC v14 **14.51.36247.0**, independently for x64 and
+x86, plus the Windows UCRT **10.0.10240.0** or newer. This conservative deployment
+floor uses the native runtime DLL version verified with the recorded build
+toolset; it is not a measured oldest-export compatibility promise. The
+14.51.36260.0 linker component version is not used as a runtime DLL threshold.
+The installer needs both architectures, removal needs x86, and the portable application needs only x64. `VCRUNTIME140_1.dll` and
+`MSVCP140.dll` are not direct dependencies of either Rust output and are not
+added to the prerequisite policy.
+
+### Files changed for the dynamic CRT work
+
+| Area | Files |
+| --- | --- |
+| Release linkage and native evidence | `packaging/build.py`, `packaging/windows_crt.py`, `packaging/nsis_helpers.py`, `third-party/nsis/inputs.json` |
+| Prerequisite policy and existing installer | `packaging/windows-runtime.json`, `packaging/windows_runtime.py`, `packaging/nsis/prerequisites.nsh`, `packaging/nsis/installer.nsi`, `packaging/nsis/UPSTREAM.json` |
+| Packaging and runtime regression checks | `packaging/licenses.py`, `packaging/release.py`, `packaging/windows-smoke.ps1`, `packaging/nsis/prerequisite-tests.nsi`, `packaging/nsis/prerequisite-tests.ps1`, `packaging/test_windows_runtime.py`, `packaging/test_windows_crt.py`, `packaging/test_nsis_helpers.py`, `packaging/test_licenses.py` |
+| Inventory and reproducible source kit | `third-party/catalog.json`, `third-party/nsis/README.txt`, `third-party/nsis-build-audit.json`, `third-party/nsis-build-evidence.zip`, `third-party/sources/codeconvoy-nsis-helpers-1.zip`, `third-party/evidence/windows-dynamic-crt-38919332474.zip` |
+| CI and stable input bytes | `.github/workflows/ci.yml`, `.gitattributes` |
+| User guidance and assessment | `README.md`, `docs/releasing.md`, `docs/third-party-licenses.md`, `docs/license-blocker-evidence.md`, this document |
+
+Application Rust code, backends, dependencies, scheduler, worktrees, Linux/macOS
+packaging and the two-stage release workflow are unchanged. Validation commits
+are confined to the authorized `codex/windows-dynamic-crt-validation` branch;
+there is no release tag, PR, merge or publication from this work.
+
+### Validation limits
+
+The hosted Windows job is automated native execution on Windows Server 2025;
+it does not certify interactive operation on Windows 10/11. Missing-runtime
+fixtures exercise the shipped checker with private file paths while the host's
+real runtimes remain installed. Older/newer cases vary the required version,
+not Microsoft's installed binaries. The x86 host checks x64 file version and PE
+architecture but cannot load x64 DLLs; the actual x64 application startup test
+provides the positive loading check. The gate is not a complete Windows image
+integrity validator.
+
+Interactive prerequisite-message presentation, wizard choices, taskbar behavior,
+and clean consumer Windows desktops remain untested. Maintenance tests simulate
+prior version registration using the same executable bytes, as in the existing
+smoke suite. Silent uninstall uses `_?=` so its process can be awaited, leaving
+uninstaller self-deletion outside this check. No genuine system DLL, runtime
+installation or real runtime registry key is removed for testing.
+
+### Retained dynamic linker reference
+
+[CI diagnostic 38919332474](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38919332474)
+built source `ebf180f6ba28b0ca61ac72fb286456dcbf8496dd` with Rust 1.99.0,
+VS Enterprise 18.10.12224.181, MSVC 14.51.36231, LINK 14.51.36260.0 and SDK
+10.0.26100.0 on image `win25-vs2026/20261007.264.1`. Its application link,
+portable startup/normal close, two matching helper builds and helper Rust tests
+passed. Independent extraction verified both package contents, all eight native
+PE hashes, sources/notices and linker provenance against that exact revision.
+
+That diagnostic's installer rejected the original DLL minimum of 14.51.36260.0:
+the actual x86 and x64 VCRUNTIME140.dll files are 14.51.36247.0. The corrected
+policy uses the verified runtime-file floor; linker, DLL and Redistributable
+package version numbers must not be conflated. Microsoft recommends the latest
+[compatible v14 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+for the selected toolset. The observed UCRT files are 10.0.26100.33438.
+This reference proves the link and package identities, not a passing installer
+run; the final corrected run is recorded separately below.
+
+The [retained archive](../third-party/evidence/windows-dynamic-crt-38919332474.zip)
+contains 20 original diagnostic files: provenance, toolchain, linker trace/map,
+response file, selected libraries, system runtime hashes/versions and final PE
+inspections/package manifest. It contains no executable or Microsoft DLL,
+library or object file. SHA-256:
+`e246ba88023ed4cd631ec94311f4c781424a310c7ec17196a30875e8ad6dfdf4`.
+The catalog retains this reference separately from the earlier static audit.
+
+The application selects 34 distinct msvcrt.lib member names (including startup,
+TLS, exception/security support and allocation support); the utility selects
+24 startup/support member names, retained in its two-build evidence. These counts describe linker
+selection, not a claim that all loaded objects survive optimization. Both use
+vcruntime.lib and ucrt.lib import libraries; neither selects libcmt.lib,
+libvcruntime.lib, libucrt.lib or libcpmt.lib. The application also uses SDK
+kernel32/ntdll/user32 import archives and the existing windows.0.52.0 import
+archive. AppId still uses SDK kernel32/ole32 imports and UUID data.
+
+The remaining prebuilt NSIS payloads have these direct imports. Their pinned
+plugin bytes are unchanged; these inspections establish imports, not complete
+static-library provenance.
+
+| Native component | Direct DLL imports |
+| --- | --- |
+| Setup stub and `uninstall.exe` | `ADVAPI32.dll`, `COMCTL32.dll`, `GDI32.dll`, `KERNEL32.dll`, `SHELL32.dll`, `USER32.dll`, `ole32.dll` |
+| `nsDialogs.dll` | `GDI32.dll`, `KERNEL32.dll`, `SHELL32.dll`, `USER32.dll`, `comdlg32.dll`, `ole32.dll` |
+| `StartMenu.dll` | `GDI32.dll`, `KERNEL32.dll`, `SHELL32.dll`, `USER32.dll`, `ole32.dll` |
+| `System.dll` | `KERNEL32.dll`, `USER32.dll`, `ole32.dll` |
+
+| Selected startup archive | Distinct loaded member names | SHA-256 |
+| --- | ---: | --- |
+| MSVC x64 `msvcrt.lib` | 34 | `d3f725923c6dd639bb5e5c52f3122c6fe084471f7ab0ef5f27d054f56b4d8a7e` |
+| MSVC x86 `msvcrt.lib` | 24 | `5b0626d52414ac346eda0c19d6c4417411a232505748b56abf866df9af2e38d9` |
+
+### Final dynamic CRT validation
+
+Final diagnostic [CI run 38923230998](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38923230998)
+passed on Windows, Linux and macOS using source
+`1f1f62f3bd2166f4a9172d8161bae6cf0d76b54c`. It includes the corrected
+runtime-file floor and the explicit exit from a failed custom maintenance-page
+helper call. `Abort` in that callback would skip the page; the failure path now
+uses `Quit` with status 1603 and respects silent/passive operation.
+
+The final Windows release build, two matching helper builds, both real installer
+smoke tests, portable startup and normal close, helper ABI tests and all 15
+prerequisite cases passed. The native environment has VCRUNTIME140.dll
+14.51.36247.0 in both architectures and UCRT 10.0.26100.33438. Toolchain and image
+versions match the retained reference above. The final complete PE import lists
+and selected CRT archive hashes/member lists also match that reference.
+
+| Validation | Result |
+| --- | --- |
+| Local formatting, strict Clippy and release build | Passed |
+| Local Rust tests, all features | 621 passed; 10 intentionally ignored |
+| Packaging regressions | 107 passed locally and on each CI platform |
+| Final Linux and macOS CI | Passed formatting, strict Clippy, tests and release build |
+| Final Windows CI | Passed native build/packaging/runtime tests, formatting, strict Clippy, all-feature Rust tests and software graphics startup |
+| Installer/ZIP independent verification | Passed against the exact clean CI revision, reconstructing only captured Windows checkout line endings in a disposable source copy |
+| License inventory/publication guard | 457 locked crates checked; release-ready still fails solely for windows-crt |
+
+Native installer checks cover default and Unicode/space-containing per-user
+paths, registration, shortcuts/AppUserModelID, upgrade and downgrade registration,
+the running application, uninstall and user-data preservation. The portable
+executable started and closed normally in each path scenario. These remain
+automated hosted-Windows checks, with the limitations listed above.
+
+| Native prerequisite fixture | Exit status | Utility helper executed |
+| --- | ---: | --- |
+| both architectures installed | 0 | Yes |
+| x64 missing | 1603 | No |
+| x86 missing | 1603 | No |
+| both missing | 1603 | No |
+| x86 UCRT missing | 1603 | No |
+| x64 UCRT missing | 1603 | No |
+| wrong DLL architecture | 1603 | No |
+| newer compatible files | 0 | Yes |
+| older than required version | 1603 | No |
+| runtime removed after initial check | 1603 | No |
+| create fixture uninstaller | 0 | Yes |
+| uninstall x86 missing | 1603 | No |
+| uninstall does not need x64 application runtime | 0 | Yes |
+| stale registry claim Registry32 | 1603 | No |
+| stale registry claim Registry64 | 1603 | No |
+
+Independent verification downloaded the final installer and ZIP, extracted their
+contents, checked all eight native PE hashes and inspection hashes, verified the
+application and both clean helper builds against their linker records, and
+compared every notice/source payload with the exact source revision. There are
+no separate Microsoft runtime DLLs or redist installers, old replacement
+plugins, extra native payloads or portable launcher. The ZIP and installed
+application bytes are identical.
+
+| Final diagnostic item | SHA-256 |
+| --- | --- |
+| `CodeConvoy-1.0.0-windows-x86_64-setup.exe` | `5069b2d4892bc0c115c56ba4457c5f5cffcb6d053c6ecdb8b06c90a9cd6142af` |
+| `CodeConvoy-1.0.0-windows-x86_64.zip` | `1e5201f34b15d151f7a16c02ef915889e91560a35b98e64343068834001eeb3d` |
+| `$PLUGINSDIR/codeconvoy_utils.dll` | `ca1929c770a3ebb88ffb71732dab0772bcf3e4a9d52619359df29ac36b23b935` |
+| `$PLUGINSDIR/CodeConvoyAppId.dll` | `3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29` |
+| `$PLUGINSDIR/nsDialogs.dll` | `4b7d17da290f41ebe244827cc295ce7e580da2f7e9f7cc3efc1abc6898e3c9ed` |
+| `$PLUGINSDIR/StartMenu.dll` | `110545415a59402635e1c9439acba15b44bab268ed02ad2a262ce12604a47855` |
+| `$PLUGINSDIR/System.dll` | `9111099efe9d5c9b391dc132b2faf0a3851a760d4106d5368e30ac744eb42706` |
+| `CodeConvoy.exe` | `f8558791992b0765d5f840dd1e1a56272e36d52f24c7e710e5b5a0a199235002` |
+| `uninstall.exe` | `e2d8c25431e164c9d307e5eab06ed9e3408a02f0decc2049194578005af7767a` |
+| `THIRD-PARTY-SOURCES.zip` | `eb61566a9f3e26f7c5d29482cabb22828a86cd6b985480e48faf196e77ba7b8f` |
+
+These final hashes stay in this external report to avoid a circular reference
+inside the bundled inventory. The retained helper audit from
+[38916756095](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38916756095)
+is a reference build of the same helper source/toolchain and identical DLL
+bytes; the final CI artifact additionally binds two fresh builds to every current
+helper/installer input. Subsequent local edits only finish this validation report.
+A future release candidate must be rebuilt from its own reviewed commit and
+retain its own provenance/checksums through the existing two-stage workflow.
+
+The implementation is ready for maintainer technical review and target-desktop
+verification. Publication remains blocked: user-supplied runtime DLLs do not
+resolve the embedded VC/SDK object-code grant and conditions, recipient/distributor
+terms, hosted-build entitlement or remaining prebuilt NSIS runtime provenance.
+No additional EULA, license grant or compliance approval is inferred. CodeConvoy's
+MIT license and the other resolved licensing decisions are unchanged. No merge,
+tag or release was created during this validation.

@@ -55,7 +55,7 @@ or exhaustive inventory. The library lockfile is included in the source ZIP.
 | Compiler startup code | Source-built musl 1.2.5 CRT and checksum-identified GCC 14.2.0-r4 crtbeginS/crtendS objects. GCC source/Alpine recipe, copyright, GPLv3 and Runtime Library Exception 3.1 are included; the documented C compilation process supports the stated exception interpretation. |
 | NSIS 3.09 | Installer/uninstaller stub, standard plugins, artwork and LZMA decoder; original COPYING and full official source archive included. LZMA's CPL-1.0 linking exception does not relicense CodeConvoy. |
 | Windows replacement NSIS helpers | Original MIT shortcut helper and reduced MIT/Apache Tauri process/SemVer helper; locked source/build kit, dependency notices, binary pins and linker evidence. See the [validation record](nsis-helper-validation.md). |
-| Windows static CRT | Application and helper inputs captured separately; Microsoft redistribution obligations remain unresolved. |
+| Windows CRT / SDK support code | Dynamic runtime DLLs are supplied by users; embedded Microsoft startup/support code and hosted-build conditions remain unresolved. |
 | Original icons, AppRun and application assets | Project MIT. No new third-party artwork added. |
 | Host libraries, Git and agent CLIs | Installed separately, not redistributed in these packages. Newly bundled ELF/PE/Mach-O code fails the inventory gate. |
 | linuxdeploy, appimagetool, cargo-packager | Build tools; their executables are not shipped. The emitted AppImage runtime and NSIS/template code are separately covered. |
@@ -150,8 +150,10 @@ clearance or authorization to publish is inferred.
    is evidence, not redistribution approval. Applicable static-code grants,
    hosted build entitlement, recipient conditions and any remaining installer
    runtime obligations still require confirmation. The replacement helpers now
-   have their own x86 linker evidence; CodeConvoy.exe retains its x64 static CRT
-   configuration. See the Windows
+   have their own x86 linker evidence. The current distribution policy uses
+   dynamic CRT linkage for the application and Rust helper, with user-supplied
+   runtime DLLs; the original AppId helper remains CRT-independent. Historical
+   static-link evidence is retained as historical evidence. See the Windows
    section of [the evidence record](license-blocker-evidence.md#5-windows-static-crt-unresolved)
    for actual observations, Microsoft references and the repeatable checks.
    The application remains MIT; that license does not grant rights to Microsoft
@@ -161,7 +163,10 @@ clearance or authorization to publish is inferred.
    entitlement and recipient agreements. It covers both replacement helpers
    and the remaining NSIS binaries, and records the exact decisions needed
    before closure. Four of the five original blockers are resolved; Windows
-   CRT is still the sole publication blocker.
+   CRT is still the sole publication blocker. Dynamic linkage does not clear it.
+   The current [dynamic CRT record](license-blocker-evidence.md#7-dynamic-crt-and-user-supplied-prerequisites)
+   distinguishes user-supplied DLLs, embedded application/helper startup code,
+   prebuilt NSIS inputs and hosted-toolchain entitlement.
 
 Primary AppImage evidence: [runtime source/tag](https://github.com/AppImage/type2-runtime/tree/20251108),
 [libfuse terms](https://github.com/libfuse/libfuse/blob/fuse-3.15.0/LICENSE),

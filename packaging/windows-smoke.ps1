@@ -43,6 +43,13 @@ if ($info.ProductName -ne 'CodeConvoy' -or $info.ProductVersion -ne $version) {
 }
 $running = $null
 try {
+    $running = Start-Process "$portable/CodeConvoy.exe" -PassThru
+    Start-Sleep -Seconds 3
+    if ($running.HasExited) { throw 'Portable application could not start with the installed runtime' }
+    if (!$running.CloseMainWindow() -or !$running.WaitForExit(15000)) {
+        throw 'Portable application did not close normally'
+    }
+    $running = $null
     # NSIS requires the unquoted /D= argument last, including embedded spaces.
     $installer = Start-Process $setup -ArgumentList "/S /D=$installed" -Wait -PassThru
     if ($installer.ExitCode -ne 0) { throw "Installer failed: $($installer.ExitCode)" }
@@ -84,7 +91,8 @@ try {
         throw "Unreviewed installed native components: $($nativeFiles -join ',')"
     }
     # User data shares this per-user parent directory; uninstall must leave it.
-    New-Item -ItemType Directory -Path "$installed/data" | Out-Null
+    # Portable startup may already have created this application data folder.
+    New-Item -ItemType Directory -Force -Path "$installed/data" | Out-Null
     Set-Content "$installed/data/preservation-fixture.txt" 'keep user state'
     # Exercise upgrade/downgrade selection with synthetic prior registration
     # versions. /P traverses PageReinstall and its SemverCompare call.

@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "msvc": "14.51.36231",
+  "windows_sdk": "10.0.26100.0",
+  "minimum_vc_version": [
+    14,
+    51,
+    36247,
+    0
+  ],
+  "minimum_ucrt_version": [
+    10,
+    0,
+    10240,
+    0
+  ],
+  "download_page": "https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist",
+  "runtime_files": {
+    "x64": [
+      "ucrtbase.dll",
+      "vcruntime140.dll"
+    ],
+    "x86": [
+      "ucrtbase.dll",
+      "vcruntime140.dll"
+    ]
+  },
+  "crt_imports": {
+    "x64": [
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "vcruntime140.dll"
+    ],
+    "x86": [
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "vcruntime140.dll"
+    ]
+  }
+}

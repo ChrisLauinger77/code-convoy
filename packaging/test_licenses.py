@@ -21,7 +21,8 @@ class LicenseEvidence(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         for name in ("Cargo.lock", "Cargo.toml", "packaging/appimage-tools.json", ".github/workflows/release.yml",
-                     "packaging/nsis_helpers.py", "packaging/windows_crt.py"):
+                     "packaging/nsis_helpers.py", "packaging/windows_crt.py",
+                     "packaging/windows_runtime.py", "packaging/windows-runtime.json"):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(licenses.ROOT / name, destination)

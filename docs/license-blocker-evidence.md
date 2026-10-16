@@ -692,3 +692,57 @@ At that earlier revision, all five blocker IDs were enforced by
 `licenses.py release-ready` and the publisher. Section 6 records the current
 single-blocker state. That change introduced no new package formats, channels
 or runtime substitutions.
+
+## 7. Dynamic CRT and user-supplied prerequisites
+
+The 1.0.0 distribution policy now uses dynamic CRT linkage for CodeConvoy.exe
+(x64) and codeconvoy_utils.dll (x86). Sections 5–6 retain the preceding static
+build evidence and legal assessment; they do not describe this new linkage.
+The publication blocker **windows-crt remains active**.
+
+The implementation supplies no separate Microsoft runtime DLL, redistributable
+installer, downloader or additional portable launcher. Users install Microsoft's
+v14 runtime independently from its
+[official download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
+The reviewed VCRUNTIME140.dll file-version floor is 14.51.36247.0 for both
+architectures, established from the native system files that run the application
+and helper built with MSVC 14.51.36231. The linker has a separate component
+version, 14.51.36260.0; it is not the DLL file version or Redistributable package
+version. This is a tested deployment floor, not a claim to have measured the
+oldest DLL exporting each required symbol.
+Windows supplies the UCRT; its checked floor is 10.0.10240.0, with Windows updates
+required for supported Windows 10/11 systems. The existing product support matrix
+is not expanded by this CRT change.
+
+| Category | Current scope and obligation |
+| --- | --- |
+| User-supplied runtime DLLs | VCRUNTIME140.dll and Windows UCRT interfaces are external dependencies. CodeConvoy does not redistribute their DLLs or the Microsoft installer. Users obtain them independently; no Microsoft distributor grant is inferred from download availability. |
+| Code embedded in CodeConvoy.exe and the Rust utility | Dynamic linkage still selects static startup/support objects from msvcrt.lib, alongside vcruntime.lib/ucrt.lib import libraries. The old libcmt/libvcruntime/libucrt implementation archives are rejected. The applicable VC object-code grant, SDK/component terms, notices and recipient/distributor obligations still need a qualified determination. |
+| CodeConvoyAppId.dll | Unchanged CRT-independent helper; kernel32/ole32 SDK imports and UUID data remain. SDK conditions are not removed by the Rust linkage change. |
+| Other NSIS binaries | Setup stub, uninstaller, StartMenu.dll, nsDialogs.dll and System.dll remain the recorded prebuilt components. Their absence of VC/UCRT DLL imports does not establish the absence, identities or licensing of embedded Microsoft code. No rebuild or renewed NSIS source-license audit was performed. |
+| Build environment | Hosted VS Enterprise/MSVC/SDK entitlement remains a separate question. Dynamic linkage, a working compiler and a successful CI run do not establish this distributor's contractual grant. |
+
+Microsoft explicitly identifies msvcrt.lib as static startup code for the dynamic
+CRT in its [CRT library documentation](https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features).
+The existing [VS terms](https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/)
+and [SDK REDIST list](https://learn.microsoft.com/en-us/legal/windows-sdk/redist#static-lib-files)
+remain the references for embedded code. The Microsoft runtime end-user license
+is not a replacement distributor grant. The precise recipient agreement and
+notice mechanism for embedded code, including ZIP and silent installation, is
+still unresolved; no speculative EULA or change to CodeConvoy's MIT license is
+introduced.
+
+The installer checks actual system DLL file versions and PE architecture, using
+SysWOW64 for x86 and Sysnative for x64 from the 32-bit NSIS host. It also performs
+a system-only x86 load check. Registry version claims are not used, so stale keys
+cannot override missing/old files. The x86 host does not execute x64 DLLs as a
+loadability probe. Failures identify the affected architecture, provide the
+Microsoft link and stop with status 1603; silent/passive modes do not block on a
+dialog. Checks precede helper use and repeat before maintenance/process calls.
+Uninstall requires x86 only and never bypasses process detection. The portable
+ZIP requires x64; missing imports can prevent startup before Rust main and the
+application's own error dialog.
+
+Exact import lists, retained build evidence, final hashes and native test results
+are recorded with the [dynamic migration](nsis-helper-validation.md#dynamic-crt-migration-and-prerequisite-validation).
+These are technical evidence, not permission to clear windows-crt or publish.

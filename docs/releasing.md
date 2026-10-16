@@ -229,8 +229,19 @@ The common bundle/installer identifier is
 The Windows setup is per-user (`currentUser`), requests no elevation, supplies
 Start Menu integration and an uninstaller, and does not remove user state.
 The ZIP contains `CodeConvoy.exe`, `LICENSE.txt` and the four third-party
-notice/source files described above; the release build statically
-links the MSVC CRT. Both use the same normal per-user state location. Release GUI builds
+notice/source files described above; the release build dynamically
+links the MSVC CRT. The application/ZIP require the user-supplied x64 Visual C++
+v14 Runtime (`VCRUNTIME140.dll` 14.51.36247.0 or newer); installer process checks also require x86.
+Obtain prerequisites from Microsoft’s official
+[download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
+No runtime DLL, redistributable installer or downloader is bundled. NSIS checks
+actual DLL versions and PE architectures before helper calls and rechecks
+before maintenance/process operations; x86 dependencies are also load-tested.
+The x86 host inspects x64 files through Sysnative without executing x64 code.
+Registry claims cannot override missing, old or wrong-architecture files.
+Silent/passive prerequisite failure returns 1603. Uninstall needs x86 only and
+never bypasses process checks. Portable startup can fail before the application
+error dialog when the x64 runtime is missing. Both use the same normal per-user state location. Release GUI builds
 hide their console; debug builds keep it. A native startup error dialog preserves
 visibility when state loading or application startup fails. Child processes use
 `CreationFlags(CREATE_NO_WINDOW)` together with JobObject, preserving the wrapper's
@@ -266,7 +277,7 @@ python3 -m unittest discover -s packaging -p 'test_*.py'
 ```
 
 `packaging/build.py` always uses `--locked`, remaps checkout/home/Cargo source
-paths out of release diagnostics, and selects a static CRT on Windows. It does
+paths out of release diagnostics, and selects a dynamic CRT on Windows. It does
 not change global environment settings. Package assembly expects the repository's
 normal `target/` directory; do not override `CARGO_TARGET_DIR` for these commands.
 Use the audited Rust 1.99.0 compiler for package assembly: a different compiler's

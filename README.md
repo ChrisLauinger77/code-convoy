@@ -73,6 +73,20 @@ Published releases provide these native artifacts:
 
 ARM Linux/Windows packages are not currently published. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
 
+Windows 1.0.0 candidates require Microsoft Visual C++ v14 Runtime with
+`VCRUNTIME140.dll` **14.51.36247.0 or newer**. Install the **x64** redistributable
+for the application and portable ZIP; the NSIS installer also requires **x86** for its process-management helper.
+Obtain both from [Microsoft's official download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist),
+install them independently, then retry CodeConvoy. Administrator permission may
+be needed for Microsoft's installer. Keep Windows updated for the Universal CRT.
+CodeConvoy neither bundles these runtimes nor downloads or installs them.
+
+The CodeConvoy installer stops with guidance if a required runtime is missing,
+old or unusable; silent/passive installation fails without a blocking dialog.
+Uninstallation requires the x86 runtime so it can safely check running processes.
+The portable ZIP has no launcher: a missing runtime DLL can prevent startup
+before CodeConvoy can display its own error dialog.
+
 The Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app bundle is ad-hoc signed but has no Developer ID signature or notarization, and Gatekeeper may block its first launch. Verify every downloaded file against the accompanying SHA-256 checksum.
 
 ## Installation

@@ -59,7 +59,7 @@ From the repository root:
   python packaging/nsis_helpers.py verify
 The source ZIP recreates the same third-party/nsis and packaging paths.
 The builder selects the x86 MSVC environment explicitly, uses Cargo --locked,
-static CRT only for the Rust helper, /NODEFAULTLIB /NOENTRY for the shortcut
+dynamic CRT only for the Rust helper, /NODEFAULTLIB /NOENTRY for the shortcut
 helper, and /Brepro for both. It builds into independent empty output trees.
 provenance.json binds source file hashes, locked packages, commands, Rust flags,
 compiler/linker hashes, SDK versions, selected archive hashes/members, maps,
@@ -67,17 +67,30 @@ imports/exports, PE hashes and both clean builds. Unequal outputs fail.
 Do not infer cross-toolchain reproducibility from two matching builds on one
 runner. No compiler, SDK or Microsoft CRT license grant is supplied by this kit.
 
-The Rust helper adds x86 static libcmt/libvcruntime/libucrt inputs to the existing
-Windows CRT evidence. The shortcut helper uses SDK import/UUID libraries but
+The Rust helper selects x86 msvcrt startup code and vcruntime/ucrt import
+libraries, recorded in the Windows CRT evidence. The shortcut helper uses SDK import/UUID libraries but
 no CRT. Microsoft redistribution obligations remain separately unresolved.
-CodeConvoy.exe's existing x64 CRT selection is unchanged. A source build alone
+CodeConvoy.exe independently uses dynamic x64 CRT linkage. A source build alone
 does not authorize Microsoft runtime redistribution or publication.
 
 packaging/nsis/installer.nsi derives from cargo-packager 0.11.8 under its
 preserved MIT/Apache terms. UPSTREAM.json records the original template hash.
-Changes only select the uniquely named replacement DLLs from an independent
-directory and check the shortcut helper result. cargo-packager still downloads
+Changes select the uniquely named replacement DLLs from an independent
+directory, check shortcut results and enforce externally supplied runtime
+prerequisites before helper calls. cargo-packager still downloads
 its legacy helper cache; those DLLs are not referenced by the custom template.
 Never replace cache files: cargo-packager verifies/re-downloads the old helper.
 Final extraction must reject old or unexpected plugins and compare all pinned
 DLL hashes. Native tests use only a disposable Windows Actions account.
+
+Windows runtime distribution policy (2026-10-16):
+The Rust utility uses -C target-feature=-crt-static. The x86 helper requires
+user-supplied VCRUNTIME140.dll and Windows UCRT interfaces; the x64 application
+has its own runtime prerequisite. No Microsoft runtime DLL or redistributable
+installer is included. The original AppId helper remains CRT-independent.
+CRT startup code from msvcrt.lib remains embedded; this is not a license grant.
+The NSIS prerequisite gate checks actual system file versions/PE architectures,
+and x86 loadability, before helper calls. The minimum versions and required
+files are in packaging/windows-runtime.json. Registry claims alone are ignored.
+Native prerequisite fixtures use private copied files and compile-time paths;
+no fixture runtime DLLs or test executables are included in release artifacts.

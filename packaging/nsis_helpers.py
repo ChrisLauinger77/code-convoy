@@ -14,6 +14,7 @@ import tomllib
 import zipfile
 
 import windows_crt as crt
+import windows_runtime
 
 ROOT = Path(__file__).resolve().parent.parent
 KIT = ROOT / "third-party/nsis"
@@ -24,7 +25,8 @@ OLD_PLUGINS = {"$PLUGINSDIR/ApplicationID.dll", "$PLUGINSDIR/nsis_tauri_utils.dl
 def inputs(root=ROOT):
     paths = [p for directory in ("third-party/nsis", "packaging/nsis")
              for p in (root / directory).rglob("*") if p.is_file()]
-    paths += [root / p for p in ("packaging/nsis_helpers.py", "packaging/windows_crt.py")]
+    paths += [root / p for p in ("packaging/nsis_helpers.py", "packaging/windows_crt.py",
+                                "packaging/windows_runtime.py", "packaging/windows-runtime.json")]
     return {p.relative_to(root).as_posix(): crt.checksum(p) for p in sorted(paths)}
 
 
@@ -149,8 +151,11 @@ def check_identity(text, expected):
     if not re.search(r"\b14C machine \(x86\)", text, re.I) or pe_exports(text) != expected["exports"]:
         raise ValueError("Unexpected NSIS helper architecture or exports")
     imports = sorted(set(re.findall(r"^\s+([\w.-]+\.dll)\s*$", text, re.I | re.M)))
-    if any(re.search(r"(?:msvcp|msvcr|vcruntime|ucrtbase|api-ms-win-crt)", name, re.I) for name in imports):
-        raise ValueError("Unexpected dynamic CRT dependency in NSIS helper")
+    runtime = [name for name in imports if re.search(r"(?:msvcp|msvcr|vcruntime|ucrtbase|api-ms-win-crt)", name, re.I)]
+    if expected["crt"] == "none" and runtime:
+        raise ValueError("Unexpected dynamic CRT dependency in CRT-independent helper")
+    if expected["crt"] == "dynamic":
+        crt.check_dynamic_imports(imports, "x86")
     return imports
 
 
@@ -162,7 +167,9 @@ def check_link(directory, expected):
             or not all(flag in invocation["command"] for flag in ("/VERBOSE", "/VERBOSE:LIB", "/Brepro"))):
         raise ValueError("Missing successful deterministic helper linker invocation")
     selected = crt.loaded_libraries((directory / "link.log").read_text(encoding="utf-8", errors="replace"),
-                                    require_crt=expected["crt"] == "static")
+                                    require_crt=expected["crt"] == "dynamic")
+    if expected["crt"] == "dynamic":
+        crt.check_dynamic_libraries(selected)
     libraries = json.loads((directory / "selected-libraries.json").read_text())
     if ({p["path"]: p["members"] for p in libraries} != selected or len(libraries) != len(selected)
             or any(not re.fullmatch(r"[0-9a-f]{64}", p["sha256"]) for p in libraries)):
@@ -200,14 +207,14 @@ def verify(directory=OUTPUT):
                 if Path(path).name != path or crt.checksum(capture / path) != checksum:
                     raise ValueError("Missing or altered NSIS linker evidence")
             required = {*crt.CAPTURE_FILES, "pe.txt", "build-command.json"}
-            if spec["binaries"][name]["crt"] == "static":
+            if spec["binaries"][name]["crt"] == "dynamic":
                 required.add("rustflags.json")
             if not required <= record["evidence"][build].keys():
                 raise ValueError("Incomplete NSIS linker evidence")
             check_link(capture, spec["binaries"][name])
             if "rustflags.json" in required:
                 flags = json.loads((capture / "rustflags.json").read_text())
-                if "windows_raw_dylib" not in flags or "target-feature=+crt-static" not in flags:
+                if "windows_raw_dylib" not in flags or "target-feature=-crt-static" not in flags:
                     raise ValueError("Unexpected helper CRT/import-library configuration")
             imports = check_identity((capture / "pe.txt").read_text(), spec["binaries"][name])
             if imports != record["imports"] or record["crt"] != spec["binaries"][name]["crt"]:
@@ -267,7 +274,7 @@ def build():
             else:
                 wrapper = capture / "link.cmd"
                 wrapper.write_text(f"@{crt.command_path(sys.executable)} {crt.command_path(Path(crt.__file__))} link %*\n")
-                flags = ["--cfg", "windows_raw_dylib", "-C", "target-feature=+crt-static", "-C", "link-arg=/Brepro",
+                flags = ["--cfg", "windows_raw_dylib", "-C", "target-feature=-crt-static", "-C", "link-arg=/Brepro",
                          f"--remap-path-prefix={Path.home()}=/build-home",
                          f"--remap-path-prefix={env.get('CARGO_HOME', Path.home() / '.cargo')}=/cargo",
                          f"--remap-path-prefix={ROOT}=."]
@@ -288,7 +295,7 @@ def build():
             if record["sha256"] != checksum:
                 raise ValueError(f"Independent clean helper builds differ: {name}")
             evidence = [*crt.CAPTURE_FILES, "pe.txt", "build-command.json", *[p.name for p in capture.glob("response-*.rsp")]]
-            if expected["crt"] == "static":
+            if expected["crt"] == "dynamic":
                 evidence.append("rustflags.json")
             record["evidence"][build_name] = {p: crt.checksum(capture / p) for p in evidence}
             shutil.copyfile(capture / name, OUTPUT / "plugins" / name)
@@ -308,6 +315,11 @@ def configure(config, work):
     template = (ROOT / "packaging/nsis/installer.nsi").read_text()
     if template.count("@CODECONVOY_HELPERS@") != 1:
         raise ValueError("Missing independent NSIS helper path")
+    if "CODECONVOY_CRT_FIXTURE" in template:
+        raise ValueError("Runtime test hook is forbidden in production template")
+    prerequisites = work / "prerequisites.nsh"
+    prerequisites.write_text(windows_runtime.render_prerequisites(), encoding="utf-8-sig")
+    template = template.replace("@CODECONVOY_PREREQUISITES@", str(prerequisites.resolve()))
     rendered = work / "installer.nsi"
     rendered.write_text(template.replace("@CODECONVOY_HELPERS@", path), encoding="utf-8")
     config["nsis"]["template"] = str(rendered.resolve())
@@ -335,6 +347,9 @@ def native_tests():
     makensis = Path(env["LOCALAPPDATA"]) / ".cargo-packager/NSIS/makensis.exe"
     subprocess.run([str(makensis), str(script)], env=env, check=True)
     subprocess.run(["pwsh", "-NoProfile", "-File", str(ROOT / "packaging/nsis/native-tests.ps1")], check=True)
+    windows_runtime.native_prerequisite_tests(makensis, OUTPUT / "plugins", work / "prerequisites ü 安装")
+    if crt.EVIDENCE.exists():
+        shutil.copyfile(work / "prerequisites ü 安装/results.json", crt.EVIDENCE / "prerequisite-tests.json")
 
 
 if __name__ == "__main__":

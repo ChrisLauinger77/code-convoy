@@ -1,4 +1,4 @@
-"""Locked release build with normalized source paths and a portable Windows CRT."""
+"""Locked release build with normalized source paths and an external Windows CRT prerequisite."""
 import argparse
 import os
 from pathlib import Path
@@ -17,7 +17,7 @@ flags = [f"--remap-path-prefix={Path.home()}=/build-home",
          f"--remap-path-prefix={Path(os.environ.get('CARGO_HOME', Path.home() / '.cargo'))}=/cargo",
          f"--remap-path-prefix={ROOT}=."]
 if os.name == "nt":
-    flags.extend(["-C", "target-feature=+crt-static"])
+    flags.extend(["-C", "target-feature=-crt-static"])
 env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(flags)
 command = ["cargo", "build", "--locked", "--release"]
 command += ["--features", "test-support", "--example", "package_probe"] if args.probe else ["--bin", "codeconvoy"]

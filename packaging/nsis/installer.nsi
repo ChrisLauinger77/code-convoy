@@ -177,8 +177,24 @@ Function PageReinstall
   ${EndIf}
   ${IfThen} $R0 == "" ${|} StrCpy $R4 "$(unknown)" ${|}
 
+  Call RequireWindowsRuntime
   codeconvoy_utils::SemverCompare "${VERSION}" $R0
+  ClearErrors
   Pop $R0
+  ${If} ${Errors}
+    StrCpy $R0 "invalid"
+  ${EndIf}
+  ${If} $R0 != "0"
+  ${AndIf} $R0 != "1"
+  ${AndIf} $R0 != "-1"
+    ; Abort in a custom page would skip the page and continue installation.
+    ${IfNot} ${Silent}
+    ${AndIf} $PassiveMode != 1
+      MessageBox MB_OK|MB_ICONSTOP "Could not validate the installed version. Repair the x86 Visual C++ Runtime and retry."
+    ${EndIf}
+    SetErrorLevel 1603
+    Quit
+  ${EndIf}
   ; Reinstalling the same version
   ${If} $R0 == 0
     StrCpy $R1 "$(alreadyInstalledLong)"
@@ -378,10 +394,13 @@ FunctionEnd
 !macroend
 
 Var PassiveMode
+!include "@CODECONVOY_PREREQUISITES@"
 Function .onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   IfErrors +2 0
     StrCpy $PassiveMode 1
+
+  Call RequireWindowsRuntime
 
   !if "${DISPLAYLANGUAGESELECTOR}" == "true"
     !insertmacro MUI_LANGDLL_DISPLAY
@@ -440,19 +459,35 @@ SectionEnd
 {{unescape_newlines preinstall_section}}
 {{/if}}
 
-!macro CheckIfAppIsRunning
+!macro CheckIfAppIsRunning PREFIX
+  Call ${PREFIX}RequireWindowsRuntime
   codeconvoy_utils::FindProcess "${MAINBINARYNAME}.exe"
+  ClearErrors
   Pop $R0
-  ${If} $R0 = 0
+  ${If} ${Errors}
+    StrCpy $R0 "invalid"
+  ${EndIf}
+  ${If} $R0 != "0"
+  ${AndIf} $R0 != "1"
+    SetErrorLevel 1603
+    Abort "Could not check running processes. Repair the x86 Visual C++ Runtime and retry."
+  ${EndIf}
+  ${If} $R0 == "0"
       IfSilent kill 0
       ${IfThen} $PassiveMode != 1 ${|} MessageBox MB_OKCANCEL "$(appRunningOkKill)" IDOK kill IDCANCEL cancel ${|}
       kill:
+        Call ${PREFIX}RequireWindowsRuntime
         codeconvoy_utils::KillProcess "${MAINBINARYNAME}.exe"
+        ClearErrors
         Pop $R0
+        ${If} ${Errors}
+          StrCpy $R0 "invalid"
+        ${EndIf}
         Sleep 500
-        ${If} $R0 = 0
+        ${If} $R0 == "0"
           Goto app_check_done
         ${Else}
+          SetErrorLevel 1603
           IfSilent silent ui
           silent:
             System::Call 'kernel32::AttachConsole(i -1)i.r0'
@@ -472,9 +507,9 @@ SectionEnd
 !macroend
 
 Section Install
-  SetOutPath $INSTDIR
+  !insertmacro CheckIfAppIsRunning ""
 
-  !insertmacro CheckIfAppIsRunning
+  SetOutPath $INSTDIR
 
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"
@@ -568,6 +603,10 @@ Function .onInstSuccess
 FunctionEnd
 
 Function un.onInit
+  ${GetOptions} $CMDLINE "/P" $PassiveMode
+  IfErrors +2 0
+    StrCpy $PassiveMode 1
+  Call un.RequireWindowsRuntime
   !insertmacro SetContext
 
   !if "${INSTALLMODE}" == "both"
@@ -578,7 +617,7 @@ Function un.onInit
 FunctionEnd
 
 Section Uninstall
-  !insertmacro CheckIfAppIsRunning
+  !insertmacro CheckIfAppIsRunning "un."
 
   ; Delete the app directory and its content from disk
   ; Copy main executable
