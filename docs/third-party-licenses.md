@@ -156,6 +156,12 @@ clearance or authorization to publish is inferred.
    for actual observations, Microsoft references and the repeatable checks.
    The application remains MIT; that license does not grant rights to Microsoft
    runtime code. The `windows-crt` publication guard remains active.
+   The [post-PR-73 assessment](license-blocker-evidence.md#6-windows-crt-redistribution-assessment-after-pr-73)
+   distinguishes the conditional SDK grant from the unconfirmed VC/hosted-build
+   entitlement and recipient agreements. It covers both replacement helpers
+   and the remaining NSIS binaries, and records the exact decisions needed
+   before closure. Four of the five original blockers are resolved; Windows
+   CRT is still the sole publication blocker.
 
 Primary AppImage evidence: [runtime source/tag](https://github.com/AppImage/type2-runtime/tree/20251108),
 [libfuse terms](https://github.com/libfuse/libfuse/blob/fuse-3.15.0/LICENSE),
@@ -247,5 +253,7 @@ Fedora 44, AppImage extraction, the hosted Ubuntu FUSE check and disposable
 Git/process probes. These runtime checks and their limitations are detailed in
 the [readiness report](release-readiness.md#final-verification).
 
-The five unresolved obligations above still block `licenses.py release-ready`
-and publication. No tag or public release has been created.
+At that earlier candidate revision, all five obligations blocked
+`licenses.py release-ready` and publication. The current unresolved-obligations
+section above records the remaining `windows-crt` blocker. No tag or public
+release was created by that verification.

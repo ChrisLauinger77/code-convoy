@@ -7,6 +7,7 @@ disposition are recorded in [AppImage runtime validation](appimage-runtime-valid
 The NSIS plugin section is also historical: the replacement and its source,
 license and binary evidence are in [NSIS helper validation](nsis-helper-validation.md).
 The Windows CRT obligation remains unresolved; the dispatch resolution is unchanged.
+The current post-PR-73 decision is in [section 6](#6-windows-crt-redistribution-assessment-after-pr-73).
 Publication remains blocked. This record distinguishes
 recovered evidence from missing evidence; it is not a legal clearance. The
 project's MIT license is unchanged. PR checks, interim artifact evidence and the
@@ -510,7 +511,169 @@ release candidate was dispatched from this branch. After merge,
 the usual `main` candidate must carry its own fresh provenance and final
 package hashes; this diagnostic is not a substitute for that release record.
 
-## Reproducible source ZIP and gates
+## 6. Windows CRT redistribution assessment after PR 73
+
+Assessment date: **2026-10-16**, after PR 73 merged as
+`d96c94e789afae9611df9229d0c22e4b83cd2b6b`. **Keep `windows-crt` active.**
+The public terms establish conditional SDK coverage, but do not establish the
+complete grant and recipient arrangements for this distribution. This is an
+evidence gap, not a determination that static linking is prohibited. The four
+other licensing decisions remain resolved. No application, linking, installer,
+notice-bundle, inventory or publication implementation is changed by this
+assessment.
+
+### Authoritative terms and the remaining decision
+
+The official VS and SDK downloads were retrieved again; their SHA-256 values
+match the previously recorded documents. No toolchain discovery or dependency
+audit was repeated.
+
+| Reference | Finding and limit |
+| --- | --- |
+| [VS 2026 Enterprise/Professional terms](https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/), updated October 1, 2025, sections II.6 and II.7 | The distribution grant depends on the Distributable List. Component-specific terms can control. Full-use entitlement and the relevant licensing channel must be established; the installed edition does not establish either. |
+| [VS 2026 Distributable List](https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution) and [Microsoft licensing guidance](https://www.microsoft.com/licensing/guidance/Visual-Studio) | The list names runtime merge modules and `VC\redist`, but does not expressly identify the observed `VC\Tools\MSVC\14.51.36231\lib` static libraries. Guidance allows linked output from **identified distributable** `.lib` code; it does not itself identify these two libraries. Whether the listed runtime code also grants these static forms needs confirmation. |
+| [Windows SDK license](https://aka.ms/WinSDKLicenseURL), section 2(a), and [SDK REDIST static LIB list](https://learn.microsoft.com/en-us/legal/windows-sdk/redist#static-lib-files) | Explicit conditional coverage of linked output from public SDK `um` and `ucrt` paths includes the observed x86 and x64 inputs. Confirm that the installed components carry no overriding terms. This list does not cover the separate VC toolset paths. |
+| [Visual C++ V14 Redistributable and Runtime terms](https://visualstudio.microsoft.com/license-terms/vs2026-ga-visualcpp-v14-redist-runtime/), updated October 1, 2025 | These end-user terms allow installation/use but expressly restrict redistribution of the runtime/code. They are **not** a substitute distributor grant. This does not negate a grant under an applicable development-tool agreement. |
+| [GitHub Additional Products and Features terms, Actions](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions), effective August 27, 2026 | They authorize development/testing use of Actions, together with the customer's main agreement. The reviewed text does not expressly establish the customer's VS Enterprise static-runtime redistribution entitlement. Its authorized-developer provision concerns Apple software; it cannot be extended to Microsoft code. |
+
+The [VS license directory](https://visualstudio.microsoft.com/license-terms/)
+also distinguishes subscription Product Terms from the published EULAs. Neither
+a subscription agreement nor a Microsoft/GitHub confirmation covering this
+distributor is in the project evidence. The
+[hosted-runner documentation](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+documents supplied tools, not the missing redistribution grant. Public availability,
+runner activation, an Enterprise label, and absence of CRT DLL imports are not
+substitutes. No conclusion that the runner is an unlicensed trial is drawn.
+Further searches for the same public lists will not resolve this contractual gap.
+
+| Downloaded reference document | SHA-256 |
+| --- | --- |
+| `Visual_Studio_2026-License-Enterprise_Professional_ENU.docx` | `dd2ab92a7c2bb90dd509e16572707a34b13bc0bc09b9199d115f25594ac39053` |
+| `sdk_license.rtf` | `dd07eb178e00c6bba4148457fc00ff77cd4887eb521d504186fe59c9ec8bbe62` |
+| `Visual-C-V14-License-Redistributable_and_Runtime_ENU.docx` | `08651651a7602fc7c0e2763de0fde1ff9f868df2780597cd1775ee9d6441c783` |
+
+### Conditions versus the existing packages
+
+The VS distribution requirements include substantial application functionality,
+protective distributor/end-user agreements and indemnification (with its stated
+exception); restrictions include unreleased components, misleading Microsoft
+branding and imposing an Excluded License on Microsoft source. The SDK also
+requires linked output rather than library delivery, preserved notices, an
+application copyright notice and Microsoft-platform distribution; its
+indemnification wording differs. These are conditional obligations under the
+respective agreements, not a proposed new license for CodeConvoy.
+
+CodeConvoy supplies substantial independent functionality. The recorded builds
+use release CRT inputs; the Windows formats contain executables rather than
+Microsoft `.lib`/`.obj` files and target Windows. Existing project copyright,
+third-party notices and the distinction between MIT source and Microsoft code
+are present. These observations support some conditions; they do not establish
+all contractual obligations or completeness of Microsoft-specific notices.
+
+The installer currently displays the project `LICENSE` through `licenseFile`
+and `MUI_PAGE_LICENSE`; the ZIP supplies `LICENSE.txt` and the four existing
+third-party files. Neither establishes agreement to protective Microsoft-code
+terms. In particular, silent installation and unpacking a portable ZIP cannot
+be assumed to supply assent. No particular click-through design is mandated by
+this assessment. A bare attribution, a copied Microsoft EULA, or MIT's warranty
+disclaimer cannot be declared sufficient. Recipient/distributor wording and
+the mechanism for both formats require approval under the confirmed grant;
+indemnification is a distributor obligation, not something a packaging test
+can discharge. Consequently no speculative EULA or notice text was added.
+
+### Application and installer coverage
+
+The recorded selected paths, not inferred libraries, determine this scope.
+The application evidence in section 5 and the independent
+[PR 73 helper evidence](nsis-helper-validation.md#validation-and-remaining-checks)
+use VS Enterprise **18.10.12224.181**, VC **14.51.36231**, LINK
+**14.51.36260.0**, SDK **10.0.26100.0**, and Rust **1.99.0**.
+
+| Distributed code | Actual runtime evidence and assessment |
+| --- | --- |
+| `CodeConvoy.exe`, identical in setup and portable ZIP | Captured x64 `libcmt.lib` and `libvcruntime.lib` under the VS toolset, and `libucrt.lib` under SDK `ucrt\x64`; exact paths/hashes in section 5. VC grant and recipient conditions remain open. |
+| `codeconvoy_utils.dll`, installer only | Separate PR 73 trace selects the same three release library names for **x86**. This is covered by the same unresolved VC/SDK decision, not by the helper's MIT/Apache source grants. |
+| `CodeConvoyAppId.dll`, installer only | `/NODEFAULTLIB /NOENTRY`; selected SDK `um\x86\kernel32.lib`, `ole32.lib`, and `uuid.lib`. No CRT selected. SDK support-code conditions still apply. |
+| NSIS setup stub, generated uninstaller, `StartMenu.dll`, `nsDialogs.dll`, `System.dll` | Existing exact binary hashes/import inspections and NSIS source/license decision are retained. No VC/UCRT DLL imports were observed. Original build inputs are not established by those imports; section 5 records the source's default-library settings and the System exception. No new claim of CRT absence or Microsoft permission is made for these prebuilt components. |
+| Portable ZIP | Only the application is executable; no installer helpers. Existing byte/notice/source checks cover its six root entries. |
+
+The retained `nsis-build-evidence.zip` gives the Rust helper's exact x86 inputs:
+
+| Directory under the recorded installation | Library | SHA-256 |
+| --- | --- | --- |
+| `VC\Tools\MSVC\14.51.36231\lib\x86` | `libcmt.lib` | `e5350669a2e6611019dcb0ee37fb577e8783d808e4d15317972d8a2e9fb76ed5` |
+| Same VC directory | `libvcruntime.lib` | `699f86b2144f39962eec5c39a29fd5049a94e8552a44538f101fa5dccbb43217` |
+| `Windows Kits\10\lib\10.0.26100.0\ucrt\x86` | `libucrt.lib` | `5a17862298fc04332aae61315014d838f5a7c6a05c9e643666939d91b533f0cb` |
+
+### Exact decision needed to close the blocker
+
+Obtain Microsoft/GitHub licensing confirmation or a supported legal review of
+the applicable agreement that:
+
+1. Identifies the grant for linked `libcmt`/`libvcruntime` output from these
+   x64/x86 VC toolset paths and establishes this distributor's entitlement for
+   the hosted builds, including any controlling component terms.
+2. Specifies the required Microsoft-code notices, recipient/distributor terms
+   and a sufficient delivery/agreement method for both installer and portable
+   ZIP, with the distributor's obligations accepted separately.
+3. Determines whether the remaining prebuilt NSIS components need further
+   Microsoft-runtime provenance or permission evidence. Their existing NSIS
+   source/license resolution is not reopened or treated as a Microsoft grant.
+
+This is the stop point for the licensing assessment. Rebuilding, changing
+static linking, adding an acknowledgment file, or clearing an inventory flag
+would not supply these determinations. `licenses.py release-ready` must continue
+to reject **only `windows-crt`**; the publisher must continue to call that gate
+before creating a release.
+
+### Validation of this assessment
+
+Local `cargo fmt --check`, strict all-target/all-feature Clippy,
+`cargo test --all-features` (**621 passed, 10 ignored**), `cargo build --release`,
+all **101 packaging tests**, and `licenses.py check` passed. The first Rust run
+encountered the already documented read-only `/tmp/.git` environment marker;
+the complete rerun with `TMPDIR=/var/tmp` passed without code changes.
+`licenses.py release-ready` rejected exactly `windows-crt`, as intended.
+The existing publisher regression verifies rejection before even draft release
+creation. Neither the live publisher nor a release workflow was invoked.
+
+[Non-publishing CI diagnostic 38906991244](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38906991244)
+was dispatched against merged `main` at
+`d96c94e789afae9611df9229d0c22e4b83cd2b6b`, with `windows_crt_audit=true`.
+All three CI jobs passed, including the Linux private-D-Bus and Windows
+software-graphics startup checks. The Windows packaging step passed default and
+Unicode-path installation/removal and native helper tests. Its audited release
+build ran in that step; only the redundant final release-build command was
+skipped. The separate helpers-only job was not requested; the packaging step
+built and checked both helpers. The two local documentation edits do not change
+the build inputs, inventory or bundled notices; this diagnostic is not a
+publication candidate.
+
+Downloaded `windows-crt-audit` artifact **12049765094** identifies that exact
+source and run. Independent local extraction passed the existing installer/ZIP
+byte checks, source/notice delivery, all eight PE hashes and inspection hashes,
+both helpers' two-build evidence, application link capture and final package
+manifest. Only checkout line endings matching the captured input hashes were
+reconstructed in a disposable source snapshot; production checks were not
+relaxed. The actual VS/toolset/SDK/linker identities and the application's three
+CRT paths/hashes match section 5 exactly. Both helper binaries match PR 73, and
+the source-bundle hash is unchanged. This reuses the existing provenance
+machinery and reviewed baseline rather than introducing another audit pipeline.
+
+| Verified diagnostic output | SHA-256 |
+| --- | --- |
+| `CodeConvoy-1.0.0-windows-x86_64-setup.exe` | `212cbb78467273a3b8025b6f254cd66b11962d15e562443bcffae03c59a2996f` |
+| `CodeConvoy-1.0.0-windows-x86_64.zip` | `55cc9ab47675706c1676d1b93c993665456e6402dd3622cbfe8aa3cec90887cc` |
+| `CodeConvoy.exe` in both packages | `819b59fd1a65b3f4daf783d48779cf9d22c2e1f0b16a012a807128d69b0c7364` |
+| `THIRD-PARTY-SOURCES.zip` in both packages | `b253fcf0f891ff1bb20b1240b72e80c8a09a3ec760bc1d11c9ea9d4f9c603f31` |
+
+The installer behavior and limitations remain those documented in
+[NSIS helper validation](nsis-helper-validation.md#validation-and-remaining-checks):
+no interactive desktop certification, real historical-installer upgrade claim,
+or uninstaller final self-deletion check is inferred. The technical checks do
+not alter the licensing outcome above.
+
+## Historical PR 68 record: reproducible source ZIP and gates
 
 The outer ZIP explicitly fixes ASCII name ordering, DOS timestamp, Unix creator,
 regular-file permissions, ZIP version fields, flags, comments and extra fields.
@@ -525,5 +688,7 @@ all six formats, as do checksum, provenance and native-payload gates.
 Inventory checks now tie the native evidence to the pinned runtime/plugin hashes
 and reject removal of recovered AppImage sources, CRT reference source/terms
 or observed plugin notices.
-All five blocker IDs remain enforced by `licenses.py release-ready` and the
-publisher. There are no new package formats, channels or runtime substitutions.
+At that earlier revision, all five blocker IDs were enforced by
+`licenses.py release-ready` and the publisher. Section 6 records the current
+single-blocker state. That change introduced no new package formats, channels
+or runtime substitutions.
