@@ -23,6 +23,10 @@ def verify_linux_payload(appdir):
 def download_tools(work):
     tools = {}
     for name, spec in json.loads((ROOT / "packaging/appimage-tools.json").read_text()).items():
+        if name == "runtime":
+            from appimage_runtime import build_runtime
+            tools[name] = build_runtime(work)
+            continue
         path = work / name
         with urllib.request.urlopen(spec["url"], timeout=120) as source, path.open("wb") as target:
             shutil.copyfileobj(source, target)

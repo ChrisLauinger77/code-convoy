@@ -1,7 +1,11 @@
 # PR 68 — native license evidence follow-up
 
 Audit date: 2026-10-15; dispatch follow-up: 2026-10-16.
-**Publication remains blocked by the four non-dispatch obligations.** This record distinguishes
+**Historical follow-up:** the AppImage sections below describe the original
+upstream binary. The replacement runtime, relinking demonstration and current
+disposition are recorded in [AppImage runtime validation](appimage-runtime-validation.md).
+Windows/NSIS evidence and the reviewed dispatch resolution below are unchanged.
+Publication remains blocked. This record distinguishes
 recovered evidence from missing evidence; it is not a legal clearance. The
 project's MIT license is unchanged. PR checks, interim artifact evidence and the
 exact tested revisions are recorded in [PR 68](https://github.com/ChrisLauinger77/code-convoy/pull/68).

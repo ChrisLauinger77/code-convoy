@@ -3,7 +3,7 @@
   "scope": "Conservative Cargo release-target closure, including build/proc-macro inputs; not a claim that every object survives linking. All locked crates are inventoried; entries with no targets are excluded from these release targets. Native unresolved entries are release blockers.",
   "inputs": {
     "dependencies_sha256": "2c5ab84e57bc4682bf92f830a3a86ddc24778e063f4aa84f64639de1b3dbb614",
-    "appimage_tools_sha256": "4846cc7b7c5734cb5aadf357a3a30d0ca2fa1ca695f9ea32a07caa362a628b8b",
+    "appimage_tools_sha256": "2143abcb81dec79dcdce5e3d3bfa85723854c0cae1ae956890389ad5f4fc1bfe",
     "rust": "1.99.0",
     "packager": "0.11.8"
   },
@@ -15257,7 +15257,7 @@
   "components": [
     {
       "name": "AppImage type2 runtime",
-      "version": "20251108 / dd6cebedcbddde9c82f89b011e8e1d40b6e43868",
+      "version": "20251108 / dd6cebedcbddde9c82f89b011e8e1d40b6e43868 / CodeConvoy source build 1",
       "license": "MIT",
       "scope": "AppImage launcher",
       "notices": [
@@ -15266,11 +15266,12 @@
           "origin": "https://codeload.github.com/AppImage/type2-runtime/tar.gz/dd6cebedcbddde9c82f89b011e8e1d40b6e43868 :: type2-runtime-dd6cebedcbddde9c82f89b011e8e1d40b6e43868/LICENSE"
         }
       ],
-      "sha256": "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
+      "sha256": "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d",
+      "source": "sources/AppImage-runtime-dd6cebed.tar.gz"
     },
     {
       "name": "libfuse",
-      "version": "3.15.0 with upstream runtime mount.c patch",
+      "version": "3.15.0 with upstream mount patch and dated modification notice",
       "license": "LGPL-2.1-only (library); GPL-2.0-only (other source files)",
       "scope": "statically linked into AppImage runtime",
       "notices": [
@@ -15287,11 +15288,11 @@
           "origin": "https://github.com/libfuse/libfuse/releases/download/fuse-3.15.0/fuse-3.15.0.tar.xz :: fuse-3.15.0/GPL2.txt"
         }
       ],
-      "unresolved": "appimage-relink"
+      "source": "sources/libfuse-3.15.0.tar.xz"
     },
     {
       "name": "squashfuse",
-      "version": "0.5.2",
+      "version": "0.5.2 (source-built, no downstream patches)",
       "license": "BSD-2-Clause",
       "scope": "statically linked into AppImage runtime",
       "notices": [
@@ -15299,11 +15300,12 @@
           "text": "9e909cc8a8ba27b1a649c964cf9eda37de911f3138c2b64e6d2f01703904ac13",
           "origin": "https://codeload.github.com/vasi/squashfuse/tar.gz/refs/tags/0.5.2 :: squashfuse-0.5.2/LICENSE"
         }
-      ]
+      ],
+      "source": "sources/squashfuse-0.5.2.tar.gz"
     },
     {
       "name": "musl",
-      "version": "1.2.5 (upstream; Alpine package revision unresolved)",
+      "version": "1.2.5 (source-built, no downstream patches)",
       "license": "MIT and embedded notices",
       "scope": "statically linked into AppImage runtime",
       "notices": [
@@ -15312,12 +15314,11 @@
           "origin": "https://musl.libc.org/releases/musl-1.2.5.tar.gz :: musl-1.2.5/COPYRIGHT"
         }
       ],
-      "unresolved": "appimage-versions",
       "source": "sources/musl-1.2.5.tar.gz"
     },
     {
       "name": "zstd",
-      "version": "1.5.6 (upstream; Alpine package revision unresolved)",
+      "version": "1.5.6 (source-built, no downstream patches)",
       "license": "BSD-3-Clause OR GPL-2.0-only",
       "scope": "statically linked into AppImage runtime",
       "notices": [
@@ -15326,12 +15327,11 @@
           "origin": "https://codeload.github.com/facebook/zstd/tar.gz/refs/tags/v1.5.6 :: zstd-1.5.6/LICENSE"
         }
       ],
-      "unresolved": "appimage-versions",
       "source": "sources/zstd-1.5.6.tar.gz"
     },
     {
       "name": "zlib",
-      "version": "1.3.1 (upstream; Alpine package revision unresolved)",
+      "version": "1.3.1 (source-built, no downstream patches)",
       "license": "Zlib",
       "scope": "statically linked into AppImage runtime",
       "notices": [
@@ -15340,12 +15340,11 @@
           "origin": "https://zlib.net/fossils/zlib-1.3.1.tar.gz :: zlib-1.3.1/LICENSE"
         }
       ],
-      "unresolved": "appimage-versions",
       "source": "sources/zlib-1.3.1.tar.gz"
     },
     {
       "name": "mimalloc",
-      "version": "2.1.7 (upstream; Alpine package revision unresolved)",
+      "version": "2.1.7 (source-built, no downstream patches)",
       "license": "MIT",
       "scope": "statically linked into AppImage runtime",
       "notices": [
@@ -15354,7 +15353,6 @@
           "origin": "https://codeload.github.com/microsoft/mimalloc/tar.gz/refs/tags/v2.1.7 :: mimalloc-2.1.7/LICENSE"
         }
       ],
-      "unresolved": "appimage-versions",
       "source": "sources/mimalloc-2.1.7-source.tar.gz"
     },
     {
@@ -16444,9 +16442,9 @@
     },
     {
       "name": "GNU CRT startup code",
-      "version": "UNRESOLVED (GCC 14.2.0 source reference)",
-      "license": "GPL-3.0-or-later WITH GCC-exception-3.1 (upstream reference; exact inputs unresolved)",
-      "scope": "AppImage launcher: observed GNU-style startup symbols; not the GCC compiler executable",
+      "version": "14.2.0 (Alpine gcc 14.2.0-r4)",
+      "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "scope": "AppImage crtbeginS.o and crtendS.o, exact object/package hashes in runtime build evidence",
       "notices": [
         {
           "text": "17b9f4c14d694081978108a8cdec4d1a0096b7d3370fbcd3a3535ed07a361cd0",
@@ -16460,8 +16458,28 @@
           "text": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
           "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING.RUNTIME"
         }
-      ],
-      "unresolved": "appimage-versions"
+      ]
+    },
+    {
+      "name": "Linux UAPI headers",
+      "version": "6.6-r1 (Alpine linux-headers)",
+      "license": "GPL-2.0-only WITH Linux-syscall-note and per-header notices",
+      "scope": "Header definitions/inline byte-order code used by the source-built AppImage launcher; no kernel binary or new shared library",
+      "source": "sources/linux-uapi-6.6-r1.tar.gz",
+      "notices": [
+        {
+          "text": "fb5a425bd3b3cd6071a3a9aff9909a859e7c1158d54d32e07658398cd67eb6a0",
+          "origin": "https://raw.githubusercontent.com/torvalds/linux/v6.6/COPYING"
+        },
+        {
+          "text": "f6b78c087c3ebdf0f3c13415070dd480a3f35d8fc76f3d02180a407c1c812f79",
+          "origin": "https://raw.githubusercontent.com/torvalds/linux/v6.6/LICENSES/preferred/GPL-2.0"
+        },
+        {
+          "text": "8e378ab93586eb55135d3bc119cce787f7324f48394777d00c34fa3d0be3303f",
+          "origin": "https://raw.githubusercontent.com/torvalds/linux/v6.6/LICENSES/exceptions/Linux-syscall-note"
+        }
+      ]
     }
   ],
   "sources": [
@@ -16532,19 +16550,68 @@
       "path": "sources/gcc-14.2.0-crtstuff.c",
       "sha256": "5859380c2242ce108b323fe216847df6f2be052fa98ca56eb6284daacda3befd",
       "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/libgcc/crtstuff.c",
-      "scope": "Unmodified upstream reference only; exact shipped CRT object provenance remains unresolved."
+      "scope": "GCC 14.2.0 startup reference source/license; exact Alpine recipe, patches and object hashes accompany the source-built runtime."
     },
     {
       "path": "sources/gcc-14.2.0-COPYING3",
       "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
       "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING3",
-      "scope": "Unmodified upstream reference only; exact shipped CRT object provenance remains unresolved."
+      "scope": "GCC 14.2.0 startup reference source/license; exact Alpine recipe, patches and object hashes accompany the source-built runtime."
     },
     {
       "path": "sources/gcc-14.2.0-COPYING.RUNTIME",
       "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
       "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING.RUNTIME",
-      "scope": "Unmodified upstream reference only; exact shipped CRT object provenance remains unresolved."
+      "scope": "GCC 14.2.0 startup reference source/license; exact Alpine recipe, patches and object hashes accompany the source-built runtime."
+    },
+    {
+      "path": "runtime/build-runtime.py",
+      "sha256": "34ac32f64790acde85c621f0524a2f5b285e6f7deceef333f26069a6da719b6e",
+      "origin": "CodeConvoy runtime recipe; upstream provenance in runtime-inputs.json"
+    },
+    {
+      "path": "runtime/build-runtime.sh",
+      "sha256": "3037281bd9839133313d68fc1e6f3815e4eb489c3eb33ee8918f93db4bf7e917",
+      "origin": "CodeConvoy runtime recipe; upstream provenance in runtime-inputs.json"
+    },
+    {
+      "path": "runtime/runtime-inputs.json",
+      "sha256": "1eacc73d986ed729c9b91df107b4ebce29ef6d2cb53388af052ecf68d2d1a707",
+      "origin": "CodeConvoy runtime recipe; upstream provenance in runtime-inputs.json"
+    },
+    {
+      "path": "runtime/gcc-14.2.0-alpine-r4.tar.gz",
+      "sha256": "e028101c63aa2920f5cb27295076881870fbc58a0b8a4d16230262aca0f1c590",
+      "origin": "CodeConvoy runtime recipe; upstream provenance in runtime-inputs.json"
+    },
+    {
+      "path": "runtime/runtime-README.txt",
+      "sha256": "7bdb8511b387dcdd4f0d8cbb4bbfdbeff49438034f92cf9fafa370ec56ac3a82",
+      "origin": "CodeConvoy runtime recipe; upstream provenance in runtime-inputs.json"
+    },
+    {
+      "path": "runtime/libfuse-notice.patch",
+      "sha256": "af58e8224e51e855cea68b86d36c0e579f21514bd40740cf4188f8dca0326cfa",
+      "origin": "CodeConvoy runtime recipe; upstream provenance in runtime-inputs.json"
+    },
+    {
+      "path": "runtime/libfuse-demo.patch",
+      "sha256": "c8ffbf679fcf59f75d6b9c821299395aa8791339249c86b766ccd07ee8adb156",
+      "origin": "CodeConvoy runtime recipe; upstream provenance in runtime-inputs.json"
+    },
+    {
+      "path": "runtime/runtime-build-LICENSE.txt",
+      "sha256": "37438906c0a4475ff6029c83d6ab7c9a62c4b8042b32a51182258a717bccb803",
+      "origin": "CodeConvoy runtime recipe; upstream provenance in runtime-inputs.json"
+    },
+    {
+      "path": "sources/linux-uapi-6.6-r1.tar.gz",
+      "sha256": "ae390e523ea681bbe9c2d733528054de5128d931dfa67a9d4740ea554639a41d",
+      "package_sha256": "775cfa57ca5475d6dd87527a9889f6934e1dda11331060b7aee761d54a7c9949",
+      "origin": "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/linux-headers-6.6-r1.apk",
+      "source_revision": "ff05649790da27954fc672698b30aa984b772c01",
+      "recipe_archive_sha256": "2de9cd681c8f635ad87646d89fdab8e11d1ddeac5d533c3e66ed3b689a901e95",
+      "transformation": "Preserve every regular usr/include file and .PKGINFO from the pinned APK; include exact Alpine recipe/patches and Linux v6.6 COPYING, GPL-2.0 and Linux-syscall-note; deterministic source-only tar metadata."
     }
   ],
   "files": [
@@ -16559,17 +16626,21 @@
       "sha256": "e2224cd608658761f567b73d1d6b0f40bce971abec951e6ce678faf575011031",
       "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38785562437",
       "scope": "Repository audit evidence only; exact native linker/PE diagnostic bytes. No Microsoft library/object files or release binaries. Not added to the end-user source bundle."
+    },
+    {
+      "path": "evidence/appimage-runtime-build.json",
+      "sha256": "0bf51a77e05afc3de9ee6a90cc2b42f8d3a3f12304a1739d0bf9ad5986b843de",
+      "origin": "Final pinned offline runtime recipe; see docs/appimage-runtime-validation.md",
+      "scope": "Repository build/link evidence; no binary files."
+    },
+    {
+      "path": "evidence/appimage-runtime-relink.json",
+      "sha256": "660732ca9f2068007cd622a3bb0c0a2ec67846acfe2711804cdcdc4719262671",
+      "origin": "Final pinned offline runtime recipe; see docs/appimage-runtime-validation.md",
+      "scope": "Repository build/link evidence; no binary files."
     }
   ],
   "release_blockers": [
-    {
-      "id": "appimage-versions",
-      "detail": "Matched runtime/debug evidence identifies upstream musl 1.2.5, zstd 1.5.6, zlib 1.3.1 and mimalloc 2.1.7; matching notices/source now included. Exact Alpine APK revisions and downstream patches remain unverified. Upstream build logs expired; no immutable image/package manifest recovered. GNU-style CRT startup symbols are also observed; upstream GCC 14.2.0 reference source, GPLv3 and runtime exception 3.1 are included, but exact CRT objects/patches and exception applicability remain unverified."
-    },
-    {
-      "id": "appimage-relink",
-      "detail": "Static libfuse 3.15.0 LGPL-2.1 section 6(a): sources, runtime mount patch and build recipe are supplied, but exact downstream library patches/build inputs and a verified modified-libfuse relink are missing. No written offer or shared-library alternative is claimed. See source README and docs/license-blocker-evidence.md."
-    },
     {
       "id": "nsis-plugins",
       "detail": "ApplicationID source copyright headers are preserved but no grant or exact DLL/source correspondence was found. nsis-tauri-utils 0.2.1 matches the upstream release SHA-1; source and notices for 17 binary-observed crate versions are included. The unlocked build, remaining transitive code, Rust 1.71.1 standard library and static CRT are not completely inventoried."
@@ -17508,45 +17579,19 @@
   ],
   "native_provenance": {
     "appimage": {
-      "runtime_sha256": "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d",
+      "runtime_sha256": "d5510b4077eb0e05083e576085326e76f3ffffb55ef81fd34e2a75279d80f912",
       "source_revision": "dd6cebedcbddde9c82f89b011e8e1d40b6e43868",
-      "debug_url": "https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64.debug",
-      "debug_sha256": "1f3c4a8439e344d74b61bfd0610b89e8499453791bbc3c5b4ae38c181fe54942",
-      "build_id": "a87aaf5da1bf2ef30becedd1aa58e217818fb503",
-      "debuglink_crc32": "dd5771c8",
       "versions": {
+        "libfuse": "3.15.0",
+        "squashfuse": "0.5.2",
         "musl": "1.2.5",
         "zstd": "1.5.6",
         "zlib": "1.3.1",
         "mimalloc": "2.1.7"
       },
-      "observations": {
-        "musl": "Matched debug DW_AT_comp_dir: /home/buildozer/aports/main/musl/src/musl-1.2.5",
-        "libfuse": "Matched debug DW_AT_comp_dir: /tmp/tmp.mOkBIM/fuse-3.15.0/build",
-        "zstd": "ZSTD_versionString at 0x32340 returns string at 0x899f2: 1.5.6",
-        "zlib": "zlibVersion at 0x3bbc0 returns string at 0x89b70: 1.3.1",
-        "mimalloc": "mi_version at 0x63340: b8 d9 00 00 00 c3 (return 217); v2.1.7 include/mimalloc.h defines MI_MALLOC_VERSION 217"
-      },
-      "limitation": "Upstream version identities recovered from matched debug symbols and runtime bytes; exact Alpine APK revisions/patches, image digest and complete relink evidence remain unknown.",
+      "build_audit": "evidence/appimage-runtime-build.json",
       "compiler_startup": {
         "component": "GNU CRT startup code",
-        "observed_symbols": {
-          "__EH_FRAME_BEGIN__": "0xbcc28",
-          "__TMC_END__": "0xe3900",
-          "__do_global_dtors_aux": "0x2b1a0",
-          "deregister_tm_clones": "0x2b130",
-          "frame_dummy": "0x2b200",
-          "register_tm_clones": "0x2b160"
-        },
-        "runtime_comment": [
-          "GCC: (Alpine 14.2.0) 14.2.0",
-          "Alpine clang version 19.1.4"
-        ],
-        "reference_sources": [
-          "sources/gcc-14.2.0-crtstuff.c",
-          "sources/gcc-14.2.0-COPYING3",
-          "sources/gcc-14.2.0-COPYING.RUNTIME"
-        ],
         "reference_notices": [
           {
             "text": "17b9f4c14d694081978108a8cdec4d1a0096b7d3370fbcd3a3535ed07a361cd0",
@@ -17561,8 +17606,84 @@
             "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING.RUNTIME"
           }
         ],
-        "limitation": "Symbols in the matched debug asset and compiler comments establish a GNU-style CRT input requiring audit, not an exact object/source identity. Upstream GCC 14.2.0 reference source, GPLv3 and GCC exception 3.1 are included conservatively. Exact Alpine CRT object hashes/patches and eligibility under the exception remain unresolved."
-      }
+        "reference_sources": [
+          "sources/gcc-14.2.0-crtstuff.c",
+          "sources/gcc-14.2.0-COPYING3",
+          "sources/gcc-14.2.0-COPYING.RUNTIME"
+        ],
+        "objects": {
+          "crtbeginS.o": "7f13ed58a696945c2a1f4de29450485c59664886606b55b5eb7701d32cd6bad1",
+          "crtendS.o": "801b38e1001ac23947848c28a74bcf739516c253173b5641644fedcb459233b4"
+        },
+        "package": "gcc-14.2.0-r4.apk",
+        "source_revision": "1a03a2a9c9e77f1a07d48b6f6805e72c8c63c03f",
+        "assessment": "GCC 14.2.0 C compilation with no plugins/LTO; Runtime Library Exception 3.1 interpretation documented in docs/appimage-runtime-validation.md."
+      },
+      "previous_runtime": {
+        "runtime_sha256": "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d",
+        "source_revision": "dd6cebedcbddde9c82f89b011e8e1d40b6e43868",
+        "debug_url": "https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64.debug",
+        "debug_sha256": "1f3c4a8439e344d74b61bfd0610b89e8499453791bbc3c5b4ae38c181fe54942",
+        "build_id": "a87aaf5da1bf2ef30becedd1aa58e217818fb503",
+        "debuglink_crc32": "dd5771c8",
+        "versions": {
+          "musl": "1.2.5",
+          "zstd": "1.5.6",
+          "zlib": "1.3.1",
+          "mimalloc": "2.1.7"
+        },
+        "observations": {
+          "musl": "Matched debug DW_AT_comp_dir: /home/buildozer/aports/main/musl/src/musl-1.2.5",
+          "libfuse": "Matched debug DW_AT_comp_dir: /tmp/tmp.mOkBIM/fuse-3.15.0/build",
+          "zstd": "ZSTD_versionString at 0x32340 returns string at 0x899f2: 1.5.6",
+          "zlib": "zlibVersion at 0x3bbc0 returns string at 0x89b70: 1.3.1",
+          "mimalloc": "mi_version at 0x63340: b8 d9 00 00 00 c3 (return 217); v2.1.7 include/mimalloc.h defines MI_MALLOC_VERSION 217"
+        },
+        "limitation": "Upstream version identities recovered from matched debug symbols and runtime bytes; exact Alpine APK revisions/patches, image digest and complete relink evidence remain unknown.",
+        "compiler_startup": {
+          "component": "GNU CRT startup code",
+          "observed_symbols": {
+            "__EH_FRAME_BEGIN__": "0xbcc28",
+            "__TMC_END__": "0xe3900",
+            "__do_global_dtors_aux": "0x2b1a0",
+            "deregister_tm_clones": "0x2b130",
+            "frame_dummy": "0x2b200",
+            "register_tm_clones": "0x2b160"
+          },
+          "runtime_comment": [
+            "GCC: (Alpine 14.2.0) 14.2.0",
+            "Alpine clang version 19.1.4"
+          ],
+          "reference_sources": [
+            "sources/gcc-14.2.0-crtstuff.c",
+            "sources/gcc-14.2.0-COPYING3",
+            "sources/gcc-14.2.0-COPYING.RUNTIME"
+          ],
+          "reference_notices": [
+            {
+              "text": "17b9f4c14d694081978108a8cdec4d1a0096b7d3370fbcd3a3535ed07a361cd0",
+              "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/libgcc/crtstuff.c :: copyright/license header"
+            },
+            {
+              "text": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+              "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING3"
+            },
+            {
+              "text": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+              "origin": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING.RUNTIME"
+            }
+          ],
+          "limitation": "Symbols in the matched debug asset and compiler comments establish a GNU-style CRT input requiring audit, not an exact object/source identity. Upstream GCC 14.2.0 reference source, GPLv3 and GCC exception 3.1 are included conservatively. Exact Alpine CRT object hashes/patches and eligibility under the exception remain unresolved."
+        }
+      },
+      "resolution": {
+        "record": "docs/appimage-runtime-validation.md",
+        "date": "2026-10-16",
+        "provenance": "Resolved for the replacement runtime only; original upstream binary provenance remains incomplete.",
+        "relinking": "Resolved under the documented LGPL-2.1 section 6(a) source-based interpretation: complete library/launcher sources, patches, build instructions and pinned system toolchain; extracted-kit stock and modified builds, same-AppDir FUSE/extraction launch and normal close verified. This is not authoritative legal approval.",
+        "remaining_platform_checks": "Native Ubuntu 24.04 and Debian 13 desktops and native Wayland session remain unverified; virtual-display tests and native Debian Forky XWayland results are separately recorded."
+      },
+      "relink_audit": "evidence/appimage-runtime-relink.json"
     },
     "nsis_tauri_utils": {
       "dll_sha256": "0eed48313a7f904d7cc1977b70000ab3f11f18cadc8e6a69b807d288ca71f9db",

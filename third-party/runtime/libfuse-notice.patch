@@ -1,0 +1,12 @@
+--- a/lib/mount.c
++++ b/lib/mount.c
+@@ -1,4 +1,9 @@
+ /*
++  CodeConvoy modification notice, 2026-10-16:
++  Apply AppImage type2-runtime dd6cebed's mount.c.diff to obtain the
++  fusermount helper path from FUSERMOUNT_PROG. This file remains covered
++  by its original LGPL-2.1 terms. Original notices follow unchanged.
++
+   FUSE: Filesystem in Userspace
+   Copyright (C) 2001-2007  Miklos Szeredi <miklos@szeredi.hu>
+ 
