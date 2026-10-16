@@ -15376,12 +15376,12 @@
       "notices": [
         {
           "path": "MICROSOFT-DISTRIBUTABLE-CODE.txt",
-          "text": "900dfbff7301d7bd96598923fc4bed5961645371649a3bbaebea67e55fee0aa3",
-          "origin": "Original CodeConvoy notice; third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt; Microsoft references and assessment in docs/license-blocker-evidence.md section 8"
+          "text": "ec0484b390241e0fbc0e9608ca8c4e4f605f1acd6cb918db61d1756a287846d2",
+          "origin": "Original CodeConvoy Windows notice and component terms; third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt; decision and Microsoft references in docs/windows-licensing-decision.md"
         }
       ],
-      "unresolved": "windows-crt",
-      "evidence": "evidence/windows-dynamic-crt-38919332474.zip"
+      "evidence": "evidence/windows-dynamic-crt-38919332474.zip",
+      "accepted_risk": "windows-crt"
     },
     {
       "name": "Rust standard library and compiler-builtins",
@@ -16417,17 +16417,12 @@
     },
     {
       "path": "MICROSOFT-DISTRIBUTABLE-CODE.txt",
-      "sha256": "900dfbff7301d7bd96598923fc4bed5961645371649a3bbaebea67e55fee0aa3",
+      "sha256": "ec0484b390241e0fbc0e9608ca8c4e4f605f1acd6cb918db61d1756a287846d2",
       "origin": "Original CodeConvoy Windows notice based on the Microsoft references it identifies; reviewed 2026-10-16",
-      "scope": "Included verbatim in THIRD-PARTY-NOTICES.txt through the Microsoft component notice; Windows-only applicability; does not clear windows-crt."
+      "scope": "Included verbatim in THIRD-PARTY-NOTICES.txt; Windows-only ownership, redistribution conditions and operative component terms; maintained independently of publication-risk classification."
     }
   ],
-  "release_blockers": [
-    {
-      "id": "windows-crt",
-      "detail": "Final risk review: two material decisions remain for embedded Microsoft code: G1, a supported mapping of the controlling VC/hosted-build agreement to linked startup/support output; G2, operative protective recipient terms and an agreement basis for installer, ZIP and downstream redistribution. SDK path coverage is supported. Complete historical NSIS CRT reconstruction, an individual approval letter and a separate indemnity certificate are not independent blockers. No separate runtime DLLs or redistributable installers are bundled. See docs/license-blocker-evidence.md section 9; review recommendation awaits maintainer approval."
-    }
-  ],
+  "release_blockers": [],
   "windows_installer_plugins": {
     "$PLUGINSDIR/StartMenu.dll": "110545415a59402635e1c9439acba15b44bab268ed02ad2a262ce12604a47855",
     "$PLUGINSDIR/System.dll": "9111099efe9d5c9b391dc132b2faf0a3851a760d4106d5368e30ac744eb42706",
@@ -17978,5 +17973,16 @@
         "scope": "Historical first candidate, before stack safety patch; proves removal of the retired prebuilt helpers. Current candidate evidence is in docs/nsis-helper-validation.md."
       }
     }
-  }
+  },
+  "accepted_licensing_risks": [
+    {
+      "id": "windows-crt",
+      "accepted_by": "CodeConvoy maintainer, explicit instruction of 2026-10-16",
+      "version": "1.0.0",
+      "decision": "docs/windows-licensing-decision.md#implemented-maintainer-risk-decision--2026-10-16",
+      "detail": "Maintainer accepts the ordinary linked VC output interpretation without demanding an express grant for every startup object. Microsoft permission is not conclusively established. SDK linked-output coverage and all Microsoft conditions remain applicable. The Windows component terms and notice/conduct or existing-agreement arrangement implement recipient protection; their legal sufficiency and effectiveness remain uncertain, not proven by delivery. CPython, yt-dlp and Firefox are comparison evidence, not grants. No specifically identified contrary prohibition is waived. A known unmet mandatory condition must be recorded as a release blocker.",
+      "conditions": "Preserve Microsoft ownership, conditions and operative component terms; provide conspicuous pre-use notice and an opportunity to review, require recipient/downstream agreement, and retain distributor undertakings. Preserve all objective notice, source, binary, prerequisite and package checks. Reassess affected terms or inputs when they change or a concrete contradictory fact is identified.",
+      "notice_sha256": "ec0484b390241e0fbc0e9608ca8c4e4f605f1acd6cb918db61d1756a287846d2"
+    }
+  ]
 }

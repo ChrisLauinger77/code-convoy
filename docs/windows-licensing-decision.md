@@ -3,17 +3,125 @@
 Licensing assessment prepared 2026-10-16. This completes the
 two decision questions identified in [the risk review](license-blocker-evidence.md#9-final-risk-based-windows-review)
 using its existing evidence. It does not reopen historical NSIS provenance.
-The maintainer's subsequent release decision is recorded below; it does not
-convert the retained assessment into a verified finding of legal compliance.
+The current policy is the implemented maintainer decision below. Earlier
+assessments and the prior stop decision are retained as historical evidence;
+their recommendations do not override this later explicit instruction.
+Microsoft permission and recipient agreement are not conclusively established.
 
-**Recommendation: do not close `windows-crt` on the present record.** SDK linked
-output has an express conditional basis. Ordinary linked VC startup output has
-a plausible licensing interpretation, but the reviewed documents do not
-establish the necessary inclusion in the controlling grant. The proposed
-[recipient terms](windows-microsoft-terms-proposed.txt) address the current
-notice's substantive gap; their adoption and a legally effective agreement
-arrangement remain necessary. These are two bounded legal/contractual decisions,
-not reasons to rerun technical audits or request blanket Microsoft approval.
+## Implemented maintainer risk decision — 2026-10-16
+
+The maintainer explicitly instructs implementation of the CodeConvoy **1.0.0**
+release decision. The additional internal standard of an express redistribution
+grant for every linked VC startup object is no longer an absolute publication
+condition. `windows-crt` is recorded as a **maintainer-accepted licensing risk**,
+not as an established Microsoft grant, resolved legal uncertainty, or verified
+finding of compliance. No tag or publication is authorized by this preparation.
+
+### Interpretation and mandatory conditions
+
+The accepted interpretation is that the applicable licensed development/build
+arrangement permits ordinary application output incorporating the recorded VC
+startup/support code, subject to Microsoft's distribution conditions. The
+express SDK linked-output basis and the limitations of the VC path mapping in
+sections 1–3 remain unchanged. CPython, yt-dlp and Firefox provide comparison
+evidence for distribution arrangements, not rights for CodeConvoy. No separate
+Microsoft approval letter or legal-opinion certificate is imposed.
+
+The existing record identifies no express contractual prohibition against this
+specific recorded output. That is not proof of permission. It does identify a
+mandatory protective-recipient-agreement condition: M1 II.7(b), second bullet,
+and M3 §2(a)(ii), recipient-agreement bullet. The previous informational notice
+alone left an implementation gap, so this change does **not** merely delete the
+blocker. It incorporates the previously proposed, Microsoft-only operative
+terms into the [canonical notice](../third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt)
+and places the corresponding pre-use notice in the README download guidance
+and release notes. Existing NSIS/ZIP resources deliver the exact same text.
+The permission is expressly limited to the distributor's applicable rights.
+
+The intended agreement basis is informed exercise of the component permissions
+after conspicuous notice and a reasonable opportunity to review, where
+applicable law recognizes that conduct, or an existing applicable agreement.
+The release notes link the exact 1.0.0 tagged text; packaged copies identify
+version 1.0.0 and the date. The distributing party offers the terms; managed
+and downstream distributors must arrange agreement for their recipients,
+including direct-link, mirror and unattended deployments. Silent installation
+and notice delivery do not themselves prove agreement. No installer click-through
+is required by the cited clauses or introduced here.
+
+This implements the known missing operative wording and planned delivery;
+**the legal sufficiency and effectiveness of that arrangement remain an
+accepted interpretation risk**, not an automated finding that recipients have
+agreed. The SDK-derived USD 5 limitation is retained as the proposed protective
+choice for both Microsoft portions, with mandatory-law and direct-warranty
+exceptions. Its enforceability is not certified. The distributor must still
+meet the agreement condition in actual distribution; a specifically identified
+failure to do so must be treated as an unmet obligation, not covered by this
+risk acceptance. The maintainer's instruction does not waive a known prohibition
+or mandatory condition. No new evidence of either is asserted by this change.
+
+All Microsoft ownership notices, distribution restrictions, defense/indemnity
+undertakings (including the differing VS/SDK scope), and trade obligations
+remain. CodeConvoy's MIT license and independent component rights are unchanged.
+No assurance of legal compliance is inferred from the maintainer's willingness
+to release. The questions for qualified legal determination remain the precise
+VC grant coverage and sufficiency/formation of the recipient agreement; such
+an opinion is optional assurance, not a newly invented Microsoft condition.
+
+### Publication policy and evidence
+
+The catalog moves only `windows-crt` from `release_blockers` to
+`accepted_licensing_risks` and changes the Microsoft component reference to
+`accepted_risk`. The decision is limited to version 1.0.0 and bound to the
+canonical notice/terms SHA-256. The checker rejects a missing or stale decision,
+changed terms binding, and conflicts between accepted risk and active blockers.
+Acceptance cannot excuse missing notices or untracked obligations. The publisher
+still calls the unchanged `require_release_ready()` enforcement function before
+creating even a draft. There is no bypass flag or blanket obligation waiver.
+The generated inventory and aggregate notice expose the accepted risk separately.
+
+Historical native captures, source archives, linker evidence and their hashes
+are unchanged, including their point-in-time unresolved assessments. The current
+policy record supersedes those assessments only as a publication-policy choice.
+Changed Microsoft terms, toolchain/channel, native payload, recipient terms or
+distribution method require affected-scope review; a concrete contradictory fact
+must be recorded as a blocker. Other license and package checks are unchanged.
+
+The Linux runner fix is present on `main` at
+`c749a5ec9a38b85976ed497dbd957e0be737d355`; its
+[controlled reproduction and correction](appimage-runtime-validation.md#candidate-38936028334-ubuntu-sandbox-failure-and-correction)
+are separate from this decision. Candidate 38936028334 failed and remains
+ineligible. A fresh complete, successful non-publishing release candidate from
+the final committed source must validate the Linux fix and changed release
+materials. Passing `release-ready` alone cannot qualify a candidate or authorize
+publication. This work stops as local changes for maintainer review.
+
+### Validation of the implemented decision
+
+- `python3 packaging/licenses.py check`: passed; 457 locked crates, zero
+  unresolved publication obligations and one maintainer-accepted licensing risk.
+- `python3 packaging/licenses.py release-ready`: **exit 0**. This is the actual
+  internal publication-policy result, not verified legal compliance.
+- All **110 packaging tests** passed, including notice/resource/ZIP integrity,
+  accepted-risk binding and rejection of unrelated obligations. A removed
+  Microsoft notice now fails the ordinary missing-notice gate earlier than its
+  specialized binding check; the regression expectation was updated accordingly.
+- Local formatting, strict Clippy, Rust tests (621 passed, 10 intentionally
+  ignored) and the release build passed with installed Rust 1.96.1. These
+  checks do not certify native Windows packages.
+- All other component/text records, source archives, tool pins and native
+  provenance remain identical. The source ZIP remains SHA-256
+  `eb61566a9f3e26f7c5d29482cabb22828a86cd6b985480e48faf196e77ba7b8f`.
+- Canonical Microsoft notice/terms SHA-256 is
+  `ec0484b390241e0fbc0e9608ca8c4e4f605f1acd6cb918db61d1756a287846d2`.
+  It occurs exactly once in the generated aggregate, which passed the existing
+  directory verifier. Actual final NSIS/ZIP validation remains part of the
+  fresh candidate; no new release workflow was dispatched in this step.
+
+## Historical release-intent decision (superseded policy)
+
+The following records the earlier instruction and its actual checks. Its
+recommendation to retain G1/G2 as blockers is superseded by the explicit risk
+decision above; the factual evidence and limitations remain relevant.
 
 ## Maintainer release decision — 2026-10-16
 

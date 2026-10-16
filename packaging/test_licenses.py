@@ -89,7 +89,7 @@ class LicenseEvidence(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "altered license/source"):
             self.check()
 
-    def test_microsoft_notice_is_delivered_verbatim_with_blocker_active(self):
+    def test_microsoft_terms_and_accepted_risk_are_delivered_verbatim(self):
         catalog, texts = self.check()
         component = next(c for c in catalog["components"] if c["name"] == licenses.MICROSOFT_COMPONENT)
         notice = next(n for n in component["notices"] if n["path"] == licenses.MICROSOFT_NOTICE)
@@ -100,8 +100,54 @@ class LicenseEvidence(unittest.TestCase):
         self.assertEqual(set(material), set(licenses.FILES))  # Existing four-file delivery.
         self.assertIn(b"CodeConvoy's original code and artwork remain under the MIT license", original)
         self.assertIn(b"CodeConvoy Windows releases", original)
-        self.assertEqual(component["unresolved"], "windows-crt")
-        self.assertEqual([b["id"] for b in catalog["release_blockers"]], ["windows-crt"])
+        self.assertNotIn("unresolved", component)
+        self.assertEqual(component["accepted_risk"], "windows-crt")
+        self.assertEqual(catalog["release_blockers"], [])
+        self.assertEqual(catalog["accepted_licensing_risks"][0]["notice_sha256"], notice["text"])
+        self.assertIn(b"1. Scope and agreement", original)
+        self.assertIn(b"3. Further distribution", original)
+        self.assertIn(b"4. Microsoft protections", original)
+        self.assertIn(b"5. Rights preserved", original)
+        self.assertIn(b"not verified legal compliance", material["THIRD-PARTY-NOTICES.txt"])
+
+    def test_accepted_risk_cannot_waive_missing_notices_or_new_obligations(self):
+        original = copy.deepcopy(self.catalog)
+        for mode, error in (("missing decision", "Untracked accepted"),
+                            ("stale version", "stale maintainer"),
+                            ("changed terms", "reviewed component terms"),
+                            ("empty conditions", "Malformed"),
+                            ("also blocked", "Malformed"),
+                            ("unrelated component", "reviewed component terms"),
+                            ("other missing notice", "Missing notices"),
+                            ("untracked obligation", "Untracked license obligation")):
+            self.catalog = copy.deepcopy(original)
+            risk = self.catalog["accepted_licensing_risks"][0]
+            if mode == "missing decision":
+                self.catalog["accepted_licensing_risks"] = []
+            elif mode == "stale version":
+                risk["version"] = "0.0.0"
+            elif mode == "changed terms":
+                risk["notice_sha256"] = "0" * 64
+            elif mode == "empty conditions":
+                risk["conditions"] = ""
+            elif mode == "also blocked":
+                self.catalog["release_blockers"] = [{"id": risk["id"], "detail": "Contrary contractual fact"}]
+            else:
+                component = next(c for c in self.catalog["crates"] if c["targets"])
+                if mode in ("unrelated component", "other missing notice"):
+                    component["accepted_risk"] = risk["id"]
+                    if mode == "other missing notice":
+                        component["notices"] = []
+                else:
+                    component["unresolved"] = "new-source-obligation"
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, error):
+                self.check()
+        self.catalog = original
+        self.catalog["release_blockers"] = [{"id": "new-source-obligation", "detail": "Missing source"}]
+        checked = self.check()
+        with patch.object(licenses, "checked_catalog", return_value=checked):
+            with self.assertRaisesRegex(ValueError, "new-source-obligation"):
+                licenses.require_release_ready()
 
     def test_microsoft_notice_cannot_lose_its_component_or_source_binding(self):
         original = copy.deepcopy(self.catalog)
@@ -116,7 +162,8 @@ class LicenseEvidence(unittest.TestCase):
                 self.catalog["files"] = [f for f in self.catalog["files"] if f["path"] != licenses.MICROSOFT_NOTICE]
             else:
                 component["notices"][0]["text"] = self.catalog["crates"][0]["notices"][0]["text"]
-            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "Microsoft Distributable Code notice binding"):
+            error = "Missing notices: Microsoft" if mode == "notice" else "Microsoft Distributable Code notice binding"
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, error):
                 self.check()
         self.catalog = original
         source = self.evidence / licenses.MICROSOFT_NOTICE

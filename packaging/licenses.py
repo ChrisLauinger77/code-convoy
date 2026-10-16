@@ -81,6 +81,13 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
     blocker_ids = {item["id"] for item in blockers}
     if len(blocker_ids) != len(blockers) or any(not item["detail"].strip() for item in blockers):
         raise ValueError("Malformed license blockers")
+    risks = catalog.get("accepted_licensing_risks", [])
+    risk_ids = {item["id"] for item in risks}
+    if (len(risk_ids) != len(risks) or risk_ids & blocker_ids
+            or any(not all(item.get(key, "").strip() for key in
+                           ("accepted_by", "decision", "detail", "conditions", "notice_sha256"))
+                   or item.get("version") != manifest["package"]["version"] for item in risks)):
+        raise ValueError("Malformed or stale maintainer licensing-risk decision")
     for key, text in texts.items():
         if not text.strip() or digest(text.encode()) != key:
             raise ValueError(f"Missing or altered notice text: {key}")
@@ -89,6 +96,8 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
             raise ValueError(f"Incomplete license inventory: {component['name']}")
         if component.get("unresolved") and component["unresolved"] not in blocker_ids:
             raise ValueError(f"Untracked license obligation: {component['name']}")
+        if component.get("accepted_risk") and component["accepted_risk"] not in risk_ids:
+            raise ValueError(f"Untracked accepted licensing risk: {component['name']}")
         required = bool(component.get("targets")) if "targets" in component else component["scope"] != "build only"
         if required and not component["notices"] and not component.get("unresolved"):
             raise ValueError(f"Missing notices: {component['name']}")
@@ -100,7 +109,7 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
         if (path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(evidence.resolve())
                 or digest(path.read_bytes()) != item["sha256"]):
             raise ValueError(f"Missing or altered license/source evidence: {item['path']}")
-    # An unresolved grant must not allow the reviewed notice to disappear.
+    # Neither an unresolved grant nor accepted risk permits notice removal.
     # Reuse the content-addressed texts and existing final-package byte gates.
     microsoft = next((c for c in catalog["components"] if c["name"] == MICROSOFT_COMPONENT), {})
     notice = next((n for n in microsoft.get("notices", []) if n.get("path") == MICROSOFT_NOTICE), {})
@@ -108,6 +117,12 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
             or not any(f["path"] == MICROSOFT_NOTICE and f["sha256"] == notice["text"] for f in catalog["files"])
             or (evidence / MICROSOFT_NOTICE).read_bytes() != texts[notice["text"]].encode("utf-8")):
         raise ValueError("Missing or altered Microsoft Distributable Code notice binding")
+    for risk in risks:
+        components = [c for c in catalog["crates"] + catalog["components"] if c.get("accepted_risk") == risk["id"]]
+        if (not components or any(c.get("unresolved") for c in components)
+                or any(not any(n["text"] == risk["notice_sha256"] for n in c["notices"])
+                       for c in components)):
+            raise ValueError("Accepted licensing risk differs from its reviewed component terms")
     native = catalog["native_provenance"]
     runtime_policy = json.loads((root / "packaging/windows-runtime.json").read_text())
     recorded_policy = native["windows_crt"].get("dynamic_runtime_policy", {})
@@ -201,10 +216,16 @@ def materials(root=ROOT, evidence=EVIDENCE):
             sections.append("Scope: " + component["scope"] + "\n")
         if component.get("unresolved"):
             sections.append("UNRESOLVED: " + component["unresolved"] + "\n")
+        if component.get("accepted_risk"):
+            sections.append("MAINTAINER-ACCEPTED LICENSING RISK: " + component["accepted_risk"] + "\n")
         for notice in component["notices"]:
             sections.append(f"Notice {notice['text']}\nSource: {notice['origin']}\n")
     sections.append("\nUNRESOLVED RELEASE OBLIGATIONS\n")
     sections.extend(f"{item['id']}: {item['detail']}\n" for item in catalog["release_blockers"])
+    if catalog.get("accepted_licensing_risks"):
+        sections.append("\nMAINTAINER-ACCEPTED LICENSING RISKS (not verified legal compliance)\n")
+        sections.extend(f"{item['id']}: {item['detail']}\nConditions: {item['conditions']}\n"
+                        for item in catalog["accepted_licensing_risks"])
     sections.append("\nFULL NOTICE TEXTS (identified by SHA-256 above)\n")
     for key, text in sorted(texts.items()):
         sections.append(f"\n{'=' * 72}\nNotice {key}\n{'=' * 72}\n{text}\n")
@@ -316,11 +337,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.command == "check":
         inventory, _ = checked_catalog()
-        print(f"License inventory checked: {len(inventory['crates'])} locked crates; {len(inventory['release_blockers'])} unresolved release obligations")
+        print(f"License inventory checked: {len(inventory['crates'])} locked crates; "
+              f"{len(inventory['release_blockers'])} unresolved release obligations; "
+              f"{len(inventory.get('accepted_licensing_risks', []))} maintainer-accepted licensing risks")
     elif args.command == "prepare":
         print(prepare())
     elif args.command == "release-ready":
         require_release_ready()
+        print("License publication-policy checks passed; this is not a finding of legal compliance.")
     elif args.directory is None:
         parser.error("verify requires the installed/extracted notice directory")
     else:

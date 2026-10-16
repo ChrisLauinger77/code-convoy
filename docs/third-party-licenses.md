@@ -2,8 +2,8 @@
 
 CodeConvoy's original code and artwork remain **MIT licensed**. This audit adds
 notice/source delivery and omission checks; it does **not** certify complete
-compliance or authorize a release. The unresolved obligations below block
-publication. Application functionality, dependencies, tool pins, package formats
+compliance or authorize a release. Any catalogued unresolved obligation blocks
+publication; the Windows interpretation risk has a separate maintainer decision. Application functionality, dependencies, tool pins, package formats
 and the two-stage release architecture are unchanged.
 
 ## Inventory and evidence
@@ -55,7 +55,7 @@ or exhaustive inventory. The library lockfile is included in the source ZIP.
 | Compiler startup code | Source-built musl 1.2.5 CRT and checksum-identified GCC 14.2.0-r4 crtbeginS/crtendS objects. GCC source/Alpine recipe, copyright, GPLv3 and Runtime Library Exception 3.1 are included; the documented C compilation process supports the stated exception interpretation. |
 | NSIS 3.09 | Installer/uninstaller stub, standard plugins, artwork and LZMA decoder; original COPYING and full official source archive included. LZMA's CPL-1.0 linking exception does not relicense CodeConvoy. |
 | Windows replacement NSIS helpers | Original MIT shortcut helper and reduced MIT/Apache Tauri process/SemVer helper; locked source/build kit, dependency notices, binary pins and linker evidence. See the [validation record](nsis-helper-validation.md). |
-| Windows CRT / SDK support code | Original Windows-specific Microsoft Distributable Code notice included in the aggregate; runtime DLLs are supplied by users. Embedded-code grants, recipient/distributor conditions and hosted-build entitlement remain unresolved. |
+| Windows CRT / SDK support code | Original Windows-specific Microsoft Distributable Code notice included in the aggregate; runtime DLLs are supplied by users. Grant interpretation and recipient-agreement effectiveness remain uncertain under the maintainer-accepted 1.0.0 risk decision; conditions and operative terms remain applicable. |
 | Original icons, AppRun and application assets | Project MIT. No new third-party artwork added. |
 | Host libraries, Git and agent CLIs | Installed separately, not redistributed in these packages. Newly bundled ELF/PE/Mach-O code fails the inventory gate. |
 | linuxdeploy, appimagetool, cargo-packager | Build tools; their executables are not shipped. The emitted AppImage runtime and NSIS/template code are separately covered. |
@@ -113,17 +113,22 @@ omission or alteration. Its Microsoft-specific scope does not change CodeConvoy'
 MIT license. The [proposal and sufficiency review](license-blocker-evidence.md#8-proposed-microsoft-distributable-code-notice)
 records the Microsoft references, the comparison with CPython/yt-dlp and why
 notice delivery alone does not discharge the recipient/distributor requirements.
-No new installer agreement or automatic blocker removal is introduced.
+The [maintainer decision](windows-licensing-decision.md#implemented-maintainer-risk-decision--2026-10-16)
+adds the proposed operative terms to this same notice and records the remaining
+interpretation risk; it does not equate delivery with agreement or add a click-through.
 
-## Unresolved release obligations
+## Publication obligations and accepted risk
 
 These are tracked in `catalog.json:release_blockers`; `publish.py` checks them
 before creating even a draft release. Non-publishing candidate builds remain
-available for inspection. Removing a blocker requires new evidence and review.
+available for inspection. Known unmet obligations remain blockers. An explicit
+maintainer policy decision may accept an interpretation risk without declaring
+legal compliance; `accepted_licensing_risks` records that distinct disposition.
 
 The [follow-up evidence record](license-blocker-evidence.md) documents the deeper
 investigation, exact binary/debug identities, newly recovered sources/notices
-and remaining requirements. The Windows CRT blocker remains. The `dispatch` notice blocker
+and remaining requirements. The Windows CRT interpretation risk is accepted
+for 1.0.0 under the current documented decision. The `dispatch` notice blocker
 is resolved under the documented interpretation of its explicit MIT declaration:
 the bundle now preserves its original manifest/author metadata and reproduces
 the standard MIT permission, condition and disclaimer, without inventing a
@@ -164,18 +169,14 @@ clearance or authorization to publish is inferred.
    section of [the evidence record](license-blocker-evidence.md#5-windows-static-crt-unresolved)
    for actual observations, Microsoft references and the repeatable checks.
    The application remains MIT; that license does not grant rights to Microsoft
-   runtime code. The `windows-crt` publication guard remains active.
-   The [final risk-based review](license-blocker-evidence.md#9-final-risk-based-windows-review)
-   supersedes the earlier broad confirmation policy. Two material decisions
-   remain: the controlling grant for linked VC startup/support output from the
-   hosted build, and operative recipient terms with an agreement basis for both
-   formats and downstream redistribution. SDK directory coverage is supported.
-   Complete historical NSIS CRT reconstruction, an individual Microsoft letter
-   and a separate indemnity certificate are internal assurance requirements,
-   not independent blockers. Distributor undertakings remain applicable.
-   This is a review recommendation awaiting maintainer approval, not legal
-   clearance. Four of the five original blockers are resolved; Windows CRT
-   remains the sole publication blocker.
+   runtime code. The [implemented maintainer decision](windows-licensing-decision.md#implemented-maintainer-risk-decision--2026-10-16)
+   records `windows-crt` as an accepted interpretation risk, with Microsoft-only
+   operative recipient/distributor terms and pre-use notice. Permission and
+   agreement effectiveness are not conclusively established. The prior demand
+   for an express grant covering every VC startup object is no longer an
+   absolute internal blocker. Known mandatory conditions, distributor duties,
+   notice/source integrity and final-package checks remain enforced. This is
+   the sole accepted licensing risk; it does not waive another obligation.
    The current [dynamic CRT record](license-blocker-evidence.md#7-dynamic-crt-and-user-supplied-prerequisites)
    distinguishes user-supplied DLLs, embedded application/helper startup code,
    prebuilt NSIS inputs and hosted-toolchain entitlement.
@@ -281,5 +282,5 @@ the [readiness report](release-readiness.md#final-verification).
 
 At that earlier candidate revision, all five obligations blocked
 `licenses.py release-ready` and publication. The current unresolved-obligations
-section above records the remaining `windows-crt` blocker. No tag or public
+section above records the subsequent `windows-crt` risk decision. No tag or public
 release was created by that verification.

@@ -6,15 +6,13 @@ upstream binary. The replacement runtime, relinking demonstration and current
 disposition are recorded in [AppImage runtime validation](appimage-runtime-validation.md).
 The NSIS plugin section is also historical: the replacement and its source,
 license and binary evidence are in [NSIS helper validation](nsis-helper-validation.md).
-The Windows CRT obligation remains unresolved; the dispatch resolution is unchanged.
-The current risk classification is in [section 9](#9-final-risk-based-windows-review).
-The [maintainer release decision and licensing assessment](windows-licensing-decision.md)
-records the decision to proceed, the unchanged publication blocker, the precise
-grant mapping and draft recipient terms for its two open questions.
-It supersedes the broader Windows closure requirements in sections 5–8;
-their binary evidence and historical conclusions remain recorded.
-Publication remains blocked. This record distinguishes
-recovered evidence from missing evidence; it is not a legal clearance. The
+The current [implemented maintainer decision](windows-licensing-decision.md#implemented-maintainer-risk-decision--2026-10-16)
+classifies `windows-crt` as a maintainer-accepted licensing risk for 1.0.0 and
+includes Microsoft-component terms through the existing notice infrastructure.
+It supersedes earlier blocker recommendations, including section 9, without
+claiming verified permission or agreement. The binary evidence and historical
+conclusions below remain recorded. Other obligations and the failed Linux
+candidate are not waived. This record is not legal clearance. The
 project's MIT license is unchanged. PR checks, interim artifact evidence and the
 exact tested revisions are recorded in [PR 68](https://github.com/ChrisLauinger77/code-convoy/pull/68).
 Per maintainer direction, the next release candidate and final six-format

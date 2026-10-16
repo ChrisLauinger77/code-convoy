@@ -2,10 +2,15 @@
 
 ## Changes since 0.10.0
 
-These notes prepare the first stable release. **Publication is not approved:**
-third-party licensing obligations and required native checks remain open in the
-[readiness report](release-readiness.md). No release or RC tag is needed to build
-a candidate through the existing first-stage workflow.
+These notes cover the first stable release.
+
+**Windows Microsoft-component terms:** before using or redistributing the
+Windows downloads, review the [version 1.0.0 terms](https://github.com/ChrisLauinger77/code-convoy/blob/v1.0.0/third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt),
+also included in `THIRD-PARTY-NOTICES.txt`. Permission for the Microsoft portions
+is conditional on agreement to those terms; if you do not agree, do not use or
+redistribute those portions. CodeConvoy's independent MIT license is unchanged.
+Managed and downstream distributors must arrange recipient agreement; notice
+delivery or silent installation alone does not establish it.
 
 ### Repository and process safety
 
@@ -45,8 +50,7 @@ a candidate through the existing first-stage workflow.
 - Include offline third-party notices, an inventory, Rust library notices and
   available source archives in each package. The exact MPL `option-ext` source
   is included without changing CodeConvoy's MIT license. Final-package checks
-  reject missing notices and unreviewed native components. Publication remains
-  blocked on the documented unresolved licensing obligations.
+  reject missing notices and unreviewed native components.
 - Add first-use, contribution, security-reporting and compatibility guidance.
   GitHub private vulnerability reporting is enabled. Existing data/worktree
   ownership protections and explicit cleanup remain unchanged.

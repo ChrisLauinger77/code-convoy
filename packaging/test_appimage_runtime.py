@@ -121,12 +121,15 @@ class RuntimeInputs(unittest.TestCase):
                 self.assertEqual(hashlib.sha256(archive.read(item["file"])).hexdigest(), item["sha256"])
             self.assertEqual(archive.read("runtime-inputs.json"), (KIT / "runtime-inputs.json").read_bytes())
 
-    def test_publication_guards_do_not_change_after_compilation(self):
-        with self.assertRaisesRegex(ValueError, "release blockers remain"):
-            licenses.require_release_ready()
-        spec = json.loads((licenses.EVIDENCE / "catalog.json").read_text())
-        self.assertIn("windows-crt", {b["id"] for b in spec["release_blockers"]})
-        self.assertNotIn("dispatch-notice", {b["id"] for b in spec["release_blockers"]})
+    def test_accepted_risk_does_not_clear_runtime_obligations(self):
+        catalog, texts = licenses.checked_catalog()
+        blocked = copy.deepcopy(catalog)
+        blocked["release_blockers"].append({"id": "fixture-relink-gap", "detail": "Missing relink input"})
+        with patch.object(licenses, "checked_catalog", return_value=(blocked, texts)):
+            with self.assertRaisesRegex(ValueError, "fixture-relink-gap"):
+                licenses.require_release_ready()
+        self.assertEqual(catalog["release_blockers"], [])
+        self.assertEqual([r["id"] for r in catalog["accepted_licensing_risks"]], ["windows-crt"])
 
 
 class Repeatability(unittest.TestCase):

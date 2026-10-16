@@ -73,6 +73,14 @@ Published releases provide these native artifacts:
 
 ARM Linux/Windows packages are not currently published. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
 
+**Windows 1.0.0 Microsoft-component terms:** before using or redistributing
+Windows binaries, review the [component terms](third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt),
+also included in `THIRD-PARTY-NOTICES.txt`. Permission for the Microsoft portions
+is conditional on agreement to those terms; if you do not agree, do not use or
+redistribute those portions. CodeConvoy's independent MIT license is unchanged.
+Managed and downstream distributors must arrange recipient agreement; delivering
+a notice or running a silent installer alone does not establish it.
+
 Windows 1.0.0 candidates require Microsoft Visual C++ v14 Runtime with
 `VCRUNTIME140.dll` **14.51.36247.0 or newer**. Install the **x64** redistributable
 for the application and portable ZIP; the NSIS installer also requires **x86** for its process-management helper.
@@ -771,5 +779,5 @@ checks remain separate in the [platform matrix](docs/platform-validation.md).
 CodeConvoy's own code and original artwork are MIT licensed. See [LICENSE](LICENSE).
 Third-party components retain their own terms. Packages carry offline notices,
 an inventory and applicable source archives; see [third-party licensing](docs/third-party-licenses.md)
-for their locations and unresolved release obligations. The audit does not yet
-certify complete license compliance.
+for their locations, applicable obligations and the maintainer-accepted Windows
+licensing risk. The audit does not certify complete license compliance.

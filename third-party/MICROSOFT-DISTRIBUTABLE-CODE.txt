@@ -67,10 +67,13 @@ contractual responsibilities, not an indemnity imposed on ordinary end users
 by this notice. Applicable trade/export laws and controlling component terms
 must also be observed.
 
-This original notice summarizes the relevant distribution conditions. It is
-not a Microsoft license, a substitute for the controlling agreements, or a
-declaration that CodeConvoy's redistribution rights and recipient arrangements
-have been established. The windows-crt publication blocker remains active.
+The preceding summary is not a Microsoft license or a substitute for the
+controlling agreements. The operative Microsoft-component terms below state
+the distributor's conditions for the Microsoft portions. Their inclusion does
+not establish Microsoft's permission conclusively or prove recipient agreement.
+For CodeConvoy 1.0.0, the maintainer accepts the remaining grant-interpretation
+and agreement-effectiveness uncertainty as a documented licensing risk. No
+Microsoft condition or distributor undertaking is waived by that decision.
 
 Microsoft references
 --------------------
@@ -86,3 +89,76 @@ https://learn.microsoft.com/en-us/legal/windows-sdk/redist#static-lib-files
 The reviewed identities, evidence and remaining questions are recorded in
 THIRD-PARTY-INVENTORY.json and the CodeConvoy source repository's
 docs/license-blocker-evidence.md. These references were reviewed on 2026-10-16.
+
+
+CodeConvoy Windows - Microsoft component terms
+Version 1.0.0, 2026-10-16
+==============================================
+
+1. Scope and agreement
+
+These terms are offered by your CodeConvoy distributor for the Microsoft-owned
+startup and support portions incorporated in CodeConvoy.exe and
+codeconvoy_utils.dll, and Microsoft SDK portions in those files and
+CodeConvoyAppId.dll. They also cover any Microsoft startup/support portions
+present in the included NSIS setup, uninstaller or plugins, without asserting
+which of those files contains such code. These are the "Microsoft portions".
+These terms do not license separately obtained runtime DLLs. Microsoft's
+ownership is retained.
+
+Subject to its applicable Microsoft rights, your distributor permits use and
+copying of the Microsoft portions, and their redistribution as part of the
+supplied CodeConvoy binaries, on these conditions.
+By knowingly exercising those permissions after receiving these terms and a
+reasonable opportunity to review them, you agree to these terms. If you do not
+agree, these terms give you no permission to exercise those rights.
+
+CodeConvoy's independent code and artwork remain MIT licensed. These terms do
+not limit those rights or rights under other components' independent licenses.
+
+2. Conditions applying only to the Microsoft portions
+
+Keep them unmodified and within CodeConvoy's linked binaries, which provide
+substantial independent functionality; do not extract them for standalone
+distribution. Use and distribute them for the Microsoft Windows operating
+system platform only. Preserve copyright, patent and trademark notices and
+CodeConvoy's copyright notice. Do not imply Microsoft authorship or endorsement,
+or include these portions in malicious, deceptive or unlawful programs.
+
+Do not circumvent their technical limitations or reverse engineer, decompile
+or disassemble them, except as permitted by applicable law or required by
+applicable third-party license rights. Do not subject Microsoft source to
+terms requiring its disclosure/distribution or granting modification rights.
+Comply with applicable import, export, sanctions, destination, end-user and
+end-use restrictions. Nothing here authorizes unreleased, preview or debug
+Microsoft components or output prohibited by the applicable Microsoft license.
+
+3. Further distribution
+
+With each copy, preserve these terms and the applicable notices. Give downstream
+distributors and external end users a reasonable opportunity to review the
+Microsoft-component terms before exercising the permissions, and require their
+agreement to these terms or terms providing equivalent or greater protection
+for the Microsoft portions, including this downstream obligation. File delivery
+alone does not demonstrate agreement. You receive no rights here to distribute
+additional Microsoft software or libraries.
+
+4. Microsoft protections
+
+To the extent permitted by applicable law, the Microsoft portions are supplied
+without warranties, including implied merchantability, fitness and
+non-infringement warranties. Subject to section 5, recovery from Microsoft and
+its suppliers is limited to direct damages of no more than USD 5; consequential,
+lost-profit, special, indirect and incidental damages are excluded, regardless
+of the legal theory or prior knowledge of possible loss. These protections
+benefit Microsoft and its suppliers. This text imposes no indemnity on an
+ordinary end user; it does not discharge a distributor's separate undertakings
+to Microsoft under its applicable agreement.
+
+5. Rights preserved
+
+Nothing here excludes nonwaivable statutory or consumer rights, liability that
+applicable law does not permit to be limited, or rights under a warranty given
+directly by Microsoft. The restrictions above concern only the Microsoft
+portions. They do not restrict independent MIT-licensed CodeConvoy source or
+grant permission beyond the distributor's applicable Microsoft rights.
