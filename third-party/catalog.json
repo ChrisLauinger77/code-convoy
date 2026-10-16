@@ -16350,7 +16350,7 @@
     },
     {
       "path": "sources/codeconvoy-nsis-helpers-1.zip",
-      "sha256": "bef30a8876e918a127e7a39b4e963564ac7349fbf1b310cade5a1b769338ece4",
+      "sha256": "c6b92f996a935b456f2ee06d8b6a99ec31535fa29b5fd19373d05bf6cf08197c",
       "origin": "CodeConvoy original shortcut helper, modified upstream source kit and pinned build recipe; see nsis/README.txt"
     },
     {
@@ -17789,7 +17789,7 @@
         "packaging/nsis/LICENSE_MIT": "ef497d10d31e3a85c5c0a6bc598dcdfb5c717b6e085bbc0376f02618a8e31cb2",
         "packaging/nsis/UPSTREAM.json": "700f3e8a1e064e532c3689d94f95cf1ead4a1a73300dbc3d4bd41420257a7ad5",
         "packaging/nsis/helper-tests.nsi": "e0ccc344a3e159a6b1244b29c3596f5e49fae85d428d492d746a580b425502e8",
-        "packaging/nsis/installer.nsi": "2257950d1d385bb73b8425cce192727d1ade1bf9f6ddabc76e461771fa7ae79d",
+        "packaging/nsis/installer.nsi": "a9779144033793567a884b1f6121beeb7614d9569cd65bbc7c3033ebbf4826bc",
         "packaging/nsis/native-tests.ps1": "8ecb21d47a03062a90f871f570c4265c70c7c529f5dba835c6b2f1cec7985de8",
         "packaging/nsis/prerequisite-tests.nsi": "b402e81fd5cc3ef405c1161990d39bad261904dea7cf5ad808c87bd66cb3a12d",
         "packaging/nsis/prerequisite-tests.ps1": "092e5e0f8820b863c731305ef412a3d9d79a16585ec2407b105f8d0c0a9c1819",

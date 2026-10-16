@@ -141,6 +141,11 @@ class NsisHelpers(unittest.TestCase):
         text = text.replace('!macro CheckIfAppIsRunning PREFIX', '!macro CheckIfAppIsRunning')
         for suffix in (' ""', ' "un."'):
             text = text.replace('!insertmacro CheckIfAppIsRunning' + suffix, '!insertmacro CheckIfAppIsRunning')
+        text = text.replace('    ; Abort in a custom page would skip the page and continue installation.\n' +
+            '    ${IfNot} ${Silent}\n    ${AndIf} $PassiveMode != 1\n' +
+            '      MessageBox MB_OK|MB_ICONSTOP "Could not validate the installed version. Repair the x86 Visual C++ Runtime and retry."\n' +
+            '    ${EndIf}\n    SetErrorLevel 1603\n    Quit\n',
+            '    SetErrorLevel 1603\n    Abort "Could not validate the installed version. Repair the x86 Visual C++ Runtime and retry."\n')
         for message, extra in [('validate the installed version', '  ${AndIf} $R0 != "-1"\n'), ('check running processes', '')]:
             text = text.replace('  ${If} $R0 != "0"\n  ${AndIf} $R0 != "1"\n' + extra +
                 '    SetErrorLevel 1603\n    Abort "Could not ' + message + '. Repair the x86 Visual C++ Runtime and retry."\n  ${EndIf}\n', '')

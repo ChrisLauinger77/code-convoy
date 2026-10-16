@@ -332,10 +332,26 @@ library or object file. SHA-256:
 The catalog retains this reference separately from the earlier static audit.
 
 The application selects 34 distinct msvcrt.lib member names (including startup,
-TLS, exception/security support and allocation support); the utility's exact
-members are retained in its two-build evidence. These counts describe linker
+TLS, exception/security support and allocation support); the utility selects
+24 startup/support member names, retained in its two-build evidence. These counts describe linker
 selection, not a claim that all loaded objects survive optimization. Both use
 vcruntime.lib and ucrt.lib import libraries; neither selects libcmt.lib,
 libvcruntime.lib, libucrt.lib or libcpmt.lib. The application also uses SDK
 kernel32/ntdll/user32 import archives and the existing windows.0.52.0 import
 archive. AppId still uses SDK kernel32/ole32 imports and UUID data.
+
+The remaining prebuilt NSIS payloads have these direct imports. Their pinned
+plugin bytes are unchanged; these inspections establish imports, not complete
+static-library provenance.
+
+| Native component | Direct DLL imports |
+| --- | --- |
+| Setup stub and `uninstall.exe` | `ADVAPI32.dll`, `COMCTL32.dll`, `GDI32.dll`, `KERNEL32.dll`, `SHELL32.dll`, `USER32.dll`, `ole32.dll` |
+| `nsDialogs.dll` | `GDI32.dll`, `KERNEL32.dll`, `SHELL32.dll`, `USER32.dll`, `comdlg32.dll`, `ole32.dll` |
+| `StartMenu.dll` | `GDI32.dll`, `KERNEL32.dll`, `SHELL32.dll`, `USER32.dll`, `ole32.dll` |
+| `System.dll` | `KERNEL32.dll`, `USER32.dll`, `ole32.dll` |
+
+| Selected startup archive | Distinct loaded member names | SHA-256 |
+| --- | ---: | --- |
+| MSVC x64 `msvcrt.lib` | 34 | `d3f725923c6dd639bb5e5c52f3122c6fe084471f7ab0ef5f27d054f56b4d8a7e` |
+| MSVC x86 `msvcrt.lib` | 24 | `5b0626d52414ac346eda0c19d6c4417411a232505748b56abf866df9af2e38d9` |

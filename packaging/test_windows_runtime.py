@@ -67,6 +67,8 @@ class WindowsRuntime(unittest.TestCase):
         self.assertIn('Call un.RequireWindowsRuntime', uninstall)
         self.assertIn('!insertmacro CheckIfAppIsRunning "un."', text)
         self.assertEqual(text.count('StrCpy $R0 "invalid"'), 3)
+        version_page = text.split('Function PageReinstall\n')[1].split('FunctionEnd')[0]
+        self.assertIn('SetErrorLevel 1603\n    Quit', version_page)
         install = text.split('Section Install\n')[1].split('SectionEnd')[0]
         self.assertLess(install.index('CheckIfAppIsRunning'), install.index('SetOutPath'))
 

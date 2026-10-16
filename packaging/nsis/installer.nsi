@@ -187,8 +187,13 @@ Function PageReinstall
   ${If} $R0 != "0"
   ${AndIf} $R0 != "1"
   ${AndIf} $R0 != "-1"
+    ; Abort in a custom page would skip the page and continue installation.
+    ${IfNot} ${Silent}
+    ${AndIf} $PassiveMode != 1
+      MessageBox MB_OK|MB_ICONSTOP "Could not validate the installed version. Repair the x86 Visual C++ Runtime and retry."
+    ${EndIf}
     SetErrorLevel 1603
-    Abort "Could not validate the installed version. Repair the x86 Visual C++ Runtime and retry."
+    Quit
   ${EndIf}
   ; Reinstalling the same version
   ${If} $R0 == 0
