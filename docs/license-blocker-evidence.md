@@ -7,7 +7,11 @@ disposition are recorded in [AppImage runtime validation](appimage-runtime-valid
 The NSIS plugin section is also historical: the replacement and its source,
 license and binary evidence are in [NSIS helper validation](nsis-helper-validation.md).
 The Windows CRT obligation remains unresolved; the dispatch resolution is unchanged.
-The current post-PR-73 decision is in [section 6](#6-windows-crt-redistribution-assessment-after-pr-73).
+The current risk classification is in [section 9](#9-final-risk-based-windows-review).
+The [proposed final maintainer decision](windows-licensing-decision.md) supplies
+the precise grant mapping and draft recipient terms for its two open questions.
+It supersedes the broader Windows closure requirements in sections 5–8;
+their binary evidence and historical conclusions remain recorded.
 Publication remains blocked. This record distinguishes
 recovered evidence from missing evidence; it is not a legal clearance. The
 project's MIT license is unchanged. PR checks, interim artifact evidence and the
@@ -906,3 +910,144 @@ contain the new notice and are not claimed as validation of its delivery.
 The release compiler pin remains 1.99.0; the local Rust checks are source checks,
 not release-toolchain evidence. No commit, push, merge, tag or release was made
 for this proposal.
+
+## 9. Final risk-based Windows review
+
+Reviewed on 2026-10-16 against `56dfe55` (the committed notice implementation).
+**Recommendation for maintainer approval: retain `windows-crt`, narrowed to
+the two material decisions below.** The earlier requirement for external
+confirmation of every uncertainty was an internal assurance policy. It is not
+itself a Microsoft license condition. This review is a documented compliance
+assessment for a maintainer decision, not authoritative legal advice or a
+finding of infringement. No individual Microsoft approval letter or mandatory
+external legal opinion is required by the cited distribution clauses.
+
+### Scope and classification
+
+The current payload is the dynamic-CRT application and utility helper, the
+CRT-independent AppId helper, and the unchanged recorded NSIS binaries. Users
+supply the runtime DLLs; neither format bundles a runtime DLL or redistributable
+installer. Selected `msvcrt.lib` startup objects and SDK support/import/UUID
+objects still occur in linked output. Sections 7–8 and the existing native
+validation record supply these facts; no binary investigation was repeated.
+
+The terms and their document digests in section 8 remain the references for
+this review. A **satisfied obligation** below is limited to the stated element;
+it does not imply that every condition of the grant is satisfied.
+
+| Previously raised concern | Classification | Evidence and disposition |
+| --- | --- | --- |
+| Permission for the linked VC startup/support output and controlling component agreement | **Unresolved material obligation (G1)** | VS II.7(a)(i) ties object-code permission to the distributable list; II.6, “Licenses for Other Components / Microsoft Platforms,” gives component terms precedence. The selected VC inputs are known, but the record has not mapped their linked output to the controlling grant. Missing literal `msvcrt.lib` paths in the public list is not proof of prohibition. A supported interpretation covering this class of output is sufficient; a separate permission for each archive member is not required. |
+| SDK library coverage and linked-output form | **Satisfied obligation**, conditional grant | SDK 2(a)(i)–(ii) and the SDK REDIST static-LIB entry cover the recorded public `um`/`ucrt` directory families and linked output. No SDK library files are shipped separately. The directory grant is sufficient evidence for those inputs; more historical member-level licensing reconstruction is unnecessary. Recipient conditions remain G2. |
+| Hosted-build entitlement | **Confirmed obligation** to use an authorized toolchain; a separate approval certificate is an **internal assurance requirement** | The recorded non-prerelease Enterprise installation on GitHub's standard hosted image supports ordinary authorized build use. [GitHub's hosted-runner documentation](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) and [Actions terms](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions) describe that service. They do not themselves specify the VC output grant. Treat that mapping within G1, not as a separate demand to purchase a subscription or obtain a Microsoft/GitHub letter. No evidence here identifies trial or unauthorized use; `isPrerelease: false` alone is not proof of a full-use license. |
+| Recipient/downstream protection and agreement | **Unresolved material obligation (G2)** | VS II.7(b)(ii) and SDK 2(a)(ii) require protective recipient terms and agreement. Our notice expressly remains a summary and disclaims establishing a complete protective set or recipient arrangement. Its verified delivery establishes communication, not the missing contractual determination. Neither clause specifies a checkbox, signatures or per-install acceptance logs. |
+| Distributor defense/indemnity and continuing conduct | **Confirmed obligation**, not a separate evidence blocker | VS II.7(b)(iii) and SDK 2(a)(ii) place undertakings on the distributing licensee. These are continuing responsibilities under the applicable agreement, not a requirement to obtain an indemnity certificate, prove financial capacity or make ordinary end users indemnify Microsoft. The maintainer must account for them when adopting the distribution basis; automated tests cannot discharge them. The VS sole-Distributable-Code exception must not be imported into the SDK clause. |
+| Notice preservation, distinct MIT grant, substantive application and Windows-only distribution | **Satisfied obligation**, for observed materials | The canonical Microsoft notice and existing license material are delivered by the shared notice infrastructure; byte checks cover both formats. CodeConvoy supplies substantial independent functionality, preserves its own copyright/license, and does not present Microsoft code as MIT. No Microsoft source is relicensed, and these native payloads target Windows. The current release toolchain evidence supports the non-preview condition. This is not a guarantee about future downstream conduct. |
+| Separate VC runtime redistribution rights | **Satisfied obligation by avoiding that distribution** | No DLLs or redistributable installer are bundled. The separate runtime end-user agreement does not supply the grant for embedded startup code and need not be substituted for it. Runtime prerequisites remain a technical requirement. |
+| Complete historical CRT provenance for unchanged official NSIS binaries | **Internal assurance requirement**, absent a specific contrary fact | Existing source/license, binary identity and package evidence remain usable. Unknown historical inputs are a recorded residual uncertainty, not affirmative evidence of an unmet Microsoft condition. Reconstructing every input or proving total absence of Microsoft code is no longer a standalone closure requirement. A newly identified component with incompatible/missing rights would trigger a targeted review. This does not assert that NSIS's own license grants rights to Microsoft code. |
+
+### What the comparison projects support
+
+The pinned CPython and yt-dlp sources in section 8 support Windows-specific
+conditions, downstream redistribution guidance and separation from an
+application's open-source license. CPython makes an affirmative compliance
+statement subject to conditions; yt-dlp imports that notice. Their approach is
+useful drafting precedent, but yt-dlp is not independent evidence of a Microsoft
+grant and neither notice identifies CodeConvoy's governing agreement.
+
+Firefox's [license-page source](https://github.com/mozilla/gecko-dev/blob/master/toolkit/content/license.html#L5713-L5753),
+inspected on 2026-10-16, places conditional Microsoft use/distribution terms in
+the Windows-only proprietary-components section. Its listed runtime DLLs differ
+from CodeConvoy's embedded startup output. Mozilla's [binary-components policy](https://www.mozilla.org/en-US/foundation/licensing/binary-components/)
+explains the separation from open-source licensing. Firefox also has
+[Terms of Use](https://www.mozilla.org/en-US/about/legal/terms/firefox/)
+(effective 2026-09-16) addressing executable-code use; its notice is not evidence
+that Firefox operates without any agreement.
+
+These sources support a component-scoped conditional notice without imposing
+Microsoft terms on independent MIT source. They do not demonstrate a requirement
+for a separate Microsoft click-through. Equally, they cannot establish that
+CodeConvoy's current explicitly informational text supplies the required
+agreement. A notice-based arrangement is a possible solution to G2, subject to
+an actual determination of its protective wording and delivery; absence of
+recorded clicks is not itself a defect.
+
+### Two bounded decisions before publication
+
+1. **G1 — applicable VC output grant (legal/contractual, not missing binary
+   evidence).** Identify the agreement covering the recorded hosted build and
+   cite the provision or supported interpretation permitting its ordinary
+   linked VC startup/support output. [Microsoft's redistribution guidance](https://www.microsoft.com/licensing/guidance/Visual-Studio#how-certain-software-can-be-distributed-to-others-within-your-applications)
+   supports linked output from identified distributable libraries, but does not
+   independently identify these VC inputs. The smallest next action is a short
+   grant mapping using the existing terms and, if needed, only the accompanying
+   VC component license/additional-license record. There is no need for another
+   linker audit, exact-member permission letter or blanket Microsoft approval.
+   A maintainer can adopt a supported reading; merely declaring that risk is
+   acceptable does not create missing rights. If the component record still
+   leaves this specific question ambiguous, seek a focused interpretation of
+   it rather than restarting the audit.
+2. **G2 — recipient terms and agreement (contractual).** Establish the operative
+   Microsoft-component conditions and how recipients agree for installer,
+   silent deployment, ZIP and further redistribution. The minimum next action
+   is a bounded review/adoption of that component-only wording and its delivery
+   basis, considering the existing notice-based precedents. This may use a
+   notice-based or existing agreement; it does not require an installer feature.
+   Current MIT text and the summary's disclaimer do not establish that basis.
+   No change to CodeConvoy's MIT grant or speculative click-through is proposed.
+
+The active catalog detail now names G1 and G2 only. The component's unresolved
+marker, `release-ready` enforcement and all objective checks remain unchanged.
+The SDK grant, historical NSIS uncertainty and an extra indemnity confirmation
+are not additional independent blockers. Approval of this review adopts that
+narrower policy; it does not by itself answer G1/G2 or authorize publication.
+
+### Maintenance and validation boundary
+
+Reuse this assessment for unchanged components. Continue automated notice,
+source-bundle, binary identity, prerequisite and final-package verification.
+Review only affected questions when the MSVC/SDK or runner licensing channel
+changes, governing terms change, NSIS/helper inputs change, a new Microsoft
+payload is bundled, or recipient terms/distribution methods change. An unchanged
+application release does not require another historical audit or external
+confirmation. A concrete contradictory licensing fact also triggers review.
+
+The Microsoft notice, its text-map entry and hash remain unchanged. No CRT,
+helper, installer behavior, dependency, AppImage, workflow or package-format
+change is part of this review. The aggregate notice's blocker description and
+generated inventory reflect the narrower assessment; all full notice texts
+remain unchanged.
+
+Validation of this review on Linux with Rust 1.96.1:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features` | 621 passed; 10 intentionally ignored (nested child invocations not double-counted) |
+| `cargo build --release` | Passed |
+| `python3 -m unittest discover -s packaging -p 'test_*.py'` | 109 passed |
+| `python3 packaging/licenses.py check` | Passed: 457 locked crates; one unresolved release obligation |
+| `python3 packaging/licenses.py release-ready` | Failed as expected, exit 1, solely `windows-crt` |
+| `git diff --check` | Passed |
+| Material preservation | Canonical Microsoft notice occurs exactly once, byte-identical, in the generated aggregate; all 367 texts unchanged; source ZIP remains `eb61566a9f3e26f7c5d29482cabb22828a86cd6b985480e48faf196e77ba7b8f` |
+
+Only the blocker description and current Windows limitation text changed in the
+catalog. Native provenance, pinned hashes, component unresolved marker and all
+verification code/tests are unchanged. Rust test repositories again used
+`/var/tmp` because of the known `/tmp/.git` marker.
+
+**Technical candidate readiness:** the source and packaging checks support
+proceeding to a non-publishing 1.0.0 candidate validation after maintainer
+approval. The two-stage workflow permits that validation with the publication
+blocker active. This does not certify a final candidate: the earlier
+[dynamic-CRT CI run](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38923230998)
+predates the Microsoft notice. A candidate from the final reviewed commit must
+still verify that notice and updated inventory in actual packages using the
+pinned Rust 1.99.0 toolchain. Local Rust 1.96.1 checks are not that evidence.
+Existing manual Windows 10/11 desktop validation limitations remain recorded;
+no platform test, helper rebuild or workflow dispatch was repeated here.
+Publication readiness remains **no**, because G1/G2 are unresolved.
+
+Work stops at this review. No commit, push, tag, merge, publication or external
+licensing enquiry was performed. Maintainer approval is pending.

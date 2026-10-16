@@ -16425,7 +16425,7 @@
   "release_blockers": [
     {
       "id": "windows-crt",
-      "detail": "Dynamic application/helper imports require user-supplied Microsoft v14 runtimes. No separate runtime DLLs or installers are bundled. msvcrt startup and SDK support/import objects remain embedded. Confirm the applicable VC/SDK object-code grant, hosted-build entitlement, controlling component terms and recipient/distributor conditions for installer and ZIP. Remaining prebuilt NSIS CRT provenance is still unresolved. Successful dynamic linking does not establish legal approval."
+      "detail": "Final risk review: two material decisions remain for embedded Microsoft code: G1, a supported mapping of the controlling VC/hosted-build agreement to linked startup/support output; G2, operative protective recipient terms and an agreement basis for installer, ZIP and downstream redistribution. SDK path coverage is supported. Complete historical NSIS CRT reconstruction, an individual approval letter and a separate indemnity certificate are not independent blockers. No separate runtime DLLs or redistributable installers are bundled. See docs/license-blocker-evidence.md section 9; review recommendation awaits maintainer approval."
     }
   ],
   "windows_installer_plugins": {
@@ -17477,7 +17477,7 @@
       "terms": "https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/",
       "terms_docx_sha256": "dd2ab92a7c2bb90dd509e16572707a34b13bc0bc09b9199d115f25594ac39053",
       "redistribution_list": "https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution",
-      "limitation": "Earlier reference/application_link_audit fields retain historical static-build evidence. Current release binaries dynamically link VC/UCRT, with startup/support code still embedded. External runtime DLLs and installers are supplied by users. VC/SDK grant, hosted-build basis, recipient terms and prebuilt NSIS runtime provenance remain unresolved.",
+      "limitation": "Earlier reference/application_link_audit fields retain historical static-build evidence. Current release binaries dynamically link VC/UCRT, with startup/support code still embedded. External runtime DLLs and installers are supplied by users. The final risk review in docs/license-blocker-evidence.md section 9 narrows the material gaps to the controlling VC output grant and recipient terms/agreement. Conditional SDK path coverage is supported; historical prebuilt NSIS CRT provenance remains uncertain but is not an independent blocker without a specific contrary fact.",
       "sdk_license": "https://aka.ms/WinSDKLicenseURL",
       "sdk_license_rtf_sha256": "dd07eb178e00c6bba4148457fc00ff77cd4887eb521d504186fe59c9ec8bbe62",
       "sdk_package_license_reference": "https://www.nuget.org/packages/Microsoft.Windows.SDK.CPP/10.0.26100.1",

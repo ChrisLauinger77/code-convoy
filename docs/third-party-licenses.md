@@ -156,9 +156,7 @@ clearance or authorization to publish is inferred.
    `/VERBOSE:LIB` capture of the selected toolset/SDK libraries, hashes and
    archive members. Final installer/helper PE inspection and final package
    hashes are retained separately from the six candidate assets. The capture
-   is evidence, not redistribution approval. Applicable static-code grants,
-   hosted build entitlement, recipient conditions and any remaining installer
-   runtime obligations still require confirmation. The replacement helpers now
+   is evidence, not redistribution approval. The replacement helpers now
    have their own x86 linker evidence. The current distribution policy uses
    dynamic CRT linkage for the application and Rust helper, with user-supplied
    runtime DLLs; the original AppId helper remains CRT-independent. Historical
@@ -167,12 +165,17 @@ clearance or authorization to publish is inferred.
    for actual observations, Microsoft references and the repeatable checks.
    The application remains MIT; that license does not grant rights to Microsoft
    runtime code. The `windows-crt` publication guard remains active.
-   The [post-PR-73 assessment](license-blocker-evidence.md#6-windows-crt-redistribution-assessment-after-pr-73)
-   distinguishes the conditional SDK grant from the unconfirmed VC/hosted-build
-   entitlement and recipient agreements. It covers both replacement helpers
-   and the remaining NSIS binaries, and records the exact decisions needed
-   before closure. Four of the five original blockers are resolved; Windows
-   CRT is still the sole publication blocker. Dynamic linkage does not clear it.
+   The [final risk-based review](license-blocker-evidence.md#9-final-risk-based-windows-review)
+   supersedes the earlier broad confirmation policy. Two material decisions
+   remain: the controlling grant for linked VC startup/support output from the
+   hosted build, and operative recipient terms with an agreement basis for both
+   formats and downstream redistribution. SDK directory coverage is supported.
+   Complete historical NSIS CRT reconstruction, an individual Microsoft letter
+   and a separate indemnity certificate are internal assurance requirements,
+   not independent blockers. Distributor undertakings remain applicable.
+   This is a review recommendation awaiting maintainer approval, not legal
+   clearance. Four of the five original blockers are resolved; Windows CRT
+   remains the sole publication blocker.
    The current [dynamic CRT record](license-blocker-evidence.md#7-dynamic-crt-and-user-supplied-prerequisites)
    distinguishes user-supplied DLLs, embedded application/helper startup code,
    prebuilt NSIS inputs and hosted-toolchain entitlement.
@@ -185,6 +188,15 @@ Installer evidence: [NSIS licenses and linking exception](https://nsis.sourcefor
 [nsis-tauri-utils 0.2.1](https://github.com/tauri-apps/nsis-tauri-utils/tree/nsis_tauri_utils-v0.2.1).
 
 ## Updating the audit
+
+For unchanged Windows components, reuse the final review and retain automated
+notice, source and binary/package checks. Revisit affected licensing questions
+when toolchain/components, the runner licensing channel, governing terms,
+bundled Microsoft payloads or recipient/distribution arrangements change, or
+when a concrete contrary fact appears. Do not repeat the historical audit or
+require external confirmation for every application release. The following
+collection steps apply to changed inputs; they are not a requirement to reopen
+unchanged dependency decisions.
 
 1. Fetch locked sources and export `cargo metadata --locked --format-version 1`.
    `packaging/collect_licenses.py METADATA_JSON OUTPUT_JSON` collects candidate
