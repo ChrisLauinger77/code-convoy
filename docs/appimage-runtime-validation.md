@@ -241,3 +241,62 @@ Application code, Cargo manifests/lockfile, `packaging/AppRun`, Windows/macOS
 packaging code and the project's root MIT license are unchanged. The two
 unrelated blocker objects and dispatch evidence compare exactly with the base
 revision. Work stops here for maintainer review; no publication is authorized.
+
+
+## Candidate 38936028334: Ubuntu sandbox failure and correction
+
+The Linux job in [candidate 38936028334](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38936028334)
+failed while invoking the offline APK installation at source commit
+`56dfe5548a1a4594e9abe45b0ed83290b48507f4`. Its original `build.log` was not
+retained, so its exact contents cannot be recovered. Before changing the recipe,
+[diagnostic run 38940110607](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38940110607)
+checked out that exact commit, verified the same pinned inputs, and reproduced
+exit 1 on the same Ubuntu 24.04 runner image, `20261012.334.1`, with Python
+3.15.0 and bubblewrap 0.9.0. The uploaded `build.log` contains:
+
+```text
+bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
+```
+
+This is sandbox setup failure before APK executes. In the controlled
+[comparison run 38940484471](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38940484471),
+the unchanged build failed again. The kernel audit showed `/usr/bin/bwrap`
+transitioning from `unconfined` to `unprivileged_userns`, followed by AppArmor
+`DENIED` entries for `setpcap` and `net_admin`. This establishes a reproducible
+host-policy incompatibility, rather than a transient download or APK defect.
+It is the supported explanation for the original failure; the original missing
+log is not represented as recovered evidence.
+
+The correction adds an AppArmor profile for `/usr/bin/bwrap` on the ephemeral
+Linux candidate runner, allowing `userns` for that executable. The controlled
+run confirmed that `kernel.apparmor_restrict_unprivileged_userns` remained `1`.
+The build still runs as the ordinary runner user; the unchanged recipe retains
+`--unshare-all`, including network isolation, and offline APK installation.
+No host-wide AppArmor disablement, privileged build, source/toolchain update,
+recipe change or runtime pin change is needed.
+[Ubuntu's AppArmor documentation](https://documentation.ubuntu.com/security/security-features/privilege-restriction/apparmor/)
+describes explicit per-application permission for unprivileged user namespaces;
+[bubblewrap 0.9.0's loopback setup](https://github.com/containers/bubblewrap/blob/v0.9.0/network.c#L127-L170)
+identifies the failing operation. This runner prerequisite does not change the
+runtime's corresponding-source or recipient relinking materials.
+
+After applying only the host profile, that same controlled job completed two
+fresh builds. `runtime`, `runtime.full`, `runtime.map` and `audit.json` matched
+byte for byte, including the independently rebuilt local disk-backed output.
+The runtime SHA-256 remains
+`d5510b4077eb0e05083e576085326e76f3ffffb55ef81fd34e2a75279d80f912`;
+the audit matches the committed stock evidence. Both diagnostic runs retained
+their logs; the first did so despite the build step and job failing.
+The release workflow now uploads both primary and repeat-build `build.log`
+paths with `if: always()`, in a separate `linux-runtime-diagnostics` artifact.
+Missing logs before a build starts produce a warning, not a replacement failure.
+This artifact is excluded from `packages-*` aggregation and release assets.
+
+Local validation passed all 109 packaging tests, formatting, strict Clippy,
+all non-ignored Rust tests and the release build (installed Rust 1.96.1).
+The Ubuntu comparison used the release Python version and exact pinned runtime
+toolchain. The GLIBC 2.39 gate, LGPL relinking evidence, source pins and
+`windows-crt` publication guard are unchanged. No full replacement release
+candidate was dispatched: after review, start a fresh non-publishing candidate
+from the chosen final committed source, not a rerun of 38936028334. A successful
+runtime diagnostic is not a six-asset candidate or publication approval.
