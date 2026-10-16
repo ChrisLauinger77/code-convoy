@@ -84,7 +84,7 @@ still fail; a notification alone cannot establish success. This narrow exception
 uses installed-CLI evidence, not a claim that the private notification is a stable
 documented SDK contract. Future shape changes fail conservatively and may require
 a compatibility update. The real Auto and disabled-Auto tests both passed after
-this correction.
+this correction. The later background-turn correction is recorded below.
 
 Final local validation after the decoder and review fixes:
 
@@ -105,6 +105,254 @@ accepted trailing notification and rejected malformed/error variants. The full
 suite reran existing scheduler, worktree, cancellation and supervision regressions.
 No Windows/macOS build or native Auto UI verification was performed in this task.
 
+## Background-task follow-up results — 2026-10-15
+
+The maintainer supplied a raw stream from CodeConvoy **1.0.0
+(9f0801ee01af)**, Claude Code **2.1.300**, model **claude-opus-5-5**, Auto mode,
+and reported process exit zero. Both result records have the existing success
+shape. The incompatibility is the assumption that one invocation emits only one
+result, not a changed success-field schema or Auto permission rejection:
+
+1. A `task_started` event identifies a background Bash task and its `run_id`.
+2. A successful result with `result_index: 0` ends the initial turn.
+3. `task_updated`, `task_notification` and an empty `background_tasks_changed`
+   snapshot report completion of that same task.
+4. A second `system/init` with the same session precedes more tool activity.
+5. A successful result with `result_index: 1` has an `origin` identifying
+   `kind: task-notification`, `producer: session-task`, and that task's `runId`.
+
+The first `task_updated` after the initial result sets the old decoder's sticky
+protocol-error flag. The second result is parsed, but cannot clear that flag.
+The existing UI-render exception does not cover this sequence. The repeated init,
+recoverable tool error, failed MCP-server availability entry and rate-limit
+metadata are not terminal failures in the supplied trace.
+
+The current official [Python SDK ResultMessage documentation](https://code.claude.com/docs/en/agent-sdk/python#resultmessage)
+also describes results for injected background-task turns, their `origin`, and
+one result per notification when several notifications are answered together.
+The supplied print-mode trace establishes that this occurs with CodeConvoy's
+existing invocation too. This is observed with 2.1.300; no claim is made that this
+version introduced the behavior. CLI arguments and permission selection do not
+change.
+
+`tests/fixtures/claude-auto-background.jsonl` is a reduced, sanitized replay of
+that stream. It preserves the event order and correlation fields, both results,
+the repeated init, Auto/model/version metadata and a recovered tool failure.
+Repository paths, task/session/tool IDs, commands, outputs and prose are replaced;
+opaque signatures, account/plugin details and unrelated payloads are omitted.
+It contains no executable reproduction of the original task. The regression
+failed with the old decoder and passes with the fix, including byte-wise UTF-8
+input and an unterminated final JSON line.
+
+Completion now tracks background tasks within the Claude decoder only. A matching
+completed notification and same-session re-init authorize a follow-up; its result
+must identify the notified run and advance the result index by one. Each result
+independently passes the per-turn success checks. Pending tasks/answers and
+undrained queued turns prevent final success. Earlier failures, bad correlations,
+duplicates, explicit errors, invalid JSON and unconfirmed endings cannot be erased
+by a later success. Coalesced notifications require all attributed results in
+notification order; an empty
+zero-turn placeholder cannot finish the batch. Membership removal cannot clear an
+unanswered obligation.
+The existing UI-render exception remains allowed.
+Scheduler, cancellation, process supervision, Git/worktree handling, other
+backends, settings and CLI arguments are unchanged.
+
+Background membership can come from `task_started` with `is_backgrounded: true`,
+`task_updated` with `patch.is_backgrounded: true`, or a full
+`background_tasks_changed` snapshot with session/task/run IDs. Matching evidence
+is merged; a missing background-start bookend does not invalidate an authoritative
+membership snapshot. Snapshot order is independent of start/update bookends.
+Each observed run still requires a completed notification and attributed answer.
+An answered identity stays retained while still listed, so a lagging snapshot
+cannot reopen it; a later level that omits it releases that metadata. Empty levels
+never discharge missing notifications/results. Foreground-only tasks remain
+ordinary activity and consume no background tracking capacity.
+
+A resumed background task may reuse its `task_id` with a new `run_id`, including
+while the previous run's answer is still pending. Each outstanding run ID must be
+unique and retains its own notification/result obligation. Notifications still
+match the exact session/task/run identity; results must identify the notified run
+in notification order. Reusing a task ID cannot discharge a different run.
+
+Tracked background notifications must report `status: completed`. A `failed`,
+`killed`, `stopped` or other non-completed status permanently fails completion
+validation, even if Claude later handles it and emits a successful follow-up.
+Untracked notifications remain ordinary activity before the first result and
+during an authorized answer; while waiting after a result, they fail correlation.
+
+Every result may omit `queued_turn_count` or report a nonnegative integer. A
+positive count keeps completion pending until a later result explicitly reports
+zero; omitting the field cannot clear an earlier positive count. Counts do not
+authorize untracked turns or replace task/session/run/index correlation. An
+ordinary single-turn result still needs an absent or zero count to complete;
+malformed counts fail permanently, even if a later result reports zero. An
+initial result may omit `result_index` for single-turn compatibility, but a
+continuation then fails because consecutive indices cannot
+be established. The completion diagnostic points to these correlation fields in
+Raw output.
+
+Deterministic regressions cover every truncated prefix of the fixture, missing
+membership evidence/notification/init/result, altered session/task/run/origin/index fields,
+failed/interrupted/malformed earlier and final results, nonzero exit, explicit
+errors during either turn, unsolicited trailing output, sequential and coalesced
+notifications, early notifications, and correlation-memory bounds. Existing
+failure, permission, persistence and buffer-limit tests remain enabled.
+Review follow-up tests also pin untracked-notification handling at each turn
+boundary, sticky failed/killed/stopped notifications before and after the first
+result, ordinary-result queued-turn validation, and the missing-index diagnostic.
+
+Compatibility limits: this recognizes the observed `session-task` continuation
+shape, not arbitrary injected turns, peer messages or future result origins.
+Continuation support requires the observed IDs, recognized background membership
+evidence, repeated init and result indices; older/different continuation shapes
+fail conservatively. Missing IDs are not guessed. Correlation is bounded to 128
+retained run identities, including answered identities still listed by the SDK,
+and 256 bytes per stored identifier; later events
+remain subject to the existing 1 MiB record limit. Notifications received before
+the initial result also require an attributed follow-up; an initial result alone
+cannot prove they were answered. These bounds do not change process ownership or
+cancellation.
+No new authenticated reproduction of the original long-running task or native
+Windows/macOS Claude execution is claimed.
+
+Final local verification on Linux after the implementation and error-guard tests:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features` | 608 passed, 0 failed, 10 opt-in tests ignored (excluding seven nested fixture-test summaries) |
+| `cargo build --release` | Passed on Linux |
+| `cargo test --all-features --test claude -- --include-ignored --nocapture --test-threads=1` | All 26 passed, including installed Claude 2.1.300 help/version and authenticated Auto/disabled-Auto checks |
+
+The authenticated checks used existing CLI authentication and disposable Git
+repositories. Auto wrote the requested fixture file and reported `auto`; the
+local disabled-Auto setting reported `default`, with the existing warning retained.
+These are fresh ordinary single-turn checks, not an authenticated reproduction
+of the background-task sequence. That sequence is verified by the supplied trace
+and deterministic replay. No account authentication files were read or edited.
+
+PR #70 review follow-up verification on macOS, 2026-10-16:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features -- --test-threads=1` | 616 passed, 0 failed, 9 opt-in tests ignored (excluding eight nested fixture-test summaries) |
+| `cargo build --release` | Passed |
+
+The sandboxed suite could not create a temporary Unix socket in an existing
+storage test; the final suite ran outside that sandbox. A parallel run then hit
+the fixture startup timeout in
+`cancellation_racing_leader_failure_stops_descendants_but_preserves_a_peer`;
+that test passed alone and in the complete serial run. The review follow-up
+changes diagnostics, documentation, comments and tests, not completion rules.
+Installed/authenticated Claude probes were not rerun. The declared minimum Rust
+version is 1.95, which supports the existing `Option::is_none_or` call.
+
+### Queued follow-up correction — 2026-10-16
+
+The next review identified that a successful intermediate result may report
+`queued_turn_count > 0` when another notification arrives during an answer. The
+[official TypeScript SDK 0.3.243 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03243)
+defines this optional field as the number of queued sends still pending when the
+result was produced, indicating another turn and result will follow. The previous
+decoder incorrectly made a positive count a permanent protocol failure. The
+Claude-local continuation state now retains that pending obligation until an
+explicit zero, while every result still passes the independent success and
+correlation checks. Malformed fields and earlier failures remain sticky.
+
+A fixture-derived regression adds a second tracked notification during the first
+follow-up, then a result with count one and a correlated final result with count
+zero. It failed before the fix and passes afterward. Three new tests cover every
+truncated prefix, initial queued counts, sequential and coalesced answers,
+malformed counts on every result, missing/positive terminal counts, omission
+after an earlier positive count, missing task starts/notifications, invalid
+session/run/index fields and earlier failed/interrupted results. The new sequence
+is synthetic protocol coverage, not an authenticated reproduction. No CLI flags,
+permissions, other backends, shared process handling or scheduling changed.
+
+Verification on macOS after the queued-turn correction:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features -- --test-threads=1` | 619 passed, 0 failed, 9 opt-in tests ignored (excluding eight nested fixture-test summaries) |
+| `cargo build --release` | Passed |
+
+The suite used the same serial execution and local Unix socket access described
+above. Installed/authenticated Claude probes and native Windows/Linux execution
+were not repeated.
+
+### Resumed background-task identity correction — 2026-10-16
+
+The next review identified an overly strict task-ID uniqueness check. The
+[official TypeScript SDK 0.3.292 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03292)
+describes stable task IDs across resume and separate run IDs to distinguish the
+runs. The decoder now rejects duplicate outstanding run IDs while permitting a
+new run for an already tracked task. Exact notification/result correlation,
+queued-turn handling and sticky failures are unchanged.
+
+A synthetic fixture-derived sequence starts a new run with the same task ID while
+Claude answers the previous run's notification. It failed before the fix and
+passes afterward. Two new tests cover notifications before/after the prior
+result, every event-prefix truncation, duplicate run IDs with matching/different
+task IDs, missing/mismatched/failed notifications and cross-run/out-of-order
+results. The existing 128/129-run boundary test also covers repeated task IDs.
+This is decoder validation, not a new authenticated reproduction or a CodeConvoy
+session-resume feature. CLI arguments and process management are unchanged.
+
+Verification on macOS after the resumed-run correction:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features -- --test-threads=1` | 621 passed, 0 failed, 9 opt-in tests ignored (excluding eight nested fixture-test summaries) |
+| `cargo build --release` | Passed |
+
+The suite used the same serial execution and local Unix socket access described
+above. Installed/authenticated Claude probes and native Windows/Linux execution
+were not repeated.
+
+### Foreground promotion and membership ordering — 2026-10-16
+
+The next review identified foreground tasks that later become background work.
+The published [SDK 0.3.292 declarations](https://unpkg.com/@anthropic-ai/claude-agent-sdk@0.3.292/sdk.d.ts)
+document `patch.is_backgrounded` and a full background-membership level whose
+ordering is independent of the start/update bookends. The decoder now merges
+these membership sources by exact session/task/run identity, while keeping
+completion obligations independent of membership removal. Pending, notified and
+answered states prevent repeated levels from duplicating obligations or reopening
+an answer that membership has not yet removed. Repeated background starts for a
+retained run and conflicting identities still fail; the same 128-entry/256-byte
+bounds apply.
+
+A synthetic foreground-to-background regression failed before this correction
+and passes afterward. Four tests in `tests/claude/background_membership.rs` cover
+promotion before/after the first result, event-prefix truncation, foreground-only
+volume, missing start bookends with authoritative snapshots, repeated and lagging
+levels, retained-metadata release across 130 resumed runs, missing completion and
+malformed/error-bearing evidence. The 128/129-run tests now exercise both level
+and start-only streams, including reused task IDs. The captured fixture is
+unchanged. No authenticated reproduction, new dependency, CLI flag, permission,
+shared process, scheduler, persistence or other-backend change is claimed.
+
+Verification on macOS after the membership correction:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features -- --test-threads=1` | 625 passed, 0 failed, 9 opt-in tests ignored (excluding eight nested fixture-test summaries) |
+| `cargo build --release` | Passed |
+
+The suite used the same serial execution and local Unix socket access described
+above. Installed/authenticated Claude probes and native Windows/Linux execution
+were not repeated.
+
 ## Contract evidence
 
 The implementation was checked against current official sources, not remembered flags:
@@ -118,6 +366,9 @@ The implementation was checked against current official sources, not remembered 
 | [Stop reasons](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons) | Explicit final token/context truncation and paused turns must not appear complete |
 | [Official SDK message parser](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/message_parser.py) | Actual assistant-error and result-field parsing |
 | [Official SDK CLI transport](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/transport/subprocess_cli.py) | `_DEFAULT_MAX_BUFFER_SIZE = 1024 * 1024`, used to justify the backend's record bound |
+| [TypeScript SDK 0.3.243 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03243) | A positive `queued_turn_count` means queued sends remain and another turn/result will follow, not that the completed turn failed |
+| [TypeScript SDK 0.3.292 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03292) | Task IDs persist across resume; run IDs distinguish each task's runs |
+| [Published SDK 0.3.292 declarations](https://unpkg.com/@anthropic-ai/claude-agent-sdk@0.3.292/sdk.d.ts) | Foreground promotion via `task_updated.patch.is_backgrounded`; full background membership independent of edge ordering; matching run IDs on each event source |
 
 These are rolling documentation/source references inspected on the recorded date, not a claim about an installed Claude release. `tests/fixtures/claude-help-contract.txt` is explicitly synthetic. The shared fixture's version string is also synthetic and only tests display; no Claude semantic-version parser or minimum-version claim is made. Check CLI cannot prove account/model entitlement or validate every hidden flag on an older binary. A rejected invocation fails visibly.
 

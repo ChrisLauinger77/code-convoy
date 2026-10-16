@@ -1,0 +1,21 @@
+{"type":"system","subtype":"ui_panes","panes":[],"session_id":"fixture"}
+{"type":"system","subtype":"init","cwd":"/fixture/repository","session_id":"fixture","model":"claude-opus-5-5","permissionMode":"auto","claude_code_version":"2.1.300","mcp_servers":[{"name":"unavailable-fixture","status":"failed"}]}
+{"type":"assistant","session_id":"fixture","message":{"content":[{"type":"tool_use","id":"background-tool","name":"Bash","input":{"command":"fixture-background-command","run_in_background":true}}]}}
+{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"background-task","run_id":"background-run","task_type":"local_bash","description":"Disposable background fixture"}],"session_id":"fixture"}
+{"type":"system","subtype":"task_started","task_id":"background-task","run_id":"background-run","tool_use_id":"background-tool","is_backgrounded":true,"task_type":"local_bash","session_id":"fixture"}
+{"type":"user","session_id":"fixture","message":{"content":[{"type":"tool_result","tool_use_id":"background-tool","content":"Command running in background.","is_error":false}]},"tool_use_result":{"stdout":"","stderr":"","interrupted":false,"backgroundTaskId":"background-task"}}
+{"type":"assistant","session_id":"fixture","message":{"content":[{"type":"text","text":"Waiting for the background fixture."}]}}
+{"type":"rate_limit_event","session_id":"fixture","rate_limit_info":{"status":"allowed","overageStatus":"rejected","overageDisabledReason":"org_level_disabled"}}
+{"type":"result","subtype":"success","is_error":false,"session_id":"fixture","result":"First turn finished; background work continues.","duration_ms":20,"duration_api_ms":10,"num_turns":1,"stop_reason":"end_turn","terminal_reason":"completed","api_error_status":null,"permission_denials":[],"queued_turn_count":0,"result_index":0}
+{"type":"system","subtype":"task_updated","task_id":"background-task","run_id":"background-run","patch":{"status":"completed","end_time":100},"session_id":"fixture"}
+{"type":"system","subtype":"task_notification","task_id":"background-task","run_id":"background-run","tool_use_id":"background-tool","status":"completed","output_file":"/fixture/background.output","summary":"Background command completed (exit code 0)","session_id":"fixture"}
+{"type":"system","subtype":"background_tasks_changed","tasks":[],"session_id":"fixture"}
+{"type":"system","subtype":"init","cwd":"/fixture/repository","session_id":"fixture","model":"claude-opus-5-5","permissionMode":"auto","claude_code_version":"2.1.300"}
+{"type":"assistant","session_id":"fixture","message":{"content":[{"type":"tool_use","id":"follow-up-tool","name":"Bash","input":{"command":"fixture-read-output"}}]}}
+{"type":"user","session_id":"fixture","message":{"content":[{"type":"tool_result","tool_use_id":"follow-up-tool","content":"Recoverable tool failure.","is_error":true}]}}
+{"type":"assistant","session_id":"fixture","message":{"content":[{"type":"tool_use","id":"retry-tool","name":"Bash","input":{"command":"fixture-retry"}}]}}
+{"type":"system","subtype":"task_started","task_id":"foreground-task","run_id":"foreground-run","tool_use_id":"retry-tool","is_backgrounded":false,"session_id":"fixture"}
+{"type":"system","subtype":"task_notification","task_id":"foreground-task","run_id":"foreground-run","tool_use_id":"retry-tool","status":"completed","session_id":"fixture"}
+{"type":"user","session_id":"fixture","message":{"content":[{"type":"tool_result","tool_use_id":"retry-tool","content":"Fixture checks passed.","is_error":false}]}}
+{"type":"assistant","session_id":"fixture","message":{"content":[{"type":"text","text":"Grüße 🌍 — background fixture verified."}]}}
+{"type":"result","subtype":"success","is_error":false,"session_id":"fixture","result":"Grüße 🌍 — background fixture verified.","duration_ms":30,"duration_api_ms":15,"num_turns":2,"stop_reason":"end_turn","terminal_reason":"completed","api_error_status":null,"permission_denials":[],"origin":{"kind":"task-notification","producer":"session-task","runId":"background-run"},"queued_turn_count":0,"result_index":1}

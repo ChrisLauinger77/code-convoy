@@ -8,6 +8,9 @@ use codeconvoy::{
 use serde_json::{Value, json};
 use std::{path::Path, process::ExitStatus};
 
+#[path = "claude/background_membership.rs"]
+mod background_membership;
+
 fn task() -> TaskConfig {
     TaskConfig {
         agent: AgentId::Claude,
@@ -518,6 +521,685 @@ fn errors_malformed_incomplete_duplicate_and_post_result_records_fail_closed() {
         output.push(Stream::Stdout, &line(&success()));
         output.push(Stream::Stdout, &line(&later));
         assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+    }
+}
+
+#[test]
+fn observed_auto_background_follow_up_finishes_with_a_second_success_result() {
+    let fixture = include_str!("fixtures/claude-auto-background.jsonl").trim_end();
+    for chunk_size in [1, 37, fixture.len()] {
+        let mut output = auto_output();
+        let mut decoded = String::new();
+        for chunk in fixture.as_bytes().chunks(chunk_size) {
+            decoded.push_str(&output.push(Stream::Stdout, chunk));
+        }
+        decoded.push_str(&output.finish());
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+        assert_eq!(output.interpret(status(1)).0, JobStatus::Failed);
+        assert_eq!(decoded.matches("[Claude result]\n").count(), 2);
+        assert!(decoded.contains("Grüße 🌍 — background fixture verified."));
+        assert!(decoded.contains("\"runId\":\"background-run\""));
+        assert!(
+            output
+                .take_activity()
+                .unwrap()
+                .contains("permission mode: auto")
+        );
+    }
+}
+
+fn background_events() -> Vec<Value> {
+    include_str!("fixtures/claude-auto-background.jsonl")
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+fn background_outcome(events: &[Value]) -> JobStatus {
+    let mut output = auto_output();
+    for event in events {
+        output.push(Stream::Stdout, &line(event));
+    }
+    output.finish();
+    output.interpret(status(0)).0
+}
+
+fn queued_background_events() -> Vec<Value> {
+    let original = background_events();
+    let mut second_start = original[4].clone();
+    second_start["task_id"] = json!("second-task");
+    second_start["run_id"] = json!("second-run");
+    let mut second_notification = original[10].clone();
+    second_notification["task_id"] = json!("second-task");
+    second_notification["run_id"] = json!("second-run");
+    let mut first_result = original[20].clone();
+    first_result["queued_turn_count"] = json!(1);
+    let mut second_result = original[20].clone();
+    second_result["origin"]["runId"] = json!("second-run");
+    second_result["result_index"] = json!(2);
+
+    let mut events = original[..8].to_vec();
+    events.push(second_start);
+    events.extend_from_slice(&original[8..14]);
+    // The second task finishes while Claude is answering the first notification.
+    events.push(second_notification);
+    events.extend_from_slice(&original[14..20]);
+    events.push(first_result);
+    events.push(original[12].clone());
+    events.push(original[19].clone());
+    events.push(second_result);
+    events
+}
+
+fn resumed_background_events() -> Vec<Value> {
+    let mut events = queued_background_events();
+    let start = events
+        .iter()
+        .position(|event| event["subtype"] == "task_started" && event["task_id"] == "second-task")
+        .unwrap();
+    let start = events.remove(start);
+    let notification = events
+        .iter()
+        .position(|event| {
+            event["subtype"] == "task_notification" && event["task_id"] == "second-task"
+        })
+        .unwrap();
+    // Start the resumed run while answering the prior run's notification.
+    events.insert(notification, start);
+    for event in &mut events {
+        if event["task_id"] == "second-task" {
+            event["task_id"] = json!("background-task");
+        }
+    }
+    events
+}
+
+#[test]
+fn resumed_background_runs_keep_independent_notifications_and_results() {
+    let events = resumed_background_events();
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+    for end in 0..events.len() {
+        assert_eq!(
+            background_outcome(&events[..end]),
+            JobStatus::Failed,
+            "prefix {end}"
+        );
+    }
+
+    let mut later_notification = events.clone();
+    let notification = later_notification
+        .iter()
+        .position(|event| {
+            event["subtype"] == "task_notification" && event["run_id"] == "second-run"
+        })
+        .unwrap();
+    let notification = later_notification.remove(notification);
+    let first_result = later_notification
+        .iter()
+        .position(|event| event["result_index"] == 1)
+        .unwrap();
+    later_notification.insert(first_result + 1, notification);
+    assert_eq!(
+        background_outcome(&later_notification),
+        JobStatus::Succeeded
+    );
+}
+
+#[test]
+fn resumed_background_runs_reject_duplicate_runs_and_cross_run_completion() {
+    let original = resumed_background_events();
+    for reuse_task_id in [false, true] {
+        let mut duplicate = original.clone();
+        for event in &mut duplicate {
+            if event["run_id"] == "second-run" {
+                event["run_id"] = json!("background-run");
+                if !reuse_task_id {
+                    event["task_id"] = json!("different-task");
+                }
+            }
+        }
+        duplicate.last_mut().unwrap()["origin"]["runId"] = json!("background-run");
+        assert_eq!(
+            background_outcome(&duplicate),
+            JobStatus::Failed,
+            "duplicate run with reused task ID: {reuse_task_id}"
+        );
+    }
+    for (key, value) in [
+        ("task_id", json!("unknown-task")),
+        ("run_id", json!("unknown-run")),
+        ("session_id", json!("unknown-session")),
+        ("status", json!("failed")),
+    ] {
+        let mut events = original.clone();
+        let notification = events
+            .iter_mut()
+            .find(|event| {
+                event["subtype"] == "task_notification" && event["run_id"] == "second-run"
+            })
+            .unwrap();
+        notification[key] = value;
+        assert_eq!(background_outcome(&events), JobStatus::Failed, "{key}");
+    }
+    let missing_notification: Vec<_> = original
+        .iter()
+        .filter(|event| {
+            !(event["subtype"] == "task_notification" && event["run_id"] == "second-run")
+        })
+        .cloned()
+        .collect();
+    assert_eq!(background_outcome(&missing_notification), JobStatus::Failed);
+
+    // The old run's answer cannot also answer the resumed run, even though
+    // their task IDs match, and attributed results must keep notification order.
+    let mut old_result = original.clone();
+    old_result.last_mut().unwrap()["origin"]["runId"] = json!("background-run");
+    assert_eq!(background_outcome(&old_result), JobStatus::Failed);
+    let mut out_of_order = original.clone();
+    let first_result = out_of_order
+        .iter_mut()
+        .find(|event| event["result_index"] == 1)
+        .unwrap();
+    first_result["origin"]["runId"] = json!("second-run");
+    out_of_order.last_mut().unwrap()["origin"]["runId"] = json!("background-run");
+    assert_eq!(background_outcome(&out_of_order), JobStatus::Failed);
+}
+
+#[test]
+fn queued_background_notifications_drain_across_correlated_results() {
+    let events = queued_background_events();
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+    for end in 0..events.len() {
+        assert_eq!(
+            background_outcome(&events[..end]),
+            JobStatus::Failed,
+            "prefix {end}"
+        );
+    }
+    let mut initially_queued = events.clone();
+    let initial = initially_queued
+        .iter_mut()
+        .find(|event| event["result_index"] == 0)
+        .unwrap();
+    initial["queued_turn_count"] = json!(1);
+    assert_eq!(background_outcome(&initially_queued), JobStatus::Succeeded);
+
+    // A coalesced batch can have a queued, zero-turn intermediate placeholder;
+    // the final attributed result must still contain the completed answer.
+    let first_result = events
+        .iter()
+        .position(|event| event["result_index"] == 1)
+        .unwrap();
+    let mut coalesced = events[..=first_result].to_vec();
+    coalesced[first_result]["num_turns"] = json!(0);
+    coalesced[first_result]["result"] = json!("");
+    coalesced.push(events.last().unwrap().clone());
+    assert_eq!(background_outcome(&coalesced), JobStatus::Succeeded);
+}
+
+#[test]
+fn queued_results_require_valid_counts_and_an_explicit_drain() {
+    let original = queued_background_events();
+    for result_index in 0..=2 {
+        for count in [json!(-1), json!(null), json!("0"), json!(false), json!(0.5)] {
+            let mut events = original.clone();
+            let result = events
+                .iter_mut()
+                .find(|event| event["result_index"] == result_index)
+                .unwrap();
+            result["queued_turn_count"] = count.clone();
+            assert_eq!(
+                background_outcome(&events),
+                JobStatus::Failed,
+                "result {result_index} count {count}"
+            );
+        }
+    }
+    let mut missing_zero = original.clone();
+    missing_zero
+        .last_mut()
+        .unwrap()
+        .as_object_mut()
+        .unwrap()
+        .remove("queued_turn_count");
+    assert_eq!(background_outcome(&missing_zero), JobStatus::Failed);
+    let mut positive_final = original.clone();
+    positive_final.last_mut().unwrap()["queued_turn_count"] = json!(1);
+    assert_eq!(background_outcome(&positive_final), JobStatus::Failed);
+
+    // Optional fields remain compatible, but cannot silently erase a count
+    // reported by an earlier result.
+    let initial = missing_zero
+        .iter_mut()
+        .find(|event| event["result_index"] == 0)
+        .unwrap();
+    initial["queued_turn_count"] = json!(1);
+    let intermediate = missing_zero
+        .iter_mut()
+        .find(|event| event["result_index"] == 1)
+        .unwrap();
+    intermediate
+        .as_object_mut()
+        .unwrap()
+        .remove("queued_turn_count");
+    assert_eq!(background_outcome(&missing_zero), JobStatus::Failed);
+    missing_zero.last_mut().unwrap()["queued_turn_count"] = json!(0);
+    assert_eq!(background_outcome(&missing_zero), JobStatus::Succeeded);
+}
+
+#[test]
+fn queued_counts_cannot_authorize_uncorrelated_turns_or_hide_failures() {
+    let original = queued_background_events();
+    for subtype in ["task_started", "task_notification"] {
+        let events: Vec<_> = original
+            .iter()
+            .filter(|event| !(event["task_id"] == "second-task" && event["subtype"] == subtype))
+            .cloned()
+            .collect();
+        assert_eq!(background_outcome(&events), JobStatus::Failed, "{subtype}");
+    }
+    for result_index in 0..=2 {
+        for (pointer, value) in [
+            ("/is_error", json!(true)),
+            ("/stop_reason", json!("max_tokens")),
+            ("/session_id", json!("unrelated")),
+            ("/result_index", json!(9)),
+        ] {
+            let mut events = original.clone();
+            let result = events
+                .iter_mut()
+                .find(|event| event["result_index"] == result_index)
+                .unwrap();
+            *result.pointer_mut(pointer).unwrap() = value;
+            assert_eq!(
+                background_outcome(&events),
+                JobStatus::Failed,
+                "result {result_index} {pointer}"
+            );
+        }
+    }
+    let mut unrelated = original.clone();
+    unrelated.last_mut().unwrap()["origin"]["runId"] = json!("unrelated");
+    assert_eq!(background_outcome(&unrelated), JobStatus::Failed);
+}
+
+#[test]
+fn untracked_task_notifications_are_activity_until_a_result_requires_correlation() {
+    let notification = json!({"type":"system", "subtype":"task_notification",
+        "task_id":"untracked-task", "run_id":"untracked-run",
+        "session_id":"fixture", "status":"completed"});
+    let mut output = Claude.output();
+    output.push(Stream::Stdout, &line(&notification));
+    output.push(Stream::Stdout, &line(&success()));
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+    output.push(Stream::Stdout, &line(&notification));
+    output.finish();
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+
+    let original = background_events();
+    // An unrelated notification is also ordinary activity during the answer,
+    // but cannot authorize another turn while waiting after a result.
+    for (index, expected) in [
+        (8, JobStatus::Succeeded),
+        (9, JobStatus::Failed),
+        (12, JobStatus::Failed),
+        (13, JobStatus::Succeeded),
+        (21, JobStatus::Failed),
+    ] {
+        let mut events = original.clone();
+        events.insert(index, notification.clone());
+        assert_eq!(background_outcome(&events), expected, "event {index}");
+    }
+}
+
+#[test]
+fn failed_tracked_notifications_cannot_be_repaired_by_successful_follow_up_results() {
+    let original = background_events();
+    for status in ["completed", "failed", "killed", "stopped"] {
+        for before_result in [true, false] {
+            let mut notification = original[10].clone();
+            notification["status"] = json!(status);
+            let mut events = original[..8].to_vec();
+            events.extend(if before_result {
+                [notification, original[8].clone()]
+            } else {
+                [original[8].clone(), notification]
+            });
+            events.extend_from_slice(&original[12..]);
+            assert_eq!(
+                background_outcome(&events),
+                if status == "completed" {
+                    JobStatus::Succeeded
+                } else {
+                    JobStatus::Failed
+                },
+                "{status} notification before initial result: {before_result}"
+            );
+        }
+    }
+}
+
+#[test]
+fn single_turn_results_require_no_queued_turns() {
+    assert_eq!(background_outcome(&[success()]), JobStatus::Succeeded);
+    for (count, expected) in [
+        (json!(0), JobStatus::Succeeded),
+        (json!(1), JobStatus::Failed),
+        (json!(-1), JobStatus::Failed),
+        (json!(null), JobStatus::Failed),
+        (json!("0"), JobStatus::Failed),
+        (json!(false), JobStatus::Failed),
+    ] {
+        let mut result = success();
+        result["queued_turn_count"] = count.clone();
+        assert_eq!(background_outcome(&[result]), expected, "count {count}");
+    }
+}
+
+#[test]
+fn missing_initial_result_index_allows_a_single_turn_but_fails_follow_up_with_a_hint() {
+    let mut events = background_events();
+    events[8].as_object_mut().unwrap().remove("result_index");
+    assert_eq!(
+        background_outcome(&[events[8].clone()]),
+        JobStatus::Succeeded
+    );
+    let mut output = auto_output();
+    for event in events {
+        output.push(Stream::Stdout, &line(&event));
+    }
+    output.finish();
+    let (outcome, message) = output.interpret(status(0));
+    assert_eq!(outcome, JobStatus::Failed);
+    assert!(message.contains("uncorrelated background follow-up"));
+    assert!(message.contains("consecutive result_index"));
+}
+
+#[test]
+fn background_follow_up_requires_complete_correlated_turns() {
+    let events = background_events();
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+    // Includes exit after the first success, notification, re-init, tools and
+    // final assistant text. None can stand in for the follow-up result.
+    for end in 0..events.len() {
+        assert_eq!(
+            background_outcome(&events[..end]),
+            JobStatus::Failed,
+            "prefix {end}"
+        );
+    }
+    for missing in [8, 10, 12, 20] {
+        let mut incomplete = events.clone();
+        incomplete.remove(missing);
+        assert_eq!(
+            background_outcome(&incomplete),
+            JobStatus::Failed,
+            "missing {missing}"
+        );
+    }
+    // A completion update is not an answer. Explicit background starts also
+    // supply membership evidence when no level snapshots are available.
+    let without_snapshots: Vec<_> = events
+        .iter()
+        .filter(|event| {
+            !matches!(
+                event["subtype"].as_str(),
+                Some("background_tasks_changed" | "task_updated")
+            )
+        })
+        .cloned()
+        .collect();
+    assert_eq!(background_outcome(&without_snapshots), JobStatus::Succeeded);
+    for (index, pointer, value) in [
+        (4, "/task_id", json!(null)),
+        (4, "/run_id", json!("")),
+        (4, "/session_id", json!("different")),
+        (9, "/task_id", json!("different")),
+        (9, "/run_id", json!("different")),
+        (9, "/patch/status", json!("failed")),
+        (10, "/status", json!("failed")),
+        (10, "/status", json!("stopped")),
+        (10, "/task_id", json!("different")),
+        (10, "/run_id", json!("different")),
+        (10, "/session_id", json!("different")),
+        (
+            11,
+            "/tasks",
+            json!([{"task_id":"unknown","run_id":"unknown"}]),
+        ),
+        (11, "/tasks", json!(null)),
+        (12, "/session_id", json!("different")),
+        (13, "/session_id", json!("different")),
+        (20, "/origin/kind", json!("human")),
+        (20, "/origin/producer", json!("unknown")),
+        (20, "/origin/runId", json!("different")),
+        (20, "/origin", json!(null)),
+        (20, "/session_id", json!("different")),
+        (20, "/result_index", json!(0)),
+        (20, "/result_index", json!(2)),
+        (20, "/result_index", json!(null)),
+        (8, "/result_index", json!(null)),
+        (8, "/result_index", json!(u64::MAX)),
+    ] {
+        let mut changed = events.clone();
+        *changed[index].pointer_mut(pointer).unwrap() = value;
+        assert_eq!(
+            background_outcome(&changed),
+            JobStatus::Failed,
+            "event {index} {pointer}"
+        );
+    }
+}
+
+#[test]
+fn background_results_cannot_erase_failure_or_authorize_unrelated_output() {
+    let events = background_events();
+    for index in [9, 10, 11, 12] {
+        for (key, value) in [
+            ("error", json!("failed")),
+            ("errors", json!(["failed"])),
+            ("is_error", json!(true)),
+        ] {
+            let mut changed = events.clone();
+            changed[index][key] = value;
+            assert_eq!(background_outcome(&changed), JobStatus::Failed);
+        }
+    }
+    for index in [8, 20] {
+        for (key, value) in [
+            ("subtype", json!("error_during_execution")),
+            ("is_error", json!(true)),
+            ("is_error", json!("false")),
+            ("result", json!(null)),
+            ("duration_ms", json!(-1)),
+            ("duration_api_ms", json!(null)),
+            ("num_turns", json!(null)),
+            ("terminal_reason", json!("aborted_tools")),
+            ("terminal_reason", json!("aborted_streaming")),
+            ("stop_reason", json!("max_tokens")),
+            ("stop_reason", json!("pause_turn")),
+            ("api_error_status", json!(401)),
+            ("errors", json!(["failed"])),
+            ("deferred_tool_use", json!({"name":"Bash"})),
+            ("queued_turn_count", json!(-1)),
+            ("queued_turn_count", json!("0")),
+        ] {
+            let mut changed = events.clone();
+            changed[index][key] = value;
+            assert_eq!(
+                background_outcome(&changed),
+                JobStatus::Failed,
+                "result {index} {key}"
+            );
+        }
+    }
+    for index in [9, 13, 20, 21] {
+        for extra in [
+            json!({"type":"error","error":"failed"}),
+            json!({"type":"system","subtype":"error"}),
+            json!({"type":"assistant","error":"failed"}),
+            events[8].clone(),
+            events[10].clone(),
+            events[20].clone(),
+        ] {
+            let mut changed = events.clone();
+            changed.insert(index, extra);
+            assert_eq!(
+                background_outcome(&changed),
+                JobStatus::Failed,
+                "extra event at {index}"
+            );
+        }
+        let mut output = auto_output();
+        for event in &events[..index] {
+            output.push(Stream::Stdout, &line(event));
+        }
+        output.push(Stream::Stdout, b"{malformed JSON}\n");
+        for event in &events[index..] {
+            output.push(Stream::Stdout, &line(event));
+        }
+        output.finish();
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+    }
+    for extra in [
+        json!({"type":"assistant","message":{}}),
+        json!({"type":"system","subtype":"unknown"}),
+    ] {
+        let mut changed = events.clone();
+        changed.push(extra);
+        assert_eq!(background_outcome(&changed), JobStatus::Failed);
+    }
+}
+
+#[test]
+fn background_notifications_require_all_results_in_notification_order() {
+    let original = background_events();
+    let mut second_start = original[4].clone();
+    second_start["task_id"] = json!("second-task");
+    second_start["run_id"] = json!("second-run");
+    let mut second_notification = original[10].clone();
+    second_notification["task_id"] = json!("second-task");
+    second_notification["run_id"] = json!("second-run");
+    let mut second_result = original[20].clone();
+    second_result["origin"]["runId"] = json!("second-run");
+
+    // Launch order is deliberately the opposite of notification/result order.
+    let mut events = original[..4].to_vec();
+    events.push(second_start.clone());
+    events.extend_from_slice(&original[4..11]);
+    events.push(second_notification.clone());
+    events.extend_from_slice(&original[11..20]);
+    let mut placeholder = original[20].clone();
+    placeholder["num_turns"] = json!(0);
+    placeholder["result"] = json!("");
+    events.push(placeholder);
+    assert_eq!(background_outcome(&events), JobStatus::Failed);
+    second_result["result_index"] = json!(2);
+    events.push(second_result.clone());
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+    let last = events.len() - 1;
+    events.swap(last - 1, last);
+    assert_eq!(background_outcome(&events), JobStatus::Failed);
+
+    let mut empty_answer = original.clone();
+    empty_answer[20]["num_turns"] = json!(0);
+    empty_answer[20]["result"] = json!("");
+    assert_eq!(background_outcome(&empty_answer), JobStatus::Failed);
+
+    // A second independent follow-up needs a fresh init and matching result.
+    let mut sequential = original[..8].to_vec();
+    sequential.push(second_start);
+    sequential.extend_from_slice(&original[8..]);
+    sequential.push(second_notification);
+    sequential.push(original[12].clone());
+    sequential.push(second_result);
+    assert_eq!(background_outcome(&sequential), JobStatus::Succeeded);
+}
+
+#[test]
+fn early_background_notification_still_needs_an_attributed_answer() {
+    let original = background_events();
+    let mut events = original[..8].to_vec();
+    events.extend_from_slice(&original[9..12]);
+    events.push(original[8].clone());
+    assert_eq!(background_outcome(&events), JobStatus::Failed);
+    events.extend_from_slice(&original[12..]);
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+}
+
+#[test]
+fn background_correlation_is_bounded_and_cannot_be_cleared_by_later_output() {
+    let original = background_events();
+    for length in [256, 257] {
+        let run = "x".repeat(length);
+        let mut events = original.clone();
+        for index in [4, 9, 10] {
+            events[index]["run_id"] = json!(run);
+        }
+        events[3]["tasks"][0]["run_id"] = json!(run);
+        events[20]["origin"]["runId"] = json!(run);
+        assert_eq!(
+            background_outcome(&events),
+            if length == 256 {
+                JobStatus::Succeeded
+            } else {
+                JobStatus::Failed
+            }
+        );
+    }
+    for (count, reuse_task_id) in [(128, false), (129, false), (128, true), (129, true)] {
+        let task_id = |n| {
+            if reuse_task_id {
+                "shared-task".to_owned()
+            } else {
+                format!("task-{n}")
+            }
+        };
+        let mut events = original[..3].to_vec();
+        let entries: Vec<_> = (0..count)
+            .map(|n| json!({"task_id":task_id(n), "run_id":format!("run-{n}")}))
+            .collect();
+        events.push(
+            json!({"type":"system", "subtype":"background_tasks_changed",
+            "session_id":"fixture", "tasks":entries}),
+        );
+        for n in 0..count {
+            let mut start = original[4].clone();
+            start["task_id"] = json!(task_id(n));
+            start["run_id"] = json!(format!("run-{n}"));
+            events.push(start);
+        }
+        events.extend_from_slice(&original[5..9]);
+        for n in 0..count {
+            let mut notification = original[10].clone();
+            notification["task_id"] = json!(task_id(n));
+            notification["run_id"] = json!(format!("run-{n}"));
+            events.push(notification);
+            events.push(original[12].clone());
+            let mut result = original[20].clone();
+            result["origin"]["runId"] = json!(format!("run-{n}"));
+            result["result_index"] = json!(n + 1);
+            events.push(result);
+        }
+        assert_eq!(
+            background_outcome(&events),
+            if count == 128 {
+                JobStatus::Succeeded
+            } else {
+                JobStatus::Failed
+            },
+            "pending runs {count}, reused task ID: {reuse_task_id}"
+        );
+        events.retain(|event| event["subtype"] != "background_tasks_changed");
+        assert_eq!(
+            background_outcome(&events),
+            if count == 128 {
+                JobStatus::Succeeded
+            } else {
+                JobStatus::Failed
+            },
+            "edge-only pending runs {count}, reused task ID: {reuse_task_id}"
+        );
     }
 }
 

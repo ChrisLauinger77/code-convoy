@@ -9,6 +9,8 @@ use anyhow::Result;
 use serde_json::Value;
 use std::{path::Path, process::ExitStatus};
 
+mod continuation;
+
 pub struct Claude;
 static OPTIONS: &[OptionSpec] = &[
     OptionSpec {
@@ -247,6 +249,7 @@ struct ClaudeOutput {
     // Keep the parsed Claude result (including usage/denials/metadata) for outcome
     // interpretation, without introducing a shared activity/event abstraction.
     result: Option<Value>,
+    continuation: continuation::Continuation,
     activity: String,
 }
 impl ClaudeOutput {
@@ -266,10 +269,9 @@ impl ClaudeOutput {
                 );
             }
         };
-        // Claude 2.1.300 emits a UI-render invalidation after its final result.
-        // Accept only that observed notification shape (see validation record),
-        // never arbitrary trailing system messages, errors or execution activity.
-        self.protocol_error |= self.result.is_some() && !ui_render_notification(&event);
+        if !self.protocol_error {
+            self.protocol_error = !self.continuation.observe(&event, self.result.as_ref());
+        }
         let kind = event["type"].as_str().unwrap_or("");
         match kind {
             "assistant" => {
@@ -362,6 +364,9 @@ impl ClaudeOutput {
             || (kind == "assistant" && !event["error"].is_null())
             || (kind == "system" && event["subtype"].as_str() == Some("error"));
         if kind == "result" {
+            // Each turn must succeed. A later result cannot hide an earlier
+            // failed, incomplete or interrupted turn.
+            self.protocol_error |= !Self::confirmed_result(&event);
             let mut display = event.clone();
             let text = event["result"].as_str().unwrap_or("");
             if event["result"].is_string()
@@ -389,10 +394,7 @@ impl ClaudeOutput {
             self.record(&bytes)
         }
     }
-    fn confirmed_result(&self) -> bool {
-        let Some(result) = &self.result else {
-            return false;
-        };
+    fn confirmed_result(result: &Value) -> bool {
         result["subtype"].as_str() == Some("success")
             && result["is_error"].as_bool() == Some(false)
             && result["result"].is_string()
@@ -413,6 +415,8 @@ impl ClaudeOutput {
             )
             && result["deferred_tool_use"].is_null()
             && result["api_error_status"].is_null()
+            && (result.get("queued_turn_count").is_none()
+                || result["queued_turn_count"].as_u64().is_some())
             && (result["errors"].is_null()
                 || result["errors"].as_array().is_some_and(Vec::is_empty))
     }
@@ -451,7 +455,8 @@ impl AgentOutput for ClaudeOutput {
     }
     fn interpret(&self, status: ExitStatus) -> (JobStatus, String) {
         let (outcome, mut message) = if status.success()
-            && self.confirmed_result()
+            && self.result.as_ref().is_some_and(Self::confirmed_result)
+            && self.continuation.complete()
             && !self.protocol_error
             && !self.explicit_error
         {
@@ -460,7 +465,7 @@ impl AgentOutput for ClaudeOutput {
             (
                 JobStatus::Failed,
                 format!(
-                    "Claude Code completion was not confirmed ({status}). Expected one valid final success result with is_error=false and no execution/protocol errors. Inspect output for interrupted execution, turn limits, authentication, model, permission or CLI errors."
+                    "Claude Code completion was not confirmed ({status}). Expected valid success results with is_error=false for every turn, no unfinished or uncorrelated background follow-up, no queued turns, and no execution/protocol errors. For background follow-ups, check session/task/run IDs and consecutive result_index values in Raw output. Inspect output for interrupted execution, turn limits, authentication, model, permission or CLI errors."
                 ),
             )
         };
