@@ -1,5 +1,11 @@
 # CodeConvoy 1.0.0 — Final readiness report
 
+**Historical PR 68 report.** The current [maintainer release decision](windows-licensing-decision.md#maintainer-release-decision--2026-10-16)
+records the decision to proceed and the actual source/candidate check. Four of
+the original five licensing blockers have since been resolved; `windows-crt`
+remains active. The evidence and recommendations below retain their original
+scope and are not a new validation of the final source.
+
 PR 68 follow-up: [native license evidence and deterministic source bundles](license-blocker-evidence.md).
 All five publication blockers remain enforced. PR checks and interim artifact
 evidence are recorded in [PR 68](https://github.com/ChrisLauinger77/code-convoy/pull/68);

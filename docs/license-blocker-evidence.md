@@ -8,8 +8,9 @@ The NSIS plugin section is also historical: the replacement and its source,
 license and binary evidence are in [NSIS helper validation](nsis-helper-validation.md).
 The Windows CRT obligation remains unresolved; the dispatch resolution is unchanged.
 The current risk classification is in [section 9](#9-final-risk-based-windows-review).
-The [proposed final maintainer decision](windows-licensing-decision.md) supplies
-the precise grant mapping and draft recipient terms for its two open questions.
+The [maintainer release decision and licensing assessment](windows-licensing-decision.md)
+records the decision to proceed, the unchanged publication blocker, the precise
+grant mapping and draft recipient terms for its two open questions.
 It supersedes the broader Windows closure requirements in sections 5–8;
 their binary evidence and historical conclusions remain recorded.
 Publication remains blocked. This record distinguishes

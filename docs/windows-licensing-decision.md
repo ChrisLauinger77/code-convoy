@@ -1,8 +1,10 @@
-# CodeConvoy 1.0.0 — proposed final Windows licensing decision
+# CodeConvoy 1.0.0 — Windows licensing and maintainer release decision
 
-Prepared 2026-10-16 for maintainer review; **not adopted**. This completes the
+Licensing assessment prepared 2026-10-16. This completes the
 two decision questions identified in [the risk review](license-blocker-evidence.md#9-final-risk-based-windows-review)
 using its existing evidence. It does not reopen historical NSIS provenance.
+The maintainer's subsequent release decision is recorded below; it does not
+convert the retained assessment into a verified finding of legal compliance.
 
 **Recommendation: do not close `windows-crt` on the present record.** SDK linked
 output has an express conditional basis. Ordinary linked VC startup output has
@@ -12,6 +14,117 @@ establish the necessary inclusion in the controlling grant. The proposed
 notice's substantive gap; their adoption and a legally effective agreement
 arrangement remain necessary. These are two bounded legal/contractual decisions,
 not reasons to rerun technical audits or request blanket Microsoft approval.
+
+## Maintainer release decision — 2026-10-16
+
+The maintainer explicitly decided to proceed with CodeConvoy **1.0.0** and
+declared the technical and licensing investigations complete. That decision
+is recorded as release intent, with the documented Microsoft interpretation,
+conditions and uncertainty preserved. It is not a verified finding that the VC
+output grant (G1) or recipient agreement (G2) has been established. The same
+instruction prohibits silently clearing unresolved obligations and requires
+stopping if publication would override an unresolved material requirement.
+**That stop condition applies. No publication override is made.**
+
+### Release-material review
+
+The existing `MICROSOFT-DISTRIBUTABLE-CODE.txt` is present exactly once and
+unchanged in the generated `THIRD-PARTY-NOTICES.txt`, which uses the existing
+installer/ZIP delivery paths. This is a check of release materials, not a new
+claim about completed candidate packages. The notice communicates the recorded
+Microsoft conditions and separates them from MIT; its summary status remains
+explicit.
+
+The proposed terms remain a review draft outside those materials. In particular,
+their section 1 offers permissions whose upstream basis is G1; their section 4
+applies the SDK's USD 5 ceiling to both Microsoft portions as a proposed choice;
+and their sections 1/3 depend on an effective recipient-agreement arrangement.
+The release instruction supplies no new determination of those points. Simply
+copying the draft into packages would not establish them, and it must not be
+presented as verified required terms or effective agreement. **Final operative
+recipient terms/delivery remain an unresolved release-material requirement
+under G2.** The proposed scoped text and delivery plan below remain available
+for the maintainer's review; no new click-through or packaging change is made.
+
+### Exact publication-guard consequence
+
+`packaging/publish.py` calls `require_release_ready()` before creating a release.
+That function in `packaging/licenses.py` checks the catalog and rejects every
+remaining `release_blockers` entry. The catalog also requires every component's
+`unresolved` reference to name an existing blocker. There is no maintainer-risk
+override setting.
+
+After supported resolution, the mechanical change would be to remove only
+`windows-crt` from `third-party/catalog.json`'s `release_blockers` and remove the
+Microsoft component's corresponding `unresolved` marker, updating the decision
+record and adopted notice/text/hash bindings consistently. The regression that
+currently asserts this active blocker would need its expectation updated while
+preserving notice-integrity and blocked-state coverage. No change to the
+enforcement function or two-stage workflow is needed for a genuine resolution.
+Deleting only the blocker fails the unresolved-reference check; deleting only
+the component marker still leaves publication blocked.
+
+**With G1/G2 still recorded as material and unresolved, removing both markers
+would suppress those obligations; bypassing the function would defeat the
+check. Neither is a justified readiness change under this instruction.**
+
+### Source, candidate and actual readiness result
+
+At the initial check, local HEAD and remote `main` both identified
+`56dfe5548a1a4594e9abe45b0ed83290b48507f4`; five licensing-review files were
+staged. During this request they were committed and pushed outside this work.
+The final source check found local HEAD and remote `main` at
+`eec04e9ffee471d55b6062d5f1494bc0eb2961eb` (`docs(licensing): narrow Windows CRT
+publication blockers`). This step neither staged nor committed those changes.
+The new release-decision documentation remains uncommitted, so there is
+**no committed final source containing this decision**.
+The exact-commit Release workflow lookup returned no run for `eec04e9` at the
+time of this check.
+
+The existing [candidate run 38936028334](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38936028334)
+was independently verified through GitHub's run metadata: repository
+`ChrisLauinger77/code-convoy`, `.github/workflows/release.yml`,
+`workflow_dispatch`, branch `main`, attempt **1**, and source
+`56dfe5548a1a4594e9abe45b0ed83290b48507f4` — **not current HEAD**.
+Correction after inspecting individual jobs: the [Linux job](https://github.com/ChrisLauinger77/code-convoy/actions/runs/38936028334/job/117091962627)
+had already **failed** at 17:09:55 UTC in “Package and verify DEB, RPM, AppImage
+and host tools.” The overall run still reported `in_progress` because Windows
+was running; that overall status must not obscure the failed Linux job. macOS
+passed. The run is not an eligible candidate, regardless of the remaining job.
+
+Linux formatting, Clippy, Rust tests, application build and probe had passed.
+Failure occurred while preparing the AppImage runtime build environment: the
+`bwrap ... /sbin/apk add --no-network --no-chown ...` command exited 1. Its
+actual diagnostic output was redirected to
+`target/packaging/linux/runtime-build/build.log`, which the workflow did not
+print or retain. The available job log therefore identifies the failing command
+but does not establish whether bubblewrap setup or Alpine package installation
+caused it. Do not infer a particular root cause from the wrapper traceback.
+Subsequent Linux verification/upload steps were skipped. The artifact listing
+contained `packages-macos` but no aggregate `release-assets` artifact.
+This is a separate technical packaging failure from `windows-crt`; no complete
+six-package artifact/checksum provenance is certified. No workflow was
+dispatched or runtime/build code changed by this inspection.
+
+That run contains the committed informational notice, not the subsequently
+committed review or proposed operative terms. The two-stage workflow requires
+candidate and tagged source commits to match exactly. Any later commit changing the catalog or
+release materials requires a fresh candidate from that commit; this run cannot
+be relabelled as validation of later source, even for documentation-only changes.
+
+`python3 packaging/licenses.py release-ready` was executed against the current
+working tree and returned **exit 1**:
+
+```text
+ValueError: Third-party license release blockers remain: windows-crt
+```
+
+Only this focused material/guard/provenance check and documentation checks were
+performed. Earlier audits, builds and tests were not repeated. Application,
+CRT, helpers, packaged notices, catalog/guard and workflow are unchanged by
+this step. No commit, push, merge, tag or publication was performed. Work stops
+for maintainer review with the material blocker and incomplete final-source/
+candidate status explicitly retained.
 
 ## 1. VC redistribution rights
 
