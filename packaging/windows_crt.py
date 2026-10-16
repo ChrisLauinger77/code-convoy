@@ -255,17 +255,25 @@ def record_packages(installer, archive, binary):
         if (not re.fullmatch(r"pe-[0-9]+\.txt", record["inspection"])
                 or checksum(EVIDENCE / record["inspection"]) != record["inspection_sha256"]):
             raise ValueError("Missing or altered Windows PE inspection")
+    evidence_files = ["provenance.json", "packaged-binaries.json"]
+    if "nsis_provenance_sha256" in helpers:
+        if checksum(EVIDENCE / "nsis-provenance.json") != helpers["nsis_provenance_sha256"]:
+            raise ValueError("Missing or altered NSIS helper CRT provenance")
+        evidence_files.append("nsis-provenance.json")
     write_json(EVIDENCE / "packages.json", {
         "schema": 1, "source_commit": report["source_commit"], "license_assessment": "unresolved",
         "application_sha256": checksum(binary),
-        "evidence": {name: checksum(EVIDENCE / name) for name in ("provenance.json", "packaged-binaries.json")},
+        "evidence": {name: checksum(EVIDENCE / name) for name in evidence_files},
         "packages": {p.name: checksum(p) for p in (installer, archive)},
     })
 
 
 def inspect_installer(installer, payload, binary):
-    """Record each prebuilt helper separately; imports cannot prove static CRT provenance."""
+    """Record rebuilt helpers and remaining prebuilt NSIS components separately."""
+    import nsis_helpers
     report = verify(binary)
+    helper_report = nsis_helpers.verify()
+    shutil.copyfile(nsis_helpers.OUTPUT / "provenance.json", EVIDENCE / "nsis-provenance.json")
     dumpbin = Path(report["toolchain"]["linker"]["path"]).with_name("dumpbin.exe")
     records = []
     paths = [("installer", installer)] + [(p.relative_to(payload).as_posix(), p)
@@ -274,12 +282,17 @@ def inspect_installer(installer, payload, binary):
         text = output([dumpbin, "/headers", "/imports", path], env={**os.environ, "VSLANG": "1033"})
         log = EVIDENCE / f"pe-{index}.txt"
         log.write_text(text, encoding="utf-8")
+        helper = helper_report["binaries"].get(path.name) if name.startswith("$PLUGINSDIR/") else None
+        if helper and helper["sha256"] != checksum(path):
+            raise ValueError("Final installer helper differs from captured linker inputs")
         records.append({"name": name, "sha256": checksum(path), "inspection": log.name,
                         "inspection_sha256": checksum(log),
                         "imports": sorted(set(re.findall(r"^\s+([\w.-]+\.dll)\s*$", text, re.I | re.M))),
                         "static_crt_provenance": "captured above" if name == "CodeConvoy.exe" else
-                        "unresolved: prebuilt component; imports do not identify static library inputs"})
+                        (f"nsis-provenance.json: {path.name}; CRT={helper['crt']}; redistribution assessment remains unresolved"
+                         if helper else "unresolved: prebuilt component; imports do not identify static library inputs")})
     write_json(EVIDENCE / "packaged-binaries.json", {"schema": 1, "application_sha256": checksum(binary),
+               "nsis_provenance_sha256": checksum(EVIDENCE / "nsis-provenance.json"),
                "license_assessment": "unresolved", "dumpbin_sha256": checksum(dumpbin), "binaries": records})
 
 

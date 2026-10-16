@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tomllib
 
 import windows_crt as crt
@@ -25,8 +26,40 @@ def inputs(root=ROOT):
 
 
 def locked_packages(kit=KIT):
-    return [{key: p[key] for key in ("name", "version", "checksum")}
-            for p in tomllib.loads((kit / "Cargo.lock").read_text())["package"] if p.get("source")]
+    source_patch = json.loads((kit / "inputs.json").read_text())["source_patch"]
+    packages = []
+    for package in tomllib.loads((kit / "Cargo.lock").read_text())["package"]:
+        if package["name"] == source_patch["name"]:
+            if package["version"] != source_patch["version"] or package.get("source"):
+                raise ValueError("Missing locked NSIS source patch")
+            packages.append({key: source_patch[key] for key in ("name", "version", "checksum")})
+        elif package.get("source"):
+            packages.append({key: package[key] for key in ("name", "version", "checksum")})
+    return packages
+
+
+def prepare_source():
+    """Apply the single audited stable-Rust compatibility patch to fresh source."""
+    spec = json.loads((KIT / "inputs.json").read_text())["source_patch"]
+    archive = ROOT / "third-party" / spec["archive"]
+    if crt.checksum(archive) != spec["checksum"]:
+        raise ValueError("Modified NSIS dependency archive")
+    destination = ROOT / "target/packaging/nsis-source"
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True)
+    with tarfile.open(archive) as source:
+        source.extractall(destination, filter="data")
+    original = destination / f"{spec['name']}-{spec['version']}"
+    path = original / spec["file"]
+    if crt.checksum(path) != spec["before_sha256"]:
+        raise ValueError("NSIS source patch preimage changed")
+    data = path.read_bytes().replace(b'#![cfg_attr(windows_raw_dylib, feature(raw_dylib))]\n',
+        b'// CodeConvoy 2026-10-16: raw_dylib is stable since Rust 1.71; remove obsolete feature gate.\n')
+    path.write_bytes(data)
+    if crt.checksum(path) != spec["after_sha256"]:
+        raise ValueError("NSIS source patch result changed")
+    original.rename(destination / spec["name"])
 
 
 def source_entries(root=ROOT):
@@ -155,6 +188,7 @@ def build():
     if os.name != "nt":
         raise ValueError("NSIS helper builds require native Windows MSVC")
     spec = json.loads((KIT / "inputs.json").read_text())
+    prepare_source()
     env, toolchain = crt.msvc_environment(os.environ.copy(), architecture="x64_x86",
                                         toolset=spec["msvc"], sdk=spec["windows_sdk"])
     env["RUSTUP_TOOLCHAIN"] = spec["rust"]

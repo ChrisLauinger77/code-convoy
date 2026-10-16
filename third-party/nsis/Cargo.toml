@@ -28,3 +28,7 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = "symbols"
+
+# Recreated from the checksum-pinned crate by packaging/nsis_helpers.py.
+[patch.crates-io]
+windows-sys = { path = "../../target/packaging/nsis-source/windows-sys" }

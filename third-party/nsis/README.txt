@@ -33,6 +33,13 @@ source crates and their actual notices are distributed. Architecture-specific
 windows_* import archives remain locked but are not selected into the DLL:
 the upstream windows-targets windows_raw_dylib configuration lets rustc generate
 the imports. The linker gate rejects windows.0.* prebuilt import libraries.
+windows-sys 0.48.0 still marks raw_dylib as an unstable compiler feature. The
+single recorded windows-sys-stable-raw-dylib.patch removes that obsolete feature
+gate (raw_dylib stabilized in Rust 1.71). The builder recreates a local path
+dependency from the original checksum-verified crate and verifies the exact
+before/after source hashes. Cargo.lock records the path replacement; the
+inventory retains the original crate checksum and upstream revision. No API,
+ABI or generated binding is changed. No nightly compiler or bootstrap is used.
 Rust 1.99.0 library notices/lockfile are supplied by the existing distribution
 inventory; they apply to this helper too. windows-sys/windows-targets and SemVer
 are MIT OR Apache-2.0; both sets of notices are retained.
