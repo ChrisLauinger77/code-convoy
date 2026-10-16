@@ -2719,8 +2719,12 @@
         "aarch64-apple-darwin",
         "x86_64-apple-darwin"
       ],
-      "notices": [],
-      "unresolved": "dispatch-notice"
+      "notices": [
+        {
+          "text": "36927e7ba57a9457c03a17b3a93ffd8fa1da97571a739f05cf01b68070f7b912",
+          "origin": "https://crates.io/api/v1/crates/dispatch/0.2.0/download :: Cargo.toml.orig (also https://github.com/SSheldon/rust-dispatch/blob/82d6c7a5b75dc0c71c3f46f87bb6c16a476f7748/Cargo.toml); https://raw.githubusercontent.com/spdx/license-list-data/v3.26.0/text/MIT.txt :: standard MIT terms reproduced by CodeConvoy; template copyright line omitted because upstream supplies no notice"
+        }
+      ]
     },
     {
       "name": "dispatch2",
@@ -16565,10 +16569,6 @@
     {
       "id": "appimage-relink",
       "detail": "Static libfuse 3.15.0 LGPL-2.1 section 6(a): sources, runtime mount patch and build recipe are supplied, but exact downstream library patches/build inputs and a verified modified-libfuse relink are missing. No written offer or shared-library alternative is claimed. See source README and docs/license-blocker-evidence.md."
-    },
-    {
-      "id": "dispatch-notice",
-      "detail": "dispatch 0.2.0 declares MIT and identifies Steven Sheldon in Cargo metadata, but neither its crate nor pinned upstream revision contains a license/copyright notice. Obtain authoritative notice evidence rather than inventing a copyright statement."
     },
     {
       "id": "nsis-plugins",

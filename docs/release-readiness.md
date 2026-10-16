@@ -76,9 +76,11 @@ keeps its date/version and scope; OpenCode authenticated E2E remains unverified.
 
 - **Blocker — license/source obligations:** the [license audit](third-party-licenses.md)
   records exact AppImage static-library provenance and LGPL relinking gaps,
-  missing `dispatch` attribution evidence, installer plugin provenance and
+  installer plugin provenance and
   Windows static CRT redistribution evidence. Passing tests does not resolve
-  these legal/source obligations.
+  these legal/source obligations. The `dispatch` notice blocker is resolved
+  under the [documented MIT interpretation](license-blocker-evidence.md#3-dispatch-020-resolved-under-the-documented-interpretation),
+  submitted for maintainer review; the dependency remains unchanged.
 - **Release approval gap — native target evidence:** Ubuntu 24.04/Debian 13
   hardware-backed Wayland/XWayland, rendering/decorations, clipboard/dialogs,
   task cancellation and normal Quit; Windows interactive desktop behavior;

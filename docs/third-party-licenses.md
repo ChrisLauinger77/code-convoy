@@ -18,7 +18,7 @@ separately records normal dependency edges. The other 74 entries are explicit
 exclusions for these release targets. This does not imply every object survives
 linking, or that every listed crate is in every package.
 
-The collection contains **361 distinct notice texts**, deduplicated by
+The collection contains **362 distinct notice texts**, deduplicated by
 their content hashes in [texts.json](../third-party/texts.json). It retains
 upstream copyright statements, notices, font licenses and protocol XML copyright
 blocks. When a crate omits a license file, the evidence refers to its exact
@@ -103,8 +103,15 @@ available for inspection. Removing a blocker requires new evidence and review.
 
 The [follow-up evidence record](license-blocker-evidence.md) documents the deeper
 investigation, exact binary/debug identities, newly recovered sources/notices
-and remaining requirements. All five blockers remain; upstream base versions
-and 17 plugin dependency versions are now established, with explicit limits.
+and remaining requirements. Four blockers remain. The `dispatch` notice blocker
+is resolved under the documented interpretation of its explicit MIT declaration:
+the bundle now preserves its original manifest/author metadata and reproduces
+the standard MIT permission, condition and disclaimer, without inventing a
+copyright notice. This is an evidence-based compliance interpretation submitted
+for maintainer review, not authoritative legal approval. See
+[section 3 of the evidence record](license-blocker-evidence.md#3-dispatch-020-resolved-under-the-documented-interpretation)
+for sources, notice obligations and limits. Upstream AppImage base versions and
+17 plugin dependency versions are established, with their existing limits.
 
 1. **AppImage static-library versions.** The exact runtime recipe uses mutable
    Alpine 3.21 packages for musl, zstd, zlib and mimalloc. Its 2025 build log is
@@ -121,11 +128,7 @@ and 17 plugin dependency versions are now established, with explicit limits.
    including the necessary build inputs, and demonstrate relinking. Current
    archives preserve the known source/patch, but mutable dependencies and absent
    build evidence prevent claiming this obligation is fully satisfied.
-3. **`dispatch` 0.2.0 notice.** Its crate and pinned upstream revision declare
-   MIT and identify Steven Sheldon, but contain no copyright/license file.
-   Obtain authoritative notice evidence; no copyright wording has been invented.
-   Upstream issue #18 was closed by its reporter without a notice or response.
-4. **NSIS plugins.** The prebuilt ApplicationID archive contains only DLL/PDB
+3. **NSIS plugins.** The prebuilt ApplicationID archive contains only DLL/PDB
    files. The linked source identifies Mike Anchor/Mozilla/Connectify
    contributions without a clear license grant; these copyright headers are now
    included. Establish the exact binary's source/license. `nsis-tauri-utils`
@@ -134,7 +137,7 @@ and 17 plugin dependency versions are now established, with explicit limits.
    standard library and native toolchain remain unresolved; the tag has no
    Cargo.lock. Plugin hashes prevent an
    unnoticed binary substitution during future candidate builds.
-5. **Windows CRT.** Windows packaging now requires an application-bound
+4. **Windows CRT.** Windows packaging now requires an application-bound
    `/VERBOSE:LIB` capture of the selected toolset/SDK libraries, hashes and
    archive members. Final installer/helper PE inspection and final package
    hashes are retained separately from the six candidate assets. The capture

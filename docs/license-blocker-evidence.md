@@ -1,6 +1,7 @@
 # PR 68 — native license evidence follow-up
 
-Audit date: 2026-10-15. **Publication remains blocked.** This record distinguishes
+Audit date: 2026-10-15; dispatch follow-up: 2026-10-16.
+**Publication remains blocked by the four non-dispatch obligations.** This record distinguishes
 recovered evidence from missing evidence; it is not a legal clearance. The
 project's MIT license is unchanged. PR checks, interim artifact evidence and the
 exact tested revisions are recorded in [PR 68](https://github.com/ChrisLauinger77/code-convoy/pull/68).
@@ -86,21 +87,135 @@ or obtain a complete upstream corresponding-source/relink kit, then verify the
 modified runtime with the same extracted AppDir. A replacement runtime would
 need a separate review of its provenance and behavior; none is substituted here.
 
-## 3. dispatch 0.2.0: unresolved
+## 3. dispatch 0.2.0: resolved under the documented interpretation
 
-The exact crate and source revision
-[`82d6c7a5b75dc0c71c3f46f87bb6c16a476f7748`](https://github.com/SSheldon/rust-dispatch/tree/82d6c7a5b75dc0c71c3f46f87bb6c16a476f7748)
-declare MIT and identify Steven Sheldon. Neither contains a license text.
-The upstream [missing-license issue #18](https://github.com/SSheldon/rust-dispatch/issues/18)
-has **zero comments** and was closed by its reporter, Jake-Shadle, on 2024-05-16.
-Its closure supplies neither a maintainer grant nor a missing copyright notice.
-The repository history/root was also checked; no authoritative replacement text
-was recovered. Existing author/license metadata remains in the inventory.
+This 2026-10-16 follow-up examines only `dispatch`; it does not repeat the full
+audit or change the other four blockers. The proposed notice and inventory
+change is ready for maintainer review. It is **not authoritative legal approval**.
 
-**Still blocking:** an authoritative notice from the rights holder or a supported
-license determination for the actual code. Do not copy a different project's MIT
-copyright, invent a year, or treat closing an issue as granting permission.
-No upstream message has been sent and no dependency was replaced.
+### Technical evidence
+
+- The original [published crate](https://crates.io/api/v1/crates/dispatch/0.2.0/download)
+  has SHA-256
+  `bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b`,
+  matching `Cargo.lock` and the catalog. Both its normalized `Cargo.toml` and
+  original `Cargo.toml.orig` explicitly declare `license = "MIT"` and
+  `authors = ["Steven Sheldon"]`; neither specifies `license-file`.
+  Its `.cargo_vcs_info.json` pins
+  `82d6c7a5b75dc0c71c3f46f87bb6c16a476f7748`.
+- The [crates.io version metadata](https://crates.io/api/v1/crates/dispatch/0.2.0)
+  independently reports MIT, the same checksum, publication on 2020-01-19 and
+  publisher `SSheldon` (Steven Sheldon); the version is not yanked. This
+  corroborates the publisher's declaration, not an independent legal review.
+- The exact [upstream manifest](https://github.com/SSheldon/rust-dispatch/blob/82d6c7a5b75dc0c71c3f46f87bb6c16a476f7748/Cargo.toml)
+  is byte-identical to `Cargo.toml.orig`. All six `src/*.rs` files,
+  `examples/main.rs` and `README.md` in the crate are byte-identical to that
+  revision. Inspection of every file in the crate and pinned source, including
+  source headers and the excluded iOS test/build scripts, found no copyright
+  notice, license text, conflicting license or extra attribution requirement.
+- The [upstream tag list](https://api.github.com/repos/SSheldon/rust-dispatch/tags?per_page=100)
+  contains `0.2.0`, `0.1.4`, `0.1.3`, `0.1.2`, `0.1.1`, `0.1.0`, `0.0.3`,
+  `0.0.2` and `0.0.1`. Tag `0.2.0` points to the exact pinned revision; no
+  separate GitHub release is listed by the
+  [releases API](https://api.github.com/repos/SSheldon/rust-dispatch/releases?per_page=100).
+  The [repository metadata](https://api.github.com/repos/SSheldon/rust-dispatch)
+  has `license: null`, so GitHub's license detection supplies no additional
+  evidence. It does not negate the explicit upstream/package MIT declaration.
+- The [missing-license issue #18](https://github.com/SSheldon/rust-dispatch/issues/18)
+  still has zero comments and was closed by its reporter, Jake-Shadle, on
+  2024-05-16. Its closure supplies neither a new grant nor a copyright notice.
+  No upstream message has been sent.
+
+### Notice obligations and interpretation
+
+Cargo's [manifest specification](https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields)
+defines `license` as the license under which the package is released, using
+SPDX identifiers; `license-file` is a separate way to supply terms. Consequently
+the MIT field is affirmative publisher-supplied licensing evidence, rather than
+an inferred license from a similar project. The [standard MIT terms](https://opensource.org/license/mit)
+permit use, copying, modification, merging, publication, distribution,
+sublicensing and sale subject to preserving the copyright and permission
+notices in copies or substantial portions. The complete permission, condition
+and warranty/liability disclaimer should accompany redistribution. MIT does
+not prescribe a file named `LICENSE` or require source delivery.
+
+The interpretation used for this change is that the explicit, unqualified MIT
+designation identifies those standard terms by reference. Preserve every notice
+actually supplied, retain the published author attribution and reproduce the
+identified terms. No copyright statement was found to copy; the authors field
+is not proof of sole copyright ownership and must not be converted into a
+fabricated copyright line or year. Reproducing the standard terms is notice
+delivery based on upstream's declaration, not CodeConvoy issuing a new grant.
+
+On that interpretation, the evidence is sufficient to retain and redistribute
+the unchanged crate with the supplemented notices. The earlier demand for a
+separate rights-holder-issued notice was a conservative internal evidence
+requirement, not a demonstrated lack of permission or proof of noncompliance
+from the missing file alone. There was, however, a concrete delivery gap: the
+old `dispatch` catalog entry had **no referenced notice text**. Generated notices
+included only its name/version, MIT label, author, targets and unresolved marker;
+other crates' MIT texts were not a substitute for an explicit dispatch notice.
+
+This remains a documented compliance interpretation, not a legal opinion or a
+guarantee of title to every contribution. A completed upstream copyright notice
+and separate maintainer confirmation remain unavailable. If the maintainer's
+policy requires either, seek upstream confirmation or qualified legal review
+before accepting this resolution; do not invent the missing statement. No
+evidence of a contrary grant or omitted existing notice was found in the
+inspected release material.
+
+### Distribution change and maintenance
+
+The `dispatch` entry now references a content-addressed notice in `texts.json`.
+It retains the original manifest verbatim, the published author attribution,
+crate checksum and pinned revision, followed by the standard MIT permission,
+condition and disclaimer. The latter are reproduced from
+[SPDX license-list-data v3.26.0, text/MIT.txt](https://raw.githubusercontent.com/spdx/license-list-data/v3.26.0/text/MIT.txt)
+(reference SHA-256
+`6d7c9e9d7d12c8d3753bdb24417b84819ba4d6c2f025c37948113d86dc81eef9`).
+Only its unfilled template copyright line and generic heading are replaced by
+an explanation and dispatch-specific heading; the terms themselves are
+unchanged. The notice explicitly distinguishes reproduction from an upstream
+license file. No copyright owner or year is invented.
+
+The existing bundle generator delivers the notice and its provenance through
+`THIRD-PARTY-NOTICES.txt` and `THIRD-PARTY-INVENTORY.json` to all package formats.
+Only `dispatch-notice` is removed from the publication blockers and the crate's
+unresolved marker; AppImage provenance, LGPL relinking, NSIS plugins and Windows
+CRT entries retain their exact content and enforcement. Overall publication is
+still blocked. CodeConvoy's MIT license and the two-stage workflow are unchanged.
+
+No dependency or application/packaging code changes are necessary. The
+conditional `objc2-foundation`/`dispatch2` patch is therefore not pursued;
+main-queue, return-value, panic, event-loop and accessibility behavior are
+unchanged. Future version/checksum/source changes must re-evaluate this
+determination through the existing locked-inventory checks. Preserve any
+authoritative upstream notices subsequently recovered, and keep this
+publisher-declaration interpretation specific to the reviewed release.
+
+### Validation
+
+Local validation on macOS arm64 with Rust/Cargo 1.99.0:
+
+| Check | Result |
+| --- | --- |
+| `python3 packaging/licenses.py check` | Passed: 457 locked crates, 362 notice texts, four remaining release obligations. |
+| `python3 packaging/licenses.py prepare` and `python3 packaging/licenses.py verify target/packaging/licenses` | Passed for the generated bundle directory; not a new final-package inspection. |
+| Scoped bundle/evidence comparison against `HEAD` | Passed: dispatch attribution, original manifest, provenance and exact reproduced MIT terms reach the generated notices/inventory; no invented copyright line. All other crates, pre-existing notice texts, components, sources and four blocker details are unchanged. |
+| `python3 packaging/licenses.py release-ready` | Expected refusal (exit 1) listing exactly `appimage-versions`, `appimage-relink`, `nsis-plugins`, `windows-crt`. |
+| `python3 -m unittest discover -s packaging -p 'test_*.py'` | Passed: 78 tests run, 77 passed, one Linux-only native ELF/DEB fixture skipped. |
+| `cargo fmt --check` | Passed. |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed. |
+| `cargo test --all-features` | Passed: 625 passed, nine ignored. The initial sandbox run could not bind the existing temporary Unix-socket fixture (`Operation not permitted`); the full rerun outside that sandbox passed. Counts exclude nested subprocess fixture summaries. |
+| `cargo build --release` | Passed for the native arm64 target. |
+| `git diff --check` | Passed. |
+
+No new candidate or final six-format package extraction was performed. No native
+interactive macOS, event-loop, accessibility or x86-64 compilation/runtime check
+is claimed; no executable behavior or dependency changed. Packaging fixture
+tests are not evidence of interactive platform behavior. The earlier candidate
+records retain their original scope. Stop here for maintainer approval; the
+other licensing tasks remain outside this change.
 
 ## 4. Installer plugins: partially resolved
 
