@@ -741,5 +741,5 @@ ZIP requires x64; missing imports can prevent startup before Rust main and the
 application's own error dialog.
 
 Exact import lists, retained build evidence, final hashes and native test results
-are recorded with the dynamic migration in docs/nsis-helper-validation.md. These
-are technical evidence, not permission to clear windows-crt or publish.
+are recorded with the [dynamic migration](nsis-helper-validation.md#dynamic-crt-migration-and-prerequisite-validation).
+These are technical evidence, not permission to clear windows-crt or publish.

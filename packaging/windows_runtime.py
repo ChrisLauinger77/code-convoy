@@ -57,7 +57,7 @@ $files = foreach ($arch in @('x64', 'x86')) {
 }
 ConvertTo-Json -Depth 4 -InputObject @($files)
 '''
-    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+    result = subprocess.run(["pwsh", "-NoProfile", "-NonInteractive", "-EncodedCommand",
                              base64.b64encode(script.encode("utf-16-le")).decode("ascii")],
                             capture_output=True, text=True)
     if result.returncode:

@@ -179,7 +179,11 @@ Function PageReinstall
 
   Call RequireWindowsRuntime
   codeconvoy_utils::SemverCompare "${VERSION}" $R0
+  ClearErrors
   Pop $R0
+  ${If} ${Errors}
+    StrCpy $R0 "invalid"
+  ${EndIf}
   ${If} $R0 != "0"
   ${AndIf} $R0 != "1"
   ${AndIf} $R0 != "-1"
@@ -453,7 +457,11 @@ SectionEnd
 !macro CheckIfAppIsRunning PREFIX
   Call ${PREFIX}RequireWindowsRuntime
   codeconvoy_utils::FindProcess "${MAINBINARYNAME}.exe"
+  ClearErrors
   Pop $R0
+  ${If} ${Errors}
+    StrCpy $R0 "invalid"
+  ${EndIf}
   ${If} $R0 != "0"
   ${AndIf} $R0 != "1"
     SetErrorLevel 1603
@@ -465,11 +473,16 @@ SectionEnd
       kill:
         Call ${PREFIX}RequireWindowsRuntime
         codeconvoy_utils::KillProcess "${MAINBINARYNAME}.exe"
+        ClearErrors
         Pop $R0
+        ${If} ${Errors}
+          StrCpy $R0 "invalid"
+        ${EndIf}
         Sleep 500
         ${If} $R0 == "0"
           Goto app_check_done
         ${Else}
+          SetErrorLevel 1603
           IfSilent silent ui
           silent:
             System::Call 'kernel32::AttachConsole(i -1)i.r0'
@@ -489,9 +502,9 @@ SectionEnd
 !macroend
 
 Section Install
-  SetOutPath $INSTDIR
-
   !insertmacro CheckIfAppIsRunning ""
+
+  SetOutPath $INSTDIR
 
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"

@@ -66,6 +66,9 @@ class WindowsRuntime(unittest.TestCase):
         uninstall = text.split("Function un.onInit\n")[1].split("FunctionEnd")[0]
         self.assertIn('Call un.RequireWindowsRuntime', uninstall)
         self.assertIn('!insertmacro CheckIfAppIsRunning "un."', text)
+        self.assertEqual(text.count('StrCpy $R0 "invalid"'), 3)
+        install = text.split('Section Install\n')[1].split('SectionEnd')[0]
+        self.assertLess(install.index('CheckIfAppIsRunning'), install.index('SetOutPath'))
 
     def test_rendered_check_uses_file_versions_architectures_and_no_runtime_override(self):
         text = runtime.render_prerequisites()

@@ -229,8 +229,9 @@ through explicit SysWOW64/Sysnative paths. Checks run before the utility helper
 and repeat before version/process operations. Missing prerequisites produce
 Microsoft's official download-page guidance and error 1603. Silent/passive
 operation has no blocking dialog. Uninstall requires x86 only; it must still
-perform process checks. Invalid plugin results fail safely rather than being
-interpreted as no running process.
+perform process checks. Invalid or missing plugin results fail safely rather than being
+interpreted as no running process. The final prerequisite/process check runs
+before the installation directory is created.
 
 The native fixture compiles the same prerequisite include with private test
 paths. That substitution is compile-time only and is not exposed in the shipped
@@ -246,3 +247,24 @@ runtime before startup. Packaging rejects separate VC/UCRT DLLs and VC redist
 installers; the existing closed native payload allowlist also rejects unexpected
 or renamed binaries. The windows-crt publication guard and two-stage release
 architecture remain unchanged.
+
+### Exact import inventory for the dynamic binaries
+
+The import names below preserve the spelling of the native PE inspection;
+Windows resolves DLL names case-insensitively. The UCRT API-set contracts resolve
+to the operating system's UCRT implementation (`ucrtbase.dll`); they are not
+extra DLLs to copy into the package.
+
+| Binary | Direct DLL imports |
+| --- | --- |
+| `CodeConvoy.exe` (x64) | `KERNEL32.dll`, `USER32.dll`, `VCRUNTIME140.dll`, `advapi32.dll`, `api-ms-win-core-synch-l1-2-0.dll`, `api-ms-win-core-winrt-l1-1-0.dll`, `api-ms-win-crt-heap-l1-1-0.dll`, `api-ms-win-crt-locale-l1-1-0.dll`, `api-ms-win-crt-math-l1-1-0.dll`, `api-ms-win-crt-runtime-l1-1-0.dll`, `api-ms-win-crt-stdio-l1-1-0.dll`, `api-ms-win-crt-string-l1-1-0.dll`, `bcryptprimitives.dll`, `combase.dll`, `comctl32.dll`, `dwmapi.dll`, `dxgi.dll`, `gdi32.dll`, `imm32.dll`, `kernel32.dll`, `ntdll.dll`, `ole32.dll`, `oleaut32.dll`, `opengl32.dll`, `setupapi.dll`, `shell32.dll`, `shlwapi.dll`, `uiautomationcore.dll`, `user32.dll`, `uxtheme.dll` |
+| `codeconvoy_utils.dll` (x86) | `KERNEL32.dll`, `VCRUNTIME140.dll`, `api-ms-win-core-synch-l1-2-0.dll`, `api-ms-win-crt-runtime-l1-1-0.dll`, `api-ms-win-crt-string-l1-1-0.dll`, `kernel32.dll`, `ntdll.dll` |
+| `CodeConvoyAppId.dll` (x86, unchanged) | `KERNEL32.dll`, `ole32.dll` |
+
+The configured minimum is VC v14 **14.51.36260.0**, independently for x64 and
+x86, plus the Windows UCRT **10.0.10240.0** or newer. This conservative deployment
+floor follows the recorded build toolset; it is not a measured oldest-export
+compatibility promise. The installer needs both architectures, removal needs
+x86, and the portable application needs only x64. `VCRUNTIME140_1.dll` and
+`MSVCP140.dll` are not direct dependencies of either Rust output and are not
+added to the prerequisite policy.

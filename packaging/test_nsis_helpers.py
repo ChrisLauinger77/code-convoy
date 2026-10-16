@@ -127,6 +127,12 @@ class NsisHelpers(unittest.TestCase):
         self.assertTrue(text.startswith(header))
         text = text.removeprefix(header)
         text = text.replace('!include "@CODECONVOY_PREREQUISITES@"\n', '')
+        for indent in ('  ', '        '):
+            text = text.replace(indent + 'ClearErrors\n' + indent + 'Pop $R0\n' + indent + '${If} ${Errors}\n' +
+                                indent + '  StrCpy $R0 "invalid"\n' + indent + '${EndIf}\n', indent + 'Pop $R0\n')
+        text = text.replace('          SetErrorLevel 1603\n          IfSilent silent ui\n', '          IfSilent silent ui\n')
+        text = text.replace('Section Install\n  !insertmacro CheckIfAppIsRunning ""\n\n  SetOutPath $INSTDIR\n',
+                            'Section Install\n  SetOutPath $INSTDIR\n\n  !insertmacro CheckIfAppIsRunning ""\n')
         text = text.replace('Function un.onInit\n  ${GetOptions} $CMDLINE "/P" $PassiveMode\n  IfErrors +2 0\n    StrCpy $PassiveMode 1\n  Call un.RequireWindowsRuntime\n', 'Function un.onInit\n')
         text = text.replace('\n  Call RequireWindowsRuntime\n\n', '\n')
         text = text.replace('  Call RequireWindowsRuntime\n', '')

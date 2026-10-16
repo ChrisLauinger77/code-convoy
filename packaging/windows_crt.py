@@ -196,6 +196,7 @@ def build(command, env, target=None):
     runtime = windows_runtime.policy()
     env, toolchain = msvc_environment(env, toolset=runtime["msvc"], sdk=runtime["windows_sdk"])
     write_json(EVIDENCE / "toolchain.json", toolchain)
+    windows_runtime.capture_system(EVIDENCE)
     env["CODECONVOY_REAL_LINKER"] = toolchain["linker"]["path"]
     env["CODECONVOY_CRT_EVIDENCE"] = str(EVIDENCE)
     # A unique linker argument forces the final executable to relink even with
@@ -215,7 +216,6 @@ def build(command, env, target=None):
     imports = pe_imports(inspection)
     check_dynamic_imports(imports, "x64")
     check_dynamic_libraries(p["path"] for p in libraries)
-    windows_runtime.capture_system(EVIDENCE)
     report = {
         "imports": imports, "crt": "dynamic",
         "pe_sha256": checksum(EVIDENCE / "application-pe.txt"),

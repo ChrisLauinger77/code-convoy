@@ -3275,7 +3275,7 @@
       "repository": "https://github.com/meithecatte/enumflags2",
       "authors": [
         "maik klein <maikklein@googlemail.com>",
-        "Maja K\u0105dzio\u0142ka <maya@compilercrim.es>"
+        "Maja Kądziołka <maya@compilercrim.es>"
       ],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
@@ -3309,7 +3309,7 @@
       "repository": "https://github.com/meithecatte/enumflags2",
       "authors": [
         "maik klein <maikklein@googlemail.com>",
-        "Maja K\u0105dzio\u0142ka <maya@compilercrim.es>"
+        "Maja Kądziołka <maya@compilercrim.es>"
       ],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
@@ -6395,7 +6395,7 @@
       "license": "MIT/Apache-2.0",
       "repository": "https://github.com/h4llow3En/mac-notification-sys",
       "authors": [
-        "Felix D\u00f6ring <development@felixdoering.com>",
+        "Felix Döring <development@felixdoering.com>",
         "Hendrik Sollich <hendrik@hoodie.de>"
       ],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -8766,7 +8766,7 @@
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/bkchr/proc-macro-crate",
       "authors": [
-        "Bastian K\u00f6cher <git@kchr.de>"
+        "Bastian Köcher <git@kchr.de>"
       ],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
@@ -8834,7 +8834,7 @@
       "license": "Apache-2.0 OR MIT",
       "repository": "https://github.com/watchexec/process-wrap",
       "authors": [
-        "F\u00e9lix Saparelli <felix@passcod.name>"
+        "Félix Saparelli <felix@passcod.name>"
       ],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
@@ -11442,7 +11442,7 @@
         "Caleb Maclennan <caleb@alerque.com>",
         "Laurenz Stampfl <laurenz.stampfl@gmail.com>",
         "Yevhenii Reizner <razrfalcon@gmail.com>",
-        "\u062e\u0627\u0644\u062f \u062d\u0633\u0646\u064a (Khaled Hosny) <khaled@aliftype.com>"
+        "خالد حسني (Khaled Hosny) <khaled@aliftype.com>"
       ],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
@@ -14321,7 +14321,7 @@
       "repository": "https://github.com/psychon/x11rb",
       "authors": [
         "Uli Schlachter <psychon@znc.in>",
-        "Eduardo S\u00e1nchez Mu\u00f1oz <eduardosm-dev@e64.io>",
+        "Eduardo Sánchez Muñoz <eduardosm-dev@e64.io>",
         "notgull <jtnunley01@gmail.com>"
       ],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -14356,7 +14356,7 @@
       "repository": "https://github.com/psychon/x11rb",
       "authors": [
         "Uli Schlachter <psychon@znc.in>",
-        "Eduardo S\u00e1nchez Mu\u00f1oz <eduardosm-dev@e64.io>",
+        "Eduardo Sánchez Muñoz <eduardosm-dev@e64.io>",
         "notgull <jtnunley01@gmail.com>"
       ],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -14664,7 +14664,7 @@
       "license": "MIT",
       "repository": "https://github.com/z-galaxy/zbus/",
       "authors": [
-        "Marc-Andr\u00e9 Lureau <marcandre.lureau@redhat.com>",
+        "Marc-André Lureau <marcandre.lureau@redhat.com>",
         "Zeeshan Ali Khan <zeeshanak@gnome.org>"
       ],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -16350,7 +16350,7 @@
     },
     {
       "path": "sources/codeconvoy-nsis-helpers-1.zip",
-      "sha256": "66b5f441d027684e491e6705a18914e16e17a76f309a11c281604241ffd3719a",
+      "sha256": "e742cfc829903ded515555c7c4814e04f4114ba0aaf1ebf319132ccd4f0009c3",
       "origin": "CodeConvoy original shortcut helper, modified upstream source kit and pinned build recipe; see nsis/README.txt"
     },
     {
@@ -16397,12 +16397,12 @@
     {
       "path": "nsis-build-audit.json",
       "sha256": "9dc6819222e9aa04a0a07ca599b82ed1db9e278cc012956461603687d0546e64",
-      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38899118720"
+      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38916756095"
     },
     {
       "path": "nsis-build-evidence.zip",
       "sha256": "01b27a6d7b9471df1bff4ddb710dd4378514a17741139b41b51dab18a1dcfe37",
-      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38899118720"
+      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38916756095"
     }
   ],
   "release_blockers": [
@@ -17636,7 +17636,7 @@
         "packaging/nsis/LICENSE_MIT": "ef497d10d31e3a85c5c0a6bc598dcdfb5c717b6e085bbc0376f02618a8e31cb2",
         "packaging/nsis/UPSTREAM.json": "700f3e8a1e064e532c3689d94f95cf1ead4a1a73300dbc3d4bd41420257a7ad5",
         "packaging/nsis/helper-tests.nsi": "e0ccc344a3e159a6b1244b29c3596f5e49fae85d428d492d746a580b425502e8",
-        "packaging/nsis/installer.nsi": "7e7ee41f4c5ea32628436bff821679bb07435d7eb885e353ccd69b1dafc02c7b",
+        "packaging/nsis/installer.nsi": "2257950d1d385bb73b8425cce192727d1ade1bf9f6ddabc76e461771fa7ae79d",
         "packaging/nsis/native-tests.ps1": "8ecb21d47a03062a90f871f570c4265c70c7c529f5dba835c6b2f1cec7985de8",
         "packaging/nsis/prerequisite-tests.nsi": "b402e81fd5cc3ef405c1161990d39bad261904dea7cf5ad808c87bd66cb3a12d",
         "packaging/nsis/prerequisite-tests.ps1": "092e5e0f8820b863c731305ef412a3d9d79a16585ec2407b105f8d0c0a9c1819",
@@ -17644,8 +17644,8 @@
         "packaging/nsis/test-process.cpp": "51063ac7bd02c2d37a64d6959a55e5f6a0826526b1f9f82414146f9ee7ac8ea1",
         "packaging/nsis_helpers.py": "07f2b6099f4a543eecaa3306dbb6fe0e8657e4b1c3171abc8753d8d99461dc1e",
         "packaging/windows-runtime.json": "af4993a5cec058a49af1421d8c1795fe9cfb09394c6f70829f6fe673fc8220ce",
-        "packaging/windows_crt.py": "7d28134a44116eaa394c9a95ac1bdfe31091623ff9d775ac7090eff1c9dfda5e",
-        "packaging/windows_runtime.py": "792c6febae5080b461b06d4f09757e6acb8ba87e98e1e1d1eed3b75815cae03d",
+        "packaging/windows_crt.py": "14fae31b77ad5f080c22d8af7909b24b5a8c2b3ae82cf50b4db006092f83f279",
+        "packaging/windows_runtime.py": "acdad7920046a751ee86f2cc5f819d892d418385d4fd14adcf28dd6236727aa2",
         "third-party/nsis/Cargo.lock": "e434e7a08cbf9239731f19762f5a7c71c0647a25a7e54985094c05354dbd1e2d",
         "third-party/nsis/Cargo.toml": "0b341b1e7e1d12779e74d749d00946bdc5b63f2f9050c5c3b0318a7af7cc43bb",
         "third-party/nsis/LICENSE-CodeConvoy": "37438906c0a4475ff6029c83d6ab7c9a62c4b8042b32a51182258a717bccb803",
