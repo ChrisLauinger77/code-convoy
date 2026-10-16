@@ -111,12 +111,8 @@ impl Continuation {
                     return false;
                 };
                 // Bound retained correlation data as well as individual JSON records.
-                if self.tasks.len() >= 128
-                    || self
-                        .tasks
-                        .iter()
-                        .any(|task| task.id == id || task.run == run)
-                {
+                // Task IDs survive resume; each outstanding run ID must be unique.
+                if self.tasks.len() >= 128 || self.tasks.iter().any(|task| task.run == run) {
                     return false;
                 }
                 self.tasks.push(Task {

@@ -157,6 +157,12 @@ The existing UI-render exception remains allowed.
 Scheduler, cancellation, process supervision, Git/worktree handling, other
 backends, settings and CLI arguments are unchanged.
 
+A resumed background task may reuse its `task_id` with a new `run_id`, including
+while the previous run's answer is still pending. Each outstanding run ID must be
+unique and retains its own notification/result obligation. Notifications still
+match the exact session/task/run identity; results must identify the notified run
+in notification order. Reusing a task ID cannot discharge a different run.
+
 Tracked background notifications must report `status: completed`. A `failed`,
 `killed`, `stopped` or other non-completed status permanently fails completion
 validation, even if Claude later handles it and emits a successful follow-up.
@@ -189,7 +195,7 @@ shape, not arbitrary injected turns, peer messages or future result origins.
 Continuation support requires the observed IDs, explicit background marker,
 repeated init and result indices; older/different continuation shapes fail
 conservatively. Missing IDs are not guessed. Correlation is bounded to 128 pending
-tasks and 256 bytes per identifier retained from `task_started`; later events
+runs and 256 bytes per identifier retained from `task_started`; later events
 remain subject to the existing 1 MiB record limit. Notifications received before
 the initial result also require an attributed follow-up; an initial result alone
 cannot prove they were answered. These bounds do not change process ownership or
@@ -267,6 +273,37 @@ The suite used the same serial execution and local Unix socket access described
 above. Installed/authenticated Claude probes and native Windows/Linux execution
 were not repeated.
 
+### Resumed background-task identity correction — 2026-10-16
+
+The next review identified an overly strict task-ID uniqueness check. The
+[official TypeScript SDK 0.3.292 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03292)
+describes stable task IDs across resume and separate run IDs to distinguish the
+runs. The decoder now rejects duplicate outstanding run IDs while permitting a
+new run for an already tracked task. Exact notification/result correlation,
+queued-turn handling and sticky failures are unchanged.
+
+A synthetic fixture-derived sequence starts a new run with the same task ID while
+Claude answers the previous run's notification. It failed before the fix and
+passes afterward. Two new tests cover notifications before/after the prior
+result, every event-prefix truncation, duplicate run IDs with matching/different
+task IDs, missing/mismatched/failed notifications and cross-run/out-of-order
+results. The existing 128/129-run boundary test also covers repeated task IDs.
+This is decoder validation, not a new authenticated reproduction or a CodeConvoy
+session-resume feature. CLI arguments and process management are unchanged.
+
+Verification on macOS after the resumed-run correction:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --check` | Passed |
+| `cargo clippy --all-targets --all-features -- -D warnings` | Passed |
+| `cargo test --all-features -- --test-threads=1` | 621 passed, 0 failed, 9 opt-in tests ignored (excluding eight nested fixture-test summaries) |
+| `cargo build --release` | Passed |
+
+The suite used the same serial execution and local Unix socket access described
+above. Installed/authenticated Claude probes and native Windows/Linux execution
+were not repeated.
+
 ## Contract evidence
 
 The implementation was checked against current official sources, not remembered flags:
@@ -281,6 +318,7 @@ The implementation was checked against current official sources, not remembered 
 | [Official SDK message parser](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/message_parser.py) | Actual assistant-error and result-field parsing |
 | [Official SDK CLI transport](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/transport/subprocess_cli.py) | `_DEFAULT_MAX_BUFFER_SIZE = 1024 * 1024`, used to justify the backend's record bound |
 | [TypeScript SDK 0.3.243 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03243) | A positive `queued_turn_count` means queued sends remain and another turn/result will follow, not that the completed turn failed |
+| [TypeScript SDK 0.3.292 changelog](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md#03292) | Task IDs persist across resume; run IDs distinguish each task's runs |
 
 These are rolling documentation/source references inspected on the recorded date, not a claim about an installed Claude release. `tests/fixtures/claude-help-contract.txt` is explicitly synthetic. The shared fixture's version string is also synthetic and only tests display; no Claude semantic-version parser or minimum-version claim is made. Check CLI cannot prove account/model entitlement or validate every hidden flag on an older binary. A rejected invocation fails visibly.
 

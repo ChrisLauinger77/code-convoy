@@ -588,6 +588,120 @@ fn queued_background_events() -> Vec<Value> {
     events
 }
 
+fn resumed_background_events() -> Vec<Value> {
+    let mut events = queued_background_events();
+    let start = events
+        .iter()
+        .position(|event| event["subtype"] == "task_started" && event["task_id"] == "second-task")
+        .unwrap();
+    let start = events.remove(start);
+    let notification = events
+        .iter()
+        .position(|event| {
+            event["subtype"] == "task_notification" && event["task_id"] == "second-task"
+        })
+        .unwrap();
+    // Start the resumed run while answering the prior run's notification.
+    events.insert(notification, start);
+    for event in &mut events {
+        if event["task_id"] == "second-task" {
+            event["task_id"] = json!("background-task");
+        }
+    }
+    events
+}
+
+#[test]
+fn resumed_background_runs_keep_independent_notifications_and_results() {
+    let events = resumed_background_events();
+    assert_eq!(background_outcome(&events), JobStatus::Succeeded);
+    for end in 0..events.len() {
+        assert_eq!(
+            background_outcome(&events[..end]),
+            JobStatus::Failed,
+            "prefix {end}"
+        );
+    }
+
+    let mut later_notification = events.clone();
+    let notification = later_notification
+        .iter()
+        .position(|event| {
+            event["subtype"] == "task_notification" && event["run_id"] == "second-run"
+        })
+        .unwrap();
+    let notification = later_notification.remove(notification);
+    let first_result = later_notification
+        .iter()
+        .position(|event| event["result_index"] == 1)
+        .unwrap();
+    later_notification.insert(first_result + 1, notification);
+    assert_eq!(
+        background_outcome(&later_notification),
+        JobStatus::Succeeded
+    );
+}
+
+#[test]
+fn resumed_background_runs_reject_duplicate_runs_and_cross_run_completion() {
+    let original = resumed_background_events();
+    for reuse_task_id in [false, true] {
+        let mut duplicate = original.clone();
+        for event in &mut duplicate {
+            if event["run_id"] == "second-run" {
+                event["run_id"] = json!("background-run");
+                if !reuse_task_id {
+                    event["task_id"] = json!("different-task");
+                }
+            }
+        }
+        duplicate.last_mut().unwrap()["origin"]["runId"] = json!("background-run");
+        assert_eq!(
+            background_outcome(&duplicate),
+            JobStatus::Failed,
+            "duplicate run with reused task ID: {reuse_task_id}"
+        );
+    }
+    for (key, value) in [
+        ("task_id", json!("unknown-task")),
+        ("run_id", json!("unknown-run")),
+        ("session_id", json!("unknown-session")),
+        ("status", json!("failed")),
+    ] {
+        let mut events = original.clone();
+        let notification = events
+            .iter_mut()
+            .find(|event| {
+                event["subtype"] == "task_notification" && event["run_id"] == "second-run"
+            })
+            .unwrap();
+        notification[key] = value;
+        assert_eq!(background_outcome(&events), JobStatus::Failed, "{key}");
+    }
+    let missing_notification: Vec<_> = original
+        .iter()
+        .filter(|event| {
+            !(event["subtype"] == "task_notification" && event["run_id"] == "second-run")
+        })
+        .cloned()
+        .collect();
+    assert_eq!(background_outcome(&missing_notification), JobStatus::Failed);
+
+    // The old run's answer cannot also answer the resumed run, even though
+    // their task IDs match, and attributed results must keep notification order.
+    let mut old_result = original.clone();
+    old_result.last_mut().unwrap()["origin"]["runId"] = json!("background-run");
+    assert_eq!(background_outcome(&old_result), JobStatus::Failed);
+    let mut out_of_order = original.clone();
+    let first_result = out_of_order
+        .iter_mut()
+        .find(|event| event["result_index"] == 1)
+        .unwrap();
+    first_result["origin"]["runId"] = json!("second-run");
+    out_of_order.last_mut().unwrap()["origin"]["runId"] = json!("background-run");
+    assert_eq!(background_outcome(&out_of_order), JobStatus::Failed);
+}
+
 #[test]
 fn queued_background_notifications_drain_across_correlated_results() {
     let events = queued_background_events();
@@ -1031,18 +1145,25 @@ fn background_correlation_is_bounded_and_cannot_be_cleared_by_later_output() {
             }
         );
     }
-    for count in [128, 129] {
+    for (count, reuse_task_id) in [(128, false), (129, false), (128, true), (129, true)] {
+        let task_id = |n| {
+            if reuse_task_id {
+                "shared-task".to_owned()
+            } else {
+                format!("task-{n}")
+            }
+        };
         let mut events = original[..4].to_vec();
         for n in 0..count {
             let mut start = original[4].clone();
-            start["task_id"] = json!(format!("task-{n}"));
+            start["task_id"] = json!(task_id(n));
             start["run_id"] = json!(format!("run-{n}"));
             events.push(start);
         }
         events.extend_from_slice(&original[5..9]);
         for n in 0..count {
             let mut notification = original[10].clone();
-            notification["task_id"] = json!(format!("task-{n}"));
+            notification["task_id"] = json!(task_id(n));
             notification["run_id"] = json!(format!("run-{n}"));
             events.push(notification);
             events.push(original[12].clone());
@@ -1057,7 +1178,8 @@ fn background_correlation_is_bounded_and_cannot_be_cleared_by_later_output() {
                 JobStatus::Succeeded
             } else {
                 JobStatus::Failed
-            }
+            },
+            "pending runs {count}, reused task ID: {reuse_task_id}"
         );
     }
 }
