@@ -16480,6 +16480,90 @@
           "origin": "https://raw.githubusercontent.com/torvalds/linux/v6.6/LICENSES/exceptions/Linux-syscall-note"
         }
       ]
+    },
+    {
+      "name": "CodeConvoy NSIS helper dependency: semver",
+      "version": "1.0.18",
+      "license": "MIT OR Apache-2.0",
+      "scope": "Windows setup; source-built helper",
+      "checksum": "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918",
+      "notices": [
+        {
+          "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "origin": "https://static.crates.io/crates/semver/semver-1.0.18.crate :: semver-1.0.18/LICENSE-APACHE"
+        },
+        {
+          "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "origin": "https://static.crates.io/crates/semver/semver-1.0.18.crate :: semver-1.0.18/LICENSE-MIT"
+        }
+      ],
+      "source": "sources/semver-1.0.18.crate"
+    },
+    {
+      "name": "CodeConvoy NSIS helper dependency: windows-sys",
+      "version": "0.48.0",
+      "license": "MIT OR Apache-2.0",
+      "scope": "Windows setup; source-built helper",
+      "checksum": "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9",
+      "notices": [
+        {
+          "text": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b",
+          "origin": "https://static.crates.io/crates/windows-sys/windows-sys-0.48.0.crate :: windows-sys-0.48.0/license-apache-2.0"
+        },
+        {
+          "text": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+          "origin": "https://static.crates.io/crates/windows-sys/windows-sys-0.48.0.crate :: windows-sys-0.48.0/license-mit"
+        }
+      ],
+      "source": "sources/windows-sys-0.48.0.crate"
+    },
+    {
+      "name": "CodeConvoy NSIS helper dependency: windows-targets",
+      "version": "0.48.5",
+      "license": "MIT OR Apache-2.0",
+      "scope": "Windows setup; source-built helper",
+      "checksum": "9a2fa6e2155d7247be68c096456083145c183cbbbc2764150dda45a87197940c",
+      "notices": [
+        {
+          "text": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b",
+          "origin": "https://static.crates.io/crates/windows-targets/windows-targets-0.48.5.crate :: windows-targets-0.48.5/license-apache-2.0"
+        },
+        {
+          "text": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+          "origin": "https://static.crates.io/crates/windows-targets/windows-targets-0.48.5.crate :: windows-targets-0.48.5/license-mit"
+        }
+      ],
+      "source": "sources/windows-targets-0.48.5.crate"
+    },
+    {
+      "name": "CodeConvoy shortcut AppUserModelID helper",
+      "version": "1",
+      "license": "MIT",
+      "scope": "Windows setup; original CodeConvoy source",
+      "notices": [
+        {
+          "text": "37438906c0a4475ff6029c83d6ab7c9a62c4b8042b32a51182258a717bccb803",
+          "origin": "third-party/nsis/LICENSE-CodeConvoy"
+        }
+      ],
+      "source": "sources/codeconvoy-nsis-helpers-1.zip"
+    },
+    {
+      "name": "CodeConvoy reduced nsis-tauri-utils helper",
+      "version": "0.2.1 CodeConvoy build 1",
+      "license": "MIT OR Apache-2.0",
+      "scope": "Windows setup; original process/version runtime source; reduced facade",
+      "notices": [
+        {
+          "text": "1c1020fa10a6bf318717e82c911bcc54ebdfb9bb280460ae332bcb2f82f57fbe",
+          "origin": "third-party/nsis/LICENSE_MIT"
+        },
+        {
+          "text": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "origin": "third-party/nsis/LICENSE_APACHE-2.0"
+        }
+      ],
+      "source": "sources/codeconvoy-nsis-helpers-1.zip"
     }
   ],
   "sources": [
@@ -16612,6 +16696,26 @@
       "source_revision": "ff05649790da27954fc672698b30aa984b772c01",
       "recipe_archive_sha256": "2de9cd681c8f635ad87646d89fdab8e11d1ddeac5d533c3e66ed3b689a901e95",
       "transformation": "Preserve every regular usr/include file and .PKGINFO from the pinned APK; include exact Alpine recipe/patches and Linux v6.6 COPYING, GPL-2.0 and Linux-syscall-note; deterministic source-only tar metadata."
+    },
+    {
+      "path": "sources/codeconvoy-nsis-helpers-1.zip",
+      "sha256": "b89447558e0843f001ffce188fcb690b043053cc21b7a2244898ced32de3bf06",
+      "origin": "CodeConvoy original shortcut helper, modified upstream source kit and pinned build recipe; see nsis/README.txt"
+    },
+    {
+      "path": "sources/semver-1.0.18.crate",
+      "sha256": "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918",
+      "origin": "https://static.crates.io/crates/semver/semver-1.0.18.crate"
+    },
+    {
+      "path": "sources/windows-sys-0.48.0.crate",
+      "sha256": "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9",
+      "origin": "https://static.crates.io/crates/windows-sys/windows-sys-0.48.0.crate"
+    },
+    {
+      "path": "sources/windows-targets-0.48.5.crate",
+      "sha256": "9a2fa6e2155d7247be68c096456083145c183cbbbc2764150dda45a87197940c",
+      "origin": "https://static.crates.io/crates/windows-targets/windows-targets-0.48.5.crate"
     }
   ],
   "files": [
@@ -16638,6 +16742,16 @@
       "sha256": "660732ca9f2068007cd622a3bb0c0a2ec67846acfe2711804cdcdc4719262671",
       "origin": "Final pinned offline runtime recipe; see docs/appimage-runtime-validation.md",
       "scope": "Repository build/link evidence; no binary files."
+    },
+    {
+      "path": "nsis-build-audit.json",
+      "sha256": "c633515048ef764252c7eef54d670331f0e37f4e0c719693dab01e43a2af0558",
+      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38894815404"
+    },
+    {
+      "path": "nsis-build-evidence.zip",
+      "sha256": "29b48ce707fa0cba7c41913d70f3e87fcac0de8a9308892c7d6fc5d8b9370829",
+      "origin": "https://github.com/ChrisLauinger77/code-convoy/actions/runs/38894815404"
     }
   ],
   "release_blockers": [
@@ -16651,11 +16765,11 @@
     }
   ],
   "windows_installer_plugins": {
-    "$PLUGINSDIR/ApplicationID.dll": "f6851dcbf0a39edecd8a46564bc455e5273736c3dbcb02b954c201c79ccdf117",
     "$PLUGINSDIR/StartMenu.dll": "110545415a59402635e1c9439acba15b44bab268ed02ad2a262ce12604a47855",
     "$PLUGINSDIR/System.dll": "9111099efe9d5c9b391dc132b2faf0a3851a760d4106d5368e30ac744eb42706",
     "$PLUGINSDIR/nsDialogs.dll": "4b7d17da290f41ebe244827cc295ce7e580da2f7e9f7cc3efc1abc6898e3c9ed",
-    "$PLUGINSDIR/nsis_tauri_utils.dll": "0eed48313a7f904d7cc1977b70000ab3f11f18cadc8e6a69b807d288ca71f9db"
+    "$PLUGINSDIR/CodeConvoyAppId.dll": "3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29",
+    "$PLUGINSDIR/codeconvoy_utils.dll": "30a4efad7d854a7eb7adf31cf48dfde6c00d6fdede9ca41674b026e36f55c734"
   },
   "rust_standard_library_components": [
     {
@@ -17861,6 +17975,211 @@
         "independent_verification": "Downloaded final installer and ZIP pass existing byte/notice/source/plugin checks against the source revision with native CRLF checkout bytes. All eight PE hashes and raw diagnostic hashes match. Complete selected member lists, response file and retained-symbol map are in the evidence archive.",
         "license_assessment": "unresolved"
       }
+    },
+    "nsis_replacements": {
+      "spec": {
+        "schema": 1,
+        "rust": "1.99.0",
+        "target": "i686-pc-windows-msvc",
+        "msvc": "14.51.36231",
+        "windows_sdk": "10.0.26100.0",
+        "upstream": {
+          "revision": "c3a4447060a260c5e4e09d94284948c4f864da02",
+          "source": "sources/nsis-tauri-utils-0.2.1.tar.gz"
+        },
+        "binaries": {
+          "CodeConvoyAppId.dll": {
+            "exports": [
+              "Set"
+            ],
+            "crt": "none"
+          },
+          "codeconvoy_utils.dll": {
+            "exports": [
+              "FindProcess",
+              "KillProcess",
+              "SemverCompare"
+            ],
+            "crt": "static"
+          }
+        },
+        "source_patch": {
+          "name": "windows-sys",
+          "version": "0.48.0",
+          "archive": "sources/windows-sys-0.48.0.crate",
+          "checksum": "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9",
+          "file": "src/lib.rs",
+          "before_sha256": "e5567f0c006a0fc45611d094303635675cbb8fc79352ee47e03037437918aaff",
+          "after_sha256": "8501f577839d588b570b9f09da6fb93f93ea2b4648039975633b59cf8c6625a3"
+        }
+      },
+      "inputs": {
+        "packaging/nsis/LICENSE_APACHE-2.0": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+        "packaging/nsis/LICENSE_MIT": "ef497d10d31e3a85c5c0a6bc598dcdfb5c717b6e085bbc0376f02618a8e31cb2",
+        "packaging/nsis/UPSTREAM.json": "b33182c79bbd6937f54d5d44edd5d7a5fb21a805fa31f0beb50d5eff96730426",
+        "packaging/nsis/helper-tests.nsi": "e0ccc344a3e159a6b1244b29c3596f5e49fae85d428d492d746a580b425502e8",
+        "packaging/nsis/installer.nsi": "8c4ffcfa92f9645fcf50094f3f57972a79b21ba4712047ed090301852d41fcf8",
+        "packaging/nsis/native-tests.ps1": "8ecb21d47a03062a90f871f570c4265c70c7c529f5dba835c6b2f1cec7985de8",
+        "packaging/nsis/test-process.cpp": "51063ac7bd02c2d37a64d6959a55e5f6a0826526b1f9f82414146f9ee7ac8ea1",
+        "packaging/nsis_helpers.py": "34527755eb00190f54fded3dca9cf8e19e2899bc2350768b0894c5a2d6a3fae9",
+        "packaging/windows_crt.py": "b8c35fe4e16d797567cb1e7bc773b46406701511cde988cee7225781e1d93892",
+        "third-party/nsis/Cargo.lock": "e434e7a08cbf9239731f19762f5a7c71c0647a25a7e54985094c05354dbd1e2d",
+        "third-party/nsis/Cargo.toml": "0b341b1e7e1d12779e74d749d00946bdc5b63f2f9050c5c3b0318a7af7cc43bb",
+        "third-party/nsis/LICENSE-CodeConvoy": "37438906c0a4475ff6029c83d6ab7c9a62c4b8042b32a51182258a717bccb803",
+        "third-party/nsis/LICENSE_APACHE-2.0": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+        "third-party/nsis/LICENSE_MIT": "1c1020fa10a6bf318717e82c911bcc54ebdfb9bb280460ae332bcb2f82f57fbe",
+        "third-party/nsis/README.txt": "5492fcd307375e0451879836f09ca7ff3c3f2a2fe1f35f47450a41d7147f5832",
+        "third-party/nsis/appid.cpp": "81a8a17032a10ec6c5e25fedb400751a0b2cf04b284e14ae155d240d27cb3218",
+        "third-party/nsis/appid.def": "a5ac56fe6d49af329a34e59a708fbd9f09edc0a5bd3889814b5fccfb2e00dd98",
+        "third-party/nsis/crates/codeconvoy-utils/Cargo.toml": "fb075e94208499990b7ac67cdad5514174d3693efbdd25125f5e15d152d2c97c",
+        "third-party/nsis/crates/codeconvoy-utils/src/lib.rs": "e95ab645e2017ced37446a7fd43e1a3ca4a19685b3ece93477f26473edaaa8a2",
+        "third-party/nsis/crates/nsis-process/Cargo.toml": "b9c6217b95bbca8e783811beb4ab67694ec2eab976086e0e5691ae2670b13d96",
+        "third-party/nsis/crates/nsis-process/src/lib.rs": "fbbeca9df211c54eaa2a9e0a47e9252376b5a3eb2fc662579776ee2fe4e87981",
+        "third-party/nsis/crates/nsis-semvercompare/Cargo.toml": "53050c8b536a224ee4dd7de1c5a1eb88c5be987d05c58a01d03251e7d61ff70a",
+        "third-party/nsis/crates/nsis-semvercompare/src/lib.rs": "e664f4e1b8bb654dab343bf40fc74f5fbad8786a76cccc922b01dabf53e41871",
+        "third-party/nsis/crates/pluginapi/Cargo.toml": "804bf78e52a9573f644068ef3bed1ae9cb60a5594f99289019e374989a25e215",
+        "third-party/nsis/crates/pluginapi/src/lib.rs": "55d378d8ffdeac55b586d2d58b103d1da9b022f6010437caab77dd2197c189fa",
+        "third-party/nsis/dependencies.json": "b02f93d69a4e26debd59df2dfbd790790ba01ab4f3042fb494c9eb96d1fd5db8",
+        "third-party/nsis/inputs.json": "fbf5f1b9601170964fb095635575272425b5919992e06d1448d5a9d2590e7af1",
+        "third-party/nsis/windows-sys-stable-raw-dylib.patch": "eff3d4452a11485b15bb67ea3d16819fc7d61ce98c289212bd7973deb9aebcdf"
+      },
+      "dependencies": [
+        {
+          "name": "semver",
+          "version": "1.0.18",
+          "checksum": "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918",
+          "license": "MIT OR Apache-2.0",
+          "notices": [
+            {
+              "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+              "origin": "https://static.crates.io/crates/semver/semver-1.0.18.crate :: semver-1.0.18/LICENSE-APACHE"
+            },
+            {
+              "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+              "origin": "https://static.crates.io/crates/semver/semver-1.0.18.crate :: semver-1.0.18/LICENSE-MIT"
+            }
+          ],
+          "source_revision": "c1fcafc1862753d93ff0cbc0c7a928cedb1a96d1",
+          "included": true,
+          "source": "sources/semver-1.0.18.crate"
+        },
+        {
+          "name": "windows-sys",
+          "version": "0.48.0",
+          "checksum": "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9",
+          "license": "MIT OR Apache-2.0",
+          "notices": [
+            {
+              "text": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b",
+              "origin": "https://static.crates.io/crates/windows-sys/windows-sys-0.48.0.crate :: windows-sys-0.48.0/license-apache-2.0"
+            },
+            {
+              "text": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+              "origin": "https://static.crates.io/crates/windows-sys/windows-sys-0.48.0.crate :: windows-sys-0.48.0/license-mit"
+            }
+          ],
+          "source_revision": "406944152ef28d3273236edc958c2bfbf825775d",
+          "included": true,
+          "source": "sources/windows-sys-0.48.0.crate"
+        },
+        {
+          "name": "windows-targets",
+          "version": "0.48.5",
+          "checksum": "9a2fa6e2155d7247be68c096456083145c183cbbbc2764150dda45a87197940c",
+          "license": "MIT OR Apache-2.0",
+          "notices": [
+            {
+              "text": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b",
+              "origin": "https://static.crates.io/crates/windows-targets/windows-targets-0.48.5.crate :: windows-targets-0.48.5/license-apache-2.0"
+            },
+            {
+              "text": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+              "origin": "https://static.crates.io/crates/windows-targets/windows-targets-0.48.5.crate :: windows-targets-0.48.5/license-mit"
+            }
+          ],
+          "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+          "included": true,
+          "source": "sources/windows-targets-0.48.5.crate"
+        },
+        {
+          "name": "windows_aarch64_gnullvm",
+          "version": "0.48.5",
+          "checksum": "2b38e32f0abccf9987a4e3079dfb67dcd799fb61361e53e2882c3cbaf0d905d8",
+          "license": "MIT OR Apache-2.0",
+          "notices": [],
+          "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+          "included": false,
+          "source": null
+        },
+        {
+          "name": "windows_aarch64_msvc",
+          "version": "0.48.5",
+          "checksum": "dc35310971f3b2dbbf3f0690a219f40e2d9afcf64f9ab7cc1be722937c26b4bc",
+          "license": "MIT OR Apache-2.0",
+          "notices": [],
+          "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+          "included": false,
+          "source": null
+        },
+        {
+          "name": "windows_i686_gnu",
+          "version": "0.48.5",
+          "checksum": "a75915e7def60c94dcef72200b9a8e58e5091744960da64ec734a6c6e9b3743e",
+          "license": "MIT OR Apache-2.0",
+          "notices": [],
+          "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+          "included": false,
+          "source": null
+        },
+        {
+          "name": "windows_i686_msvc",
+          "version": "0.48.5",
+          "checksum": "8f55c233f70c4b27f66c523580f78f1004e8b5a8b659e05a4eb49d4166cca406",
+          "license": "MIT OR Apache-2.0",
+          "notices": [],
+          "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+          "included": false,
+          "source": null
+        },
+        {
+          "name": "windows_x86_64_gnu",
+          "version": "0.48.5",
+          "checksum": "53d40abd2583d23e4718fddf1ebec84dbff8381c07cae67ff7768bbf19c6718e",
+          "license": "MIT OR Apache-2.0",
+          "notices": [],
+          "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+          "included": false,
+          "source": null
+        },
+        {
+          "name": "windows_x86_64_gnullvm",
+          "version": "0.48.5",
+          "checksum": "0b7b52767868a23d5bab768e390dc5f5c55825b6d30b86c844ff2dc7414044cc",
+          "license": "MIT OR Apache-2.0",
+          "notices": [],
+          "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+          "included": false,
+          "source": null
+        },
+        {
+          "name": "windows_x86_64_msvc",
+          "version": "0.48.5",
+          "checksum": "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538",
+          "license": "MIT OR Apache-2.0",
+          "notices": [],
+          "source_revision": "b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+          "included": false,
+          "source": null
+        }
+      ],
+      "source_archive": "sources/codeconvoy-nsis-helpers-1.zip",
+      "binaries": {
+        "CodeConvoyAppId.dll": "3f4dc691bc1e9b4cff12ad5199b6330303249cddcd49d6ffddbd27e0efeb3c29",
+        "codeconvoy_utils.dll": "30a4efad7d854a7eb7adf31cf48dfde6c00d6fdede9ca41674b026e36f55c734"
+      },
+      "audit": "nsis-build-audit.json",
+      "evidence": "nsis-build-evidence.zip",
+      "status": "candidate; final payload and native installation validation pending"
     }
   }
 }

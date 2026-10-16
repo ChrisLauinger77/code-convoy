@@ -1,5 +1,6 @@
 """Build and verify the two narrowly scoped, source-owned NSIS helpers."""
 import argparse
+import io
 import json
 import os
 from pathlib import Path, PureWindowsPath
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tarfile
 import tomllib
+import zipfile
 
 import windows_crt as crt
 
@@ -66,9 +68,25 @@ def source_entries(root=ROOT):
     return [(name, (root / name).read_bytes()) for name in inputs(root)]
 
 
+def source_archive(entries):
+    """Deterministic nested source kit; the existing outer bundle stays flat."""
+    output = io.BytesIO()
+    seen = set()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
+        for name, data in sorted(entries):
+            if (name in seen or name.startswith("/") or any(c in name for c in "\\:\x00")
+                    or any(p in ("", ".", "..") for p in name.split("/"))):
+                raise ValueError("Invalid NSIS source/evidence archive path")
+            seen.add(name)
+            info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, data)
+    return output.getvalue()
+
+
 def verify_catalog(catalog, texts, root=ROOT, evidence=None):
     """Source/notice gates also run offline, on platforms that cannot build PE."""
-    from licenses import source_bundle
     evidence = evidence or root / "third-party"
     record = catalog["native_provenance"]["nsis_replacements"]
     kit = evidence / "nsis"
@@ -76,7 +94,7 @@ def verify_catalog(catalog, texts, root=ROOT, evidence=None):
     if record["inputs"] != inputs(root) or record["spec"] != spec:
         raise ValueError("NSIS helper sources/build inputs changed: review provenance")
     archive = next((s for s in catalog["sources"] if s["path"] == record["source_archive"]), None)
-    if archive is None or (evidence / archive["path"]).read_bytes() != source_bundle(source_entries(root)):
+    if archive is None or (evidence / archive["path"]).read_bytes() != source_archive(source_entries(root)):
         raise ValueError("Incomplete NSIS helper source/build kit")
     packages = json.loads((kit / "dependencies.json").read_text())
     identities = lambda ps: [(p["name"], p["version"], p["checksum"]) for p in ps]

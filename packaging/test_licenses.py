@@ -20,10 +20,12 @@ class LicenseEvidence(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        for name in ("Cargo.lock", "Cargo.toml", "packaging/appimage-tools.json", ".github/workflows/release.yml"):
+        for name in ("Cargo.lock", "Cargo.toml", "packaging/appimage-tools.json", ".github/workflows/release.yml",
+                     "packaging/nsis_helpers.py", "packaging/windows_crt.py"):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(licenses.ROOT / name, destination)
+        shutil.copytree(licenses.ROOT / "packaging/nsis", self.root / "packaging/nsis")
         self.evidence = self.root / "third-party"
         shutil.copytree(licenses.EVIDENCE, self.evidence)
         self.catalog = json.loads((self.evidence / "catalog.json").read_text())
@@ -123,14 +125,16 @@ class LicenseEvidence(unittest.TestCase):
             self.check()
 
     def test_native_provenance_cannot_describe_another_binary(self):
-        for component, key in (("appimage", "runtime_sha256"), ("appimage", "source_revision"),
-                               ("nsis_tauri_utils", "dll_sha256")):
+        for component, key in (("appimage", "runtime_sha256"), ("appimage", "source_revision")):
             record = self.catalog["native_provenance"][component]
             original = record[key]
             record[key] = "0" * 64
             with self.subTest(component=component), self.assertRaisesRegex(ValueError, "provenance does not match"):
                 self.check()
             record[key] = original
+        self.catalog["native_provenance"]["nsis_replacements"]["binaries"]["CodeConvoyAppId.dll"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "provenance does not match"):
+            self.check()
 
     def test_identified_appimage_source_cannot_be_omitted(self):
         self.catalog["sources"] = [s for s in self.catalog["sources"] if 'mimalloc' not in s["path"]]

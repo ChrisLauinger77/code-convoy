@@ -8,3 +8,8 @@ third-party/sources/gcc-14.2.0-* -whitespace
 # Patch context includes required spaces; preserve these checksum-pinned bytes.
 third-party/runtime/*.patch -whitespace
 packaging/appimage-tools.json text eol=lf
+# The replacement helper source kit is hashed on both Windows and Unix hosts.
+packaging/nsis/** text eol=lf
+packaging/nsis_helpers.py text eol=lf
+packaging/windows_crt.py text eol=lf
+third-party/nsis/*.patch -whitespace
