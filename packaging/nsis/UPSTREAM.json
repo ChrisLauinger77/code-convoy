@@ -8,6 +8,7 @@
     "Validate normal release versions in every installation mode; preserve effective allowDowngrades=true",
     "Check externally supplied x64 runtime before installation and maintenance; retain legacy uninstaller checks",
     "Fail closed on uncertain process state, failed maintenance, and missing shortcut identity",
-    "Respect silent/passive /NS for both shortcut locations"
+    "Respect silent/passive /NS for both shortcut locations",
+    "Pin the product registry key to the 1.0.0 manufacturer so publisher changes keep upgrades working"
   ]
 }

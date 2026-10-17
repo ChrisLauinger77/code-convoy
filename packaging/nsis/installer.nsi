@@ -37,7 +37,9 @@ ${StrLoc}
 !define ALLOWDOWNGRADES "{{allow_downgrades}}"
 !define DISPLAYLANGUAGESELECTOR "{{display_language_selector}}"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
-!define MANUPRODUCTKEY "Software\${MANUFACTURER}\${PRODUCTNAME}"
+; Keep the 1.0.0 registry location independent of the displayed publisher;
+; upgrades read the previous installation directory from this key.
+!define MANUPRODUCTKEY "Software\CodeConvoy contributors\${PRODUCTNAME}"
 !define UNINSTALLERSIGNCOMMAND "{{uninstaller_sign_cmd}}"
 !define ESTIMATEDSIZE "{{estimated_size}}"
 
