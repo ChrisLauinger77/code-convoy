@@ -333,7 +333,8 @@ async fn parent_exit_cannot_complete_while_closed_stream_descendant_holds_a_lock
         .unwrap();
         assert!(
             stopped_before_return,
-            "parent exit {code} returned while its closed-stream descendant was alive: {result:#?}"
+            "parent exit {code} returned while its closed-stream descendant was alive: {:?}",
+            result.as_ref().map(|output| output.status)
         );
         assert_eq!(result.unwrap().status.code(), Some(code));
     }
