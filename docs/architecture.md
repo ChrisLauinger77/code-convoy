@@ -191,6 +191,22 @@ No Claude-specific process management is added. Each invocation belongs to the s
 
 Permissions and omitted capabilities are explained in [Claude validation](claude-validation.md). CodeConvoy supplies no additional directories, unrestricted bypass, detached/background session, resume, agent definition or custom tool policy. Existing Claude configuration/hooks still apply; tool permissions do not sandbox that configuration. Future Activity UI and backend #5 are outside this release cycle.
 
+### Cursor foundation (1.1 milestone, PR 1)
+
+Cursor is the fifth registered backend, using `AgentBackend` / `AgentOutput`
+without changes to their contracts. Its additive persisted ID is `cursor`.
+The existing selector, per-agent preferences, review, history/export and result
+flows use the registry normally. Discovery adds the official `agent` /
+`cursor-agent` launcher names and native Windows install location. Existing
+backend implementations, scheduler, Git and process execution are unchanged.
+
+`agents/cursor` owns print-mode arguments, positional prompt/text context,
+optional model, explicit force/trust choices and initial NDJSON terminal-result
+validation. Both cwd and `--workspace` select the runner-assigned checkout;
+Cursor's own worktree management is not used. Authentication remains external.
+Detailed Activity handling and real CLI lifecycle/permission validation are later
+milestones. See [Cursor evidence and limitations](cursor-validation.md).
+
 ## Scheduling and shutdown
 
 The editor draft is separate from execution. Preflight takes owned copies of task/options and selected canonical repositories; confirmation saves `PreparedRun::snapshot` before handing owned data to `RunManager`. Each convoy keeps its own task/backend and job cancellation tokens. Run IDs route every event and cancellation, so selecting or editing another convoy does not affect workers.

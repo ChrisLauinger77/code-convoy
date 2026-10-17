@@ -283,7 +283,13 @@ async fn probe(
         // Exact launcher names also use common GUI installation directories.
         if !executable.is_empty() && Path::new(&executable).components().count() == 1 {
             let name = executable.clone();
-            let search = tokio::task::spawn_blocking(move || discovery::resolve(agent, &name));
+            let search = tokio::task::spawn_blocking(move || {
+                if automatic && agent == AgentId::Cursor {
+                    discovery::find(agent, "").into_iter().next()
+                } else {
+                    discovery::resolve(agent, &name)
+                }
+            });
             let path = tokio::select! {
                 biased;
                 _ = cancellation.cancelled() => anyhow::bail!("CLI check cancelled."),

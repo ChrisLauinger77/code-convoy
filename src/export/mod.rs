@@ -233,6 +233,7 @@ impl Convoy {
                 AgentId::Copilot => "copilot",
                 AgentId::OpenCode => "opencode",
                 AgentId::Claude => "claude",
+                AgentId::Cursor => "cursor",
             },
             backend_label: run.task.agent.label(),
             task_summary: run

@@ -74,7 +74,13 @@ async fn execute(task: TaskConfig, repos: Vec<Repository>) -> (Run, Vec<Event>) 
 
 #[tokio::test]
 async fn maintenance_groups_and_image_context_reach_independent_jobs_for_every_backend() {
-    for agent in AgentId::ALL {
+    // Cursor's foundation deliberately rejects image attachments.
+    for agent in [
+        AgentId::Codex,
+        AgentId::Copilot,
+        AgentId::OpenCode,
+        AgentId::Claude,
+    ] {
         let temp = tempfile::tempdir().unwrap();
         let attachments = context(temp.path());
         let repos = vec![

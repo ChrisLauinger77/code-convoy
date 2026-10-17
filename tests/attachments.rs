@@ -147,10 +147,22 @@ fn every_backend_supplies_escaped_text_via_stdin_without_changing_permissions() 
         let original = backend.build(&task, &repository).unwrap();
         task.attachments = vec![attachment.clone()];
         let supplied = backend.build(&task, &repository).unwrap();
-        assert_eq!(original.args, supplied.args, "{agent:?}");
+        if agent == AgentId::Cursor {
+            assert_eq!(
+                original.args[..original.args.len() - 1],
+                supplied.args[..supplied.args.len() - 1]
+            );
+        } else {
+            assert_eq!(original.args, supplied.args, "{agent:?}");
+        }
         assert_eq!(original.env, supplied.env);
         assert_eq!(original.remove_env, supplied.remove_env);
-        let input = String::from_utf8(supplied.input.unwrap()).unwrap();
+        let input = if agent == AgentId::Cursor {
+            assert!(supplied.input.is_none());
+            supplied.args.last().unwrap().to_str().unwrap().to_owned()
+        } else {
+            String::from_utf8(supplied.input.unwrap()).unwrap()
+        };
         let context: serde_json::Value =
             serde_json::from_str(input.lines().last().unwrap()).unwrap();
         assert_eq!(context["filename"], attachment.filename);
@@ -187,6 +199,16 @@ fn image_transport_preserves_paths_and_uses_backend_owned_native_or_structured_i
             attachments: images.clone(),
             ..Default::default()
         };
+        if agent == AgentId::Cursor {
+            assert!(
+                backend
+                    .build(&task, &repository)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("image attachment")
+            );
+            continue;
+        }
         let spec = backend.build(&task, &repository).unwrap();
         match agent {
             AgentId::Codex => {
@@ -246,6 +268,7 @@ fn image_transport_preserves_paths_and_uses_backend_owned_native_or_structured_i
                     );
                 }
             }
+            AgentId::Cursor => unreachable!("Cursor image transport is explicitly unsupported"),
         }
     }
 }

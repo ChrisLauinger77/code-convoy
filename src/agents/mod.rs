@@ -3,6 +3,7 @@ pub mod availability;
 pub mod claude;
 pub mod codex;
 pub mod copilot;
+pub mod cursor;
 pub mod discovery;
 pub mod opencode;
 use crate::{
@@ -110,6 +111,7 @@ pub fn backend(id: AgentId) -> Result<std::sync::Arc<dyn AgentBackend>> {
         AgentId::Copilot => Ok(std::sync::Arc::new(copilot::Copilot)),
         AgentId::OpenCode => Ok(std::sync::Arc::new(opencode::OpenCode)),
         AgentId::Claude => Ok(std::sync::Arc::new(claude::Claude)),
+        AgentId::Cursor => Ok(std::sync::Arc::new(cursor::Cursor)),
     }
 }
 pub fn value<'a>(options: &'a AgentOptions, spec: &'a OptionSpec) -> &'a str {
@@ -183,12 +185,13 @@ async fn probe_lock(
     agent: AgentId,
     cancellation: &process::Cancellation,
 ) -> Result<tokio::sync::MutexGuard<'static, ()>> {
-    static PROBES: [tokio::sync::Mutex<()>; 4] = [const { tokio::sync::Mutex::const_new(()) }; 4];
+    static PROBES: [tokio::sync::Mutex<()>; 5] = [const { tokio::sync::Mutex::const_new(()) }; 5];
     let index = match agent {
         AgentId::Codex => 0,
         AgentId::Copilot => 1,
         AgentId::OpenCode => 2,
         AgentId::Claude => 3,
+        AgentId::Cursor => 4,
     };
     tokio::select! {
         biased;

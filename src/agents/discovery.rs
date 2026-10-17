@@ -9,7 +9,22 @@ use std::{
 
 /// Run on a blocking worker, never while rendering the UI.
 pub fn find(agent: AgentId, configured: &str) -> Vec<PathBuf> {
-    search(default_name(agent), configured, directories(agent))
+    find_in(agent, configured, directories(agent))
+}
+
+fn find_in(agent: AgentId, configured: &str, directories: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut found = search(default_name(agent), configured, directories.clone());
+    if agent == AgentId::Cursor {
+        for candidate in search("cursor-agent", "", directories) {
+            if !found
+                .iter()
+                .any(|path| path.canonicalize().ok() == candidate.canonicalize().ok())
+            {
+                found.push(candidate);
+            }
+        }
+    }
+    found
 }
 
 /// Resolve the requested launcher name in the same GUI-safe locations as Find
@@ -33,6 +48,7 @@ pub fn default_name(agent: AgentId) -> &'static str {
         AgentId::Copilot => "copilot",
         AgentId::OpenCode => "opencode",
         AgentId::Claude => "claude",
+        AgentId::Cursor => "agent",
     }
 }
 
@@ -80,7 +96,11 @@ fn directories(agent: AgentId) -> Vec<PathBuf> {
     );
     #[cfg(windows)]
     if let Some(local) = env::var_os("LOCALAPPDATA") {
-        directories.push(PathBuf::from(local).join("Microsoft/WinGet/Links"));
+        let local = PathBuf::from(local);
+        directories.push(local.join("Microsoft/WinGet/Links"));
+        if agent == AgentId::Cursor {
+            directories.push(local.join("cursor-agent"));
+        }
     }
     directories
 }
@@ -157,6 +177,43 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
 
+    #[test]
+    fn cursor_discovers_primary_and_legacy_launchers_without_replacing_custom_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let primary = executable(&temp.path().join("primary ü"), "agent");
+        let legacy = executable(&temp.path().join("legacy ü"), "cursor-agent");
+        let custom = executable(&temp.path().join("custom"), "selected");
+        let dirs = vec![
+            legacy.parent().unwrap().into(),
+            primary.parent().unwrap().into(),
+        ];
+        assert_eq!(
+            find_in(AgentId::Cursor, "", dirs.clone()),
+            [primary.clone(), legacy.clone()]
+        );
+        assert_eq!(
+            find_in(AgentId::Cursor, custom.to_str().unwrap(), dirs),
+            [custom, primary, legacy.clone()]
+        );
+        assert_eq!(
+            find_in(AgentId::Cursor, "", vec![legacy.parent().unwrap().into()]),
+            [legacy]
+        );
+        assert!(search("custom-missing", "", vec![temp.path().into()]).is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cursor_aliases_to_the_same_executable_are_offered_once() {
+        let temp = tempfile::tempdir().unwrap();
+        let primary = executable(temp.path(), "agent");
+        std::os::unix::fs::symlink(&primary, temp.path().join("cursor-agent")).unwrap();
+        assert_eq!(
+            find_in(AgentId::Cursor, "", vec![temp.path().into()]),
+            [primary]
+        );
+    }
+
     fn executable(directory: &Path, name: &str) -> PathBuf {
         std::fs::create_dir_all(directory).unwrap();
         let path = directory.join(if cfg!(windows) {
@@ -175,11 +232,11 @@ mod tests {
     }
 
     #[test]
-    fn finds_all_four_agents_in_search_order_without_running_them() {
+    fn finds_all_five_agents_in_search_order_without_running_them() {
         let temp = tempfile::tempdir().unwrap();
         let path_dir = temp.path().join("path with spaces ü");
         let known_dir = temp.path().join("known install");
-        for name in ["codex", "copilot", "opencode", "claude"] {
+        for name in ["codex", "copilot", "opencode", "claude", "agent"] {
             let first = executable(&path_dir, name);
             let second = executable(&known_dir, name);
             assert_eq!(

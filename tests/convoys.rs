@@ -140,7 +140,15 @@ async fn native_image_preflight_rejects_missing_cli_interfaces_without_starting_
         let mut task = h.task(1, agent, 1, false);
         task.attachments.push(attachment.clone());
         let result = runner::prepare(task, vec![repo.clone()]).await;
-        if agent == AgentId::Codex {
+        if agent == AgentId::Cursor {
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("image attachment")
+            );
+        } else if agent == AgentId::Codex {
             // The fixture intentionally has no Codex exec image interface.
             let error = result.err().unwrap().to_string();
             assert!(error.contains("screenshot.png") && error.contains("--image"));
@@ -274,7 +282,8 @@ async fn attachment_that_becomes_unreadable_while_queued_never_reaches_the_agent
 
 #[tokio::test]
 async fn every_backend_delivers_attachment_context_and_keeps_separate_raw_output() {
-    let mut h = Harness::new(4);
+    let count = AgentId::ALL.len();
+    let mut h = Harness::new(count);
     let path = h.directory.path().join("requirements.md");
     std::fs::write(&path, "attached context Grüße").unwrap();
     let attachment = codeconvoy::attachments::Attachment::inspect(&path).unwrap();
@@ -288,7 +297,7 @@ async fn every_backend_delivers_attachment_context_and_keeps_separate_raw_output
         h.start(id, prepared);
         repos.push((id, repo));
     }
-    h.until(|events| (1..=4).all(|id| Harness::ready(events, id, 0)))
+    h.until(|events| (1..=count as u64).all(|id| Harness::ready(events, id, 0)))
         .await;
     for (id, repo) in &repos {
         let input =
@@ -298,7 +307,7 @@ async fn every_backend_delivers_attachment_context_and_keeps_separate_raw_output
         assert_eq!(context["content"], "attached context Grüße");
         h.release(*id, repo);
     }
-    h.finish_all(4).await;
+    h.finish_all(count).await;
     for (index, agent) in AgentId::ALL.into_iter().enumerate() {
         let id = index as u64 + 1;
         assert!(Harness::finished(&h.events, id, 0, JobStatus::Succeeded));
