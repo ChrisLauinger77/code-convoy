@@ -514,6 +514,72 @@ impl AgentBackend for SupervisedCursor {
 }
 
 #[tokio::test]
+async fn completed_process_is_not_reclassified_when_started_delivery_outlasts_deadline() {
+    for (failed, expected, code) in [
+        (false, JobStatus::Succeeded, 0),
+        (true, JobStatus::Failed, 7),
+    ] {
+        let mut h = Harness::new(1, 1);
+        let repo = h.repository("source").await;
+        let mut task = h.task(
+            1,
+            ExecutionMode::Direct,
+            json!({"observe_exit":true, "fail":failed}),
+        );
+        task.options.insert("timeout_seconds".into(), "3".into());
+        let prepared = runner::prepare(task, vec![repo]).await.unwrap();
+        h.manager.shutdown();
+        (&mut h.manager.join).await.unwrap();
+        let (tx, rx) = mpsc::channel(1);
+        h.manager = RunManager::new(1, tx.clone());
+        h.rx = rx;
+        h.manager
+            .start(
+                1,
+                prepared,
+                Arc::new(SupervisedCursor {
+                    fill: Some(tx),
+                    refuse_cancel: false,
+                }),
+            )
+            .unwrap();
+        h.until(|events| {
+            events
+                .iter()
+                .any(|event| matches!(event, Event::Queued { run: 1, .. }))
+        })
+        .await;
+        file_ready(&h.root.path().join("control/parent.ready")).await;
+        let lock = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(h.root.path().join("control/parent.lock"))
+            .unwrap();
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        h.release(1, "source");
+        lock_released(&lock).await;
+        // The child has exited. Keep the UI queue full beyond the configured
+        // deadline; delivery latency must not replace its actual exit/result.
+        tokio::time::sleep(Duration::from_secs(4)).await;
+        h.until(|events| {
+            events
+                .iter()
+                .any(|event| matches!(event, Event::Finished { run: 1, .. }))
+        })
+        .await;
+        assert!(
+            h.events.iter().any(
+                |event| matches!(event, Event::Finished {run:1,status,exit_code,detail,..}
+            if *status == expected && *exit_code == Some(code) && !detail.contains("timed out"))
+            ),
+            "{:?}",
+            h.events
+        );
+        h.close().await;
+    }
+}
+
+#[tokio::test]
 async fn deadline_cleans_up_even_when_started_event_is_backpressured() {
     let mut h = Harness::new(1, 1);
     let repo = h.repository("source").await;
@@ -552,10 +618,12 @@ async fn deadline_cleans_up_even_when_started_event_is_backpressured() {
             |event| matches!(event, Event::Finished {detail,..} if detail.contains("timed out"))
         )
     );
-    assert!(
-        !h.events
+    assert_eq!(
+        h.events
             .iter()
-            .any(|event| matches!(event, Event::Started { run: 1, .. }))
+            .filter(|event| matches!(event, Event::Started { run: 1, .. }))
+            .count(),
+        1
     );
     h.close().await;
 }

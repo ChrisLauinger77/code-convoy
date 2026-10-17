@@ -24,6 +24,19 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     assert!(std::env::vars_os().all(|(key, _)| !key.to_string_lossy().starts_with("GIT_")));
     if let Some(json) = prompt.strip_prefix("codeconvoy-fixture-gate\n") {
         let config: serde_json::Value = serde_json::from_str(json.lines().next().unwrap_or(json))?;
+        let _exit_lock = if config["observe_exit"].as_bool() == Some(true) {
+            let control = Path::new(config["control"].as_str().ok_or("missing exit control")?);
+            let lock = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(control.join("parent.lock"))?;
+            fs2::FileExt::lock_exclusive(&lock)?;
+            std::fs::write(control.join("parent.ready"), "ready")?;
+            Some(lock)
+        } else {
+            None
+        };
         let mut child = if config["spawn_child"].as_bool() == Some(true) {
             let control = config["control"].as_str().ok_or("missing child control")?;
             Some(
@@ -40,6 +53,11 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         let result = super::gate(json, prompt, args, false, false);
         if let Some(child) = child.as_mut() {
             let _ = child.wait()?;
+        }
+        if config["observe_exit"].as_bool() == Some(true) && result.is_ok() {
+            std::io::Write::flush(&mut std::io::stdout())?;
+            // Keep the lock until OS exit rather than releasing it in Drop.
+            std::process::exit(0);
         }
         return result;
     }

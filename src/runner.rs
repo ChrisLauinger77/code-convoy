@@ -379,61 +379,68 @@ async fn run_agent(
     let deadline = timeout.map(|timeout| tokio::time::Instant::now() + timeout);
     *launched = true;
     repository_safe.store(false, Ordering::Release);
-    tokio::select! {
-        biased;
-        _ = cancellation.cancelled() => {},
-        _ = process::deadline_elapsed(deadline) => {},
-        result = tx.send(Event::Started {
-        run,
-        job,
-        before: state.summary,
-        }) => { result.context("Application closed.")?; }
-    }
-    if task.execution_mode == ExecutionMode::IsolatedWorktree {
-        // The process already exists. UI backpressure must not delay entering
-        // execute, which owns cancellation and awaits process-tree cleanup.
-        tokio::select! {
-            biased;
-            _ = cancellation.cancelled() => {},
-            _ = process::deadline_elapsed(deadline) => {},
-            _ = lifecycle(tx, run, job, "Running agent in isolated worktree") => {},
-        }
-    }
+    let started = AtomicBool::new(false);
     let decoder = Mutex::new((
         backend.output_for(&task.options, &prepared.repository.path),
         0usize,
         raw_output::RawOutput::default(),
     ));
-    let result = process::execute_until(
-        child,
-        spec.input,
-        cancellation,
-        deadline,
-        |child| backend.cancel(child),
-        |stream, bytes| {
-            if let Ok(mut data) = decoder.lock() {
-                let text = data.0.push(stream, bytes);
-                let text = data.0.take_activity().unwrap_or(text);
-                let raw = data.2.push(stream, bytes);
-                if !text.is_empty() || !raw.is_empty() {
-                    let size = text.len() + raw.len();
-                    if tx
-                        .try_send(Event::Output {
-                            run,
-                            job,
-                            text,
-                            raw,
-                        })
-                        .is_err()
-                    {
-                        data.1 += size;
-                    }
-                }
+    // Supervise immediately, independently of UI delivery. A child that exits
+    // while Started/Running is blocked must keep its actual exit/result even if
+    // publication completes after the execution deadline. Neither future may
+    // release the repository lease before owned process cleanup completes.
+    let (_, result) = tokio::try_join!(
+        async {
+            tx.send(Event::Started {
+                run,
+                job,
+                before: state.summary,
+            })
+            .await
+            .context("Application closed.")?;
+            started.store(true, Ordering::Release);
+            if task.execution_mode == ExecutionMode::IsolatedWorktree {
+                lifecycle(tx, run, job, "Running agent in isolated worktree").await;
             }
+            Ok::<_, anyhow::Error>(())
         },
-    )
-    .await?;
-    repository_safe.store(true, Ordering::Release);
+        async {
+            let result = process::execute_until(
+                child,
+                spec.input,
+                cancellation,
+                deadline,
+                |child| backend.cancel(child),
+                |stream, bytes| {
+                    if let Ok(mut data) = decoder.lock() {
+                        let text = data.0.push(stream, bytes);
+                        let text = data.0.take_activity().unwrap_or(text);
+                        let raw = data.2.push(stream, bytes);
+                        if !text.is_empty() || !raw.is_empty() {
+                            let size = text.len() + raw.len();
+                            // Decode every byte, but preserve Started-before-output
+                            // ordering and the existing bounded omission accounting.
+                            if !started.load(Ordering::Acquire)
+                                || tx
+                                    .try_send(Event::Output {
+                                        run,
+                                        job,
+                                        text,
+                                        raw,
+                                    })
+                                    .is_err()
+                            {
+                                data.1 += size;
+                            }
+                        }
+                    }
+                },
+            )
+            .await?;
+            repository_safe.store(true, Ordering::Release);
+            Ok::<_, anyhow::Error>(result)
+        }
+    )?;
     let (tail, raw_tail, dropped, outcome) = {
         let mut data = decoder
             .lock()

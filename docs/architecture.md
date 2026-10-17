@@ -212,8 +212,11 @@ keeps stderr separate and fails closed on malformed/incomplete/conflicting
 evidence or explicit tool/permission errors, retaining bounded backend Raw output.
 These structured fixtures are documentation-derived, not authenticated recordings.
 
-An optional Cursor execution time limit starts after spawn and covers blocked
-Started/Running event delivery as well as pipe processing. `process::execute_until`
+An optional Cursor execution time limit starts after spawn. Supervision runs
+concurrently with Started/Running publication, so UI backpressure cannot postpone
+pipe draining/reaping or change an already completed process into a timeout.
+Output delivery preserves Started ordering with bounded omission accounting;
+decoding continues even before Started can be delivered. `process::execute_until`
 uses the same owned process-tree termination and wait as cancellation; existing
 `execute` callers use no deadline. Cancellation wins when both signals are ready.
 Confirmed expiry fails the job, retains edits/worktrees and releases leases only

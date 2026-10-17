@@ -194,8 +194,11 @@ Unix escaped-descendant/crash limitations still apply (see architecture).
 
 Cursor adds an optional **CodeConvoy** time limit of 1–86400 seconds; blank is
 unlimited. It starts after spawn, excluding queueing and worktree preparation,
-and changes no CLI arguments. The supervisor uses the same process-tree cleanup
-as cancellation, including when Started/Running events are backpressured. Confirmed
+and changes no CLI arguments. Supervision starts concurrently with Started/Running
+publication: blocked delivery cannot postpone pipe draining/reaping or relabel an
+already completed process as a timeout. Output delivery preserves Started ordering
+and bounded omission accounting while decoding every byte. The supervisor uses
+the same process-tree cleanup as cancellation under UI backpressure. Confirmed
 expiry fails the job and retains all edits/results. Cancellation wins when both
 signals are ready. A cleanup error preserves the existing quarantined lease,
 capacity and history protection; later observations do not retroactively declare
@@ -227,11 +230,15 @@ local fixture processes and disposable real Git repositories, without providers:
 - An already-expired deadline cleans up a live descendant, and a ready cancellation
   wins the deadline race. Permission/trust defaults and the verified argument
   arrays remain unchanged, including when a time limit is configured.
+- A completed process (both successful and nonzero exits) retains its real result
+  while Started delivery stays blocked beyond the deadline. OS exit is established
+  by a fixture lock released by process termination. This regression first
+  reproduced the review finding as an exit-zero job misclassified as timed out.
 
 Existing all-backend process, convoy, worktree, attachment, persistence, compact
 UI, results and packaging suites remain relevant. On 2026-10-17, local formatting,
 strict Clippy, all-feature Rust tests and the release build passed, including
-28 focused Cursor tests and 98 packaging tests. Rust integration tests used
+29 focused Cursor tests and 98 packaging tests. Rust integration tests used
 `TMPDIR=/var/tmp` to avoid the execution sandbox's synthetic `/tmp` Git boundary.
 Commands and CI results are also recorded in the PR. Local process/Git coverage
 is Linux. The existing CI matrix
