@@ -5,7 +5,11 @@ CodeConvoy uses one egui UI thread and a small Tokio runtime. The unit of work i
 Backend status: Codex, Copilot and Claude Code have user-verified authenticated
 execution on Linux and macOS. Claude also has an authenticated Linux Auto-mode
 probe with disposable repositories; see [Claude validation](claude-validation.md)
-for exact versions and policy limitations. OpenCode has source/fixture checks
+for exact versions and policy limitations. Cursor has an accepted Linux syntax-only smoke test with CLI
+`2026.10.16-e3cb207`, deterministic lifecycle/UI fixtures and native CI process
+coverage; authenticated execution and full protocol compatibility remain
+unverified. [Cursor setup](cursor.md) and [evidence](cursor-validation.md) keep
+those boundaries explicit. OpenCode has source/fixture checks
 and macOS UI validation; authenticated E2E remains unverified. These observations
 do not establish compatibility with every CLI version or platform. See
 [1.x compatibility](compatibility.md) and [platform evidence](platform-validation.md).
@@ -23,6 +27,7 @@ do not establish compatibility with every CLI version or platform. See
 | `agents/copilot` | Copilot flags, bundled-version checks, raw text streaming, exit-status interpretation |
 | `agents/opencode` | OpenCode run/help/version contract, model/agent/variant/permission options, native JSON event decoding and conservative completion |
 | `agents/claude` | Claude print/help/version contract, model/effort/turn/permission options, stream-json decoding and final-result validation |
+| `agents/cursor` | Cursor direct print arguments, model/permission/trust/deadline options, native NDJSON decoding and conservative completion |
 | `process` | Shell-free process spawning, pipes, cancellation tokens, process-tree ownership, short-command timeouts |
 | `git` | Root/common-directory identity, working-tree inspection, direct diff and isolated diff dispatch |
 | `worktrees` | Owned attempt reservation, detached Git creation, ownership verification and fixed-base result inspection |
@@ -106,7 +111,7 @@ Reuse copies a run's task/options and selects its still-registered canonical rep
 
 `ui/text_view` caches a line index for the selected output/diff and uses egui's visible-row layout. Copy actions preserve the original retained text. Diff coloring is presentation-only: no agent protocol parsing, Git behavior, or stored output format is changed. Main panes and long details scroll independently; execution controls remain visible at the bottom of the editor. Appearance follows the system by default; overrides are saved as an optional appearance preference (Part 3.3); older state defaults to System. The editor is rendered before execution controls to match visual and Tab order. CLI probes have independent per-backend state, so their completion cannot clear repository/preflight work. An in-memory set of retained runs launched this session distinguishes empty live output from unrestored history logs.
 
-App construction schedules checks for all four configured/default executables on Tokio without awaiting them. `agents/availability` resolves exact launcher names with the existing filesystem-only discovery locations on blocking workers, then runs each backend's normal help/version check. Explicit absolute paths never fall back to another installation. Matching results adopt resolved paths into the existing per-agent settings so GUI launches and subsequent jobs use the same executable. The UI reports Checking… while a probe or its latest replacement is pending; success/error details are backend-local. Availability and probe state are never serialized.
+App construction schedules checks for all five configured/default executables on Tokio without awaiting them. `agents/availability` resolves exact launcher names with the existing filesystem-only discovery locations on blocking workers, then runs each backend's normal help/version check. Explicit absolute paths never fall back to another installation. Matching results adopt resolved paths into the existing per-agent settings so GUI launches and subsequent jobs use the same executable. The UI reports Checking… while a probe or its latest replacement is pending; success/error details are backend-local. Availability and probe state are never serialized.
 
 Run Convoy is disabled while the selected backend's check is pending. The preflight entry point also reconciles executable edits and refuses to snapshot a pending selection. This ensures a discovered absolute path is applied before preflight captures immutable options, including when the default launcher is absent from the GUI PATH. Checks for other backends do not delay review; task editing, repository loading and existing convoys stay independent.
 
@@ -352,7 +357,7 @@ review. Once admitted, a job validates its references and builds stdin/arguments
 on a blocking worker, then revalidates the Git baseline immediately before spawn.
 Cancellation can drop this read-only worker wait without exposing repository
 writes; the existing manager releases confirmed-safe capacity and leases.
-All four backends choose their actual text/image transport without copying
+Each backend chooses its supported text/image transport without copying
 files into repositories or adding directory grants. A stale add/reuse request
 cannot overwrite a newer draft. Pending validation blocks preflight.
 Reuse retains unavailable references and keeps an in-memory set of paths needing
@@ -458,7 +463,7 @@ exclusive protection boundary for a future Apply operation, without implementing
 Apply or a new scheduling system. External Git applications and agent-initiated
 shared-administration commands are outside CodeConvoy's coordination.
 
-All four backends receive a `Repository` with the isolated checkout path for
+All five backends receive a `Repository` with the isolated checkout path for
 command construction; their own working-directory flags, model/options, permissions,
 stdin, attachments, decoders and completion criteria are unchanged. Attachment
 capability checks and queued-job revalidation still run before agent spawn; files

@@ -12,7 +12,7 @@ A local, native desktop task runner for coding-agent CLIs.
 
 **Write one task → choose an agent → select local Git repositories → run with a concurrency limit → inspect each result.**
 
-CodeConvoy is a native Rust/egui implementation with four independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
+CodeConvoy is a native Rust/egui implementation with five independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
 
 Inspect saved execution outcomes, Git completion observations and validation results,
 then use **Copy Summary** or **Copy Repository Result** to share concise Markdown.
@@ -44,6 +44,7 @@ through the first convoy, Git review, manual validation and history.
 | History, retention and reports | [History](docs/history.md) · [Markdown/JSON export](docs/history-export.md) |
 | Storage measurement and safe cleanup | [Storage Overview](docs/storage.md) · [Managed worktrees](docs/worktree-cleanup.md) |
 | Keyboard and alerts | [Shortcuts](#keyboard-shortcuts) · [Notifications](docs/notifications.md) |
+| Cursor setup, permissions and limitations | [Cursor CLI guide](docs/cursor.md) · [Validation evidence](docs/cursor-validation.md) |
 | Upgrade and external CLI boundaries | [1.x compatibility](docs/compatibility.md) |
 | Platform evidence and remaining checks | [Verification matrix](docs/platform-validation.md) |
 | Build, contribute and report issues | [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Releasing](docs/releasing.md) |
@@ -60,6 +61,7 @@ version/platform evidence. Preparing 1.0 does not itself publish a new release.
 | GitHub Copilot CLI | Supported | User-verified on Linux (two concurrent repositories) and macOS                                  |
 | OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally |
 | Claude Code        | Supported | User-verified on Linux (five-repository README summarization convoy) and macOS                  |
+| Cursor CLI         | Experimental | Linux CLI `2026.10.16-e3cb207` syntax verified without sign-in; authenticated tasks and full protocol compatibility unverified |
 
 ## Downloads and platform support
 
@@ -250,7 +252,7 @@ Discovery does not run candidates, install software, read shell profiles, change
 (such as Node) on the app's `PATH`. On Windows, discovery offers native `.exe`
 files, including WinGet links and Scoop shims; shell wrappers are not offered.
 
-On every launch, CodeConvoy checks all four agent CLIs in the background. The
+On every launch, CodeConvoy checks all five agent CLIs in the background. The
 selected agent shows **Checking…**, then **Available**, **Unavailable**, or
 **Invalid configuration**. Hover Available for the resolved executable and
 supported version information. Missing agents are normal; repository/history
@@ -438,8 +440,8 @@ For a guided walkthrough including groups, validation and history, start with
 [Getting started](docs/getting-started.md). The reference below covers detailed
 execution and result-safety behavior.
 
-1. Enter a task and select Codex, GitHub Copilot CLI, OpenCode, or Claude Code.
-2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. OpenCode offers its own model, agent, variant and permission controls. Claude offers model, effort, turn limit and tool permissions. Model and reasoning support depends on the selected CLI/model.
+1. Enter a task and select Codex, GitHub Copilot CLI, OpenCode, Claude Code or the experimental Cursor CLI.
+2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. OpenCode offers its own model, agent, variant and permission controls. Claude offers model, effort, turn limit and tool permissions. Cursor offers model, permissions, workspace trust and an execution time limit. Model and reasoning support depends on the selected CLI/model.
 3. Enter an existing repository **root directory**, or use **Browse…** to fill the path field, then choose **Add repository**. Cancelling the picker preserves the field; choosing a folder never registers it automatically. Select the repository checkboxes for this task.
 4. Choose **Current working tree** (the default) or **Isolated worktree**. Set **This convoy** (its job limit) and **Global job limit** (shared by every convoy), then **Run Convoy**. This action becomes available once the selected agent's CLI check settles, so review uses the resolved executable.
 5. Review branches and existing changes. Dirty working trees require acknowledgment before **Start convoy**.
@@ -724,11 +726,44 @@ The separate authenticated Auto probe makes model calls using existing Claude au
 cargo test --all-features --test claude authenticated_claude_auto_and_disabled_auto_in_disposable_repositories -- --ignored --nocapture
 ```
 
+## Cursor CLI contract
+
+Cursor is an independent, experimental backend using its direct non-interactive
+print interface. Select **Cursor CLI** in **NEW CONVOY**. Install and authenticate
+it separately; the app links the official setup instructions. **Check CLI**
+checks help/version, without checking sign-in or making model calls.
+
+| Control | Behavior |
+| --- | --- |
+| Executable | `agent`, legacy `cursor-agent`, or an absolute launcher path; native `.exe` required on Windows |
+| Model | Blank keeps Cursor's default; an optional identifier is passed to `--model`, without a built-in catalog |
+| Permissions | **Cursor configuration** omits `--force`; **Force allow unless denied** explicitly enables it |
+| Workspace trust | **Cursor configuration** preserves saved trust; **Trust assigned workspace** explicitly enables `--trust` |
+| Time limit (seconds) | Blank is unlimited; 1–86400 limits execution after spawn, excluding queueing/preparation |
+
+The accepted invocation remains `agent agent --print --output-format stream-json
+--workspace=CHECKOUT [--model=ID] [--force] [--trust] -- PROMPT`, with each argument
+passed directly. Tasks and text context occupy one process argument; images are
+unsupported. Repository rules are delegated to Cursor without being copied into
+the prompt. Workspace selection and permissions are not an OS sandbox.
+
+Success requires a valid terminal result and zero exit status; it does not
+establish file changes or validation success. Review **Activity**, **Raw output**,
+**Diff** and **Task & settings**. Stop and timeout await owned process cleanup and
+retain partial edits. Existing history, comparison, reuse and manual validation
+presets use the shared lifecycle.
+
+The isolated Linux smoke test with CLI **2026.10.16-e3cb207** verified syntax
+through the authentication gate only. Authenticated execution, model access,
+permission enforcement and full protocol compatibility remain unverified on
+every platform. See [setup and troubleshooting](docs/cursor.md) and the exact
+[commands, exit codes and evidence](docs/cursor-validation.md).
+
 ## Repository safety and data
 
 CodeConvoy inspects registered working trees and, when requested, creates owned detached worktrees. Registration/removal never clones, deletes, resets, stashes, checks out, commits, or pushes. External diff/textconv and filesystem-monitor commands are disabled for inspection. Duplicate and nested repository selections are rejected. Each direct job rechecks branch, HEAD, common repository identity and porcelain status immediately before starting; detected state changes fail that job without affecting other jobs.
 
-Codex Workspace-write, Copilot file-write/tool approvals, and OpenCode/Claude permissions can permit the **agent** to modify files. CodeConvoy is an orchestrator, not an extra security sandbox. Stop terminates processes and retains partial edits; it cannot roll changes back. Review the diff before committing. Git checks are not filesystem locks: another application can still edit a repository, and changes within an already-dirty file may leave the same porcelain status.
+Codex Workspace-write, Copilot file-write/tool approvals, and OpenCode/Claude/Cursor permissions can permit the **agent** to modify files. CodeConvoy is an orchestrator, not an extra security sandbox. Stop terminates processes and retains partial edits; it cannot roll changes back. Review the diff before committing. Git checks are not filesystem locks: another application can still edit a repository, and changes within an already-dirty file may leave the same porcelain status.
 
 State is saved atomically in the conventional per-user application data directory, available from the footer’s Local session tooltip:
 
@@ -766,15 +801,15 @@ Renovate maintains dependencies and CI/release tooling. See
 [CI and Renovate policy](docs/releasing.md#ci-and-renovate) for the inherited
 preset, approval rules, and release compatibility checks.
 
-The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous Codex/Copilot/OpenCode/Claude convoys, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover all four backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
+The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous backend fixture convoys, including Cursor lifecycle scenarios, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover all five backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
 
 ```sh
 cargo test --all-features --test copilot installed_copilot_accepts_the_exact_command_flags -- --ignored --nocapture
 ```
 
 Read [the architecture](docs/architecture.md) for module boundaries and implementation
-tradeoffs. The four backends keep their own CLI contracts. Authenticated OpenCode
-E2E remains unverified; Claude has Linux/macOS user evidence and an authenticated
+tradeoffs. The five backends keep their own CLI contracts. Authenticated OpenCode
+and Cursor E2E remain unverified; Claude has Linux/macOS user evidence and an authenticated
 Linux Auto probe in [its validation record](docs/claude-validation.md).
 Windows package/process checks have passed in hosted CI; interactive desktop
 checks remain separate in the [platform matrix](docs/platform-validation.md).

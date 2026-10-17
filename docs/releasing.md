@@ -199,8 +199,8 @@ it using relative ELF library paths; AppRun does not alter `PATH` or
 `LD_LIBRARY_PATH`. No filesystem sandbox or bundled Git/agent installations are
 introduced. CI creates a disposable probe image using the same launcher/runtime
 and CodeConvoy's real process/Git layer to verify access to a host repository,
-host Git, disposable worktree creation/removal, all four CLI-name fixtures,
-redirected-descendant cancellation and unchanged search paths. The probe is
+host Git, disposable worktree creation/removal, all five CLI-name fixtures
+(including Cursor’s `agent`), redirected-descendant cancellation and unchanged search paths. The probe is
 never distributed and never contacts an agent service. It exercises the process
 and Git layers, not an interactive task through the final GUI binary.
 

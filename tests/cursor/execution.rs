@@ -32,7 +32,17 @@ async fn managed_isolated_cursor_edit_retains_fixed_base_and_preserves_dirty_sou
     git_command(&source, &["init", "--quiet"]);
     git_command(&source, &["config", "core.autocrlf", "false"]);
     fs::write(source.join("tracked.txt"), "committed base\n").unwrap();
-    git_command(&source, &["add", "tracked.txt"]);
+    fs::create_dir_all(source.join(".cursor/rules")).unwrap();
+    fs::write(source.join("AGENTS.md"), "Committed agent instructions\n").unwrap();
+    fs::write(
+        source.join(".cursor/rules/project.mdc"),
+        "---\nalwaysApply: true\n---\nCommitted Cursor instructions\n",
+    )
+    .unwrap();
+    git_command(
+        &source,
+        &["add", "tracked.txt", "AGENTS.md", ".cursor/rules"],
+    );
     git_command(
         &source,
         &[
@@ -47,6 +57,12 @@ async fn managed_isolated_cursor_edit_retains_fixed_base_and_preserves_dirty_sou
     );
     let base = git_command(&source, &["rev-parse", "HEAD"]);
     fs::write(source.join("tracked.txt"), "source dirty sentinel\n").unwrap();
+    fs::write(source.join("AGENTS.md"), "Uncommitted agent instructions\n").unwrap();
+    fs::write(
+        source.join(".cursor/rules/project.mdc"),
+        "Uncommitted Cursor instructions\n",
+    )
+    .unwrap();
     fs::write(source.join("untracked.txt"), "source-only untracked\n").unwrap();
     let repository = git::register(&source).await.unwrap();
     let mut task = task();
@@ -113,6 +129,15 @@ async fn managed_isolated_cursor_edit_retains_fixed_base_and_preserves_dirty_sou
         .unwrap();
     assert_eq!(metadata.base_commit, base);
     assert_eq!(metadata.repository, repository);
+    // Verify CodeConvoy's checkout/transport boundary, not Cursor's rule loading.
+    assert_eq!(
+        fs::read_to_string(metadata.path.join("AGENTS.md")).unwrap(),
+        "Committed agent instructions\n"
+    );
+    assert_eq!(
+        fs::read_to_string(metadata.path.join(".cursor/rules/project.mdc")).unwrap(),
+        "---\nalwaysApply: true\n---\nCommitted Cursor instructions\n"
+    );
     assert_eq!(git_command(&metadata.path, &["rev-parse", "HEAD"]), base);
     assert_eq!(
         git_command(&metadata.path, &["rev-parse", "--abbrev-ref", "HEAD"]),
@@ -150,6 +175,14 @@ async fn managed_isolated_cursor_edit_retains_fixed_base_and_preserves_dirty_sou
         "source-only untracked\n"
     );
     assert_eq!(git_command(&source, &["rev-parse", "HEAD"]), base);
+    assert_eq!(
+        fs::read_to_string(source.join("AGENTS.md")).unwrap(),
+        "Uncommitted agent instructions\n"
+    );
+    assert_eq!(
+        fs::read_to_string(source.join(".cursor/rules/project.mdc")).unwrap(),
+        "Uncommitted Cursor instructions\n"
+    );
     let raw: String = events
         .iter()
         .filter_map(|event| match event {
@@ -178,6 +211,13 @@ async fn real_process_fixture_checks_prompt_transport_and_failed_or_incomplete_o
         ("cursor-fixture:incomplete", JobStatus::Failed),
     ] {
         let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join(".cursor/rules")).unwrap();
+        fs::write(temp.path().join("AGENTS.md"), "Direct agent instructions\n").unwrap();
+        fs::write(
+            temp.path().join(".cursor/rules/project.mdc"),
+            "---\nalwaysApply: true\n---\nDirect Cursor instructions\n",
+        )
+        .unwrap();
         let mut task = task();
         task.prompt = prompt.into();
         task.options.insert(
@@ -208,6 +248,14 @@ async fn real_process_fixture_checks_prompt_transport_and_failed_or_incomplete_o
         assert_eq!(
             fs::read_to_string(temp.path().join("agent-input")).unwrap(),
             prompt
+        );
+        assert_eq!(
+            fs::read_to_string(temp.path().join("AGENTS.md")).unwrap(),
+            "Direct agent instructions\n"
+        );
+        assert_eq!(
+            fs::read_to_string(temp.path().join(".cursor/rules/project.mdc")).unwrap(),
+            "---\nalwaysApply: true\n---\nDirect Cursor instructions\n"
         );
         assert!(!temp.path().join("nope").exists());
         if prompt.contains("missing-auth") {

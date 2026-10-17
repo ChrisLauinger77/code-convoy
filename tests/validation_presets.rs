@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use codeconvoy::{
-    domain::{AppState, Repository, RepositoryGroup},
+    domain::{AgentId, AppState, Repository, RepositoryGroup},
     persistence::Store,
     validation::{
         Command,
@@ -130,6 +130,49 @@ fn validation_bulk_individual_selection_and_empty_selection() {
         assert_eq!(report.updated.len(), count);
         assert!(report.skipped.is_empty() && report.failed.is_empty());
         assert_eq!(state.repository_validation.len(), count);
+    }
+}
+
+#[test]
+fn validation_assignment_is_independent_of_every_backend_and_its_options() {
+    for agent in AgentId::ALL {
+        let (_temp, store, mut state) = fixture();
+        state.select_agent(agent);
+        // Even unavailable/invalid agent settings cannot affect command configuration.
+        state
+            .draft
+            .options
+            .insert("executable".into(), "missing-agent".into());
+        state
+            .draft
+            .options
+            .insert("unsupported-fixture-option".into(), "invalid".into());
+        let draft = state.draft.clone();
+        let selection = Selection {
+            paths: state.repositories.iter().map(|r| r.path.clone()).collect(),
+        };
+        let assignment = Assignment::review(&state, &selection, &BUILT_INS[1], Existing::Preserve);
+        assert_eq!(
+            store
+                .assign_validation(&mut state, &assignment)
+                .updated
+                .len(),
+            3
+        );
+        state.select_agent(AgentId::Codex);
+        for repository in &state.repositories {
+            assert_eq!(
+                state.repository_validation[&repository.path],
+                BUILT_INS[1].command()
+            );
+            assert!(!repository.path.exists());
+        }
+        state.select_agent(agent);
+        assert_eq!(
+            serde_json::to_value(&state.draft).unwrap(),
+            serde_json::to_value(&draft).unwrap()
+        );
+        assert!(state.runs.is_empty());
     }
 }
 
