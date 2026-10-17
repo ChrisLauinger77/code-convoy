@@ -7,6 +7,10 @@ on:
       - "**/*.md"
   workflow_dispatch:
     inputs:
+      native_installer_only:
+        description: Run the focused native Windows installer tests (no publication)
+        type: boolean
+        default: false
       nsis_helpers_only:
         description: Capture Windows application and repeatable NSIS helper evidence (no publication)
         type: boolean
@@ -18,6 +22,19 @@ on:
 permissions:
   contents: read
 jobs:
+  native-installer:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Test native NSIS replacements
+        shell: pwsh
+        run: |
+          # Same NSIS distribution and digest as cargo-packager 0.11.8.
+          $archive = Join-Path $env:RUNNER_TEMP 'nsis-3.09.zip'
+          Invoke-WebRequest 'https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.9/nsis-3.09.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA1).Hash -ne '586855a743a6e0ade203d8758af303a48ee0716b') { throw 'NSIS archive digest mismatch' }
+          Expand-Archive $archive (Join-Path $env:RUNNER_TEMP 'native-nsis')
+          ./packaging/windows-installer-tests.ps1 -MakeNSIS (Join-Path $env:RUNNER_TEMP 'native-nsis/nsis-3.09/makensis.exe')
   nsis-helpers:
     if: inputs.nsis_helpers_only
     runs-on: windows-2025
@@ -45,7 +62,7 @@ jobs:
             target/packaging/windows-crt/*
           if-no-files-found: error
   check:
-    if: ${{ !inputs.nsis_helpers_only }}
+    if: ${{ !inputs.nsis_helpers_only && !inputs.native_installer_only }}
     strategy:
       fail-fast: false
       matrix:
