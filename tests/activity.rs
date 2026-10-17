@@ -62,6 +62,19 @@ fn representative_activity_fixtures_preserve_progress_results_and_backend_semant
                 "Review complete",
             ][..],
         ),
+        (
+            AgentId::Cursor,
+            include_str!("fixtures/cursor-activity.jsonl"),
+            &[
+                "Cursor session: fixture",
+                "fixture model",
+                "reported permissions: default",
+                "Inspecting README. Grüße",
+                "readToolCall · README.md",
+                "writeToolCall · summary.txt",
+                "Review complete",
+            ][..],
+        ),
     ] {
         let mut decoder = agents::backend(agent).unwrap().output();
         let mut activity = String::new();

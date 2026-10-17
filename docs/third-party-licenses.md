@@ -220,6 +220,15 @@ unchanged dependency decisions.
    and inspect all six final formats. Update the verification record and resolve
    remaining blockers before running `python3 packaging/licenses.py release-ready`.
 
+On 2026-10-17, Cursor PR 2's Windows cleanup fix explicitly declared `Win32_Foundation`,
+`Win32_Security` and `Win32_System_JobObjects` on the existing `windows` 0.62
+dependency. These APIs were already enabled by locked process-wrap 10.0.1.
+Before/after `cargo metadata --locked --filter-platform` exports for all four
+release targets showed identical non-root dependency versions, features and
+edges. No crate, source, native payload or notice coverage changed. The catalog's
+manifest fingerprint is updated for the explicit declarations; the inventory
+gate and packaging tests verify the existing evidence unchanged.
+
 ## Earlier candidate verification record
 
 This records the candidate before the follow-up evidence and deterministic ZIP

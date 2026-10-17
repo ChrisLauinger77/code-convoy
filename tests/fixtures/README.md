@@ -1,9 +1,18 @@
 # Saved-state fixtures
 
-Cursor's `cursor-help-contract.txt` and `cursor-success.jsonl` are synthetic
-documentation-derived protocol fixtures, not captured help or authenticated CLI
-output. See [Cursor validation](../../docs/cursor-validation.md) for sources,
-version limits and remaining real-platform checks.
+Cursor's `cursor-help-contract.txt`, `cursor-success.jsonl` and
+`cursor-activity.jsonl` are synthetic documentation-derived fixtures, not
+authenticated CLI output. Runtime fixture processes emit additional synthetic
+failures, denials and sessions for lifecycle coverage.
+
+`cursor-2026.10.16-help.txt`, `cursor-2026.10.16-authentication.stderr.txt` and
+`cursor-2026.10.16-syntax.json` contain actual unauthenticated Linux smoke-test
+evidence from CLI `2026.10.16-e3cb207`. Only the disposable root is normalized to
+`<TEMP>` in the command record. The official temporary installation was removed;
+no login, API key or paid task was used. These prove invocation syntax through
+the authentication gate, not structured protocol or native permission behavior.
+See [Cursor validation](../../docs/cursor-validation.md) for sources, commands,
+exit codes, isolation and platform limits.
 
 These are synthetic representative saves with fields checked against the local
 release tags, not captured user data or recordings produced by old binaries.

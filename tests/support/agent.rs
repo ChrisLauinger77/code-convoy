@@ -292,7 +292,13 @@ fn gate(
         root.join(format!("{marker}.args")),
         serde_json::to_vec(args)?,
     )?;
-    if claude || cursor {
+    if cursor {
+        cursor::init()?;
+        println!(
+            "{}",
+            serde_json::json!({"type":"assistant", "session_id":"cursor-fixture", "message":{"role":"assistant", "content":[{"type":"text","text":format!("fixture gate ready {marker}")}]}})
+        );
+    } else if claude {
         if let Some(init) = config.get("claude_init") {
             println!("{init}");
         }
@@ -351,7 +357,34 @@ fn gate(
         }
     }
     if cursor {
-        print!("{}", include_str!("../fixtures/cursor-success.jsonl"));
+        match config["cursor_outcome"].as_str() {
+            Some("missing_auth") => {
+                eprint!(
+                    "{}",
+                    include_str!("../fixtures/cursor-2026.10.16-authentication.stderr.txt")
+                );
+                std::process::exit(1);
+            }
+            Some("interrupted") => {
+                eprintln!("Cursor fixture interrupted");
+                std::process::exit(130);
+            }
+            Some("malformed") => {
+                println!("{{broken JSON");
+                return Ok(());
+            }
+            Some("incomplete") => return Ok(()),
+            Some("permission") => {
+                eprintln!("Permission denied: approval required for writeToolCall")
+            }
+            Some("wrong_session") => {
+                println!(
+                    "{{\"type\":\"assistant\",\"session_id\":\"other\",\"message\":{{\"content\":[{{\"type\":\"text\",\"text\":\"wrong session\"}}]}}}}"
+                );
+            }
+            _ => {}
+        }
+        cursor::complete()?;
     } else if claude {
         claude_result(false);
     } else if opencode {
@@ -414,6 +447,10 @@ fn validation_fixture(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
         } else {
             None
         };
+        std::fs::write(
+            control.join(format!("{name}.pid")),
+            std::process::id().to_string(),
+        )?;
         std::fs::write(control.join(format!("{name}.ready")), "ready")?;
         println!("validation {name} ready");
         let deadline = std::time::Instant::now() + Duration::from_secs(30);

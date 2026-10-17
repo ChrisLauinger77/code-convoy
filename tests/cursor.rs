@@ -36,6 +36,9 @@ fn success() -> Value {
     json!({"type":"result", "subtype":"success", "is_error":false,
         "duration_ms":12, "duration_api_ms":10, "session_id":"fixture", "result":"done"})
 }
+fn init() -> Value {
+    json!({"type":"system", "subtype":"init", "session_id":"fixture", "cwd":"/synthetic/worktree", "model":"fixture", "permissionMode":"default"})
+}
 
 #[test]
 fn shell_free_command_keeps_prompt_and_model_as_data_and_uses_assigned_workspace() {
@@ -213,6 +216,7 @@ fn zero_exit_requires_complete_unambiguous_terminal_result() {
         format!("{{\"type\":\"error\",\"error\":\"failed\"}}\n{valid}\n"),
     ] {
         let mut decoder = Cursor.output();
+        decoder.push(Stream::Stdout, format!("{}\n", init()).as_bytes());
         decoder.push(Stream::Stdout, text.as_bytes());
         decoder.finish();
         assert_eq!(decoder.interpret(status(0)).0, JobStatus::Failed, "{text}");
@@ -228,6 +232,7 @@ fn zero_exit_requires_complete_unambiguous_terminal_result() {
         let mut result = success();
         result.as_object_mut().unwrap().remove(key);
         let mut decoder = Cursor.output();
+        decoder.push(Stream::Stdout, format!("{}\n", init()).as_bytes());
         decoder.push(Stream::Stdout, result.to_string().as_bytes());
         decoder.finish();
         assert_eq!(decoder.interpret(status(0)).0, JobStatus::Failed, "{key}");
@@ -242,12 +247,14 @@ fn zero_exit_requires_complete_unambiguous_terminal_result() {
         let mut result = success();
         result[key] = value;
         let mut decoder = Cursor.output();
+        decoder.push(Stream::Stdout, format!("{}\n", init()).as_bytes());
         decoder.push(Stream::Stdout, result.to_string().as_bytes());
         decoder.finish();
         assert_eq!(decoder.interpret(status(0)).0, JobStatus::Failed, "{key}");
     }
     // A complete terminal JSON record need not end with a newline.
     let mut decoder = Cursor.output();
+    decoder.push(Stream::Stdout, format!("{}\n", init()).as_bytes());
     decoder.push(Stream::Stdout, valid.as_bytes());
     decoder.finish();
     assert_eq!(decoder.interpret(status(0)).0, JobStatus::Succeeded);
@@ -256,6 +263,7 @@ fn zero_exit_requires_complete_unambiguous_terminal_result() {
 #[test]
 fn oversized_stdout_stays_failed_even_when_followed_by_success() {
     let mut decoder = Cursor.output();
+    decoder.push(Stream::Stdout, format!("{}\n", init()).as_bytes());
     for _ in 0..1025 {
         decoder.push(Stream::Stdout, &[b'x'; 1024]);
     }
@@ -304,3 +312,10 @@ fn registry_preferences_and_persistence_keep_cursor_independent() {
 #[cfg(feature = "test-support")]
 #[path = "cursor/execution.rs"]
 mod execution;
+
+#[path = "cursor/output.rs"]
+mod output;
+
+#[cfg(feature = "test-support")]
+#[path = "cursor/lifecycle.rs"]
+mod lifecycle;

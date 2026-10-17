@@ -52,6 +52,15 @@ pub trait AgentBackend: Send + Sync {
     fn output_with_options(&self, _options: &AgentOptions) -> Box<dyn AgentOutput> {
         self.output()
     }
+    /// A backend may validate the workspace reported by its native events.
+    fn output_for(&self, options: &AgentOptions, _directory: &Path) -> Box<dyn AgentOutput> {
+        self.output_with_options(options)
+    }
+    /// Optional application-owned execution deadline, excluding queue/preparation.
+    /// None preserves the backend's existing unlimited execution lifecycle.
+    fn execution_timeout(&self, _options: &AgentOptions) -> Result<Option<std::time::Duration>> {
+        Ok(None)
+    }
     fn execution_summary(&self, options: &AgentOptions) -> String;
     fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
         crate::attachments::validate_limits(&task.attachments)?;

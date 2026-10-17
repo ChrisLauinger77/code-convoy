@@ -172,6 +172,8 @@ async fn real_process_fixture_checks_prompt_transport_and_failed_or_incomplete_o
         ),
         ("cursor-fixture:missing-auth", JobStatus::Failed),
         ("cursor-fixture:failure", JobStatus::Failed),
+        ("cursor-fixture:permission", JobStatus::Failed),
+        ("cursor-fixture:interrupted", JobStatus::Failed),
         ("cursor-fixture:malformed", JobStatus::Failed),
         ("cursor-fixture:incomplete", JobStatus::Failed),
     ] {

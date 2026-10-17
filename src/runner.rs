@@ -232,8 +232,14 @@ async fn job_work(
         };
         run_agent(run, job, &execution, task, backend, cancellation, stopping, repository_safe, tx, &mut launched).await
     }.await;
-    let cancelled = (stopping.load(Ordering::Acquire) || cancellation.is_cancelled())
-        && repository_safe.load(Ordering::Acquire);
+    // Once execution chose its terminal cause, a Stop during cleanup must not
+    // overwrite an elapsed timeout (or a completed process) with Cancelled.
+    let cancelled = repository_safe.load(Ordering::Acquire)
+        && if launched {
+            matches!(&outcome, Ok((JobStatus::Cancelled, ..)))
+        } else {
+            stopping.load(Ordering::Acquire) || cancellation.is_cancelled()
+        };
     let message = if cancelled {
         if ready {
             "Agent cancelled"
@@ -374,61 +380,88 @@ async fn run_agent(
     if stopping.load(Ordering::Acquire) || cancellation.is_cancelled() {
         return Ok(cancelled());
     }
+    let timeout = backend.execution_timeout(&task.options)?;
     let child = backend.spawn(&spec)?;
+    let deadline = timeout.map(|timeout| tokio::time::Instant::now() + timeout);
     *launched = true;
     repository_safe.store(false, Ordering::Release);
-    tokio::select! {
-        biased;
-        _ = cancellation.cancelled() => {},
-        result = tx.send(Event::Started {
-        run,
-        job,
-        before: state.summary,
-        }) => { result.context("Application closed.")?; }
-    }
-    if task.execution_mode == ExecutionMode::IsolatedWorktree {
-        // The process already exists. UI backpressure must not delay entering
-        // execute, which owns cancellation and awaits process-tree cleanup.
-        tokio::select! {
-            biased;
-            _ = cancellation.cancelled() => {},
-            _ = lifecycle(tx, run, job, "Running agent in isolated worktree") => {},
-        }
-    }
+    let started = AtomicBool::new(false);
     let decoder = Mutex::new((
-        backend.output_with_options(&task.options),
+        backend.output_for(&task.options, &prepared.repository.path),
         0usize,
         raw_output::RawOutput::default(),
     ));
-    let result = process::execute(
-        child,
-        spec.input,
-        cancellation,
-        |child| backend.cancel(child),
-        |stream, bytes| {
-            if let Ok(mut data) = decoder.lock() {
-                let text = data.0.push(stream, bytes);
-                let text = data.0.take_activity().unwrap_or(text);
-                let raw = data.2.push(stream, bytes);
-                if !text.is_empty() || !raw.is_empty() {
-                    let size = text.len() + raw.len();
-                    if tx
-                        .try_send(Event::Output {
-                            run,
-                            job,
-                            text,
-                            raw,
-                        })
-                        .is_err()
-                    {
-                        data.1 += size;
-                    }
+    // Supervise immediately, independently of UI delivery. A child that exits
+    // while Started/Running is blocked must keep its actual exit/result even if
+    // publication completes after the execution deadline. Neither future may
+    // release the repository lease before owned process cleanup completes. Use
+    // a non-fail-fast join: publication failure must cancel and await the owned
+    // execution, never drop its running supervision future.
+    let (published, execution) = tokio::join!(
+        async {
+            let sent = tokio::select! {
+                biased;
+                _ = cancellation.cancelled() => return Ok::<_, anyhow::Error>(()),
+                sent = tx.send(Event::Started {
+                    run,
+                    job,
+                    before: state.summary,
+                }) => sent,
+            };
+            if let Err(error) = sent {
+                cancellation.cancel();
+                return Err(error).context("Application closed.");
+            }
+            started.store(true, Ordering::Release);
+            if task.execution_mode == ExecutionMode::IsolatedWorktree {
+                tokio::select! {
+                    biased;
+                    _ = cancellation.cancelled() => {},
+                    _ = lifecycle(tx, run, job, "Running agent in isolated worktree") => {},
                 }
             }
+            Ok::<_, anyhow::Error>(())
         },
-    )
-    .await?;
-    repository_safe.store(true, Ordering::Release);
+        async {
+            let result = process::execute_until(
+                child,
+                spec.input,
+                cancellation,
+                deadline,
+                |child| backend.cancel(child),
+                |stream, bytes| {
+                    if let Ok(mut data) = decoder.lock() {
+                        let text = data.0.push(stream, bytes);
+                        let text = data.0.take_activity().unwrap_or(text);
+                        let raw = data.2.push(stream, bytes);
+                        if !text.is_empty() || !raw.is_empty() {
+                            let size = text.len() + raw.len();
+                            // Decode every byte, but preserve Started-before-output
+                            // ordering and the existing bounded omission accounting.
+                            if !started.load(Ordering::Acquire)
+                                || tx
+                                    .try_send(Event::Output {
+                                        run,
+                                        job,
+                                        text,
+                                        raw,
+                                    })
+                                    .is_err()
+                            {
+                                data.1 += size;
+                            }
+                        }
+                    }
+                },
+            )
+            .await?;
+            repository_safe.store(true, Ordering::Release);
+            Ok::<_, anyhow::Error>(result)
+        }
+    );
+    // Cleanup uncertainty takes precedence over a failed UI publication.
+    let result = execution?;
+    published?;
     let (tail, raw_tail, dropped, outcome) = {
         let mut data = decoder
             .lock()
@@ -461,6 +494,19 @@ async fn run_agent(
     }
     if result.cancelled {
         return Ok(cancelled());
+    }
+    if result.timed_out {
+        let detail = format!(
+            "{} execution timed out after {} seconds. Process-tree cleanup was confirmed; any edits and isolated results are retained.",
+            backend.id().label(),
+            timeout.map(|duration| duration.as_secs()).unwrap_or(0)
+        );
+        lifecycle(tx, run, job, &detail).await;
+        return Ok((
+            JobStatus::Failed,
+            result.status.and_then(|status| status.code()),
+            detail,
+        ));
     }
     let (status, detail) = outcome.context("Agent returned no exit status.")?;
     Ok((status, result.status.and_then(|s| s.code()), detail))

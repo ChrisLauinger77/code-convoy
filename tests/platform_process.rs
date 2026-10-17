@@ -20,6 +20,58 @@ fn executable(root: &Path) -> std::path::PathBuf {
     path
 }
 
+#[cfg(windows)]
+fn descendant_stopped(control: &Path) -> bool {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows::Win32::{
+        Foundation::{ERROR_INVALID_PARAMETER, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
+    };
+
+    // The fixture writes its PID before the ready handshake. This read-only
+    // probe never signals a PID. Reuse can only cause a conservative failure:
+    // a reused PID means the original fixture has already stopped.
+    let pid: u32 = fs::read_to_string(control.join("child.pid"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_ne!(pid, 0);
+    // Open only while observing, so retained test handles cannot delay job
+    // accounting. An absent PID or a signaled process proves termination;
+    // access failures are test failures, never evidence of successful cleanup.
+    let process = match unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) } {
+        Ok(handle) => unsafe { OwnedHandle::from_raw_handle(handle.0) },
+        Err(error) if error.code() == ERROR_INVALID_PARAMETER.to_hresult() => return true,
+        Err(error) => panic!("Cannot observe fixture process {pid}: {error}"),
+    };
+    // SAFETY: fresh owned process handle with synchronization access; no wait.
+    let state = unsafe { WaitForSingleObject(HANDLE(process.as_raw_handle()), 0) };
+    assert!(state == WAIT_OBJECT_0 || state == WAIT_TIMEOUT);
+    state == WAIT_OBJECT_0
+}
+
+async fn assert_descendant_cleanup(control: &Path, lock: &fs::File) {
+    #[cfg(windows)]
+    assert!(
+        descendant_stopped(control),
+        "execution returned while its native descendant was still running"
+    );
+    #[cfg(not(windows))]
+    let _ = control;
+    #[cfg(unix)]
+    assert!(fs2::FileExt::try_lock_exclusive(lock).is_ok());
+    // Windows may release file locks later than process termination (LockFileEx
+    // documentation). Native termination above must already be observable;
+    // this bounded wait checks the separate filesystem cleanup consequence.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while fs2::FileExt::try_lock_exclusive(lock).is_err() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("descendant retained its OS lock after termination");
+}
+
 #[tokio::test]
 async fn native_executable_directory_arguments_and_stdin_preserve_unicode_and_spaces() {
     let temp = executable::directory();
@@ -55,6 +107,52 @@ async fn native_executable_directory_arguments_and_stdin_preserve_unicode_and_sp
             .unwrap(),
         directory.canonicalize().unwrap()
     );
+}
+
+#[tokio::test]
+async fn expired_deadline_stops_descendants_and_ready_cancellation_takes_precedence() {
+    for cancel_first in [false, true] {
+        let temp = executable::directory();
+        let executable = executable(temp.path());
+        let mut spec = CommandSpec::new(executable, temp.path()).args(&["validation-gate"]);
+        spec.args.push(temp.path().as_os_str().to_owned());
+        let child = process::spawn(&spec).unwrap();
+        // Establish a live descendant before expiring the deadline, without a
+        // race against fixture startup or an assumption about process speed.
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !temp.path().join("child.ready").exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let lock = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(temp.path().join("child.lock"))
+            .unwrap();
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        #[cfg(windows)]
+        assert!(!descendant_stopped(temp.path()));
+        let cancellation = Cancellation::default();
+        if cancel_first {
+            cancellation.cancel();
+        }
+        let result = process::execute_until(
+            child,
+            None,
+            &cancellation,
+            Some(tokio::time::Instant::now()),
+            process::cancel,
+            |_, _| {},
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.cancelled, cancel_first);
+        assert_eq!(result.timed_out, !cancel_first);
+        assert!(result.status.is_some());
+        assert_descendant_cleanup(temp.path(), &lock).await;
+    }
 }
 
 #[tokio::test]
@@ -195,7 +293,6 @@ async fn cancellation_racing_leader_failure_stops_descendants_but_preserves_a_pe
 }
 
 #[tokio::test]
-#[cfg(unix)]
 async fn parent_exit_cannot_complete_while_closed_stream_descendant_holds_a_lock() {
     for code in [0, 7] {
         let temp = executable::directory();
@@ -217,8 +314,13 @@ async fn parent_exit_cannot_complete_while_closed_stream_descendant_holds_a_lock
             .open(temp.path().join("child.lock"))
             .unwrap();
         assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        #[cfg(windows)]
+        assert!(!descendant_stopped(temp.path()));
         fs::write(temp.path().join("exit-parent"), "exit with live descendant").unwrap();
         let result = task.await.unwrap();
+        #[cfg(windows)]
+        let stopped_before_return = descendant_stopped(temp.path());
+        #[cfg(not(windows))]
         let stopped_before_return = fs2::FileExt::try_lock_exclusive(&lock).is_ok();
         // Always release the original unfixed fixture before asserting.
         fs::write(temp.path().join("release"), "finish fixture").unwrap();
@@ -231,7 +333,8 @@ async fn parent_exit_cannot_complete_while_closed_stream_descendant_holds_a_lock
         .unwrap();
         assert!(
             stopped_before_return,
-            "parent exit {code} released execution while its closed-stream descendant was alive"
+            "parent exit {code} returned while its closed-stream descendant was alive: {:?}",
+            result.as_ref().map(|output| output.status)
         );
         assert_eq!(result.unwrap().status.code(), Some(code));
     }

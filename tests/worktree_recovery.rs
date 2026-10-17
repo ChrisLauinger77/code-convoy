@@ -1141,7 +1141,7 @@ async fn apply_supports_tracked_added_deleted_renamed_binary_and_untracked_witho
         assert_eq!(f.resolution(), ResultResolution::Applied);
         f.resolve(Action::CleanupApplied).await;
         assert_eq!(f.resolution(), ResultResolution::Applied);
-        assert!(!p.exists());
+        assert!(!p.exists(), "{}", f.state.runs[0].jobs[0].worktree_detail);
         assert!(f.state.remove_from_history(1));
     }
 }
@@ -1640,7 +1640,12 @@ async fn snapshots_read_same_size_edits_even_when_git_stat_cache_matches() {
             let s = report.statistics.unwrap().unwrap();
             assert_eq!((s.files, s.additions, s.deletions), (1, 1, 1));
             f.resolve(Action::Apply).await;
-            assert_eq!(f.resolution(), ResultResolution::Applied);
+            assert_eq!(
+                f.resolution(),
+                ResultResolution::Applied,
+                "{}",
+                f.state.runs[0].jobs[0].worktree_detail
+            );
         } else {
             f.resolve(Action::Apply).await;
             assert_eq!(f.resolution(), ResultResolution::Unresolved);
