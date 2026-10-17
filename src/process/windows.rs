@@ -1,6 +1,7 @@
 //! Confirm owned Windows descendants have exited, not just a completion-port
 //! notification. process-wrap 10.0.1's wait helper accepts any job notification
 //! and caches the leader's exit before establishing that the whole job is empty.
+use super::windows_list;
 use ::windows::{
     Win32::{
         Foundation::{ERROR_INVALID_PARAMETER, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
@@ -110,35 +111,41 @@ impl Job {
         struct Processes {
             assigned: u32,
             count: u32,
-            ids: [usize; 4096],
+            ids: [usize; windows_list::CAPACITY],
         }
         let mut info = Processes {
             assigned: 0,
             count: 0,
-            ids: [0; 4096],
+            ids: [0; windows_list::CAPACITY],
         };
-        // SAFETY: live private job and aligned, matching variable-length buffer.
-        unsafe {
-            QueryInformationJobObject(
-                Some(self.handle()),
-                JobObjectBasicProcessIdList,
-                std::ptr::from_mut(&mut info).cast(),
-                std::mem::size_of_val(&info) as u32,
-                None,
-            )
-        }
-        .map_err(Error::other)?;
-        if info.count != info.assigned {
-            return Err(Error::other(
-                "Windows job process list exceeded its cleanup bound.",
-            ));
-        }
-        let ids = info
-            .ids
-            .get(..info.count as usize)
-            .ok_or_else(|| Error::other("Invalid Windows job process count."))?;
+        let ids = windows_list::query(
+            || {
+                // SAFETY: live private job and aligned, matching variable-length buffer.
+                unsafe {
+                    QueryInformationJobObject(
+                        Some(self.handle()),
+                        JobObjectBasicProcessIdList,
+                        std::ptr::from_mut(&mut info).cast(),
+                        std::mem::size_of_val(&info) as u32,
+                        None,
+                    )
+                }
+                .map_err(Error::other)?;
+                let ids = info
+                    .ids
+                    .get(..info.count as usize)
+                    .ok_or_else(|| Error::other("Invalid Windows job process count."))?;
+                Ok(windows_list::Snapshot {
+                    assigned: info.assigned,
+                    ids: ids.to_vec(),
+                })
+            },
+            // The cancellation hook runs synchronously on the process worker.
+            // Bounded retries allow OS progress, never accepting a partial list.
+            || std::thread::sleep(Duration::from_millis(1)),
+        )?;
         let mut members = Vec::with_capacity(ids.len());
-        for &pid in ids {
+        for pid in ids {
             let pid = u32::try_from(pid).map_err(Error::other)?;
             // No PID is ever signalled. Hold a read-only native handle before
             // terminating the private job, to await actual process signalling.

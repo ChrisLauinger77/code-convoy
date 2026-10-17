@@ -5,6 +5,8 @@ use process_wrap::tokio::{ChildWrapper, CommandWrap};
 mod unix;
 #[cfg(windows)]
 mod windows;
+#[cfg(any(windows, test))]
+mod windows_list;
 use std::{
     ffi::OsString,
     path::PathBuf,

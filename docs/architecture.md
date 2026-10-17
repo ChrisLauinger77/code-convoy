@@ -273,6 +273,10 @@ its nested descendants are targeted. PID lookups only acquire read-only,
 membership-checked wait handles; no PID is signalled and inherited host jobs are unused.
 The deadline/cancellation lock test and normal leader-exit closed-stream test
 exercise this guarantee on Windows as well as Unix.
+Job-list counts may change during enumeration. Bounded re-querying requires a
+complete snapshot before the first termination request; oversized lists, query
+errors and persistent incompleteness remain unconfirmed cleanup. The retry loop
+has deterministic coverage independent of native API scheduling.
 
 On Unix, `process/unix` adds a narrow POSIX identity guard using `libc` (already a
 transitive dependency). `waitid(WEXITED | WNOHANG | WNOWAIT)` observes the direct

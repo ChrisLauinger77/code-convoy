@@ -252,7 +252,10 @@ The snapshot precedes the **first** termination request, including cancellation,
 and remains owned by the job across interrupted/re-polled wait futures. Capturing
 after cancellation has begun is too late: a terminating process can leave the
 job list before its native exit signal is observable.
-An incomplete/oversized list fails closed. Cancellation targets that same private job.
+Changing list counts trigger bounded re-querying (up to 100 queries with a 1 ms
+worker-thread pause between attempts). Only a complete snapshot is accepted;
+oversized lists, native query errors and persistent incompleteness fail closed.
+Cancellation targets that same private job.
 Termination/query errors and timeout retain repository/history protection;
 Drop/kill-on-close remain unconfirmed fallbacks. Normal leader exit with a
 closed-stream descendant is now tested on Windows too. No inherited host job,
@@ -265,6 +268,12 @@ member-handle wait above. Its native CI result is recorded in the PR.
 On `fd1caf0`, the normal leader-exit regression passed, while the deadline test
 caught the pre-cancellation snapshot race described above. The final follow-up
 moves ownership of that snapshot to the job's first termination request.
+On `4e484db`, all 32 Cursor tests and all five native process tests passed
+(the process tests passed both early and in the full suite). Later worktree
+tests caught an assigned/listed-count mismatch incorrectly classified as capacity
+overflow. The retry loop now distinguishes transient membership changes from an
+actual bound violation, and deterministic tests cover successful re-query,
+persistent incompleteness, capacity violations and native-query errors.
 
 This follows Microsoft's [nested-job accounting and termination](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs)
 and [active-process accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information).
