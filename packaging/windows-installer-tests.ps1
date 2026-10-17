@@ -4,7 +4,7 @@ if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Use a disposable Windows CI account
 $work = Join-Path $env:RUNNER_TEMP "CodeConvoy NSIS ü 空-$([guid]::NewGuid())"
 New-Item $work -ItemType Directory | Out-Null
 $fixture = Join-Path $work 'native-tests.exe'
-& $MakeNSIS "/DOUTPUT=$fixture" "$PSScriptRoot/windows-installer-tests.nsi"
+& $MakeNSIS /INPUTCHARSET UTF8 "/DOUTPUT=$fixture" "$PSScriptRoot/windows-installer-tests.nsi"
 if ($LASTEXITCODE -ne 0) { throw 'Cannot compile native installer fixture' }
 
 # Reuse a Windows executable as the x64 process fixture; no C++/Rust build.

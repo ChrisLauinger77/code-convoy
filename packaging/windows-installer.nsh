@@ -3,8 +3,8 @@
 !define CODECONVOY_WINDOWS_INSTALLER
 !include LogicLib.nsh
 !include WordFunc.nsh
-!include Win/COM.nsh
-!include Win/Propkey.nsh
+!include Win\COM.nsh
+!include Win\Propkey.nsh
 
 ; Push version; returns 0 or 1603. Windows release components are canonical
 ; decimal integers in [0,65535]; validating also bounds WordFunc's arithmetic.
