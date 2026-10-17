@@ -60,8 +60,38 @@ Both custom and legacy AppID/Tauri DLLs are rejected. Required NSIS,
 cargo-packager/template, Microsoft and application notices remain. The existing
 version-bound licensing-risk decision is not expanded to a future release.
 
-Integrated CI results and final payload evidence will be recorded here before
-the PR is marked ready for review.
+The integrated Windows checks passed at implementation commit
+`d0c942155860cb37abc40e7e0dcba5b224fb0a93` in
+[diagnostic run 39014148245](https://github.com/ChrisLauinger77/code-convoy/actions/runs/39014148245).
+This includes fresh installation, the observed released 1.0.0 uninstaller,
+Unicode passive overwrite, a real next-version install followed by downgrade,
+running-process maintenance/removal, shortcut identity and targets, user-data
+preservation, native failure cases, runtime fixtures and final payload checks.
+The GUI fixture reads controls with bounded `WM_GETTEXT` and sends their
+`BN_CLICKED` notifications; it does not depend on desktop activation.
+
+The retained `windows-crt-audit` artifact binds these diagnostic packages to
+the implementation commit (they are not a release candidate):
+
+| Package | SHA-256 |
+| --- | --- |
+| Installer | `0e67a530c9572b853fb30747fcdf958d007c3a4ca3fcb9d92bec32a8adbe8992` |
+| Portable ZIP | `f1f1b8ffd7620388aa59c47399af8a84a26da05d8bebd00a92a4bf47b640fd74` |
+
+The extracted installer contains `CodeConvoy.exe`, `uninstall.exe`, CodeConvoy's
+license, all four third-party material files, and only `System.dll`,
+`StartMenu.dll` and `nsDialogs.dll` under `$PLUGINSDIR`. The portable ZIP contains
+the application and the five license/material files. Its source ZIP's README
+matches the corrected `third-party/SOURCE-README.txt`; the five retired helper
+archives and their reconstruction instructions are absent. The NSIS source
+archive remains. Final package checks also verify these same source bytes in
+the installer and installed directory.
+
+Local formatting, strict Clippy, all-feature Rust tests, release build and all
+101 packaging tests passed. Cross-platform results for the same implementation
+are recorded in [CI run 39014149051](https://github.com/ChrisLauinger77/code-convoy/actions/runs/39014149051),
+covering Linux, macOS and Windows. The final documentation commit only records
+these results and does not change the tested implementation.
 
 ## Maintenance
 
@@ -72,3 +102,7 @@ updates in Renovate PR #75 obsolete. The application dependency graph is unchang
 The two-stage release workflow, candidate provenance, checksums and publication
 guards remain in place; only obsolete helper build/test/evidence steps change.
 The published 1.0.0 release and its historical source/evidence remain unchanged.
+In total, 32 tracked files are removed, including 20 helper-workspace files and
+five source archives (about 3.9 MB across the removed files). cargo-packager
+0.11.8 still populates its ordinary upstream plugin cache; unused legacy DLLs
+in that cache are not embedded. No fork or cache-replacement mechanism is added.
