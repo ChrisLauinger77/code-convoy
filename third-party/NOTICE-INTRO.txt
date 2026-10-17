@@ -38,16 +38,16 @@ full LGPL-2.1 text and libfuse notices are reproduced below. Read runtime-README
 inside that ZIP to rebuild and modify the combined launcher. CodeConvoy imposes
 no restriction on modifying the LGPL-covered runtime for your own use or reverse
 engineering it to debug those modifications. Original library notices remain
-intact; modified files carry dated change notices. Publication remains subject
+intact; recipient modification patches carry dated change notices. Publication remains subject
 to the unresolved obligations listed below; compilation is not legal approval.
 
-The launcher includes GCC 14.2.0 crtbeginS.o and crtendS.o from the exact pinned
-Alpine gcc-14.2.0-r4 package, and startup objects built from musl 1.2.5. The
-inventory and source ZIP include GCC source/recipe evidence, copyright, GPLv3
-and Runtime Library Exception 3.1. That exception permits eligible combinations
-with independent modules under their own terms. The documented build uses GCC
-from C source without plugins or LTO; the interpretation does not relicense
-CodeConvoy's files. Exact binary inputs are recorded in the build evidence.
+The official launcher contains GNU CRT startup code and musl. The inventory
+and source ZIP retain GCC 14.2.0 reference source, copyright, GPLv3 and Runtime
+Library Exception 3.1, alongside musl source/notices. The exception permits
+eligible combinations with independent modules under their own terms. The
+upstream build uses C/clang and ordinary open-source tools. Exact original
+Alpine APK revisions and CRT object hashes are not claimed. See the official
+runtime validation record and recipient instructions for evidence and limits.
 
 The Windows installer uses NSIS 3.09 and its LZMA decoder. Its source is
 available as nsis-3.09-src.tar.bz2 in THIRD-PARTY-SOURCES.zip, together with

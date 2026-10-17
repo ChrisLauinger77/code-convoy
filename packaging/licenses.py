@@ -144,31 +144,25 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
             or any(not any(s["path"] == path for s in catalog["sources"])
                    for path in startup["reference_sources"])):
         raise ValueError("Missing AppImage compiler startup source/license evidence")
-    from appimage_runtime import checked_kit
-    kit = checked_kit(root, evidence)
     included = {Path(s["path"]).name: s["sha256"] for s in catalog["sources"]}
-    required = [*kit["sources"].values(), *kit["compiler_sources"], kit["linux_headers"], *kit["recipe"],
-                {"file": "runtime-inputs.json", "sha256": runtime["manifest_sha256"]}]
-    if any(included.get(s["file"]) != s["sha256"] for s in required):
-        raise ValueError("Incomplete distributed AppImage relinking kit")
-    records = native["appimage"]
-    retained = {s["path"] for s in catalog["files"]}
-    if any(records[key] not in retained for key in ("build_audit", "relink_audit")):
-        raise ValueError("Missing AppImage build/relink evidence record")
-    audit = json.loads((evidence / records["build_audit"]).read_text())
-    if (audit["runtime_sha256"] != runtime["sha256"]
-            or audit["manifest_sha256"] != runtime["manifest_sha256"]
-            or audit["recipient_patch_sha256"] is not None):
-        raise ValueError("Stale AppImage build provenance")
-    if (startup["objects"] != kit["toolchain_objects"]
-            or any(audit["link_inputs"][name]["sha256"] != sha for name, sha in startup["objects"].items())):
-        raise ValueError("AppImage startup objects differ from reviewed toolchain inputs")
-    relink = json.loads((evidence / records["relink_audit"]).read_text())
-    patch = next(p for p in kit["recipe"] if p["file"] == "libfuse-demo.patch")
-    if (relink["manifest_sha256"] != runtime["manifest_sha256"]
-            or relink["recipient_patch_sha256"] != patch["sha256"]
-            or relink["runtime_sha256"] == runtime["sha256"]):
-        raise ValueError("Stale AppImage modified-library relink evidence")
+    required = {"AppImage-runtime-dd6cebed.tar.gz", "libfuse-3.15.0.tar.xz",
+                "squashfuse-0.5.2.tar.gz", "musl-1.2.5.tar.gz", "zstd-1.5.6.tar.gz",
+                "zlib-1.3.1.tar.gz", "mimalloc-2.1.7-source.tar.gz", "runtime-README.txt",
+                "libfuse-notice.patch", "libfuse-demo.patch"}
+    record = native["appimage"]["relink_evidence"]
+    if not any(item["path"] == record for item in catalog["files"]):
+        raise ValueError("Missing AppImage relinking evidence")
+    relink = json.loads((evidence / record).read_text())
+    if (set(relink["recipient_inputs"]) != required
+            or any(included.get(name) != sha for name, sha in relink["recipient_inputs"].items())):
+        raise ValueError("Incomplete or changed distributed AppImage relinking kit")
+    if (relink["official_runtime_sha256"] != runtime["sha256"]
+            or relink["recipient_runtime_sha256"] == runtime["sha256"]
+            or not relink["recipient_payload_identical"]
+            or {item["mode"] for item in relink["recipient_native"]} != {"fuse", "extract"}
+            or not all(item["modified_libfuse_marker"] and item["normal_close"] == 0
+                       for item in relink["recipient_native"])):
+        raise ValueError("Stale AppImage modified-library relinking evidence")
     # Only the standard plugins required by the template may ship. Exact bytes
     # remain checked against the reviewed inventory in the final installer.
     expected_plugins = {"$PLUGINSDIR/System.dll", "$PLUGINSDIR/StartMenu.dll", "$PLUGINSDIR/nsDialogs.dll"}

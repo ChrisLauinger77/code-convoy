@@ -52,7 +52,9 @@ def smoke(binary, mode):
                    XDG_CONFIG_HOME=str(home / "config"), XDG_RUNTIME_DIR=str(home / "runtime"),
                    LIBGL_ALWAYS_SOFTWARE="1")
         (home / "runtime").mkdir(mode=0o700)
-        for key in ("WAYLAND_DISPLAY", "WAYLAND_SOCKET", "APPIMAGE_EXTRACT_AND_RUN"):
+        (home / "tmp").mkdir()
+        env["TMPDIR"] = str(home / "tmp")
+        for key in ("WAYLAND_DISPLAY", "WAYLAND_SOCKET", "APPIMAGE_EXTRACT_AND_RUN", "NO_CLEANUP"):
             env.pop(key, None)
         if mode == "extract":
             env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
@@ -95,6 +97,16 @@ def smoke(binary, mode):
                 subprocess.run(["wmctrl", "-ic", window], env=env, check=True)
                 if process.wait(timeout=30) != 0:
                     raise RuntimeError(f"Application failed normal shutdown: {process.returncode}")
+                if mode == "fuse":
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        remaining = Path("/proc/self/mountinfo").read_text().splitlines()
+                        if (not any(str(home / "tmp") in line and " - fuse" in line for line in remaining)
+                                and not list((home / "tmp").glob(".mount_*"))):
+                            break
+                        time.sleep(0.1)
+                    else:
+                        raise RuntimeError("FUSE mount or mountpoint survived normal close")
                 print(f"PASS {binary.name}: {mode}, Xvfb window/store initialization and normal close", flush=True)
             except Exception:
                 if debugger and process is not None and process.poll() is None:

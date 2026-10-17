@@ -180,13 +180,24 @@ class LicenseEvidence(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "MPL source archive"):
             self.check()
 
-    def test_runtime_build_and_relink_evidence_must_remain_bound(self):
-        records = self.catalog["native_provenance"]["appimage"]
-        original = copy.deepcopy(self.catalog["files"])
-        for key in ("build_audit", "relink_audit"):
-            self.catalog["files"] = [s for s in original if s["path"] != records[key]]
-            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "build/relink evidence"):
+    def test_runtime_relink_evidence_and_delivered_recipe_remain_bound(self):
+        record = self.catalog["native_provenance"]["appimage"]["relink_evidence"]
+        original = copy.deepcopy(self.catalog)
+        self.catalog["files"] = [s for s in original["files"] if s["path"] != record]
+        with self.assertRaisesRegex(ValueError, "Missing AppImage relinking evidence"):
+            self.check()
+        for name in ("runtime-README.txt", "libfuse-demo.patch", "libfuse-notice.patch"):
+            self.catalog = copy.deepcopy(original)
+            self.catalog["sources"] = [s for s in self.catalog["sources"] if Path(s["path"]).name != name]
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "distributed AppImage relinking kit"):
                 self.check()
+        self.catalog = original
+        source = self.evidence / "runtime/libfuse-demo.patch"
+        source.write_bytes(source.read_bytes() + b"changed")
+        # Updating only the source checksum cannot reuse an old demonstration.
+        next(s for s in self.catalog["sources"] if s["path"] == "runtime/libfuse-demo.patch")["sha256"] = licenses.digest(source.read_bytes())
+        with self.assertRaisesRegex(ValueError, "distributed AppImage relinking kit"):
+            self.check()
 
     def test_stdlib_report_does_not_replace_its_own_lockfile_coverage(self):
         self.catalog["components"] = [c for c in self.catalog["components"]
