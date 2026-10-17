@@ -15,6 +15,28 @@ Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class NativeInstallerTest {
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Privileges { public uint count, low; public int high; public uint attributes; }
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("advapi32.dll", SetLastError=true)]
+    private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+    [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    private static extern bool LookupPrivilegeValueW(string system, string name, out long luid);
+    [DllImport("advapi32.dll", SetLastError=true)]
+    private static extern bool AdjustTokenPrivileges(IntPtr token, bool all, ref Privileges privileges, uint size, IntPtr previous, IntPtr returned);
+    public static void RemoveDebugPrivilege() {
+        IntPtr token;
+        long luid;
+        if (!OpenProcessToken(GetCurrentProcess(), 0x20, out token)) throw new System.ComponentModel.Win32Exception();
+        try {
+            if (!LookupPrivilegeValueW(null, "SeDebugPrivilege", out luid)) throw new System.ComponentModel.Win32Exception();
+            var privileges = new Privileges { count=1, low=(uint)luid, high=(int)(luid >> 32), attributes=4 };
+            if (!AdjustTokenPrivileges(token, false, ref privileges, 0, IntPtr.Zero, IntPtr.Zero)) throw new System.ComponentModel.Win32Exception();
+        } finally { CloseHandle(token); }
+    }
     [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
     public static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string s, uint rev, out IntPtr sd, out uint size);
     [DllImport("advapi32.dll", SetLastError=true)]
@@ -61,6 +83,7 @@ function Assert-Case([string]$case, [int]$expected, [string]$extra = '') {
     if (!$run.WaitForExit(30000)) { $run.Kill(); throw "Native case hung: $case" }
     if ($run.ExitCode -ne $expected) { throw "$case returned $($run.ExitCode), expected $expected" }
     $results.Add(@{case=$case; expected=$expected; actual=$run.ExitCode; extra=$extra})
+    Write-Output "Passed: $case (exit $expected)"
 }
 try {
     Assert-Case versions 0
@@ -71,6 +94,10 @@ try {
     Assert-Case detect 1
     Assert-Case timeout 1603 "/PID=$($first.Id)"
     if ($first.HasExited) { throw 'Timeout check unexpectedly terminated its process' }
+    # PowerShell/.NET on an administrative hosted runner can enable debug
+    # privilege. Remove it from this disposable test parent's token so children
+    # exercise ordinary per-user access checks. Production never enables it.
+    [NativeInstallerTest]::RemoveDebugPrivilege()
     # Deny query access; detection must fail instead of claiming absence.
     Restrict-Fixture $first 'D:(D;;0x1000;;;WD)(A;;GA;;;WD)'
     try { Assert-Case detect 1603 } finally { Restrict-Fixture $first 'D:(A;;GA;;;WD)' }
