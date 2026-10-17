@@ -1,6 +1,6 @@
 # Official AppImage runtime migration
 
-## Phase 1 — accepted 2026-10-17
+## Phase 1 — gate passed 2026-10-17
 
 Baseline: CodeConvoy commit `ba96394b97842671b78cc9b7b50fb800bd4dd36b`.
 This record precedes removal of the custom builder. The maintainer explicitly
@@ -132,7 +132,108 @@ AppRun deletion or a cleanup supervisor. A private TMPDIR is suitable for tests,
 which measure retention before cleaning up their own files. Adopt a later
 reviewed official fix only after retesting. All other failures remain failures.
 
-## Phase 2
+## Phase 2 — implementation and local validation
 
-Implementation and final artifact/CI results will be recorded here after the
-Phase 1 evidence commit. Published 1.0.0 files remain unchanged.
+Implementation commit: `5baf45257421e1e395b0cd33f2bbacbcf2dfee67`.
+Review: [PR #77](https://github.com/ChrisLauinger77/code-convoy/pull/77).
+Phase 1 evidence was committed separately as `3bcf39e` before builder removal.
+This is preparation for 1.1.0, not a version bump or release; Cargo still supplies
+1.0.0 to local candidate filenames. No published artifact was modified.
+
+Removed `packaging/appimage_runtime.py`, both `third-party/runtime/build-runtime.*`
+files, `runtime-inputs.json`, the private GCC Alpine recipe archive and its
+builder-only license file. The release workflow no longer sets up bubblewrap or
+AppArmor, builds a runtime twice, compares linker maps, or uploads custom build
+logs. Historical validation records and their JSON evidence remain unchanged.
+The retained recipient kit consists of the short README and two library source
+annotation/demo patches, plus the existing source archives and upstream scripts.
+Neither patch changes the shipped official runtime. Existing notice texts were
+reviewed and retained; no new license text was needed.
+
+This removes 1,129 lines of private runtime integration/build/input code and the
+59-package APK inventory, plus obsolete tests/workflow steps. No replacement
+runtime build lifecycle was introduced. The release pipeline downloads three
+checksum-pinned upstream tools through its existing downloader. Explicit runtime
+selection, final normalization/identity, ELF/GLIBC inspection, all six package
+formats, checksums, candidate provenance and publication architecture remain.
+
+### Required local checks
+
+On the Ubuntu 24.04 build userspace with audited Rust 1.99.0:
+
+- `cargo fmt --check`: passed.
+- `cargo clippy --locked --all-targets --all-features -- -D warnings`: passed.
+- `cargo test --locked --all-features`: 621 passed, 10 explicitly ignored, none failed
+  (excluding nested filtered subprocess reruns from the aggregate).
+- `cargo build --release --locked`: passed; the normalized `packaging/build.py`
+  application and package-probe builds also passed.
+- `python3 -m unittest discover -s packaging -p 'test_*.py'`: 98 passed.
+- `packaging/release.py linux`: final DEB/RPM/AppImage assembly, exact runtime,
+  notice/source/native-payload verification and GLIBC 2.39 ceiling passed.
+
+The first local packaging attempt lacked writable `/var/tmp` in the read-only
+test filesystem, so rpmbuild could not create a temporary file. Providing a
+private writable `/var/tmp` resolved that environment setup failure. No product
+or packaging behavior was changed to bypass a failing gate.
+
+| Local final artifact | SHA-256 |
+| --- | --- |
+| `CodeConvoy-1.0.0-x86_64.AppImage` | `c3194a98b199f8a223a2725fe8b92f376ba154d186670ff03b5571265ab0455b` |
+| `code-convoy_1.0.0_amd64.deb` | `bc6eecec7ffa54db8c3fb397ce64628ffe9a87a89af8e23cfc9dc28ab9d9f6e3` |
+| `code-convoy-1.0.0-1.x86_64.rpm` | `e0ef906483a6e78b9852ca98b87d957bbd35d79123360ef00010496c74355860` |
+| `THIRD-PARTY-SOURCES.zip` inside the packages | `e98a7332484fa55d5d4c8aab0c6dafe0f88b8568579e4f21e792f48fea046e37` |
+
+The final AppImage contains only the expected application ELF in its payload;
+the runtime has no versioned GLIBC requirement and the application ceiling is
+2.39. The final source ZIP supplies all ten demonstrated recipient inputs
+byte-for-byte. The three repeated probe launches preserved host behavior and
+reported `KNOWN UPSTREAM DEFECT`: one retained tree, 13 regular files and
+18,884,173 bytes per launch. This smaller probe replaces the GUI executable;
+it is not an estimate of the final GUI image's retained size.
+
+The final GUI image was rechecked in both target userspaces in both modes:
+window/store initialization, normal close 0, and FUSE mount/mountpoint removal
+passed. The final host-process probe passed Git operations, four CLI fixture
+lookups, environment preservation and descendant cancellation in both modes on
+both distributions. Native Forky GNOME XWayland repeated the final-image FUSE
+and extraction checks with normal close 0. Extraction retention was observed
+again; it was not reported as successful automatic cleanup. The final image also passed native Wayland surface/store startup in both modes,
+followed by test process-group termination and verified mount disappearance;
+normal Wayland window-close remains untested.
+
+`check_extraction_cleanup` in `packaging/linux.py` runs the existing intermediate
+probe image three times in a private TMPDIR using both extraction selectors.
+It verifies runtime identity first, measures retention before harness cleanup,
+requires stable repeated output, and permits at most one named tree only for
+the exact approved official hash. Empty output is reported as clean; retention
+is explicitly reported as the known defect. Changed pins cannot inherit the
+retention exception. Startup failures, unexpected paths and accumulation still
+fail. Unit cases cover those distinctions. `linux_runtime.py` separately requires
+FUSE mount disappearance and mountpoint removal after normal close.
+
+### Hosted validation
+
+Hosted runs for the implementation commit above:
+
+- [Cross-platform CI](https://github.com/ChrisLauinger77/code-convoy/actions/runs/39024109744):
+  established Linux/macOS/Windows checks and native Windows installer tests.
+- [Nonpublishing candidate validation](https://github.com/ChrisLauinger77/code-convoy/actions/runs/39024116522):
+  Ubuntu 24.04 packaging, distribution smoke tests, Windows installer/portable
+  archive, universal macOS app/DMG, all six assets and aggregate checksums.
+
+The final documentation commit changes only this validation record. Final hosted
+outcomes and any subsequent documentation-head CI run are summarized in the
+[PR validation results](https://github.com/ChrisLauinger77/code-convoy/pull/77).
+The workflow dispatch skips publication and package-repository updates; no tag
+was created. Candidate artifacts are CI validation output, not a published release.
+
+### Remaining maintenance
+
+Review official runtime pins and signatures, applicable sources/notices and
+recipient instructions when upstream changes; repeat the modified-library
+relink demonstration when its inputs change. Keep embedded-runtime/ABI/source
+and platform gates. Track the extraction issue separately and remove its
+exception only after a tested official fix. Native stable-distribution desktop
+coverage and automated native Wayland normal-close coverage remain the explicit
+limits described above. No new material licensing obligation or runtime
+regression was identified. No merge, tag or publication was performed.
