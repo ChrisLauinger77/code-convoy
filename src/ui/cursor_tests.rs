@@ -9,6 +9,11 @@ fn cursor_selection_settings_and_setup_are_keyboard_accessible_and_backend_local
     keys.activate(&mut app, "Agent");
     keys.activate(&mut app, "Cursor CLI");
     assert_eq!(app.state.draft.agent, AgentId::Cursor);
+    assert!(
+        keys.nodes
+            .values()
+            .any(|node| keys.label(node) == agents::cursor::SETUP_HINT)
+    );
     for (label, value) in [("Model", "cursor-model"), ("Time limit (seconds)", "120")] {
         keys.replace_text(&mut app, label, value);
     }
