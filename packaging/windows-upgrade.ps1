@@ -40,13 +40,15 @@ function Test-ReleasedUpgrade([string]$installed, [string]$currentSetup, [switch
         try {
             $upgrade = Start-Process $next[0].FullName -ArgumentList "/D=$installed" -PassThru
             $deadline = [DateTime]::UtcNow.AddSeconds(90)
+            $previousUi = ''
             while (!$upgrade.HasExited -and [DateTime]::UtcNow -lt $deadline) {
-                [CodeConvoyUpgradeUi]::Advance($upgrade.Id)
+                $ui = [CodeConvoyUpgradeUi]::Advance($upgrade.Id)
                 # The unchanged 1.0.0 uninstaller can show its confirmation
                 # page with /P. Drive that real child, never replace it.
                 foreach ($child in @(Get-CimInstance Win32_Process -Filter "Name='uninstall.exe'" | Where-Object { $_.ParentProcessId -eq $upgrade.Id })) {
-                    [CodeConvoyUpgradeUi]::Advance($child.ProcessId)
+                    $ui += [CodeConvoyUpgradeUi]::Advance($child.ProcessId)
                 }
+                if ($ui -ne $previousUi) { Write-Output "Installer UI: $ui"; $previousUi = $ui }
                 Start-Sleep -Milliseconds 200
             }
             if (!$upgrade.HasExited) { $upgrade.Kill(); throw 'Interactive legacy maintenance timed out' }
@@ -84,12 +86,15 @@ public static class CodeConvoyUpgradeUi {
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc callback, IntPtr data);
     [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr parent, EnumProc callback, IntPtr data);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
-    [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern int GetWindowTextW(IntPtr window, StringBuilder text, int count);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern IntPtr SendMessageTimeoutW(IntPtr window, uint msg, IntPtr w, StringBuilder text, uint flags, uint timeout, out IntPtr result);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] private static extern bool IsWindowEnabled(IntPtr window);
+    [DllImport("user32.dll")] private static extern IntPtr GetParent(IntPtr window);
+    [DllImport("user32.dll")] private static extern int GetDlgCtrlID(IntPtr window);
     [DllImport("user32.dll")] private static extern IntPtr SendMessageW(IntPtr window, uint msg, IntPtr w, IntPtr l);
     [DllImport("user32.dll")] private static extern bool PostMessageW(IntPtr window, uint msg, IntPtr w, IntPtr l);
-    public static void Advance(int process) {
+    public static string Advance(int process) {
+        var state = new StringBuilder();
         EnumWindows((window, unused) => {
             uint pid;
             GetWindowThreadProcessId(window, out pid);
@@ -98,16 +103,23 @@ public static class CodeConvoyUpgradeUi {
             EnumChildWindows(window, (child, ignored) => {
                 if (!IsWindowVisible(child) || !IsWindowEnabled(child)) return true;
                 var buffer = new StringBuilder(256);
-                GetWindowTextW(child, buffer, buffer.Capacity);
+                IntPtr result;
+                // WM_GETTEXT reads controls across processes; bound the wait.
+                SendMessageTimeoutW(child, 0xd, new IntPtr(buffer.Capacity), buffer, 2, 1000, out result);
                 string text = buffer.ToString().Replace("&", "");
+                if (text.Length != 0) state.Append(text).Append(" | ");
                 if (text.StartsWith("Run CodeConvoy")) SendMessageW(child, 0xf1, IntPtr.Zero, IntPtr.Zero);
                 if (text.StartsWith("Create desktop shortcut")) SendMessageW(child, 0xf1, new IntPtr(1), IntPtr.Zero);
                 if (text == "Next >" || text == "I Agree" || text == "Install" || text == "Uninstall" || text == "Finish" || text == "Close") next = child;
                 return true;
             }, IntPtr.Zero);
-            if (next != IntPtr.Zero) PostMessageW(next, 0xf5, IntPtr.Zero, IntPtr.Zero);
+            // Notify the owning dialog directly: BM_CLICK can fail when a CI
+            // desktop does not activate the dialog. BN_CLICKED is zero.
+            // https://learn.microsoft.com/en-us/windows/win32/controls/bn-clicked
+            if (next != IntPtr.Zero) PostMessageW(GetParent(next), 0x111, new IntPtr(GetDlgCtrlID(next)), next);
             return true;
         }, IntPtr.Zero);
+        return state.ToString();
     }
 }
 '@
