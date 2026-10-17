@@ -374,12 +374,15 @@ async fn run_agent(
     if stopping.load(Ordering::Acquire) || cancellation.is_cancelled() {
         return Ok(cancelled());
     }
+    let timeout = backend.execution_timeout(&task.options)?;
     let child = backend.spawn(&spec)?;
+    let deadline = timeout.map(|timeout| tokio::time::Instant::now() + timeout);
     *launched = true;
     repository_safe.store(false, Ordering::Release);
     tokio::select! {
         biased;
         _ = cancellation.cancelled() => {},
+        _ = process::deadline_elapsed(deadline) => {},
         result = tx.send(Event::Started {
         run,
         job,
@@ -392,18 +395,20 @@ async fn run_agent(
         tokio::select! {
             biased;
             _ = cancellation.cancelled() => {},
+            _ = process::deadline_elapsed(deadline) => {},
             _ = lifecycle(tx, run, job, "Running agent in isolated worktree") => {},
         }
     }
     let decoder = Mutex::new((
-        backend.output_with_options(&task.options),
+        backend.output_for(&task.options, &prepared.repository.path),
         0usize,
         raw_output::RawOutput::default(),
     ));
-    let result = process::execute(
+    let result = process::execute_until(
         child,
         spec.input,
         cancellation,
+        deadline,
         |child| backend.cancel(child),
         |stream, bytes| {
             if let Ok(mut data) = decoder.lock() {
@@ -459,8 +464,21 @@ async fn run_agent(
             })
             .await;
     }
-    if result.cancelled {
+    if result.cancelled || (result.timed_out && cancellation.is_cancelled()) {
         return Ok(cancelled());
+    }
+    if result.timed_out {
+        let detail = format!(
+            "{} execution timed out after {} seconds. Process-tree cleanup was confirmed; any edits and isolated results are retained.",
+            backend.id().label(),
+            timeout.map(|duration| duration.as_secs()).unwrap_or(0)
+        );
+        lifecycle(tx, run, job, &detail).await;
+        return Ok((
+            JobStatus::Failed,
+            result.status.and_then(|status| status.code()),
+            detail,
+        ));
     }
     let (status, detail) = outcome.context("Agent returned no exit status.")?;
     Ok((status, result.status.and_then(|s| s.code()), detail))

@@ -139,7 +139,7 @@ Repository browsing uses `rfd::AsyncFileDialog`, parented to eframe's root windo
 
 ## Backend extension
 
-`AgentBackend` owns executable/help/version detection, supported options, invocation construction, and the execution summary shown in the editor/preflight UI. Its `output_with_options()` factory receives the immutable job options and defaults to the existing `output()` factory. Claude uses those options to scope Auto diagnostics to jobs that requested Auto; other backends retain their existing decoder construction. Each independent `AgentOutput` owns byte framing, stream handling, and exit interpretation. The backend exposes overridable spawn/cancel methods and delegates ordinary subprocess handling to `process`. Async pipe I/O and scheduling remain shared, rather than being copied into every backend.
+`AgentBackend` owns executable/help/version detection, supported options, invocation construction, and the execution summary shown in the editor/preflight UI. Its `output_with_options()` factory receives the immutable job options and defaults to the existing `output()` factory. Claude uses those options to scope Auto diagnostics to jobs that requested Auto. `output_for()` additionally receives the assigned checkout and defaults to `output_with_options()`; Cursor uses it to validate its reported workspace. Each independent `AgentOutput` owns byte framing, stream handling, and exit interpretation. The optional `execution_timeout()` defaults to unlimited; Cursor alone exposes a configurable application time limit. The backend exposes overridable spawn/cancel methods and delegates ordinary subprocess handling to `process`. Async pipe I/O and scheduling remain shared, rather than being copied into every backend.
 
 `OptionSpec` provides rendering metadata (text fields or backend-specific choice values). Persisted option keys belong to the selected backend. There is no cross-agent reasoning, model, or permission translation. Backends validate keys and values before invocation. The generic renderer only renders that backend's descriptions. Adding Copilot exposed two concrete Codex assumptions: shared line-based output with `turn.completed` observation fields, and hardcoded Codex approval/sandbox UI text. Both now live in the Codex backend. The runner only sends bytes and an exit status to an opaque per-job output handler. This permits Copilot to stream partial text immediately and interpret its own exit status, without inventing a common event schema. Codex's formatter and success criteria are unchanged. No plugin system or hypothetical capability layer was added.
 
@@ -191,21 +191,36 @@ No Claude-specific process management is added. Each invocation belongs to the s
 
 Permissions and omitted capabilities are explained in [Claude validation](claude-validation.md). CodeConvoy supplies no additional directories, unrestricted bypass, detached/background session, resume, agent definition or custom tool policy. Existing Claude configuration/hooks still apply; tool permissions do not sandbox that configuration. Future Activity UI and backend #5 are outside this release cycle.
 
-### Cursor foundation (1.1 milestone, PR 1)
+### Cursor foundation and reliability (1.1 milestone, PRs 1–2)
 
-Cursor is the fifth registered backend, using `AgentBackend` / `AgentOutput`
-without changes to their contracts. Its additive persisted ID is `cursor`.
+Cursor is the fifth registered backend, using `AgentBackend` / `AgentOutput`.
+Its additive persisted ID is `cursor`.
 The existing selector, per-agent preferences, review, history/export and result
 flows use the registry normally. Discovery adds the official `agent` /
 `cursor-agent` launcher names and native Windows install location. Existing
-backend implementations, scheduler, Git and process execution are unchanged.
+backend implementations, scheduler and Git behavior are unchanged.
 
 `agents/cursor` owns print-mode arguments, positional prompt/text context,
-optional model, explicit force/trust choices and initial NDJSON terminal-result
-validation. Both cwd and `--workspace` select the runner-assigned checkout;
-Cursor's own worktree management is not used. Authentication remains external.
-Detailed Activity handling and real CLI lifecycle/permission validation are later
-milestones. See [Cursor evidence and limitations](cursor-validation.md).
+optional model, explicit force/trust choices and native NDJSON validation.
+The PR 1 invocation remains unchanged after an accepted unauthenticated Linux
+syntax test with CLI `2026.10.16-e3cb207`. Both cwd and `--workspace` select the
+runner-assigned checkout; Cursor's own worktree management is not used.
+Authentication remains external. The decoder checks initialization workspace
+identity, consistent session IDs, correlated tool starts/completions and a single
+typed successful terminal result plus exit zero. It summarizes native Activity,
+keeps stderr separate and fails closed on malformed/incomplete/conflicting
+evidence or explicit tool/permission errors, retaining bounded backend Raw output.
+These structured fixtures are documentation-derived, not authenticated recordings.
+
+An optional Cursor execution time limit starts after spawn and covers blocked
+Started/Running event delivery as well as pipe processing. `process::execute_until`
+uses the same owned process-tree termination and wait as cancellation; existing
+`execute` callers use no deadline. Cancellation wins when both signals are ready.
+Confirmed expiry fails the job, retains edits/worktrees and releases leases only
+after cleanup. Unconfirmed cleanup retains the existing quarantine and history
+protection. Other backend timeout defaults remain unlimited. Native permission
+enforcement and full authenticated protocol compatibility remain unverified.
+See [Cursor evidence, tests and limitations](cursor-validation.md).
 
 ## Scheduling and shutdown
 
@@ -257,7 +272,7 @@ policy changes or process-wide subreaper are introduced.
 
 Unix process groups cannot contain a descendant that deliberately creates a new session/group. Abrupt OS termination or a crash cannot guarantee cleanup on Unix. No promise is made to recover or kill stale processes by persisted PID (PID reuse would make that unsafe). The application does not manage detached sessions. These constraints should be tested further before packaging a release.
 
-Stdout and stderr are drained concurrently in fixed-size chunks. Codex and OpenCode line assembly is capped at 256 KiB. Claude permits 1 MiB per record, matching the official Python Agent SDK's default; oversized stdout records invalidate completion without reinterpreting fragments. Copilot forwards each chunk immediately, retaining at most three bytes per stream to complete a split UTF-8 character; invalid bytes are replaced for display. Stderr is labelled, and no Copilot event normalization is performed. The event queue is bounded; if the UI cannot keep up, log events can be omitted with a visible count. Backend output processing continues even if a display event is dropped. Activity and raw logs each retain their latest 512 KiB per job/view, with a shared 32 MiB session budget that evicts the oldest job logs first. Stream interleaving is arrival order, not a claim about exact cross-stream ordering. Short Git/detection commands have a 20-second timeout and output caps.
+Stdout and stderr are drained concurrently in fixed-size chunks. Codex and OpenCode line assembly is capped at 256 KiB. Claude permits 1 MiB per record, matching the official Python Agent SDK's default; Cursor also uses a local 1 MiB limit. Oversized stdout records invalidate completion without reinterpreting fragments. Copilot forwards each chunk immediately, retaining at most three bytes per stream to complete a split UTF-8 character; invalid bytes are replaced for display. Stderr is labelled, and no Copilot event normalization is performed. The event queue is bounded; if the UI cannot keep up, log events can be omitted with a visible count. Backend output processing continues even if a display event is dropped. Activity and raw logs each retain their latest 512 KiB per job/view, with a shared 32 MiB session budget that evicts the oldest job logs first. Stream interleaving is arrival order, not a claim about exact cross-stream ordering. Short Git/detection commands have a 20-second timeout and output caps.
 
 ## Git and state
 

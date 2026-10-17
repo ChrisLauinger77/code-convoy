@@ -23,7 +23,25 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     assert!(std::env::var_os("PWD").is_none());
     assert!(std::env::vars_os().all(|(key, _)| !key.to_string_lossy().starts_with("GIT_")));
     if let Some(json) = prompt.strip_prefix("codeconvoy-fixture-gate\n") {
-        return super::gate(json, prompt, args, false, false);
+        let config: serde_json::Value = serde_json::from_str(json.lines().next().unwrap_or(json))?;
+        let mut child = if config["spawn_child"].as_bool() == Some(true) {
+            let control = config["control"].as_str().ok_or("missing child control")?;
+            Some(
+                std::process::Command::new(std::env::current_exe()?)
+                    .args(["validation-child", control])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()?,
+            )
+        } else {
+            None
+        };
+        let result = super::gate(json, prompt, args, false, false);
+        if let Some(child) = child.as_mut() {
+            let _ = child.wait()?;
+        }
+        return result;
     }
     std::fs::write("agent-input", prompt)?;
     std::fs::write("cursor-cwd", cwd.to_string_lossy().as_bytes())?;
@@ -41,8 +59,19 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         "cursor-fixture:incomplete" => {
-            println!("{{\"type\":\"system\",\"subtype\":\"init\"}}");
+            init()?;
             return Ok(());
+        }
+        "cursor-fixture:permission" => {
+            init()?;
+            eprintln!("Permission denied: approval required for writeToolCall");
+            complete()?;
+            return Ok(());
+        }
+        "cursor-fixture:interrupted" => {
+            init()?;
+            eprintln!("Cursor fixture interrupted before completion");
+            std::process::exit(130);
         }
         "cursor-fixture:edit" => {
             assert!(args.iter().any(|arg| arg == "--force"));
@@ -52,6 +81,29 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         _ => {}
     }
     eprintln!("Cursor fixture diagnostic");
-    print!("{}", include_str!("../fixtures/cursor-success.jsonl"));
+    init()?;
+    complete()?;
+    Ok(())
+}
+
+pub fn init() -> Result<(), Box<dyn std::error::Error>> {
+    let mut init: serde_json::Value = serde_json::from_str(
+        include_str!("../fixtures/cursor-success.jsonl")
+            .lines()
+            .next()
+            .ok_or("missing init fixture")?,
+    )?;
+    init["cwd"] = serde_json::json!(std::env::current_dir()?);
+    println!("{init}");
+    Ok(())
+}
+
+pub fn complete() -> Result<(), Box<dyn std::error::Error>> {
+    for line in include_str!("../fixtures/cursor-success.jsonl")
+        .lines()
+        .skip(1)
+    {
+        println!("{line}");
+    }
     Ok(())
 }

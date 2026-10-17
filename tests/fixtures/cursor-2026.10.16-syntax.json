@@ -1,0 +1,243 @@
+{
+  "platform": "Linux x86_64",
+  "cli_version": "2026.10.16-e3cb207",
+  "official_installer_url": "https://cursor.com/install",
+  "official_package_url": "https://downloads.cursor.com/lab/2026.10.16-e3cb207/linux/x64/agent-cli-package.tar.gz",
+  "installer_inspected_before_execution": true,
+  "authentication_attempted": false,
+  "api_key_used": false,
+  "paid_agent_task_executed": false,
+  "cleanup": {
+    "temporary_installation_removed": true,
+    "temporary_root_removed": true
+  },
+  "installer_sha256": "9b70b142b7bbd56d5d75c2575279b63c884178f8f8e6862b4f41c09afcf6c8a2",
+  "normalization": "Only the disposable temporary root is replaced with <TEMP>; help output is in cursor-2026.10.16-help.txt.",
+  "probes": [
+    {
+      "label": "version",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "--version"
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 0,
+      "timed_out": false,
+      "stderr": "",
+      "stdout": "2026.10.16-e3cb207\n"
+    },
+    {
+      "label": "root_help",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "--help"
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 0,
+      "timed_out": false,
+      "stderr": "",
+      "stdout": "(see cursor-2026.10.16-help.txt)"
+    },
+    {
+      "label": "agent_subcommand_help",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "agent",
+        "--help"
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 0,
+      "timed_out": false,
+      "stderr": "",
+      "stdout": "Usage: agent agent [options] [prompt...]\n\nStart the Cursor Agent\n\nArguments:\n  prompt      Initial prompt for the agent\n\nOptions:\n  -h, --help  Display help for command\n"
+    },
+    {
+      "label": "global_flags_after_subcommand_help",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--workspace=<TEMP>/workspace with spaces",
+        "--model=gpt-5",
+        "--force",
+        "--trust",
+        "--help"
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 0,
+      "timed_out": false,
+      "stderr": "",
+      "stdout": "Usage: agent agent [options] [prompt...]\n\nStart the Cursor Agent\n\nArguments:\n  prompt      Initial prompt for the agent\n\nOptions:\n  -h, --help  Display help for command\n"
+    },
+    {
+      "label": "unknown_option_negative_control",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "agent",
+        "--print",
+        "--codeconvoy-invalid-option"
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 1,
+      "timed_out": false,
+      "stderr": "error: unknown option '--codeconvoy-invalid-option'\n",
+      "stdout": ""
+    },
+    {
+      "label": "workspace_missing_value_negative_control",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "agent",
+        "--workspace"
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 1,
+      "timed_out": false,
+      "stderr": "error: option '--workspace <path-or-name>' argument missing\n",
+      "stdout": ""
+    },
+    {
+      "label": "authentication_status",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "status"
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 0,
+      "timed_out": false,
+      "stderr": "",
+      "stdout": "Not logged in\n"
+    },
+    {
+      "label": "exact_codeconvoy_default",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--workspace=<TEMP>/workspace with spaces",
+        "--",
+        "CodeConvoy syntax-only smoke probe."
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 1,
+      "timed_out": false,
+      "stderr": "Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.\n",
+      "stdout": ""
+    },
+    {
+      "label": "exact_codeconvoy_optional_settings",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--workspace=<TEMP>/workspace with spaces",
+        "--model=gpt-5",
+        "--force",
+        "--trust",
+        "--",
+        "CodeConvoy syntax-only smoke probe."
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 1,
+      "timed_out": false,
+      "stderr": "Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.\n",
+      "stdout": ""
+    },
+    {
+      "label": "terminator_protects_unknown_option",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--workspace=<TEMP>/workspace with spaces",
+        "--",
+        "--codeconvoy-invalid-option"
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 1,
+      "timed_out": false,
+      "stderr": "Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.\n",
+      "stdout": ""
+    },
+    {
+      "label": "terminator_protects_logout_prompt",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--workspace=<TEMP>/workspace with spaces",
+        "--",
+        "logout"
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 1,
+      "timed_out": false,
+      "stderr": "Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.\n",
+      "stdout": ""
+    },
+    {
+      "label": "direct_overview_form",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--workspace=<TEMP>/workspace with spaces",
+        "--",
+        "CodeConvoy syntax-only smoke probe."
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 1,
+      "timed_out": false,
+      "stderr": "Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.\n",
+      "stdout": ""
+    },
+    {
+      "label": "workspace_separate_value",
+      "command": [
+        "<TEMP>/home/.local/bin/agent",
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--workspace",
+        "<TEMP>/workspace with spaces",
+        "--",
+        "CodeConvoy syntax-only smoke probe."
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 1,
+      "timed_out": false,
+      "stderr": "Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.\n",
+      "stdout": ""
+    },
+    {
+      "label": "legacy_launcher_exact_codeconvoy",
+      "command": [
+        "<TEMP>/home/.local/bin/cursor-agent",
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--workspace=<TEMP>/workspace with spaces",
+        "--",
+        "CodeConvoy syntax-only smoke probe."
+      ],
+      "cwd": "<TEMP>/workspace with spaces",
+      "exit_code": 1,
+      "timed_out": false,
+      "stderr": "Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.\n",
+      "stdout": ""
+    }
+  ]
+}

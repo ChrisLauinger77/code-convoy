@@ -194,12 +194,26 @@ pub fn cancel(child: &mut ManagedChild) -> std::io::Result<()> {
 pub struct ProcessResult {
     pub status: Option<ExitStatus>,
     pub cancelled: bool,
+    pub timed_out: bool,
 }
 
 pub async fn execute(
+    child: ManagedChild,
+    input: Option<Vec<u8>>,
+    cancellation: &Cancellation,
+    cancel_process: impl Fn(&mut ManagedChild) -> std::io::Result<()>,
+    output: impl Fn(Stream, &[u8]) + Sync,
+) -> Result<ProcessResult> {
+    execute_until(child, input, cancellation, None, cancel_process, output).await
+}
+
+/// A deadline uses the same owned process-tree cleanup as explicit cancellation.
+/// Never drop a running execution future merely because its time limit elapsed.
+pub async fn execute_until(
     mut child: ManagedChild,
     input: Option<Vec<u8>>,
     cancellation: &Cancellation,
+    deadline: Option<tokio::time::Instant>,
     cancel_process: impl Fn(&mut ManagedChild) -> std::io::Result<()>,
     output: impl Fn(Stream, &[u8]) + Sync,
 ) -> Result<ProcessResult> {
@@ -237,9 +251,11 @@ pub async fn execute(
         )?;
         Ok::<_, anyhow::Error>(status)
     };
+    let mut timed_out = false;
     let result = tokio::select! {
         biased;
         _ = cancellation.cancelled() => None,
+        _ = deadline_elapsed(deadline) => { timed_out = true; None },
         result = work => Some(result),
     };
     match result {
@@ -252,6 +268,7 @@ pub async fn execute(
             Ok(ProcessResult {
                 status: Some(status),
                 cancelled: false,
+                timed_out: false,
             })
         }
         None => {
@@ -265,9 +282,17 @@ pub async fn execute(
             }
             Ok(ProcessResult {
                 status: Some(status),
-                cancelled: true,
+                cancelled: !timed_out,
+                timed_out,
             })
         }
+    }
+}
+
+pub(crate) async fn deadline_elapsed(deadline: Option<tokio::time::Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending().await,
     }
 }
 async fn pump(

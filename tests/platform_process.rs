@@ -58,6 +58,50 @@ async fn native_executable_directory_arguments_and_stdin_preserve_unicode_and_sp
 }
 
 #[tokio::test]
+async fn expired_deadline_stops_descendants_and_ready_cancellation_takes_precedence() {
+    for cancel_first in [false, true] {
+        let temp = executable::directory();
+        let executable = executable(temp.path());
+        let mut spec = CommandSpec::new(executable, temp.path()).args(&["validation-gate"]);
+        spec.args.push(temp.path().as_os_str().to_owned());
+        let child = process::spawn(&spec).unwrap();
+        // Establish a live descendant before expiring the deadline, without a
+        // race against fixture startup or an assumption about process speed.
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !temp.path().join("child.ready").exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let lock = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(temp.path().join("child.lock"))
+            .unwrap();
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        let cancellation = Cancellation::default();
+        if cancel_first {
+            cancellation.cancel();
+        }
+        let result = process::execute_until(
+            child,
+            None,
+            &cancellation,
+            Some(tokio::time::Instant::now()),
+            process::cancel,
+            |_, _| {},
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.cancelled, cancel_first);
+        assert_eq!(result.timed_out, !cancel_first);
+        assert!(result.status.is_some());
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_ok());
+    }
+}
+
+#[tokio::test]
 async fn cancellation_and_future_drop_stop_descendants_in_unicode_paths() {
     for abort in [false, true] {
         let temp = executable::directory();

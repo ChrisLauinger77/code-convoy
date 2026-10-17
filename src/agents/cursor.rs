@@ -2,12 +2,13 @@
 //! in docs/cursor-validation.md; this is independent of Claude's protocol.
 use super::{AgentBackend, AgentOutput, OptionKind, OptionSpec, value};
 use crate::{
-    domain::{AgentId, AgentOptions, JobStatus, Repository, TaskConfig},
-    process::{CommandSpec, Stream},
+    domain::{AgentId, AgentOptions, Repository, TaskConfig},
+    process::CommandSpec,
 };
 use anyhow::Result;
-use serde_json::Value;
-use std::{path::Path, process::ExitStatus};
+use std::{path::Path, time::Duration};
+
+mod output;
 
 pub struct Cursor;
 static OPTIONS: &[OptionSpec] = &[
@@ -47,6 +48,15 @@ static OPTIONS: &[OptionSpec] = &[
             ("trust", "Trust assigned workspace"),
         ]),
     },
+    OptionSpec {
+        key: "timeout_seconds",
+        label: "Time limit (seconds)",
+        default: "",
+        help: "Optional CodeConvoy execution time limit, 1–86400 seconds. Blank means no time limit. Queueing and worktree preparation are excluded. Expiry stops the owned process tree, fails this job and retains edits/results. This does not change Cursor CLI flags or permissions.",
+        kind: OptionKind::Text {
+            hint: "No time limit",
+        },
+    },
 ];
 
 impl AgentBackend for Cursor {
@@ -58,6 +68,7 @@ impl AgentBackend for Cursor {
     }
     fn detection(&self, options: &AgentOptions, directory: &Path) -> Result<CommandSpec> {
         self.validate(options)?;
+        self.execution_timeout(options)?;
         let executable = value(options, &OPTIONS[0]);
         let path = Path::new(executable);
         anyhow::ensure!(
@@ -89,6 +100,11 @@ impl AgentBackend for Cursor {
         anyhow::ensure!(
             help.contains("Cursor") && help.contains("stream-json"),
             "Expected Cursor CLI help with stream-json output. Install Cursor CLI separately or choose its agent/cursor-agent executable, then Check CLI again."
+        );
+        anyhow::ensure!(
+            help.lines()
+                .any(|line| line.trim_start().starts_with("agent [prompt...]")),
+            "Cursor CLI help does not advertise the required agent subcommand. Choose a compatible Cursor CLI executable and Check CLI again."
         );
         for flag in [
             "--print",
@@ -172,7 +188,24 @@ impl AgentBackend for Cursor {
         Ok(spec)
     }
     fn output(&self) -> Box<dyn AgentOutput> {
-        Box::<CursorOutput>::default()
+        Box::<output::CursorOutput>::default()
+    }
+    fn output_for(&self, _options: &AgentOptions, directory: &Path) -> Box<dyn AgentOutput> {
+        Box::new(output::CursorOutput::for_workspace(directory))
+    }
+    fn execution_timeout(&self, options: &AgentOptions) -> Result<Option<Duration>> {
+        let timeout = value(options, &OPTIONS[4]).trim();
+        if timeout.is_empty() {
+            return Ok(None);
+        }
+        let seconds = timeout.parse::<u32>().ok().filter(|seconds| {
+            timeout.bytes().all(|byte| byte.is_ascii_digit()) && (1..=86400).contains(seconds)
+        });
+        anyhow::ensure!(
+            seconds.is_some(),
+            "Cursor time limit must be a whole number from 1 to 86400 seconds, or blank for no time limit."
+        );
+        Ok(seconds.map(|seconds| Duration::from_secs(u64::from(seconds))))
     }
     fn attachment_summary(&self) -> &'static str {
         "UTF-8 text context in the prompt argument (visible to local process inspection; platform length limits apply). Image attachments are unsupported."
@@ -188,118 +221,16 @@ impl AgentBackend for Cursor {
         } else {
             "Cursor's saved workspace trust applies; a fresh worktree may be rejected."
         };
-        format!(
-            "{permissions} {trust} No interactive approval host. Existing Cursor authentication, rules, hooks and MCP configuration apply. Workspace selection is not an OS sandbox. Prompts/text context use a process argument. A successful result confirms CLI completion, not that files changed. Authenticate separately with agent login; CodeConvoy does not manage credentials."
-        )
-    }
-}
-
-// A local framing bound, not a claim about Cursor's maximum event size. Raw
-// output remains independently bounded by the runner even for rejected records.
-const RECORD_LIMIT: usize = 1024 * 1024;
-#[derive(Default)]
-struct CursorOutput {
-    pending: [Vec<u8>; 2],
-    oversized: [bool; 2],
-    invalid: bool,
-    terminal: bool,
-    success: bool,
-}
-impl CursorOutput {
-    fn record(&mut self, bytes: &[u8]) -> String {
-        if bytes.iter().all(u8::is_ascii_whitespace) {
-            return String::new();
-        }
-        let event = match serde_json::from_slice::<Value>(bytes) {
-            Ok(event) if event.is_object() && event["type"].is_string() => event,
-            _ => {
-                self.invalid = true;
-                return format!(
-                    "[CodeConvoy] Invalid Cursor JSON record; see Raw output.\n{}\n",
-                    String::from_utf8_lossy(bytes)
-                );
-            }
+        let timeout = match self.execution_timeout(options) {
+            Ok(Some(timeout)) => format!(
+                "CodeConvoy time limit: {} seconds after spawn; expiry stops the process tree and retains edits.",
+                timeout.as_secs()
+            ),
+            Ok(None) => "No CodeConvoy execution time limit.".into(),
+            Err(_) => "Invalid CodeConvoy time limit; review will reject it.".into(),
         };
-        // Initial single-turn contract: a second result or any later event is
-        // uncertain, and cannot repair an earlier failure.
-        self.invalid |= self.terminal;
-        if event["type"] == "error" {
-            self.invalid = true;
-        }
-        if event["type"] == "result" {
-            self.terminal = true;
-            self.success = event["subtype"] == "success"
-                && event["is_error"].as_bool() == Some(false)
-                && event["result"].is_string()
-                && event["session_id"]
-                    .as_str()
-                    .is_some_and(|id| !id.trim().is_empty())
-                && ["duration_ms", "duration_api_ms"]
-                    .iter()
-                    .all(|key| event[key].as_u64().is_some());
-            return format!(
-                "[CodeConvoy] Cursor result: {}\n{}\n",
-                event["subtype"].as_str().unwrap_or("unknown"),
-                event["result"].as_str().unwrap_or("")
-            );
-        }
-        format!("{}\n", String::from_utf8_lossy(bytes).trim_end())
-    }
-    fn flush(&mut self, index: usize) -> String {
-        let bytes = std::mem::take(&mut self.pending[index]);
-        if index == 1 {
-            format!("[stderr] {}", String::from_utf8_lossy(&bytes))
-        } else {
-            self.record(&bytes)
-        }
-    }
-}
-impl AgentOutput for CursorOutput {
-    fn push(&mut self, stream: Stream, bytes: &[u8]) -> String {
-        let index = usize::from(stream == Stream::Stderr);
-        let mut rendered = String::new();
-        for &byte in bytes {
-            if self.oversized[index] {
-                if byte == b'\n' {
-                    self.oversized[index] = false;
-                }
-                continue;
-            }
-            if byte == b'\n' {
-                rendered.push_str(&self.flush(index));
-            } else if self.pending[index].len() == RECORD_LIMIT {
-                self.pending[index].clear();
-                self.oversized[index] = true;
-                self.invalid |= index == 0;
-                rendered.push_str("[CodeConvoy] Cursor record exceeded the 1 MiB display limit; see Raw output.\n");
-            } else {
-                self.pending[index].push(byte);
-            }
-        }
-        rendered
-    }
-    fn finish(&mut self) -> String {
-        let mut rendered = String::new();
-        for index in 0..2 {
-            if !self.pending[index].is_empty() {
-                rendered.push_str(&self.flush(index));
-            }
-        }
-        rendered
-    }
-    fn interpret(&self, status: ExitStatus) -> (JobStatus, String) {
-        if status.success() && self.terminal && self.success && !self.invalid {
-            (
-                JobStatus::Succeeded,
-                "Cursor reported a successful terminal result.".into(),
-            )
-        } else {
-            (
-                JobStatus::Failed,
-                format!(
-                    "Cursor failed ({status}) or did not provide a valid successful terminal result. See Activity/Raw output. Check Cursor authentication with agent status / agent login, permissions and workspace trust; CodeConvoy does not retry with broader permissions."
-                ),
-            )
-        }
+        format!(
+            "{permissions} {trust} {timeout} No interactive approval host. Existing Cursor authentication, rules, hooks and MCP configuration apply. Workspace selection is not an OS sandbox. Prompts/text context use a process argument. A successful result confirms CLI completion, not that files changed. Authenticate separately with agent login; CodeConvoy does not manage credentials."
+        )
     }
 }

@@ -1,0 +1,8 @@
+{"type":"system","subtype":"init","cwd":"/synthetic/worktree","session_id":"fixture","model":"fixture model","permissionMode":"default"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"raw-only task context"}]},"session_id":"fixture"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Inspecting README. Grüße 🌍"}]},"session_id":"fixture"}
+{"type":"tool_call","subtype":"started","call_id":"read-1","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"fixture"}
+{"type":"tool_call","subtype":"completed","call_id":"read-1","tool_call":{"readToolCall":{"args":{"path":"README.md"},"result":{"success":{"content":"raw-only file contents","totalLines":1}}}},"session_id":"fixture"}
+{"type":"tool_call","subtype":"started","call_id":"write-1","tool_call":{"writeToolCall":{"args":{"path":"summary.txt","fileText":"raw-only generated text"}}},"session_id":"fixture"}
+{"type":"tool_call","subtype":"completed","call_id":"write-1","tool_call":{"writeToolCall":{"args":{"path":"summary.txt"},"result":{"success":{"path":"/synthetic/worktree/summary.txt","linesCreated":1}}}},"session_id":"fixture"}
+{"type":"result","subtype":"success","is_error":false,"result":"Review complete","duration_ms":12,"duration_api_ms":10,"session_id":"fixture"}
