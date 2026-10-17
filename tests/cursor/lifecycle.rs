@@ -629,6 +629,92 @@ async fn deadline_cleans_up_even_when_started_event_is_backpressured() {
 }
 
 #[tokio::test]
+async fn closed_started_receiver_awaits_owned_cleanup_without_quarantining_the_repository() {
+    let mut h = Harness::new(1, 1);
+    let repo = h.repository("source").await;
+    let task = h.task(1, ExecutionMode::Direct, json!({"spawn_child":true}));
+    let prepared = runner::prepare(task, vec![repo]).await.unwrap();
+    h.manager.shutdown();
+    (&mut h.manager.join).await.unwrap();
+    let (tx, rx) = mpsc::channel(1);
+    h.manager = RunManager::new(1, tx.clone());
+    h.rx = rx;
+    h.manager
+        .start(
+            1,
+            prepared,
+            Arc::new(SupervisedCursor {
+                fill: Some(tx),
+                refuse_cancel: false,
+            }),
+        )
+        .unwrap();
+    h.until(|events| {
+        events
+            .iter()
+            .any(|event| matches!(event, Event::Queued { run: 1, .. }))
+    })
+    .await;
+    file_ready(&h.root.path().join("control/child.ready")).await;
+    let lock = child_lock(h.root.path());
+    assert!(h.manager.history_protected(1));
+    h.rx.close(); // No Stop or timeout: publication failure must request owned cleanup.
+    lock_released(&lock).await;
+    let released = tokio::time::timeout(Duration::from_secs(5), async {
+        while h.manager.history_protected(1) {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await;
+    h.close().await;
+    assert!(
+        released.is_ok(),
+        "closed UI dropped supervision instead of awaiting owned cleanup"
+    );
+}
+
+#[tokio::test]
+async fn cancellation_interrupts_blocked_started_publication_and_awaits_descendants() {
+    let mut h = Harness::new(1, 1);
+    let repo = h.repository("source").await;
+    let task = h.task(1, ExecutionMode::Direct, json!({"spawn_child":true}));
+    let prepared = runner::prepare(task, vec![repo]).await.unwrap();
+    h.manager.shutdown();
+    (&mut h.manager.join).await.unwrap();
+    let (tx, rx) = mpsc::channel(1);
+    h.manager = RunManager::new(1, tx.clone());
+    h.rx = rx;
+    h.manager
+        .start(
+            1,
+            prepared,
+            Arc::new(SupervisedCursor {
+                fill: Some(tx),
+                refuse_cancel: false,
+            }),
+        )
+        .unwrap();
+    h.until(|events| {
+        events
+            .iter()
+            .any(|event| matches!(event, Event::Queued { run: 1, .. }))
+    })
+    .await;
+    file_ready(&h.root.path().join("control/child.ready")).await;
+    let lock = child_lock(h.root.path());
+    h.manager.cancel_run(1);
+    lock_released(&lock).await; // Keep the queue blocked until cleanup is observed.
+    h.until(|events| Harness::finished(events, 1, JobStatus::Cancelled))
+        .await;
+    assert!(
+        !h.events
+            .iter()
+            .any(|event| matches!(event, Event::Started { run: 1, .. }))
+    );
+    h.close().await;
+}
+
+#[tokio::test]
 async fn unconfirmed_timeout_cleanup_keeps_lease_and_history_protection_even_after_drop_kills_child()
  {
     let mut h = Harness::new(2, 512);

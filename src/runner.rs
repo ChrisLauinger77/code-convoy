@@ -388,19 +388,31 @@ async fn run_agent(
     // Supervise immediately, independently of UI delivery. A child that exits
     // while Started/Running is blocked must keep its actual exit/result even if
     // publication completes after the execution deadline. Neither future may
-    // release the repository lease before owned process cleanup completes.
-    let (_, result) = tokio::try_join!(
+    // release the repository lease before owned process cleanup completes. Use
+    // a non-fail-fast join: publication failure must cancel and await the owned
+    // execution, never drop its running supervision future.
+    let (published, execution) = tokio::join!(
         async {
-            tx.send(Event::Started {
-                run,
-                job,
-                before: state.summary,
-            })
-            .await
-            .context("Application closed.")?;
+            let sent = tokio::select! {
+                biased;
+                _ = cancellation.cancelled() => return Ok::<_, anyhow::Error>(()),
+                sent = tx.send(Event::Started {
+                    run,
+                    job,
+                    before: state.summary,
+                }) => sent,
+            };
+            if let Err(error) = sent {
+                cancellation.cancel();
+                return Err(error).context("Application closed.");
+            }
             started.store(true, Ordering::Release);
             if task.execution_mode == ExecutionMode::IsolatedWorktree {
-                lifecycle(tx, run, job, "Running agent in isolated worktree").await;
+                tokio::select! {
+                    biased;
+                    _ = cancellation.cancelled() => {},
+                    _ = lifecycle(tx, run, job, "Running agent in isolated worktree") => {},
+                }
             }
             Ok::<_, anyhow::Error>(())
         },
@@ -440,7 +452,10 @@ async fn run_agent(
             repository_safe.store(true, Ordering::Release);
             Ok::<_, anyhow::Error>(result)
         }
-    )?;
+    );
+    // Cleanup uncertainty takes precedence over a failed UI publication.
+    let result = execution?;
+    published?;
     let (tail, raw_tail, dropped, outcome) = {
         let mut data = decoder
             .lock()

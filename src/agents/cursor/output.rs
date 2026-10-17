@@ -122,6 +122,8 @@ impl CursorOutput {
             return self.init(&event);
         }
         if kind == "error" {
+            // Native failures may precede init; this sticky diagnostic already
+            // precludes success without requiring initialization evidence.
             self.diagnostic(Diagnostic::Agent);
             let message = error_text(&event["error"]);
             self.observe_diagnostic(&format!(

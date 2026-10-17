@@ -230,6 +230,15 @@ fn stderr_diagnostics_are_streamed_and_classified_without_parsing_assistant_pros
     for (diagnostic, expected) in [
         (captured, "authentication"),
         ("Permission denied: approval required", "permission"),
+        // Intentional conservative policy: stderr does not identify its emitter.
+        (
+            "warning: optional file probe returned permission denied; continuing",
+            "permission",
+        ),
+        (
+            "example diagnostic: not logged in (harmless tool note)",
+            "authentication",
+        ),
         ("workspace is not trusted", "trust"),
     ] {
         let mut decoder = Cursor.output();

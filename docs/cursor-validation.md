@@ -179,7 +179,10 @@ Recognized authentication, approval/permission and trust diagnostics from stderr
 or explicit error payloads produce actionable failure details. Other nonzero
 exits, invalid output and missing completion have distinct failure details.
 Diagnostic matching is conservative text matching, not proof of a stable native
-error schema. Assistant prose is never searched for these diagnostic phrases.
+error schema. Recognized stderr phrases fail closed even in an otherwise harmless
+tool warning followed by exit zero and a valid result; stderr does not identify
+its emitter. Regression cases explicitly pin this tradeoff. Assistant prose is
+never searched for these diagnostic phrases.
 Unrecognized errors remain visible in Activity/Raw and cannot turn a nonzero exit
 into success. A successful result confirms CLI completion, not task fulfillment
 or file changes. The strict documented contract may reject future event variants;
@@ -200,7 +203,10 @@ already completed process as a timeout. Output delivery preserves Started orderi
 and bounded omission accounting while decoding every byte. The supervisor uses
 the same process-tree cleanup as cancellation under UI backpressure. Confirmed
 expiry fails the job and retains all edits/results. Cancellation wins when both
-signals are ready. A cleanup error preserves the existing quarantined lease,
+signals are ready and interrupts blocked Started/Running publication. A closed
+Started receiver signals job cancellation; a non-fail-fast join awaits execution
+and owned cleanup before returning the publication error. Cleanup uncertainty
+takes precedence over that error. A cleanup error preserves the existing quarantined lease,
 capacity and history protection; later observations do not retroactively declare
 cleanup safe. Existing backends retain unlimited execution by default.
 
@@ -234,11 +240,16 @@ local fixture processes and disposable real Git repositories, without providers:
   while Started delivery stays blocked beyond the deadline. OS exit is established
   by a fixture lock released by process termination. This regression first
   reproduced the review finding as an exit-zero job misclassified as timed out.
+- Closing a blocked Started receiver requests cancellation, awaits descendants
+  and releases confirmed-safe history/lease protection. It never drops a running
+  supervision future through a publication error. This regression first reproduced
+  the fail-fast join's unsafe drop/quarantine path. Explicit cancellation also
+  interrupts Started publication without emitting a delayed Started event.
 
 Existing all-backend process, convoy, worktree, attachment, persistence, compact
 UI, results and packaging suites remain relevant. On 2026-10-17, local formatting,
 strict Clippy, all-feature Rust tests and the release build passed, including
-29 focused Cursor tests and 98 packaging tests. Rust integration tests used
+31 focused Cursor tests and 98 packaging tests. Rust integration tests used
 `TMPDIR=/var/tmp` to avoid the execution sandbox's synthetic `/tmp` Git boundary.
 Commands and CI results are also recorded in the PR. Local process/Git coverage
 is Linux. The existing CI matrix

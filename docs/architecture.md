@@ -219,6 +219,9 @@ Output delivery preserves Started ordering with bounded omission accounting;
 decoding continues even before Started can be delivered. `process::execute_until`
 uses the same owned process-tree termination and wait as cancellation; existing
 `execute` callers use no deadline. Cancellation wins when both signals are ready.
+Started/Running publication is cancellable. A closed Started receiver signals
+job cancellation; a non-fail-fast join always awaits supervision/cleanup before
+handling the publication error, with cleanup uncertainty taking precedence.
 Confirmed expiry fails the job, retains edits/worktrees and releases leases only
 after cleanup. Unconfirmed cleanup retains the existing quarantine and history
 protection. Other backend timeout defaults remain unlimited. Native permission
