@@ -260,7 +260,10 @@ wrapper's wait helper accepts any completion-port notification and caches the
 leader exit before confirming all descendants, so `process/windows` waits on
 the owned native leader handle and then unconditionally terminates the private
 job. Before termination it obtains a bounded member list, opens read-only process
-handles and verifies job membership. It awaits their native termination signals,
+handles and verifies job membership. This snapshot precedes the first termination
+request, including cancellation; it remains owned by the job across interrupted
+wait futures, since terminating members can disappear from accounting before
+their process objects are signalled. It awaits their native termination signals,
 releases those handles, and polls `JobObjectBasicAccountingInformation.ActiveProcesses`
 to zero within five seconds before cleanup can be marked safe. Incomplete lists,
 query/termination errors

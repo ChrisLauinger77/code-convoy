@@ -24,13 +24,16 @@ use process_wrap::tokio::{ChildWrapper, CommandWrap, CommandWrapper};
 use std::{
     io::{Error, Result},
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::process::{Child, Command};
 
 #[derive(Debug)]
-pub(super) struct Job(OwnedHandle);
+pub(super) struct Job {
+    handle: OwnedHandle,
+    pending: Mutex<Option<Arc<Vec<OwnedHandle>>>>,
+}
 
 impl Job {
     pub(super) fn new() -> Result<Arc<Self>> {
@@ -38,7 +41,10 @@ impl Job {
         // access to the runner's/another application's inherited outer job.
         let handle = unsafe { CreateJobObjectW(None, PCWSTR::null()) }.map_err(Error::other)?;
         // SAFETY: CreateJobObjectW returned a fresh handle; this is its sole owner.
-        let job = Self(unsafe { OwnedHandle::from_raw_handle(handle.0) });
+        let job = Self {
+            handle: unsafe { OwnedHandle::from_raw_handle(handle.0) },
+            pending: Mutex::new(None),
+        };
         let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         // SAFETY: owned live job and the SDK's fixed-layout structure/size.
@@ -55,13 +61,30 @@ impl Job {
     }
 
     fn handle(&self) -> HANDLE {
-        HANDLE(self.0.as_raw_handle())
+        HANDLE(self.handle.as_raw_handle())
     }
 
     pub(super) fn terminate(&self) -> Result<()> {
+        // Capture before the FIRST termination request, including cancellation.
+        // An already-terminating process can disappear from job accounting
+        // before its native process object is signalled. Retain these handles
+        // on the job so dropping/re-polling a wait cannot lose that evidence.
+        let snapshot = (|| {
+            let mut pending = self
+                .pending
+                .lock()
+                .map_err(|_| Error::other("Windows cleanup handle lock failed."))?;
+            if pending.is_none() {
+                *pending = Some(Arc::new(self.members()?));
+            }
+            Ok(())
+        })();
         // SAFETY: this private job contains only the suspended child assigned
         // below and its descendants. The owned handle cannot be reused here.
-        unsafe { TerminateJobObject(self.handle(), 1) }.map_err(Error::other)
+        // Even if evidence capture failed, attempt termination; the error still
+        // prevents cleanup being reported safe.
+        unsafe { TerminateJobObject(self.handle(), 1) }.map_err(Error::other)?;
+        snapshot
     }
 
     fn active(&self) -> Result<u32> {
@@ -150,16 +173,21 @@ impl Job {
     }
 
     pub(super) async fn finish(&self) -> Result<()> {
-        let members = self.members()?;
         // Match Unix ownership: once the leader exits, remaining attached
         // descendants cannot keep writing after this job releases its lease.
         // Always terminate the job, including its nested jobs; an accounting
         // observation alone must never skip the owned termination request.
         self.terminate()?;
+        let members = self
+            .pending
+            .lock()
+            .map_err(|_| Error::other("Windows cleanup handle lock failed."))?
+            .clone()
+            .ok_or_else(|| Error::other("Missing Windows cleanup process handles."))?;
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
         loop {
             let mut pending = false;
-            for process in &members {
+            for process in members.iter() {
                 // SAFETY: retained owned process handle with SYNCHRONIZE access.
                 match unsafe { WaitForSingleObject(HANDLE(process.as_raw_handle()), 0) } {
                     WAIT_OBJECT_0 => {}
@@ -177,6 +205,12 @@ impl Job {
         }
         // Native handles must be released before checking final job accounting.
         drop(members);
+        drop(
+            self.pending
+                .lock()
+                .map_err(|_| Error::other("Windows cleanup handle lock failed."))?
+                .take(),
+        );
         loop {
             if self.active()? == 0 {
                 return Ok(());

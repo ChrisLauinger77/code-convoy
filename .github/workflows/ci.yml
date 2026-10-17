@@ -84,6 +84,9 @@ jobs:
           if-no-files-found: error
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Windows process-tree regression checks
+        if: runner.os == 'Windows'
+        run: cargo test --locked --all-features --test platform_process
       - run: cargo test --locked --all-features
       - name: Linux desktop services unavailable
         if: runner.os == 'Linux'

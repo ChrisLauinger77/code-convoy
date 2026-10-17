@@ -248,6 +248,10 @@ members (including nested jobs), opens read-only wait handles and rechecks their
 membership to handle PID reuse. It always terminates the private job, awaits the
 members' native process signals, releases the wait handles, and requires the
 private job's active-process count to reach zero within the cleanup deadline.
+The snapshot precedes the **first** termination request, including cancellation,
+and remains owned by the job across interrupted/re-polled wait futures. Capturing
+after cancellation has begun is too late: a terminating process can leave the
+job list before its native exit signal is observable.
 An incomplete/oversized list fails closed. Cancellation targets that same private job.
 Termination/query errors and timeout retain repository/history protection;
 Drop/kill-on-close remain unconfirmed fallbacks. Normal leader exit with a
@@ -258,6 +262,9 @@ On `6cbda50`, Windows passed the expired-deadline/cancellation-precedence test
 but failed the new normal leader-exit test's immediate native descendant check.
 The follow-up removes the accounting-only early return and adds the explicit
 member-handle wait above. Its native CI result is recorded in the PR.
+On `fd1caf0`, the normal leader-exit regression passed, while the deadline test
+caught the pre-cancellation snapshot race described above. The final follow-up
+moves ownership of that snapshot to the job's first termination request.
 
 This follows Microsoft's [nested-job accounting and termination](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs)
 and [active-process accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information).
