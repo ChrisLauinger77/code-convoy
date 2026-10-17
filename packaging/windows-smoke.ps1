@@ -1,4 +1,4 @@
-param([switch]$UnicodePath)
+param([switch]$UnicodePath, [switch]$ReleasedUpgrade)
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Run installer tests in a disposable GitHub Actions Windows account.' }
 if (-not ('CodeConvoySmoke.Paths' -as [type])) {
@@ -23,7 +23,7 @@ $version = python packaging/release.py version
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read Cargo version' }
 $setup = (Resolve-Path "dist/CodeConvoy-$version-windows-x86_64-setup.exe").Path
 $portable = Join-Path $env:RUNNER_TEMP "CodeConvoy-portable-$([guid]::NewGuid())"
-$installed = if ($UnicodePath) { Join-Path $env:RUNNER_TEMP 'CodeConvoy 安装 with spaces' } else { Join-Path $env:LOCALAPPDATA 'CodeConvoy' }
+$installed = if ($UnicodePath) { Join-Path $env:RUNNER_TEMP 'CodeConvoy 安装 with spaces' } elseif ($ReleasedUpgrade) { Join-Path $env:RUNNER_TEMP 'CodeConvoy legacy migration' } else { Join-Path $env:LOCALAPPDATA 'CodeConvoy' }
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CodeConvoy'
 if (Test-Path $installed) { throw 'Refusing to overwrite a previous installation during smoke test' }
 if (Test-Path $uninstallKey) { throw 'Refusing to overwrite existing application registration' }
@@ -50,6 +50,10 @@ try {
         throw 'Portable application did not close normally'
     }
     $running = $null
+    if ($ReleasedUpgrade) {
+        . "$PSScriptRoot/windows-upgrade.ps1"
+        Test-ReleasedUpgrade $installed $setup -Overwrite:$UnicodePath
+    }
     # NSIS requires the unquoted /D= argument last, including embedded spaces.
     $installer = Start-Process $setup -ArgumentList "/S /D=$installed" -Wait -PassThru
     if ($installer.ExitCode -ne 0) { throw "Installer failed: $($installer.ExitCode)" }
@@ -90,18 +94,26 @@ try {
     if (($nativeFiles -join ',') -ne 'CodeConvoy.exe,uninstall.exe') {
         throw "Unreviewed installed native components: $($nativeFiles -join ',')"
     }
+    # Malformed registration must fail in silent mode before touching files.
+    Set-ItemProperty $uninstallKey DisplayVersion '1.0.0+unsupported'
+    try {
+        $invalid = Start-Process $setup -ArgumentList "/S /D=$installed" -Wait -PassThru
+        if ($invalid.ExitCode -ne 1603) { throw 'Malformed installed version did not fail with 1603' }
+        if ((Get-FileHash "$installed/CodeConvoy.exe").Hash -ne (Get-FileHash "$portable/CodeConvoy.exe").Hash) {
+            throw 'Rejected maintenance changed the application'
+        }
+    } finally { Set-ItemProperty $uninstallKey DisplayVersion $version }
     # User data shares this per-user parent directory; uninstall must leave it.
     # Portable startup may already have created this application data folder.
     New-Item -ItemType Directory -Force -Path "$installed/data" | Out-Null
     Set-Content "$installed/data/preservation-fixture.txt" 'keep user state'
-    # Exercise upgrade/downgrade selection with synthetic prior registration
-    # versions. /P traverses PageReinstall and its SemverCompare call.
-    foreach ($previous in @('0.9.9', '1.0.1')) {
-        Set-ItemProperty $uninstallKey DisplayVersion $previous
+    # The released-upgrade case covers real version changes. Both unattended
+    # modes must also safely reinstall an existing running application.
+    foreach ($mode in @('/S', '/P')) {
         $running = Start-Process "$installed/CodeConvoy.exe" -PassThru
         Start-Sleep -Seconds 3
         if ($running.HasExited) { throw 'CodeConvoy did not remain running for the installer process test' }
-        $maintenance = Start-Process $setup -ArgumentList "/P /D=$installed" -PassThru
+        $maintenance = Start-Process $setup -ArgumentList "$mode /D=$installed" -PassThru
         if (!$maintenance.WaitForExit(90000)) { $maintenance.Kill(); throw 'Installer maintenance timed out' }
         if ($maintenance.ExitCode -ne 0 -or !$running.WaitForExit(5000)) { throw 'Running application handling failed' }
         if ((Get-ItemProperty $uninstallKey).DisplayVersion -ne $version) { throw 'Upgrade/downgrade registration failed' }

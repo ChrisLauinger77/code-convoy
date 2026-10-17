@@ -70,7 +70,7 @@ class ReleaseGates(unittest.TestCase):
         rust = licenses.checked_catalog()[0]["inputs"]["rust"]
         compiler = subprocess.CompletedProcess([], 0, f"rustc {rust} (fixture)\n")
         with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"), \
-                patch("nsis_helpers.configure"), patch.object(licenses, "BUNDLE", Path(temporary) / "notices"), \
+                patch("windows_crt.configure_installer"), patch.object(licenses, "BUNDLE", Path(temporary) / "notices"), \
                 patch.object(licenses.subprocess, "run", return_value=compiler):
             work = Path(temporary)
             microsoft_notice = (licenses.EVIDENCE / licenses.MICROSOFT_NOTICE).read_bytes()

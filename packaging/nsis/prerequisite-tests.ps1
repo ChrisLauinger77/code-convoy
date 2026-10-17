@@ -5,7 +5,7 @@ $Work = (Resolve-Path $Work).Path
 $policy = Get-Content 'packaging/windows-runtime.json' -Raw | ConvertFrom-Json
 $results = [System.Collections.Generic.List[object]]::new()
 function Restore-Fixture {
-    foreach ($arch in @('x86', 'x64')) {
+    foreach ($arch in @('x64')) {
         $directory = Join-Path $Work "runtime-$arch"
         New-Item -ItemType Directory -Force $directory | Out-Null
         $system = if ($arch -eq 'x64') { 'System32' } else { 'SysWOW64' }
@@ -13,39 +13,30 @@ function Restore-Fixture {
             Copy-Item (Join-Path $env:SystemRoot "$system/$file") (Join-Path $directory $file) -Force
         }
     }
-    Remove-Item "$Work/*-helper.marker" -ErrorAction SilentlyContinue
+    Remove-Item "$Work/*-native.marker" -ErrorAction SilentlyContinue
 }
 function Check-Case([string]$name, [int]$expected, [string]$exe = 'prerequisite-tests.exe', [switch]$Uninstall) {
     $arguments = if ($Uninstall) { "/S _?=$Work" } else { '/S' }
     $process = Start-Process (Join-Path $Work $exe) -ArgumentList $arguments -PassThru
     if (!$process.WaitForExit(30000)) { $process.Kill(); throw "$name timed out" }
-    $marker = if ($Uninstall) { 'uninstaller-helper.marker' } else { 'installer-helper.marker' }
+    $marker = if ($Uninstall) { 'uninstaller-native.marker' } else { 'installer-native.marker' }
     $exists = Test-Path "$Work/$marker"
     if ($process.ExitCode -ne $expected -or $exists -ne ($expected -eq 0)) {
         throw "$name failed: exit=$($process.ExitCode), expected=$expected, marker=$exists"
     }
-    $results.Add(@{case=$name; exit_code=$process.ExitCode; helper_executed=($expected -eq 0)})
+    $results.Add(@{case=$name; exit_code=$process.ExitCode; native_check_executed=($expected -eq 0)})
 }
 try {
     Restore-Fixture
-    Check-Case 'both architectures installed' 0
+    Check-Case 'x64 runtime installed; no x86 fixture exists' 0
     Restore-Fixture
     Remove-Item "$Work/runtime-x64/vcruntime140.dll"
     Check-Case 'x64 missing' 1603
     Restore-Fixture
-    Remove-Item "$Work/runtime-x86/vcruntime140.dll"
-    Check-Case 'x86 missing' 1603
-    Restore-Fixture
-    Remove-Item "$Work/runtime-x64/vcruntime140.dll", "$Work/runtime-x86/vcruntime140.dll"
-    Check-Case 'both missing' 1603
-    Restore-Fixture
-    Remove-Item "$Work/runtime-x86/ucrtbase.dll"
-    Check-Case 'x86 UCRT missing' 1603
-    Restore-Fixture
     Remove-Item "$Work/runtime-x64/ucrtbase.dll"
     Check-Case 'x64 UCRT missing' 1603
     Restore-Fixture
-    Copy-Item "$Work/runtime-x64/vcruntime140.dll" "$Work/runtime-x86/vcruntime140.dll" -Force
+    Copy-Item "$env:SystemRoot/SysWOW64/vcruntime140.dll" "$Work/runtime-x64/vcruntime140.dll" -Force
     Check-Case 'wrong DLL architecture' 1603
     Restore-Fixture
     Check-Case 'newer compatible files' 0 'prerequisite-newer.exe'
@@ -56,11 +47,8 @@ try {
     Restore-Fixture
     Check-Case 'create fixture uninstaller' 0
     Restore-Fixture
-    Remove-Item "$Work/runtime-x86/vcruntime140.dll"
-    Check-Case 'uninstall x86 missing' 1603 'prerequisite-uninstall.exe' -Uninstall
-    Restore-Fixture
-    Remove-Item "$Work/runtime-x64/vcruntime140.dll"
-    Check-Case 'uninstall does not need x64 application runtime' 0 'prerequisite-uninstall.exe' -Uninstall
+    Remove-Item "$Work/runtime-x64" -Recurse -Force
+    Check-Case 'uninstall needs neither x64 nor x86 runtime' 0 'prerequisite-uninstall.exe' -Uninstall
     Restore-Fixture
     # Registry claims are deliberately not trusted. Exercise stale claims in
     # both views of a private test key; never edit real runtime registration.
@@ -70,7 +58,7 @@ try {
         try {
             $key = $base.CreateSubKey($keyName)
             try { $key.SetValue('Installed', 1); $key.SetValue('Version', 'v14.99.65535.0') } finally { $key.Dispose() }
-            Remove-Item "$Work/runtime-x86/vcruntime140.dll" -ErrorAction SilentlyContinue
+            Remove-Item "$Work/runtime-x64/vcruntime140.dll" -ErrorAction SilentlyContinue
             Check-Case "stale registry claim $view" 1603
         } finally { $base.DeleteSubKeyTree($keyName, $false); $base.Dispose() }
     }

@@ -169,8 +169,11 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
             or relink["recipient_patch_sha256"] != patch["sha256"]
             or relink["runtime_sha256"] == runtime["sha256"]):
         raise ValueError("Stale AppImage modified-library relink evidence")
-    from nsis_helpers import verify_catalog
-    verify_catalog(catalog, texts, root, evidence)
+    # Only the standard plugins required by the template may ship. Exact bytes
+    # remain checked against the reviewed inventory in the final installer.
+    expected_plugins = {"$PLUGINSDIR/System.dll", "$PLUGINSDIR/StartMenu.dll", "$PLUGINSDIR/nsDialogs.dll"}
+    if set(catalog["windows_installer_plugins"]) != expected_plugins:
+        raise ValueError("Unexpected NSIS plugin inventory")
     # This is the exact registry source compiled into the application, not an
     # online source offer that can expire or be replaced after distribution.
     mpl = next(p for p in catalog["crates"] if p["name"] == "option-ext")

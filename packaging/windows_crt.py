@@ -288,7 +288,7 @@ def verify(binary, directory=EVIDENCE, *, source_commit=None):
 
 
 def record_packages(installer, archive, binary):
-    """Bind the already byte-verified final packages to the linker/helper evidence."""
+    """Bind the already byte-verified final packages to the application linker and final PE evidence."""
     report = verify(binary)
     helpers = json.loads((EVIDENCE / "packaged-binaries.json").read_text(encoding="utf-8"))
     if (helpers.get("application_sha256") != checksum(binary)
@@ -301,10 +301,6 @@ def record_packages(installer, archive, binary):
                 or checksum(EVIDENCE / record["inspection"]) != record["inspection_sha256"]):
             raise ValueError("Missing or altered Windows PE inspection")
     evidence_files = ["provenance.json", "packaged-binaries.json"]
-    if "nsis_provenance_sha256" in helpers:
-        if checksum(EVIDENCE / "nsis-provenance.json") != helpers["nsis_provenance_sha256"]:
-            raise ValueError("Missing or altered NSIS helper CRT provenance")
-        evidence_files.append("nsis-provenance.json")
     write_json(EVIDENCE / "packages.json", {
         "schema": 1, "source_commit": report["source_commit"], "license_assessment": "unresolved",
         "application_sha256": checksum(binary),
@@ -314,11 +310,8 @@ def record_packages(installer, archive, binary):
 
 
 def inspect_installer(installer, payload, binary):
-    """Record rebuilt helpers and remaining prebuilt NSIS components separately."""
-    import nsis_helpers
+    """Record the application and standard prebuilt NSIS components."""
     report = verify(binary)
-    helper_report = nsis_helpers.verify()
-    shutil.copyfile(nsis_helpers.OUTPUT / "provenance.json", EVIDENCE / "nsis-provenance.json")
     dumpbin = Path(report["toolchain"]["linker"]["path"]).with_name("dumpbin.exe")
     records = []
     paths = [("installer", installer)] + [(p.relative_to(payload).as_posix(), p)
@@ -327,18 +320,32 @@ def inspect_installer(installer, payload, binary):
         text = output([dumpbin, "/headers", "/imports", path], env={**os.environ, "VSLANG": "1033"})
         log = EVIDENCE / f"pe-{index}.txt"
         log.write_text(text, encoding="utf-8")
-        helper = helper_report["binaries"].get(path.name) if name.startswith("$PLUGINSDIR/") else None
-        if helper and helper["sha256"] != checksum(path):
-            raise ValueError("Final installer helper differs from captured linker inputs")
         records.append({"name": name, "sha256": checksum(path), "inspection": log.name,
                         "inspection_sha256": checksum(log),
                         "imports": sorted(set(re.findall(r"^\s+([\w.-]+\.dll)\s*$", text, re.I | re.M))),
                         "static_crt_provenance": "captured above" if name == "CodeConvoy.exe" else
-                        (f"nsis-provenance.json: {path.name}; CRT={helper['crt']}; redistribution assessment remains unresolved"
-                         if helper else "unresolved: prebuilt component; imports do not identify static library inputs")})
+                        "unresolved: prebuilt component; imports do not identify static library inputs"})
     write_json(EVIDENCE / "packaged-binaries.json", {"schema": 1, "application_sha256": checksum(binary),
-               "nsis_provenance_sha256": checksum(EVIDENCE / "nsis-provenance.json"),
                "license_assessment": "unresolved", "dumpbin_sha256": checksum(dumpbin), "binaries": records})
+
+
+def configure_installer(config, work):
+    """Use cargo-packager's supported template hook; no helper build or cache edits."""
+    import windows_runtime
+    template = (ROOT / "packaging/nsis/installer.nsi").read_text()
+    if "CODECONVOY_CRT_FIXTURE" in template:
+        raise ValueError("Runtime test hook is forbidden in production template")
+    prerequisites = work / "prerequisites.nsh"
+    prerequisites.write_text(windows_runtime.render_prerequisites(), encoding="utf-8-sig")
+    for token, path in (("@CODECONVOY_PREREQUISITES@", prerequisites),
+                        ("@CODECONVOY_NATIVE@", ROOT / "packaging/windows-installer.nsh")):
+        value = str(path.resolve())
+        if any(c in value for c in '$"\r\n') or template.count(token) != 1:
+            raise ValueError("Invalid NSIS template path or substitution")
+        template = template.replace(token, value)
+    rendered = work / "installer.nsi"
+    rendered.write_text(template, encoding="utf-8-sig")
+    config["nsis"]["template"] = str(rendered.resolve())
 
 
 if __name__ == "__main__":

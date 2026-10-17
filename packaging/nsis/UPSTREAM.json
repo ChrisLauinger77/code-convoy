@@ -4,10 +4,10 @@
   "source": "src/package/nsis/installer.nsi",
   "upstream_sha256": "3ff5fde09ae24dfc031ab91f939b290f394e2c6d3549f2c43c37414716a47b7a",
   "changes": [
-    "Add independent helper search directory",
-    "Rename three Tauri helper calls and two shortcut calls",
-    "Consume and check shortcut helper status",
-    "Check externally supplied runtime prerequisites before helper calls, upgrades and removal",
-    "Reject invalid helper results without bypassing process checks"
+    "Use bundled WordFunc and System/COM support for version, process and shortcut operations",
+    "Validate normal release versions in every installation mode; preserve effective allowDowngrades=true",
+    "Check externally supplied x64 runtime before installation and maintenance; retain legacy uninstaller checks",
+    "Fail closed on uncertain process state, failed maintenance, and missing shortcut identity",
+    "Respect silent/passive /NS for both shortcut locations"
   ]
 }

@@ -19,10 +19,6 @@
     "x64": [
       "ucrtbase.dll",
       "vcruntime140.dll"
-    ],
-    "x86": [
-      "ucrtbase.dll",
-      "vcruntime140.dll"
     ]
   },
   "crt_imports": {
@@ -32,11 +28,6 @@
       "api-ms-win-crt-math-l1-1-0.dll",
       "api-ms-win-crt-runtime-l1-1-0.dll",
       "api-ms-win-crt-stdio-l1-1-0.dll",
-      "api-ms-win-crt-string-l1-1-0.dll",
-      "vcruntime140.dll"
-    ],
-    "x86": [
-      "api-ms-win-crt-runtime-l1-1-0.dll",
       "api-ms-win-crt-string-l1-1-0.dll",
       "vcruntime140.dll"
     ]

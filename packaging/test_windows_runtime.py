@@ -8,7 +8,6 @@ import zipfile
 
 import windows_crt as crt
 import windows_runtime as runtime
-import nsis_helpers
 import release
 
 
@@ -24,16 +23,11 @@ class WindowsRuntime(unittest.TestCase):
             with self.assertRaises(ValueError):
                 crt.check_dynamic_libraries([r"C:\VC\msvcrt.lib", "C:\\VC\\" + name])
 
-    def test_release_configurations_are_dynamic_and_shortcut_helper_is_crt_free(self):
+    def test_application_still_links_dynamic_crt(self):
         build = (runtime.ROOT / "packaging/build.py").read_text()
-        helpers = (runtime.ROOT / "packaging/nsis_helpers.py").read_text()
-        for text in (build, helpers):
-            self.assertIn("target-feature=-crt-static", text)
-            self.assertNotIn("target-feature=+crt-static", text)
-        spec = json.loads((nsis_helpers.KIT / "inputs.json").read_text())
-        self.assertEqual(spec["binaries"]["codeconvoy_utils.dll"]["crt"], "dynamic")
-        self.assertEqual(spec["binaries"]["CodeConvoyAppId.dll"]["crt"], "none")
-        self.assertIn('"/NOENTRY", "/NODEFAULTLIB"', helpers)
+        self.assertIn("target-feature=-crt-static", build)
+        self.assertNotIn("target-feature=+crt-static", build)
+        self.assertEqual(set(runtime.policy()["runtime_files"]), {"x64"})
 
     def test_prohibited_runtime_files_are_rejected_case_insensitively_at_any_depth(self):
         for filename in ("VCRUNTIME140.dll", "vcruntime140_1.dll", "MSVCP140.dll", "msvcr120.dll",
@@ -56,38 +50,26 @@ class WindowsRuntime(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "redistribution is prohibited"):
                 release.verify_windows_zip(archive, exe)
 
-    def test_bootstrap_covers_all_call_sites_and_removal_requires_process_runtime(self):
-        text = (runtime.ROOT / "packaging/nsis/installer.nsi").read_text()
-        init = text.split("Function .onInit\n")[1].split("FunctionEnd")[0]
-        self.assertLess(init.index("Call RequireWindowsRuntime"), init.index("MUI_LANGDLL_DISPLAY"))
-        self.assertIn('Call RequireWindowsRuntime\n  codeconvoy_utils::SemverCompare', text)
-        self.assertIn('Call ${PREFIX}RequireWindowsRuntime\n  codeconvoy_utils::FindProcess', text)
-        self.assertIn('Call ${PREFIX}RequireWindowsRuntime\n        codeconvoy_utils::KillProcess', text)
-        uninstall = text.split("Function un.onInit\n")[1].split("FunctionEnd")[0]
-        self.assertIn('Call un.RequireWindowsRuntime', uninstall)
-        self.assertIn('!insertmacro CheckIfAppIsRunning "un."', text)
-        self.assertEqual(text.count('StrCpy $R0 "invalid"'), 3)
-        version_page = text.split('Function PageReinstall\n')[1].split('FunctionEnd')[0]
-        self.assertIn('SetErrorLevel 1603\n    Quit', version_page)
-        install = text.split('Section Install\n')[1].split('SectionEnd')[0]
-        self.assertLess(install.index('CheckIfAppIsRunning'), install.index('SetOutPath'))
+    def test_supported_config_preserves_per_user_identity_and_downgrades(self):
+        config = json.loads((runtime.ROOT / "packaging/packager.json").read_text())
+        self.assertEqual(config["identifier"], "io.github.chrislauinger77.code-convoy")
+        self.assertEqual(config["nsis"]["installMode"], "currentUser")
+        self.assertTrue(config["windows"]["allowDowngrades"])
+        self.assertNotIn("appdataPaths", config["nsis"])
 
     def test_rendered_check_uses_file_versions_architectures_and_no_runtime_override(self):
         text = runtime.render_prerequisites()
         self.assertNotIn("@CHECKS_", text)
         self.assertIn('GetDLLVersion "$CrtFile"', text)
         self.assertIn('IntCmpU', text)
-        self.assertIn('LoadLibraryExW', text)
         self.assertIn('$WINDIR\\Sysnative', text)
-        self.assertIn('$WINDIR\\SysWOW64', text)
         self.assertIn('SetErrorLevel 1603', text)
         self.assertIn('IfSilent no_dialog', text)
-        self.assertIn('!insertmacro CodeConvoyRuntimeFunctions "un." 0', text)
         for disallowed in ('ReadReg', 'ReadEnvStr', 'ExecWait', 'Download::', 'nsis_tauri_utils::Download'):
             self.assertNotIn(disallowed, text)
-        with tempfile.TemporaryDirectory() as temp, patch.object(nsis_helpers, "verify"):
+        with tempfile.TemporaryDirectory() as temp:
             config = {"nsis": {}}
-            nsis_helpers.configure(config, Path(temp))
+            crt.configure_installer(config, Path(temp))
             production = Path(config["nsis"]["template"]).read_text()
             self.assertNotIn('!define CODECONVOY_CRT_FIXTURE', production)
             self.assertNotIn('prerequisite-tests', production)
