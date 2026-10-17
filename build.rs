@@ -17,7 +17,7 @@ fn windows_resources() {
             "FileDescription",
             "CodeConvoy — local coding-agent task runner",
         )
-        .set("CompanyName", "CodeConvoy contributors")
+        .set("CompanyName", "ChrisLauinger77")
         .set(
             "LegalCopyright",
             "Copyright 2026 CodeConvoy contributors. MIT license.",
