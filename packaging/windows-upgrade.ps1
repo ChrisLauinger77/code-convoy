@@ -42,6 +42,11 @@ function Test-ReleasedUpgrade([string]$installed, [string]$currentSetup, [switch
             $deadline = [DateTime]::UtcNow.AddSeconds(90)
             while (!$upgrade.HasExited -and [DateTime]::UtcNow -lt $deadline) {
                 [CodeConvoyUpgradeUi]::Advance($upgrade.Id)
+                # The unchanged 1.0.0 uninstaller can show its confirmation
+                # page with /P. Drive that real child, never replace it.
+                foreach ($child in @(Get-CimInstance Win32_Process -Filter "Name='uninstall.exe'" | Where-Object { $_.ParentProcessId -eq $upgrade.Id })) {
+                    [CodeConvoyUpgradeUi]::Advance($child.ProcessId)
+                }
                 Start-Sleep -Milliseconds 200
             }
             if (!$upgrade.HasExited) { $upgrade.Kill(); throw 'Interactive legacy maintenance timed out' }
@@ -97,7 +102,7 @@ public static class CodeConvoyUpgradeUi {
                 string text = buffer.ToString().Replace("&", "");
                 if (text.StartsWith("Run CodeConvoy")) SendMessageW(child, 0xf1, IntPtr.Zero, IntPtr.Zero);
                 if (text.StartsWith("Create desktop shortcut")) SendMessageW(child, 0xf1, new IntPtr(1), IntPtr.Zero);
-                if (text == "Next >" || text == "I Agree" || text == "Install" || text == "Finish" || text == "Close") next = child;
+                if (text == "Next >" || text == "I Agree" || text == "Install" || text == "Uninstall" || text == "Finish" || text == "Close") next = child;
                 return true;
             }, IntPtr.Zero);
             if (next != IntPtr.Zero) PostMessageW(next, 0xf5, IntPtr.Zero, IntPtr.Zero);

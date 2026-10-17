@@ -54,7 +54,7 @@ or exhaustive inventory. The library lockfile is included in the source ZIP.
 | AppImage runtime 20251108, CodeConvoy build 1 | Same MIT launcher revision `dd6cebedcbddde9c82f89b011e8e1d40b6e43868`; static libraries rebuilt from pinned sources. Exact input manifest and recipient relinking recipe are distributed. See the [verification record](appimage-runtime-validation.md). |
 | Compiler startup code | Source-built musl 1.2.5 CRT and checksum-identified GCC 14.2.0-r4 crtbeginS/crtendS objects. GCC source/Alpine recipe, copyright, GPLv3 and Runtime Library Exception 3.1 are included; the documented C compilation process supports the stated exception interpretation. |
 | NSIS 3.09 | Installer/uninstaller stub, standard plugins, artwork and LZMA decoder; original COPYING and full official source archive included. LZMA's CPL-1.0 linking exception does not relicense CodeConvoy. |
-| Windows replacement NSIS helpers | Original MIT shortcut helper and reduced MIT/Apache Tauri process/SemVer helper; locked source/build kit, dependency notices, binary pins and linker evidence. See the [validation record](nsis-helper-validation.md). |
+| Windows installer operations | Native NSIS WordFunc/System/COM support and Windows APIs. Custom and legacy AppID/Tauri helpers are absent; no separate helper dependencies or source kit. See [installer validation](windows-installer-validation.md). |
 | Windows CRT / SDK support code | Original Windows-specific Microsoft Distributable Code notice included in the aggregate; runtime DLLs are supplied by users. Grant interpretation and recipient-agreement effectiveness remain uncertain under the maintainer-accepted 1.0.0 risk decision; conditions and operative terms remain applicable. |
 | Original icons, AppRun and application assets | Project MIT. No new third-party artwork added. |
 | Host libraries, Git and agent CLIs | Installed separately, not redistributed in these packages. Newly bundled ELF/PE/Mach-O code fails the inventory gate. |
@@ -74,19 +74,17 @@ No expiring download or future written offer is relied upon. See Mozilla's
 
 The same source ZIP contains the pinned AppImage runtime source, libfuse 3.15.0,
 its upstream runtime patch/build recipe, squashfuse 0.5.2, musl 1.2.5, zstd 1.5.6,
-zlib 1.3.1, mimalloc 2.1.7 source, nsis-tauri-utils 0.2.1 and official NSIS 3.09
+zlib 1.3.1, mimalloc 2.1.7 source and official NSIS 3.09
 source. Each archive has a recorded digest and origin. The AppImage kit now includes the pinned build environment, build scripts,
 modification notices and a recipient patch example. Two clean outputs match;
 stock and modified-library relinking and startup were demonstrated. See the
 [AppImage record](appimage-runtime-validation.md) for scope and legal limits.
 
-`codeconvoy-nsis-helpers-1.zip` supplies the original/reduced helper source,
-Cargo.lock, exact source patches, custom template, notices and build recipe.
-The SemVer and Windows binding source archives accompany it. The old ApplicationID
-and nsis-tauri-utils prebuilt DLLs were absent from the byte-verified candidate
-before their live inventory entries were removed. Historical evidence remains
-in Git and the earlier audit record. This does not establish a grant for those
-retired binaries; it establishes different source-backed replacement components.
+The custom NSIS helpers, their dependency archives and source/build kit are
+removed from the current payload and inventory. The released 1.0.0 sources and
+native evidence remain available in the `v1.0.0` Git tag and published release.
+NSIS, cargo-packager/template and Microsoft notices remain required. Removing
+binaries does not establish licensing clearance for remaining components.
 
 ## End-user access
 
@@ -148,23 +146,19 @@ the modified library runs with the same AppDir through both FUSE and extraction.
 Native Ubuntu 24.04, Debian 13 and Wayland desktop checks remain separate platform
 validation gaps. Neither reproducibility nor the demonstration is legal approval.
 
-The **NSIS source/license blocker** is resolved for the replacement DLLs under
-the documented MIT/Apache notice-delivery interpretation. The source grants,
-copyright notices, dependency graph, build inputs and identical clean-build
-outputs are retained; the exact candidate payload contains the intended DLLs
-and source/notice material. This does not waive missing rights/provenance for
-the retired binaries. Native behavior evidence and its limitations are kept
-separately in [NSIS helper validation](nsis-helper-validation.md); no legal
-clearance or authorization to publish is inferred.
+The 1.0.0 helper source/license assessment is historical; its evidence remains
+in [the tagged validation record](https://github.com/ChrisLauinger77/code-convoy/blob/v1.0.0/docs/nsis-helper-validation.md).
+The current installer ships neither the custom helpers nor the retired upstream
+AppID/Tauri binaries. Existing NSIS notices, sources, Microsoft terms and final
+payload checks remain in force; no new licensing clearance is inferred.
 
 1. **Windows CRT.** Windows packaging now requires an application-bound
    `/VERBOSE:LIB` capture of the selected toolset/SDK libraries, hashes and
-   archive members. Final installer/helper PE inspection and final package
+   archive members. Final installer PE inspection and final package
    hashes are retained separately from the six candidate assets. The capture
-   is evidence, not redistribution approval. The replacement helpers now
-   have their own x86 linker evidence. The current distribution policy uses
-   dynamic CRT linkage for the application and Rust helper, with user-supplied
-   runtime DLLs; the original AppId helper remains CRT-independent. Historical
+   is evidence, not redistribution approval. The current distribution policy uses
+   dynamic CRT linkage for the application with user-supplied x64 runtime DLLs.
+   Custom helpers and their separate linker evidence are removed. Historical
    static-link evidence is retained as historical evidence. See the Windows
    section of [the evidence record](license-blocker-evidence.md#5-windows-static-crt-unresolved)
    for actual observations, Microsoft references and the repeatable checks.
@@ -178,7 +172,7 @@ clearance or authorization to publish is inferred.
    notice/source integrity and final-package checks remain enforced. This is
    the sole accepted licensing risk; it does not waive another obligation.
    The current [dynamic CRT record](license-blocker-evidence.md#7-dynamic-crt-and-user-supplied-prerequisites)
-   distinguishes user-supplied DLLs, embedded application/helper startup code,
+   distinguishes user-supplied DLLs, embedded application startup code,
    prebuilt NSIS inputs and hosted-toolchain entitlement.
 
 Primary AppImage evidence: [runtime source/tag](https://github.com/AppImage/type2-runtime/tree/20251108),

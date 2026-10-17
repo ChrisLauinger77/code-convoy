@@ -54,6 +54,20 @@ try {
         . "$PSScriptRoot/windows-upgrade.ps1"
         Test-ReleasedUpgrade $installed $setup -Overwrite:$UnicodePath
     }
+    if (!$ReleasedUpgrade) {
+        $minimal = Start-Process $setup -ArgumentList "/S /NS /R /D=$installed" -PassThru
+        if (!$minimal.WaitForExit(90000)) { $minimal.Kill(); throw '/NS /R installer timed out' }
+        if ($minimal.ExitCode -ne 0) { throw 'Fresh /NS /R installation failed' }
+        if ((Test-Path $desktopShortcut) -or (Get-ChildItem ([Environment]::GetFolderPath('StartMenu')) -Recurse -Filter 'CodeConvoy.lnk')) {
+            throw '/NS created a shortcut'
+        }
+        Start-Sleep -Seconds 3
+        $started = @(Get-Process CodeConvoy -ErrorAction SilentlyContinue)
+        if ($started.Count -ne 1) { throw '/R did not start CodeConvoy' }
+        $running = $started[0]
+        if (!$running.CloseMainWindow() -or !$running.WaitForExit(15000)) { throw '/R application did not close normally' }
+        $running = $null
+    }
     # NSIS requires the unquoted /D= argument last, including embedded spaces.
     $installer = Start-Process $setup -ArgumentList "/S /D=$installed" -Wait -PassThru
     if ($installer.ExitCode -ne 0) { throw "Installer failed: $($installer.ExitCode)" }
@@ -107,6 +121,7 @@ try {
     # Portable startup may already have created this application data folder.
     New-Item -ItemType Directory -Force -Path "$installed/data" | Out-Null
     Set-Content "$installed/data/preservation-fixture.txt" 'keep user state'
+    Set-Content "$installed/unrelated-user-file.txt" 'keep unrelated file'
     # The released-upgrade case covers real version changes. Both unattended
     # modes must also safely reinstall an existing running application.
     foreach ($mode in @('/S', '/P')) {
@@ -120,12 +135,15 @@ try {
         if ((Get-Content "$installed/data/preservation-fixture.txt") -ne 'keep user state') { throw 'Maintenance changed user data' }
         if ((Get-FileHash "$installed/CodeConvoy.exe").Hash -ne (Get-FileHash "$portable/CodeConvoy.exe").Hash) { throw 'Maintenance changed application identity' }
     }
+    $running = Start-Process "$installed/CodeConvoy.exe" -PassThru
+    Start-Sleep -Seconds 3
+    if ($running.HasExited) { throw 'Application did not remain running for uninstall' }
 } finally {
-    if ($null -ne $running -and !$running.HasExited) { $running.Kill(); $running.WaitForExit() }
     if (Test-Path "$installed/uninstall.exe") {
         # NSIS _?= keeps the uninstaller in place so -Wait observes completion.
         $uninstaller = Start-Process "$installed/uninstall.exe" -ArgumentList "/S _?=$installed" -Wait -PassThru
         if ($uninstaller.ExitCode -ne 0) { throw "Uninstall failed: $($uninstaller.ExitCode)" }
+        if ($null -ne $running -and !$running.WaitForExit(5000)) { throw 'Uninstall did not stop the running application' }
     }
 }
 if (Test-Path "$installed/CodeConvoy.exe") { throw 'Uninstall left the application executable' }
@@ -140,5 +158,6 @@ if ((Test-Path $desktopShortcut) -or (Get-ChildItem ([Environment]::GetFolderPat
 if ((Get-Content "$installed/data/preservation-fixture.txt") -ne 'keep user state') {
     throw 'Uninstall did not preserve the user-data directory'
 }
+if ((Get-Content "$installed/unrelated-user-file.txt") -ne 'keep unrelated file') { throw 'Uninstall removed unrelated user content' }
 Write-Output "Windows per-user installation, shortcut AppUserModelID/targets, upgrade/downgrade registration, running application handling, portable identity, uninstall and data preservation passed: $installed"
 Write-Output 'Interactive graphics, picker, and desktop cancellation still require a Windows desktop check.'

@@ -60,7 +60,7 @@ def output(command, *, env=None):
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.decode("utf-8", errors="replace")
 
 
-def loaded_libraries(log, *, require_crt=True):
+def loaded_libraries(log):
     """Only Loaded records prove selection; Searching/Found lines do not.
 
     VSLANG=1033 fixes diagnostic language. Keep archive-member spelling and full
@@ -90,7 +90,7 @@ def loaded_libraries(log, *, require_crt=True):
                 raise ValueError(f"Linker did not identify a full library path: {path}")
             path = searched
         libraries.setdefault(path, set()).add(member)
-    if not libraries or (require_crt and not any(PureWindowsPath(p).name.lower() in CRT_NAMES for p in libraries)):
+    if not libraries or not any(PureWindowsPath(p).name.lower() in CRT_NAMES for p in libraries):
         raise ValueError("No selected CRT library evidence in linker diagnostics")
     return {p: sorted(members) for p, members in sorted(libraries.items())}
 
@@ -114,8 +114,8 @@ def linker_version(linker, env):
     return match.group().strip()
 
 
-def msvc_environment(env, *, architecture="x64", toolset=None, sdk=None):
-    if architecture not in ("x64", "x64_x86") or any(
+def msvc_environment(env, *, toolset=None, sdk=None):
+    if any(
             value is not None and not re.fullmatch(r"[0-9.]+", value) for value in (toolset, sdk)):
         raise ValueError("Unsupported MSVC environment selection")
     env = {key.upper(): value for key, value in env.items()}
@@ -130,7 +130,7 @@ def msvc_environment(env, *, architecture="x64", toolset=None, sdk=None):
     # persist its complete output: the inherited environment can contain secrets.
     # cmd.exe parses command text, not C argv quoting (which escapes quotes with
     # backslashes). Quote these validated installation paths as cmd literals.
-    arguments = architecture + (f" {sdk}" if sdk else "") + (f" -vcvars_ver={toolset}" if toolset else "")
+    arguments = "x64" + (f" {sdk}" if sdk else "") + (f" -vcvars_ver={toolset}" if toolset else "")
     result = output(f'{command_path(env.get("COMSPEC", "cmd.exe"))} /d /s /c '
                     f'"call {command_path(vcvars)} {arguments} >nul && set"', env=env)
     selected = {key.upper(): value for key, value in env.items()}
@@ -142,8 +142,7 @@ def msvc_environment(env, *, architecture="x64", toolset=None, sdk=None):
     required = ("VCTOOLSVERSION", "VCTOOLSINSTALLDIR", "WINDOWSSDKVERSION", "WINDOWSSDKDIR", "LIB")
     if any(not selected.get(key) for key in required):
         raise ValueError("MSVC developer environment omitted toolset/SDK identity")
-    machine = "x86" if architecture == "x64_x86" else "x64"
-    linker = Path(selected["VCTOOLSINSTALLDIR"]) / f"bin/Hostx64/{machine}/link.exe"
+    linker = Path(selected["VCTOOLSINSTALLDIR"]) / "bin/Hostx64/x64/link.exe"
     record = {
         "visual_studio": {key: instance[key] for key in
                           ("instanceId", "installationPath", "installationVersion", "productId", "isPrerelease")},
@@ -154,7 +153,7 @@ def msvc_environment(env, *, architecture="x64", toolset=None, sdk=None):
     return selected, record
 
 
-def capture_link(arguments, *, require_crt=True):
+def capture_link(arguments):
     """Called by rustc's final-binary linker wrapper, not by dependency builds."""
     directory = Path(os.environ["CODECONVOY_CRT_EVIDENCE"])
     response_files = []
@@ -177,8 +176,7 @@ def capture_link(arguments, *, require_crt=True):
     if result.returncode == 0:
         # Rust may remove generated import archives immediately after this
         # wrapper exits. Hash every selected archive while it still exists.
-        selected = loaded_libraries((directory / "link.log").read_text(encoding="utf-8", errors="replace"),
-                                    require_crt=require_crt)
+        selected = loaded_libraries((directory / "link.log").read_text(encoding="utf-8", errors="replace"))
         write_json(directory / "selected-libraries.json", [
             {"path": path, "sha256": checksum(path), "members": members,
              "crt_family": PureWindowsPath(path).name.lower() in CRT_NAMES}

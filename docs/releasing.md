@@ -202,14 +202,16 @@ never distributed and never contacts an agent service. It exercises the process
 and Git layers, not an interactive task through the final GUI binary.
 
 `cargo-packager` downloads its NSIS toolchain and legacy helper cache on Windows.
-The supported custom template instead references the uniquely named replacement
-helpers built by `packaging/nsis_helpers.py`, outside that cache. The build pins
-Rust 1.99.0 (including the i686 MSVC target), MSVC 14.51.36231 and SDK 10.0.26100.0;
-two clean outputs must match and final extraction checks every plugin hash.
-See [source, license and native validation](nsis-helper-validation.md) before
-updating those pins or the template. The Windows CRT publication blocker remains.
-These are installer helpers, not a Tauri
-runtime or WebView. No Node, Tauri, Electron or JavaScript application dependency
+The supported custom template uses only NSIS WordFunc, the bundled System/COM
+support, and Windows APIs. Unused legacy cached DLLs are not embedded. There is
+no helper Cargo workspace, extra i686 target, custom DLL build, source kit or
+helper linker audit. Final extraction permits only the standard `System`,
+`StartMenu` and `nsDialogs` plugins at their reviewed hashes. See
+[installer validation](windows-installer-validation.md) for focused native tests
+and the actual released 1.0.0 migration test. On cargo-packager updates, compare
+its default template with `packaging/nsis/installer.nsi` using `UPSTREAM.json`;
+retain prerequisite, process, identity and failure handling. This introduces no
+Tauri runtime or WebView. No Node, Tauri, Electron or JavaScript application dependency
 was added. Rust dependencies introduced by hardening are Windows-only
 `winresource` (build-time icon/version resources) and an explicit dependency on
 the already-locked `windows` crate (the typed `CREATE_NO_WINDOW` constant).
@@ -231,16 +233,18 @@ Start Menu integration and an uninstaller, and does not remove user state.
 The ZIP contains `CodeConvoy.exe`, `LICENSE.txt` and the four third-party
 notice/source files described above; the release build dynamically
 links the MSVC CRT. The application/ZIP require the user-supplied x64 Visual C++
-v14 Runtime (`VCRUNTIME140.dll` 14.51.36247.0 or newer); installer process checks also require x86.
+v14 Runtime (`VCRUNTIME140.dll` 14.51.36247.0 or newer).
 Obtain prerequisites from Microsoft’s official
 [download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
 No runtime DLL, redistributable installer or downloader is bundled. NSIS checks
-actual DLL versions and PE architectures before helper calls and rechecks
-before maintenance/process operations; x86 dependencies are also load-tested.
+actual x64 DLL versions and PE architectures before installation and rechecks
+before maintenance or overwriting files.
 The x86 host inspects x64 files through Sysnative without executing x64 code.
 Registry claims cannot override missing, old or wrong-architecture files.
-Silent/passive prerequisite failure returns 1603. Uninstall needs x86 only and
-never bypasses process checks. Portable startup can fail before the application
+Silent/passive prerequisite failure returns 1603. The new uninstaller uses only
+Windows APIs and never bypasses process checks. A maintenance upgrade invoking
+the released 1.0.0 uninstaller retains its embedded x86 runtime prerequisite;
+its failure stops the new installer without deleting the legacy installation. Portable startup can fail before the application
 error dialog when the x64 runtime is missing. Both use the same normal per-user state location. Release GUI builds
 hide their console; debug builds keep it. A native startup error dialog preserves
 visibility when state loading or application startup fails. Child processes use

@@ -81,7 +81,7 @@ redistribute those portions. CodeConvoy's independent MIT license is unchanged.
 Managed and downstream distributors must arrange recipient agreement; delivering
 a notice or running a silent installer alone does not establish it.
 
-Windows 1.0.0 candidates require Microsoft Visual C++ v14 Runtime with
+Published Windows 1.0.0 packages require Microsoft Visual C++ v14 Runtime with
 `VCRUNTIME140.dll` **14.51.36247.0 or newer**. Install the **x64** redistributable
 for the application and portable ZIP; the NSIS installer also requires **x86** for its process-management helper.
 Obtain both from [Microsoft's official download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist),
@@ -92,6 +92,11 @@ CodeConvoy neither bundles these runtimes nor downloads or installs them.
 The CodeConvoy installer stops with guidance if a required runtime is missing,
 old or unusable; silent/passive installation fails without a blocking dialog.
 Uninstallation requires the x86 runtime so it can safely check running processes.
+The planned 1.1 installer uses native Windows APIs and requires only the x64
+application runtime; its uninstaller needs no Visual C++ runtime. An upgrade
+that invokes the released 1.0.0 uninstaller still needs that uninstaller's x86
+runtime. The 1.0.0 downloads above are unchanged.
+
 The portable ZIP has no launcher: a missing runtime DLL can prevent startup
 before CodeConvoy can display its own error dialog.
 

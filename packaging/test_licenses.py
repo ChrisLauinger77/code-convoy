@@ -221,6 +221,17 @@ class LicenseEvidence(unittest.TestCase):
                 self.check()
             del self.catalog["windows_installer_plugins"]["$PLUGINSDIR/" + name]
 
+    def test_standard_nsis_source_and_notices_remain_required(self):
+        original = copy.deepcopy(self.catalog)
+        self.catalog["components"] = [c for c in self.catalog["components"]
+                                      if c["name"] != "NSIS installer stub, bundled plugins and LZMA decoder"]
+        with self.assertRaisesRegex(ValueError, "Missing retained NSIS"):
+            self.check()
+        self.catalog = original
+        self.catalog["sources"] = [s for s in self.catalog["sources"] if s["path"] != "sources/nsis-3.09-src.tar.bz2"]
+        with self.assertRaisesRegex(ValueError, "Missing retained NSIS"):
+            self.check()
+
     def test_identified_appimage_source_cannot_be_omitted(self):
         self.catalog["sources"] = [s for s in self.catalog["sources"] if 'mimalloc' not in s["path"]]
         with self.assertRaisesRegex(ValueError, "Missing AppImage version/source"):

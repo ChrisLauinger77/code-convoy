@@ -604,7 +604,11 @@ Section Uninstall
 
   ; Delete the app directory and its content from disk
   ; Copy main executable
+  ClearErrors
   Delete "$INSTDIR\${MAINBINARYNAME}.exe"
+  ${If} ${Errors}
+    !insertmacro StopInstaller "Could not remove the application executable. Close CodeConvoy and retry."
+  ${EndIf}
 
   ; Delete resources
   {{#each resources}}

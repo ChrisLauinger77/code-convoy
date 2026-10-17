@@ -174,6 +174,10 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE):
     expected_plugins = {"$PLUGINSDIR/System.dll", "$PLUGINSDIR/StartMenu.dll", "$PLUGINSDIR/nsDialogs.dll"}
     if set(catalog["windows_installer_plugins"]) != expected_plugins:
         raise ValueError("Unexpected NSIS plugin inventory")
+    if (not any(c["name"] == "NSIS installer stub, bundled plugins and LZMA decoder"
+                for c in catalog["components"])
+            or not any(s["path"] == "sources/nsis-3.09-src.tar.bz2" for s in catalog["sources"])):
+        raise ValueError("Missing retained NSIS notices or source inventory")
     # This is the exact registry source compiled into the application, not an
     # online source offer that can expire or be replaced after distribution.
     mpl = next(p for p in catalog["crates"] if p["name"] == "option-ext")

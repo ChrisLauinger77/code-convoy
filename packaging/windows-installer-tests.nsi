@@ -70,12 +70,16 @@ Section
   timeout:
     ${GetOptions} $CMDLINE "/PID=" $0
     System::Call 'kernel32::OpenProcess(i 0x100000, i 0, i r0)p.r1'
-    StrCmp $1 0 +6
+    StrCmp $1 0 wait_failure
     Push $1
     Push 25
     Call WaitForProcessExit
     Pop $0
     System::Call 'kernel32::CloseHandle(p r1)'
+    Goto wait_done
+  wait_failure:
+    StrCpy $0 1603
+  wait_done:
     SetErrorLevel $0
     Quit
   detect:
