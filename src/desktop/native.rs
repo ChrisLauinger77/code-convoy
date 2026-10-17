@@ -50,7 +50,7 @@ pub(super) fn start(state: MenuState, events: Events) -> Result<Box<dyn Backend>
     // macOS tints the black template for the menu bar; Windows has no template
     // mechanism, so match the taskbar theme read at tray creation.
     #[cfg(target_os = "macos")]
-    let image = super::tray_glyph(false)?;
+    let image = macos_tray_glyph()?;
     #[cfg(windows)]
     let image = super::tray_glyph(!windows_light_taskbar())?;
     let icon = Icon::from_rgba(image.rgba, image.width, image.height).map_err(|e| e.to_string())?;
@@ -88,6 +88,29 @@ pub(super) fn start(state: MenuState, events: Events) -> Result<Box<dyn Backend>
         tooltip: state.tooltip(),
     }))
 }
+
+#[cfg(target_os = "macos")]
+fn macos_tray_glyph() -> Result<eframe::egui::IconData, String> {
+    let image = super::tray_glyph(false)?;
+    // tray-icon scales the whole image to 22 points. Add transparent margins to
+    // reduce the artwork by 20%, retaining its resolution for Retina displays.
+    let padding = image.height / 8;
+    let width = image.width + 2 * padding;
+    let height = image.height + 2 * padding;
+    let stride = image.width as usize * 4;
+    let padded_stride = width as usize * 4;
+    let mut rgba = vec![0; padded_stride * height as usize];
+    for (y, row) in image.rgba.chunks_exact(stride).enumerate() {
+        let start = (y + padding as usize) * padded_stride + padding as usize * 4;
+        rgba[start..start + stride].copy_from_slice(row);
+    }
+    Ok(eframe::egui::IconData {
+        rgba,
+        width,
+        height,
+    })
+}
+
 /// Windows 10/11 taskbars are dark unless the system (not app) theme is light.
 #[cfg(windows)]
 fn windows_light_taskbar() -> bool {
