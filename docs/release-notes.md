@@ -1,62 +1,49 @@
-# CodeConvoy 1.0.0 — Stable release candidate preparation
+# CodeConvoy 1.1.0 — Cursor CLI and desktop refinements
 
-## Changes since 0.10.0
+## Changes since 1.0.0
 
-These notes cover the first stable release.
+### Experimental Cursor CLI support
 
-**Windows Microsoft-component terms:** before using or redistributing the
-Windows downloads, review the [version 1.0.0 terms](https://github.com/ChrisLauinger77/code-convoy/blob/v1.0.0/third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt),
+- Add Cursor CLI as a fifth backend, using the locally installed `agent` or
+  legacy `cursor-agent` launcher and its existing sign-in. CodeConvoy does not
+  install Cursor, manage credentials or perform sign-in.
+- Add Cursor-specific model, permissions, workspace trust and optional time-limit
+  settings, CLI discovery, sign-in guidance, Activity summaries and Raw output.
+  History, comparison, reuse, text attachments and repository validation retain
+  the original launch settings and existing repository protections.
+- Supervise Cursor process trees through cancellation, timeout and shutdown;
+  retain isolated results and fail conservatively on incomplete or inconsistent
+  output. Repository rules remain the CLI's responsibility.
+- Cursor remains **experimental**. Linux CLI `2026.10.16-e3cb207` argument syntax
+  was verified through the authentication gate. Authenticated execution, actual
+  permissions, trust, rule loading and full protocol compatibility remain
+  unverified on every platform. See the [Cursor guide](cursor.md) and
+  [validation record](cursor-validation.md).
+
+### Desktop and packaging
+
+- Reduce the macOS menu bar glyph by 20% with transparent padding, retaining
+  Retina resolution. Linux and Windows tray sizing is unchanged.
+- Replace custom Windows installer helper DLLs with native Windows API handling.
+  The new installer requires only the application's x64 Visual C++ runtime;
+  its uninstaller needs no Visual C++ runtime. Upgrades invoking the released
+  1.0.0 uninstaller still require that uninstaller's x86 runtime. Process checks,
+  per-user installation and failure handling remain enforced.
+- Replace the custom AppImage runtime build with the pinned official upstream
+  runtime. Preserve final-byte verification, the glibc 2.39 ABI gate, source and
+  notice delivery, and the existing six package formats. The existing upstream
+  extraction-fallback cleanup defect still leaves `appimage_extracted_*` in
+  `TMPDIR`; see the [runtime verification record](appimage-upstream-runtime-validation.md#accepted-upstream-extraction-defect).
+- Set package publisher and Windows company metadata to `ChrisLauinger77`.
+
+**Windows Microsoft-component terms:** before using or redistributing Windows
+downloads, review the [component terms](https://github.com/ChrisLauinger77/code-convoy/blob/v1.1.0/third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt),
 also included in `THIRD-PARTY-NOTICES.txt`. Permission for the Microsoft portions
 is conditional on agreement to those terms; if you do not agree, do not use or
 redistribute those portions. CodeConvoy's independent MIT license is unchanged.
 Managed and downstream distributors must arrange recipient agreement; notice
 delivery or silent installation alone does not establish it.
 
-### Repository and process safety
-
-- Preserve saved state when history-retention settings are malformed instead of
-  accepting values that could silently alter retention behavior.
-- Extend isolated-job repository protection to the actual checkout. Cancel
-  Activity sends and binding replies without allowing an abandoned bind to
-  authorize Git creation.
-- Keep Unix process identity anchored while supervising descendants, including
-  launchers that exit before children or children that close their output
-  streams. Failed or uncertain termination retains repository protection.
-  Linux and macOS regressions cover cancellation, shutdown and group identity.
-- Expand upgrade fixtures and native process/path tests, including Windows
-  locked files and junctions. Historical unfinished work remains interrupted;
-  CodeConvoy does not resume old agent processes.
-
-### Backend and desktop compatibility
-
-- Add Claude Code **Auto** permission mode using `--permission-mode auto`.
-  Existing saved modes retain their behavior. Unsupported versions and policy
-  restrictions remain explicit; CodeConvoy never substitutes unrestricted
-  permissions. See [the authenticated Linux evidence](claude-validation.md#auto-permission-mode--2026-10-14)
-  and its account/model/organization limitations.
-- Accept Claude 2.1.300's specific post-result UI notification while continuing
-  to reject trailing execution/error records and unknown completion shapes.
-- Find macOS validation toolchains from desktop launches and use a monochrome
-  status-area tray glyph with theme-appropriate contrast.
-
-### Packaging, documentation and licensing
-
-- Build Linux candidates on Ubuntu 24.04. The intended minimum binary ABI is
-  glibc **2.39**, for Ubuntu 24.04 LTS, Debian 13 Stable and newer compatible
-  distributions. Every final DEB/RPM/AppImage ELF, including the AppImage
-  runtime, is checked. This alone does not certify desktop compatibility.
-- Preserve the six existing package formats and source-commit/checksum-based
-  two-stage release process. Candidate builds do not publish or create tags.
-- Include offline third-party notices, an inventory, Rust library notices and
-  available source archives in each package. The exact MPL `option-ext` source
-  is included without changing CodeConvoy's MIT license. Final-package checks
-  reject missing notices and unreviewed native components.
-- Add first-use, contribution, security-reporting and compatibility guidance.
-  GitHub private vulnerability reporting is enabled. Existing data/worktree
-  ownership protections and explicit cleanup remain unchanged.
-
-The source-build minimum remains Rust 1.95; candidate builds use pinned Rust
-1.99.0. macOS remains ad-hoc signed without notarization, and Windows remains
-unsigned. Ordinary Windows Storage cleanup still refuses deletion without the
-required stable filesystem identity proof. Native desktop, notifications and
-screen-reader limitations remain documented in the [platform matrix](platform-validation.md).
+macOS remains ad-hoc signed without notarization, and Windows remains unsigned.
+Native package and desktop verification remains a separate release step; see
+the [platform matrix](platform-validation.md) and [release procedure](releasing.md).

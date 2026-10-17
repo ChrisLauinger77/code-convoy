@@ -1,9 +1,27 @@
-# CodeConvoy 1.0.0 — Windows licensing and maintainer release decision
+# CodeConvoy — Windows licensing and maintainer release decisions
+
+## Maintainer renewal — 2026-10-17
+
+During preparation of CodeConvoy **1.1.0**, the maintainer explicitly authorized
+carrying the existing Windows Microsoft-component licensing-risk acceptance
+forward to this version, preserving the current component terms and every
+enforcement check. The catalog records this version-scoped renewal under
+`windows-crt`; it does not extend acceptance to future releases.
+
+The canonical notice/terms bytes and their SHA-256 binding remain unchanged.
+The existing conditions, distribution responsibilities and uncertainty remain
+as recorded for 1.0.0 below. This renewal is a maintainer risk decision, not a
+new Microsoft grant or a finding of legal compliance. A known unmet mandatory
+condition remains a blocker. No check, notice, prerequisite, source obligation
+or candidate-verification requirement is waived. This preparation authorizes
+the local release commit; tagging, pushing and publication remain separate.
+
+## 1.0.0 decision record
 
 Licensing assessment prepared 2026-10-16. This completes the
 two decision questions identified in [the risk review](license-blocker-evidence.md#9-final-risk-based-windows-review)
 using its existing evidence. It does not reopen historical NSIS provenance.
-The current policy is the implemented maintainer decision below. Earlier
+The policy for that release is the implemented maintainer decision below. Earlier
 assessments and the prior stop decision are retained as historical evidence;
 their recommendations do not override this later explicit instruction.
 Microsoft permission and recipient agreement are not conclusively established.
