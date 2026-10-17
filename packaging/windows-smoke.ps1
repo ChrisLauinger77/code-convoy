@@ -19,6 +19,18 @@ function Get-LongPath([string]$path) {
     if ($size -eq 0 -or $size -ge 32768) { throw "Cannot resolve shortcut path: $path" }
     return $result.ToString()
 }
+# Close through the window like a user. On failure, report whether the UI
+# thread still responds, then stop the process so later cases start clean.
+function Close-Application($process, [string]$message) {
+    if ($process.CloseMainWindow() -and $process.WaitForExit(15000)) { return }
+    $process.Refresh()
+    if (!$process.HasExited) {
+        Write-Output "Close diagnostics: responding=$($process.Responding) window=$($process.MainWindowHandle) title='$($process.MainWindowTitle)'"
+        $process.Kill()
+        $process.WaitForExit(5000) | Out-Null
+    }
+    throw $message
+}
 $version = python packaging/release.py version
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read Cargo version' }
 $setup = (Resolve-Path "dist/CodeConvoy-$version-windows-x86_64-setup.exe").Path
@@ -46,9 +58,7 @@ try {
     $running = Start-Process "$portable/CodeConvoy.exe" -PassThru
     Start-Sleep -Seconds 3
     if ($running.HasExited) { throw 'Portable application could not start with the installed runtime' }
-    if (!$running.CloseMainWindow() -or !$running.WaitForExit(15000)) {
-        throw 'Portable application did not close normally'
-    }
+    Close-Application $running 'Portable application did not close normally'
     $running = $null
     if ($ReleasedUpgrade) {
         . "$PSScriptRoot/windows-upgrade.ps1"
@@ -65,7 +75,7 @@ try {
         $started = @(Get-Process CodeConvoy -ErrorAction SilentlyContinue)
         if ($started.Count -ne 1) { throw '/R did not start CodeConvoy' }
         $running = $started[0]
-        if (!$running.CloseMainWindow() -or !$running.WaitForExit(15000)) { throw '/R application did not close normally' }
+        Close-Application $running '/R application did not close normally'
         $running = $null
     }
     # NSIS requires the unquoted /D= argument last, including embedded spaces.
