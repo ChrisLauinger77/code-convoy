@@ -22,7 +22,7 @@ def reject_bundled_runtimes(names):
 def render_prerequisites(spec=None):
     spec = spec or policy()
     text = (ROOT / "packaging/nsis/prerequisites.nsh").read_text()
-    for architecture in ("x86", "x64"):
+    for architecture in ("x64",):
         checks = []
         for name in spec["runtime_files"][architecture]:
             version = spec["minimum_ucrt_version" if name == "ucrtbase.dll" else "minimum_vc_version"]
@@ -66,7 +66,7 @@ ConvertTo-Json -Depth 4 -InputObject @($files)
         json.dumps(json.loads(result.stdout), indent=2) + "\n")
 
 
-def native_prerequisite_tests(makensis, helpers, work):
+def native_prerequisite_tests(makensis, work):
     import copy
     import subprocess
     work.mkdir(parents=True, exist_ok=True)
@@ -81,7 +81,7 @@ def native_prerequisite_tests(makensis, helpers, work):
         include.write_text(render_prerequisites(spec), encoding="utf-8-sig")
         script = template
         for token, path in (("@OUTPUT@", work / f"prerequisite-{name}.exe"),
-                            ("@HELPERS@", helpers), ("@PREREQUISITES@", include)):
+                            ("@NATIVE@", ROOT / "packaging/windows-installer.nsh"), ("@PREREQUISITES@", include)):
             value = str(path.resolve())
             if any(c in value for c in '$"\r\n'):
                 raise ValueError("Unsupported NSIS prerequisite fixture path")
@@ -93,3 +93,12 @@ def native_prerequisite_tests(makensis, helpers, work):
         subprocess.run([str(makensis), str(path)], check=True)
     subprocess.run(["pwsh", "-NoProfile", "-File", str(ROOT / "packaging/nsis/prerequisite-tests.ps1"),
                     "-Work", str(work)], check=True)
+
+
+if __name__ == "__main__":
+    import os
+    import sys
+    if os.name != "nt" or sys.argv[1:] != ["test"]:
+        sys.exit("Use windows_runtime.py test in a disposable native Windows account")
+    native_prerequisite_tests(Path(os.environ["LOCALAPPDATA"]) / ".cargo-packager/NSIS/makensis.exe",
+                              ROOT / "target/packaging/prerequisite-tests")

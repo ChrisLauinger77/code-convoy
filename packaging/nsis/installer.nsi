@@ -1,5 +1,4 @@
 ; Derived from cargo-packager 0.11.8; see UPSTREAM.json and LICENSE files.
-!addplugindir /x86-unicode "@CODECONVOY_HELPERS@"
 ; Set the compression algorithm.
 !if "{{compression}}" == ""
   SetCompressor /SOLID lzma
@@ -14,7 +13,6 @@ Unicode true
 !include x64.nsh
 !include WordFunc.nsh
 !include "FileAssociation.nsh"
-!include "StrFunc.nsh"
 !include "StrFunc.nsh"
 ${StrCase}
 ${StrLoc}
@@ -128,8 +126,18 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !endif
 
 
+!macro StopInstaller MESSAGE
+  ${IfNot} ${Silent}
+  ${AndIf} $PassiveMode != 1
+    MessageBox MB_OK|MB_ICONSTOP "${MESSAGE}"
+  ${EndIf}
+  SetErrorLevel 1603
+  Quit
+!macroend
+
 ; 4. Custom page to ask user if he wants to reinstall/uninstall
 ;    only if a previous installtion was detected
+Var InstalledVersionRelation
 Var ReinstallPageCheck
 Page custom PageReinstall PageLeaveReinstall
 Function PageReinstall
@@ -177,23 +185,12 @@ Function PageReinstall
   ${EndIf}
   ${IfThen} $R0 == "" ${|} StrCpy $R4 "$(unknown)" ${|}
 
-  Call RequireWindowsRuntime
-  codeconvoy_utils::SemverCompare "${VERSION}" $R0
-  ClearErrors
+  Push $R0
+  Push "${VERSION}"
+  Call CompareReleaseVersions
   Pop $R0
-  ${If} ${Errors}
-    StrCpy $R0 "invalid"
-  ${EndIf}
-  ${If} $R0 != "0"
-  ${AndIf} $R0 != "1"
-  ${AndIf} $R0 != "-1"
-    ; Abort in a custom page would skip the page and continue installation.
-    ${IfNot} ${Silent}
-    ${AndIf} $PassiveMode != 1
-      MessageBox MB_OK|MB_ICONSTOP "Could not validate the installed version. Repair the x86 Visual C++ Runtime and retry."
-    ${EndIf}
-    SetErrorLevel 1603
-    Quit
+  ${If} $R0 == 1603
+    !insertmacro StopInstaller "The installed version is not a supported X.Y.Z release. Uninstall or repair that installation before retrying."
   ${EndIf}
   ; Reinstalling the same version
   ${If} $R0 == 0
@@ -278,6 +275,7 @@ Function PageLeaveReinstall
   StrCmp $R1 "1" reinst_done ; Same version? skip uninstalling
 
   reinst_uninstall:
+    Call RequireWindowsRuntime
     HideWindow
     ClearErrors
 
@@ -301,8 +299,7 @@ Function PageLeaveReinstall
           Quit ; ...yes, already installed, we are done
         Abort
       ${EndIf}
-      MessageBox MB_ICONEXCLAMATION "$(unableToUninstall)"
-      Abort
+      !insertmacro StopInstaller "$(unableToUninstall)"
     ${Else}
       StrCpy $0 $R1 1
       ${IfThen} $0 == '"' ${|} StrCpy $R1 $R1 -1 1 ${|} ; Strip quotes from UninstallString
@@ -395,6 +392,7 @@ FunctionEnd
 
 Var PassiveMode
 !include "@CODECONVOY_PREREQUISITES@"
+!include "@CODECONVOY_NATIVE@"
 Function .onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   IfErrors +2 0
@@ -407,6 +405,7 @@ Function .onInit
   !endif
 
   !insertmacro SetContext
+  Call ValidateInstalledVersion
 
   ${If} $INSTDIR == ""
     ; Set default install location
@@ -436,77 +435,59 @@ Function .onInit
 FunctionEnd
 
 
-Section EarlyChecks
-  ; Abort silent installer if downgrades is disabled
+Function ValidateInstalledVersion
+  ReadRegStr $R0 SHCTX "${UNINSTKEY}" "UninstallString"
+  ReadRegStr $R1 SHCTX "${UNINSTKEY}" "DisplayVersion"
+  StrCpy $InstalledVersionRelation "none"
+  ${If} "$R0$R1" == ""
+    Return
+  ${EndIf}
+  Push $R1
+  Push "${VERSION}"
+  Call CompareReleaseVersions
+  Pop $InstalledVersionRelation
+  ${If} $InstalledVersionRelation == 1603
+    !insertmacro StopInstaller "The installed version is not a supported X.Y.Z release. Uninstall or repair that installation before retrying."
+  ${EndIf}
   !if "${ALLOWDOWNGRADES}" == "false"
-  IfSilent 0 silent_downgrades_done
-    ; If downgrading
-    ${If} $R0 == -1
-      System::Call 'kernel32::AttachConsole(i -1)i.r0'
-      ${If} $0 != 0
-        System::Call 'kernel32::GetStdHandle(i -11)i.r0'
-        System::call 'kernel32::SetConsoleTextAttribute(i r0, i 0x0004)' ; set red color
-        FileWrite $0 "$(silentDowngrades)"
-      ${EndIf}
-      Abort
+    ${If} $InstalledVersionRelation == -1
+      !insertmacro StopInstaller "$(silentDowngrades)"
     ${EndIf}
-  silent_downgrades_done:
   !endif
-
-SectionEnd
+FunctionEnd
 
 {{#if preinstall_section}}
 {{unescape_newlines preinstall_section}}
 {{/if}}
 
 !macro CheckIfAppIsRunning PREFIX
-  Call ${PREFIX}RequireWindowsRuntime
-  codeconvoy_utils::FindProcess "${MAINBINARYNAME}.exe"
-  ClearErrors
+  Push "${MAINBINARYNAME}.exe"
+  Push 0
+  Call ${PREFIX}CheckAppProcesses
   Pop $R0
-  ${If} ${Errors}
-    StrCpy $R0 "invalid"
+  ${If} $R0 == 1603
+    !insertmacro StopInstaller "Could not inspect running CodeConvoy processes. Close CodeConvoy and retry with access to those processes."
   ${EndIf}
-  ${If} $R0 != "0"
-  ${AndIf} $R0 != "1"
-    SetErrorLevel 1603
-    Abort "Could not check running processes. Repair the x86 Visual C++ Runtime and retry."
+  ${If} $R0 == 1
+    IfSilent kill 0
+    ${If} $PassiveMode != 1
+      MessageBox MB_OKCANCEL "$(appRunningOkKill)" IDOK kill
+      SetErrorLevel 1602
+      Quit
+    ${EndIf}
+    kill:
+      Push "${MAINBINARYNAME}.exe"
+      Push 1
+      Call ${PREFIX}CheckAppProcesses
+      Pop $R0
+      ${If} $R0 != 0
+        !insertmacro StopInstaller "Could not confirm that all CodeConvoy processes stopped. Close CodeConvoy and retry."
+      ${EndIf}
   ${EndIf}
-  ${If} $R0 == "0"
-      IfSilent kill 0
-      ${IfThen} $PassiveMode != 1 ${|} MessageBox MB_OKCANCEL "$(appRunningOkKill)" IDOK kill IDCANCEL cancel ${|}
-      kill:
-        Call ${PREFIX}RequireWindowsRuntime
-        codeconvoy_utils::KillProcess "${MAINBINARYNAME}.exe"
-        ClearErrors
-        Pop $R0
-        ${If} ${Errors}
-          StrCpy $R0 "invalid"
-        ${EndIf}
-        Sleep 500
-        ${If} $R0 == "0"
-          Goto app_check_done
-        ${Else}
-          SetErrorLevel 1603
-          IfSilent silent ui
-          silent:
-            System::Call 'kernel32::AttachConsole(i -1)i.r0'
-            ${If} $0 != 0
-              System::Call 'kernel32::GetStdHandle(i -11)i.r0'
-              System::call 'kernel32::SetConsoleTextAttribute(i r0, i 0x0004)' ; set red color
-              FileWrite $0 "$(appRunning)$\n"
-            ${EndIf}
-            Abort
-          ui:
-            Abort "$(failedToKillApp)"
-        ${EndIf}
-      cancel:
-        Abort "$(appRunning)"
-  ${EndIf}
-  app_check_done:
 !macroend
 
 Section Install
+  Call RequireWindowsRuntime
   !insertmacro CheckIfAppIsRunning ""
 
   SetOutPath $INSTDIR
@@ -568,9 +549,12 @@ Section Install
   WriteRegDWORD SHCTX "${UNINSTKEY}" "EstimatedSize" "${ESTIMATEDSIZE}"
 
   ; Create start menu shortcut (GUI)
-  !insertmacro MUI_STARTMENU_WRITE_BEGIN Application
-    Call CreateStartMenuShortcut
-  !insertmacro MUI_STARTMENU_WRITE_END
+  ${IfNot} ${Silent}
+  ${AndIf} $PassiveMode != 1
+    !insertmacro MUI_STARTMENU_WRITE_BEGIN Application
+      Call CreateStartMenuShortcut
+    !insertmacro MUI_STARTMENU_WRITE_END
+  ${EndIf}
 
   ; Create shortcuts for silent and passive installers, which
   ; can be disabled by passing `/NS` flag
@@ -582,7 +566,9 @@ Section Install
     ${GetOptions} $CMDLINE "/NS" $R0
     IfErrors 0 shortcuts_done
       Call CreateDesktopShortcut
-      Call CreateStartMenuShortcut
+      !insertmacro MUI_STARTMENU_WRITE_BEGIN Application
+        Call CreateStartMenuShortcut
+      !insertmacro MUI_STARTMENU_WRITE_END
   shortcuts_done:
 
   ; Auto close this page for passive mode
@@ -606,7 +592,6 @@ Function un.onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   IfErrors +2 0
     StrCpy $PassiveMode 1
-  Call un.RequireWindowsRuntime
   !insertmacro SetContext
 
   !if "${INSTALLMODE}" == "both"
@@ -621,7 +606,11 @@ Section Uninstall
 
   ; Delete the app directory and its content from disk
   ; Copy main executable
+  ClearErrors
   Delete "$INSTDIR\${MAINBINARYNAME}.exe"
+  ${If} ${Errors}
+    !insertmacro StopInstaller "Could not remove the application executable. Close CodeConvoy and retry."
+  ${EndIf}
 
   ; Delete resources
   {{#each resources}}
@@ -701,20 +690,32 @@ Function SkipIfPassive
 FunctionEnd
 
 Function CreateDesktopShortcut
+  ClearErrors
   CreateShortcut "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-  CodeConvoyAppId::Set "$DESKTOP\${PRODUCTNAME}.lnk" "${IDENTIFIER}"
+  ${If} ${Errors}
+    !insertmacro StopInstaller "Could not create application shortcut."
+  ${EndIf}
+  Push "$DESKTOP\${PRODUCTNAME}.lnk"
+  Push "${IDENTIFIER}"
+  Call SetShortcutIdentity
   Pop $R0
   ${If} $R0 != 0
-    Abort "Could not assign application shortcut identity."
+    !insertmacro StopInstaller "Could not assign application shortcut identity."
   ${EndIf}
 FunctionEnd
 
 Function CreateStartMenuShortcut
   CreateDirectory "$SMPROGRAMS\$AppStartMenuFolder"
+  ClearErrors
   CreateShortcut "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-  CodeConvoyAppId::Set "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk" "${IDENTIFIER}"
+  ${If} ${Errors}
+    !insertmacro StopInstaller "Could not create application shortcut."
+  ${EndIf}
+  Push "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk"
+  Push "${IDENTIFIER}"
+  Call SetShortcutIdentity
   Pop $R0
   ${If} $R0 != 0
-    Abort "Could not assign application shortcut identity."
+    !insertmacro StopInstaller "Could not assign application shortcut identity."
   ${EndIf}
 FunctionEnd

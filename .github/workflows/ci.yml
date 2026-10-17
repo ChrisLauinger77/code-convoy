@@ -7,8 +7,8 @@ on:
       - "**/*.md"
   workflow_dispatch:
     inputs:
-      nsis_helpers_only:
-        description: Capture Windows application and repeatable NSIS helper evidence (no publication)
+      native_installer_only:
+        description: Run the focused native Windows installer tests (no publication)
         type: boolean
         default: false
       windows_crt_audit:
@@ -18,34 +18,21 @@ on:
 permissions:
   contents: read
 jobs:
-  nsis-helpers:
-    if: inputs.nsis_helpers_only
+  native-installer:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
-        with:
-          toolchain: "1.99.0"
-          targets: i686-pc-windows-msvc
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.15"
-      - run: python packaging/nsis_helpers.py build
-      - run: python packaging/build.py
-        if: inputs.windows_crt_audit
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: nsis-helper-evidence
-          path: |
-            target/packaging/nsis-helpers/provenance.json
-            target/packaging/nsis-helpers/plugins/*
-            target/packaging/nsis-helpers/first/*.dll/*
-            target/packaging/nsis-helpers/second/*.dll/*
-            target/packaging/windows-crt/*
-          if-no-files-found: error
+      - name: Test native NSIS replacements
+        shell: pwsh
+        run: |
+          # Same NSIS distribution and digest as cargo-packager 0.11.8.
+          $archive = Join-Path $env:RUNNER_TEMP 'nsis-3.09.zip'
+          Invoke-WebRequest 'https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.9/nsis-3.09.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA1).Hash -ne '586855a743a6e0ade203d8758af303a48ee0716b') { throw 'NSIS archive digest mismatch' }
+          Expand-Archive $archive (Join-Path $env:RUNNER_TEMP 'native-nsis')
+          ./packaging/windows-installer-tests.ps1 -MakeNSIS (Join-Path $env:RUNNER_TEMP 'native-nsis/nsis-3.09/makensis.exe')
   check:
-    if: ${{ !inputs.nsis_helpers_only }}
+    if: ${{ !inputs.native_installer_only }}
     strategy:
       fail-fast: false
       matrix:
@@ -69,8 +56,6 @@ jobs:
         run: |
           rustup toolchain install 1.99.0 --profile minimal
           if ($LASTEXITCODE -ne 0) { throw 'Cannot install audited Rust toolchain' }
-          rustup target add --toolchain 1.99.0 i686-pc-windows-msvc
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot install NSIS helper target' }
           cargo +1.99.0 install --locked --version 0.11.8 cargo-packager
           if ($LASTEXITCODE -ne 0) { throw 'Cannot install audited packager' }
       - name: Capture Windows CRT provenance and verify packages
@@ -83,9 +68,11 @@ jobs:
           python packaging/release.py windows
           if ($LASTEXITCODE -ne 0) { throw 'Windows packaging verification failed' }
           ./packaging/windows-smoke.ps1
-          ./packaging/windows-smoke.ps1 -UnicodePath
-          python packaging/nsis_helpers.py test
-          if ($LASTEXITCODE -ne 0) { throw 'Native NSIS helper regression tests failed' }
+          ./packaging/windows-smoke.ps1 -ReleasedUpgrade
+          ./packaging/windows-smoke.ps1 -UnicodePath -ReleasedUpgrade
+          ./packaging/windows-installer-tests.ps1 -MakeNSIS "$env:LOCALAPPDATA/.cargo-packager/NSIS/makensis.exe"
+          python packaging/windows_runtime.py test
+          if ($LASTEXITCODE -ne 0) { throw 'Native runtime prerequisite tests failed' }
       - name: Retain Windows CRT diagnostic evidence
         if: always() && runner.os == 'Windows' && inputs.windows_crt_audit
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -93,10 +80,6 @@ jobs:
           name: windows-crt-audit
           path: |
             target/packaging/windows-crt/*
-            target/packaging/nsis-helpers/provenance.json
-            target/packaging/nsis-helpers/plugins/*
-            target/packaging/nsis-helpers/first/*.dll/*
-            target/packaging/nsis-helpers/second/*.dll/*
             dist/*windows*
           if-no-files-found: error
       - run: cargo fmt --check

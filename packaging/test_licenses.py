@@ -21,7 +21,7 @@ class LicenseEvidence(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         for name in ("Cargo.lock", "Cargo.toml", "packaging/appimage-tools.json", ".github/workflows/release.yml",
-                     "packaging/nsis_helpers.py", "packaging/windows_crt.py",
+                     "packaging/windows_crt.py",
                      "packaging/windows_runtime.py", "packaging/windows-runtime.json"):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -205,12 +205,6 @@ class LicenseEvidence(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing Rust in-tree library notices"):
             self.check()
 
-    def test_locked_plugin_dependencies_cannot_lose_notice_coverage(self):
-        self.catalog["components"] = [c for c in self.catalog["components"]
-                                      if c["name"] != "CodeConvoy NSIS helper dependency: semver"]
-        with self.assertRaisesRegex(ValueError, "Missing NSIS dependency inventory/notice coverage"):
-            self.check()
-
     def test_native_provenance_cannot_describe_another_binary(self):
         for component, key in (("appimage", "runtime_sha256"), ("appimage", "source_revision")):
             record = self.catalog["native_provenance"][component]
@@ -219,31 +213,23 @@ class LicenseEvidence(unittest.TestCase):
             with self.subTest(component=component), self.assertRaisesRegex(ValueError, "provenance does not match"):
                 self.check()
             record[key] = original
-        self.catalog["native_provenance"]["nsis_replacements"]["binaries"]["CodeConvoyAppId.dll"] = "0" * 64
-        with self.assertRaisesRegex(ValueError, "provenance does not match"):
-            self.check()
 
-    def test_nsis_source_and_locked_dependency_delivery_are_required(self):
-        record = self.catalog["native_provenance"]["nsis_replacements"]
-        for source in (record["source_archive"], "sources/windows-sys-0.48.0.crate"):
-            original = copy.deepcopy(self.catalog["sources"])
-            self.catalog["sources"] = [p for p in original if p["path"] != source]
-            with self.subTest(source=source), self.assertRaisesRegex(ValueError, "NSIS"):
+    def test_custom_or_legacy_plugins_cannot_be_restored(self):
+        for name in ("ApplicationID.dll", "nsis_tauri_utils.dll", "CodeConvoyAppId.dll", "codeconvoy_utils.dll"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "Unexpected NSIS plugin"):
+                self.catalog["windows_installer_plugins"]["$PLUGINSDIR/" + name] = "0" * 64
                 self.check()
-            self.catalog["sources"] = original
-        record["dependencies"].pop()
-        with self.assertRaisesRegex(ValueError, "locked NSIS dependency inventory"):
-            self.check()
+            del self.catalog["windows_installer_plugins"]["$PLUGINSDIR/" + name]
 
-    def test_restoring_old_cached_plugins_is_rejected(self):
-        self.catalog["windows_installer_plugins"]["$PLUGINSDIR/ApplicationID.dll"] = "0" * 64
-        with self.assertRaisesRegex(ValueError, "Old NSIS prebuilt plugin"):
+    def test_standard_nsis_source_and_notices_remain_required(self):
+        original = copy.deepcopy(self.catalog)
+        self.catalog["components"] = [c for c in self.catalog["components"]
+                                      if c["name"] != "NSIS installer stub, bundled plugins and LZMA decoder"]
+        with self.assertRaisesRegex(ValueError, "Missing retained NSIS"):
             self.check()
-
-    def test_nsis_source_changes_require_a_new_reviewed_build_kit(self):
-        path = self.root / "third-party/nsis/appid.cpp"
-        path.write_bytes(path.read_bytes() + b"\n// changed\n")
-        with self.assertRaisesRegex(ValueError, "NSIS helper sources/build inputs changed"):
+        self.catalog = original
+        self.catalog["sources"] = [s for s in self.catalog["sources"] if s["path"] != "sources/nsis-3.09-src.tar.bz2"]
+        with self.assertRaisesRegex(ValueError, "Missing retained NSIS"):
             self.check()
 
     def test_identified_appimage_source_cannot_be_omitted(self):

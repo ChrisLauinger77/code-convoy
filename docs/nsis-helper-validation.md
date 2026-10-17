@@ -1,5 +1,10 @@
 # NSIS helper replacement — CodeConvoy 1.0.0
 
+> Historical CodeConvoy 1.0.0 record. The current installer has removed this
+> helper infrastructure; paths to retired files refer to the
+> [v1.0.0 source tree](https://github.com/ChrisLauinger77/code-convoy/tree/v1.0.0).
+> Current behavior and checks are in [Windows installer validation](windows-installer-validation.md).
+
 Status: replacement source/notices and the exact candidate payload have been
 verified; `nsis-plugins` is removed from the inventory. `windows-crt` remains a
 publication blocker. Native installer and helper regression checks, including

@@ -104,8 +104,8 @@ def fresh_work(platform):
 def package(work, binary_dir, binary, format_name, *, glibc=None):
     config = json.loads((ROOT / "packaging/packager.json").read_text())
     if format_name == "nsis":
-        from nsis_helpers import configure
-        configure(config, work)
+        from windows_crt import configure_installer
+        configure_installer(config, work)
     bundle = licenses.prepare()
     if format_name == "deb":
         if not glibc or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", glibc):
@@ -221,9 +221,7 @@ def verify_windows_exe(path):
 
 def windows():
     import windows_crt
-    import nsis_helpers
     windows_crt.verify(ROOT / "target/release/codeconvoy.exe")
-    nsis_helpers.build()
     work = fresh_work("windows")
     binaries = work / "bin"
     binaries.mkdir()

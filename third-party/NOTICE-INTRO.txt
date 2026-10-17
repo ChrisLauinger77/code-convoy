@@ -55,14 +55,11 @@ the CPL-1.0 terms and linking exception in the notices below. CodeConvoy
 provides no additional warranties on behalf of these contributors. Any
 different terms for CodeConvoy's own files are offered by CodeConvoy alone.
 
-The installer uses CodeConvoy's original MIT-licensed shortcut identity helper
-and a reduced, source-built nsis-tauri-utils helper under MIT OR Apache-2.0.
-Their source/build kit, exact dependency source archives, lockfile and notices
-are supplied in THIRD-PARTY-SOURCES.zip. The original ApplicationID and Tauri
-prebuilt DLLs are not included. The unused downloader and its HTTP/TLS stack
-are excluded from the rebuilt helper. Windows CRT redistribution obligations
-remain unresolved separately; these source licenses do not grant rights to
-Microsoft runtime code.
+The installer uses NSIS WordFunc, the bundled System plugin, and Windows
+process and Shell APIs. No custom helper DLLs or legacy ApplicationID/Tauri
+DLLs are included. The existing NSIS notices and source archive remain supplied.
+Windows CRT obligations for the application and prebuilt NSIS components remain
+separate; removing helper binaries does not resolve those obligations.
 
 For Windows releases, the Microsoft Distributable Code notice below identifies
 the embedded startup/SDK code separately from CodeConvoy's MIT-licensed code,

@@ -118,7 +118,6 @@ jobs:
         with:
           toolchain: "1.99.0"
           components: rustfmt, clippy
-          targets: i686-pc-windows-msvc
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.15"
@@ -131,20 +130,18 @@ jobs:
       - name: Verify executable metadata, installer, portable archive and uninstall
         run: |
           ./packaging/windows-smoke.ps1
-          ./packaging/windows-smoke.ps1 -UnicodePath
-          python packaging/nsis_helpers.py test
-          if ($LASTEXITCODE -ne 0) { throw 'Native NSIS helper regression tests failed' }
-      - name: Retain Windows linker and helper evidence
+          ./packaging/windows-smoke.ps1 -ReleasedUpgrade
+          ./packaging/windows-smoke.ps1 -UnicodePath -ReleasedUpgrade
+          ./packaging/windows-installer-tests.ps1 -MakeNSIS "$env:LOCALAPPDATA/.cargo-packager/NSIS/makensis.exe"
+          python packaging/windows_runtime.py test
+          if ($LASTEXITCODE -ne 0) { throw 'Native runtime prerequisite tests failed' }
+      - name: Retain Windows application linker and installer evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-crt-evidence
           path: |
             target/packaging/windows-crt/*
-            target/packaging/nsis-helpers/provenance.json
-            target/packaging/nsis-helpers/plugins/*
-            target/packaging/nsis-helpers/first/*.dll/*
-            target/packaging/nsis-helpers/second/*.dll/*
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

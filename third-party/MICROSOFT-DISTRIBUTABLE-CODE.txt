@@ -5,10 +5,10 @@ Scope and ownership
 -------------------
 Microsoft Corporation owns the Microsoft startup and support code incorporated
 in these Windows binaries. CodeConvoy.exe (x64, in both the installer and ZIP)
-and codeconvoy_utils.dll (x86, installer only) dynamically use the VC/UCRT, but
-still incorporate startup/support objects selected from msvcrt.lib and Windows
-SDK libraries. CodeConvoyAppId.dll uses SDK import libraries and UUID data without
-a CRT. The recorded toolset is MSVC 14.51.36231 with Windows SDK 10.0.26100.0.
+dynamically uses the VC/UCRT, but still incorporates startup/support objects
+selected from msvcrt.lib and Windows SDK libraries. The recorded application
+toolset is MSVC 14.51.36231 with Windows SDK 10.0.26100.0. Custom NSIS helpers
+are no longer included.
 
 The setup stub, uninstaller and prebuilt NSIS plugins have separately recorded
 provenance gaps for any embedded Microsoft code. An absence of CRT DLL imports
@@ -98,9 +98,8 @@ Version 1.0.0, 2026-10-16
 1. Scope and agreement
 
 These terms are offered by your CodeConvoy distributor for the Microsoft-owned
-startup and support portions incorporated in CodeConvoy.exe and
-codeconvoy_utils.dll, and Microsoft SDK portions in those files and
-CodeConvoyAppId.dll. They also cover any Microsoft startup/support portions
+startup and support portions and Microsoft SDK portions incorporated in
+CodeConvoy.exe. They also cover any Microsoft startup/support portions
 present in the included NSIS setup, uninstaller or plugins, without asserting
 which of those files contains such code. These are the "Microsoft portions".
 These terms do not license separately obtained runtime DLLs. Microsoft's

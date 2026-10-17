@@ -1,6 +1,6 @@
 ; CodeConvoy: check actual system DLL versions and PE architectures, never registry
 ; claims alone. A stale or missing registry entry cannot override file evidence.
-; Runs inside the existing x86 NSIS host, before the Rust utility plugin is used.
+; The x86 NSIS host checks the x64 application runtime without loading it.
 !include "LogicLib.nsh"
 !include "x64.nsh"
 !include "WinVer.nsh"
@@ -17,7 +17,6 @@ Var CrtMissing
 ; Test paths are compile-time substitutions in a separate fixture executable.
 ; Production configure() rejects these definitions; there is no runtime bypass.
 !ifndef CODECONVOY_CRT_FIXTURE
-  !define CODECONVOY_CRT_X86 "$WINDIR\SysWOW64"
   !define CODECONVOY_CRT_X64 "$WINDIR\Sysnative"
 !endif
 
@@ -28,7 +27,7 @@ Var CrtMissing
   IntOp ${VALUE} ${VALUE} | ${TEMP}
 !macroend
 
-!macro CodeConvoyRuntimeFunctions PREFIX CHECK_APP
+!macro CodeConvoyRuntimeFunctions PREFIX
 Function ${PREFIX}CheckRuntimeFile
   Push $0
   Push $1
@@ -69,19 +68,6 @@ Function ${PREFIX}CheckRuntimeFile
     StrCpy $CrtFileOK 1
   close_file:
     FileClose $0
-  ${If} $CrtFileOK == 1
-  ${AndIf} $CrtMachine == 0x14c
-    ; The x86 host can also verify actual loading of the helper's dependencies.
-    ; System-only dependency search prevents PATH/current-directory fallbacks.
-    System::Call 'kernel32::SetErrorMode(i 0x8003)i.r3'
-    System::Call 'kernel32::LoadLibraryExW(w "$CrtFile", p 0, i 0x800)p.r4'
-    System::Call 'kernel32::SetErrorMode(i r3)'
-    ${If} $4 == 0
-      StrCpy $CrtFileOK 0
-    ${Else}
-      System::Call 'kernel32::FreeLibrary(p r4)'
-    ${EndIf}
-  ${EndIf}
   done:
     Pop $4
     Pop $3
@@ -97,25 +83,13 @@ Function ${PREFIX}CheckWindowsRuntime
     StrCpy $CrtMissing "A supported x64 Windows 10/11 system is required."
     Return
   ${EndIf}
-  StrCpy $CrtDirectory "${CODECONVOY_CRT_X86}"
-  StrCpy $CrtMachine 0x14c
+  StrCpy $CrtDirectory "${CODECONVOY_CRT_X64}"
+  StrCpy $CrtMachine 0x8664
   StrCpy $CrtArchitectureOK 1
-@CHECKS_X86@
-  ${If} $CrtArchitectureOK != 1
-    StrCpy $CrtMissing "x86 runtime (required by installer process checks)"
-  ${EndIf}
-  !if ${CHECK_APP} == 1
-    StrCpy $CrtDirectory "${CODECONVOY_CRT_X64}"
-    StrCpy $CrtMachine 0x8664
-    StrCpy $CrtArchitectureOK 1
 @CHECKS_X64@
-    ${If} $CrtArchitectureOK != 1
-      ${If} $CrtMissing != ""
-        StrCpy $CrtMissing "$CrtMissing$\r$\n"
-      ${EndIf}
-      StrCpy $CrtMissing "x64 runtime (required by CodeConvoy)$\r$\n$CrtMissing"
-    ${EndIf}
-  !endif
+  ${If} $CrtArchitectureOK != 1
+    StrCpy $CrtMissing "x64 runtime (required by CodeConvoy)"
+  ${EndIf}
 FunctionEnd
 
 Function ${PREFIX}RequireWindowsRuntime
@@ -137,7 +111,6 @@ Function ${PREFIX}RequireWindowsRuntime
 FunctionEnd
 !macroend
 
-!insertmacro CodeConvoyRuntimeFunctions "" 1
-; Removal needs only the x86 helper. Missing x64 application runtimes must not
-; prevent removal, but missing x86 runtimes must never bypass process checks.
-!insertmacro CodeConvoyRuntimeFunctions "un." 0
+!insertmacro CodeConvoyRuntimeFunctions ""
+; New uninstall uses only Windows APIs. A released 1.0.0 uninstaller retains
+; its own embedded x86 runtime check when invoked by the maintenance page.

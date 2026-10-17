@@ -60,7 +60,7 @@ def output(command, *, env=None):
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.decode("utf-8", errors="replace")
 
 
-def loaded_libraries(log, *, require_crt=True):
+def loaded_libraries(log):
     """Only Loaded records prove selection; Searching/Found lines do not.
 
     VSLANG=1033 fixes diagnostic language. Keep archive-member spelling and full
@@ -90,7 +90,7 @@ def loaded_libraries(log, *, require_crt=True):
                 raise ValueError(f"Linker did not identify a full library path: {path}")
             path = searched
         libraries.setdefault(path, set()).add(member)
-    if not libraries or (require_crt and not any(PureWindowsPath(p).name.lower() in CRT_NAMES for p in libraries)):
+    if not libraries or not any(PureWindowsPath(p).name.lower() in CRT_NAMES for p in libraries):
         raise ValueError("No selected CRT library evidence in linker diagnostics")
     return {p: sorted(members) for p, members in sorted(libraries.items())}
 
@@ -114,8 +114,8 @@ def linker_version(linker, env):
     return match.group().strip()
 
 
-def msvc_environment(env, *, architecture="x64", toolset=None, sdk=None):
-    if architecture not in ("x64", "x64_x86") or any(
+def msvc_environment(env, *, toolset=None, sdk=None):
+    if any(
             value is not None and not re.fullmatch(r"[0-9.]+", value) for value in (toolset, sdk)):
         raise ValueError("Unsupported MSVC environment selection")
     env = {key.upper(): value for key, value in env.items()}
@@ -130,7 +130,7 @@ def msvc_environment(env, *, architecture="x64", toolset=None, sdk=None):
     # persist its complete output: the inherited environment can contain secrets.
     # cmd.exe parses command text, not C argv quoting (which escapes quotes with
     # backslashes). Quote these validated installation paths as cmd literals.
-    arguments = architecture + (f" {sdk}" if sdk else "") + (f" -vcvars_ver={toolset}" if toolset else "")
+    arguments = "x64" + (f" {sdk}" if sdk else "") + (f" -vcvars_ver={toolset}" if toolset else "")
     result = output(f'{command_path(env.get("COMSPEC", "cmd.exe"))} /d /s /c '
                     f'"call {command_path(vcvars)} {arguments} >nul && set"', env=env)
     selected = {key.upper(): value for key, value in env.items()}
@@ -142,8 +142,7 @@ def msvc_environment(env, *, architecture="x64", toolset=None, sdk=None):
     required = ("VCTOOLSVERSION", "VCTOOLSINSTALLDIR", "WINDOWSSDKVERSION", "WINDOWSSDKDIR", "LIB")
     if any(not selected.get(key) for key in required):
         raise ValueError("MSVC developer environment omitted toolset/SDK identity")
-    machine = "x86" if architecture == "x64_x86" else "x64"
-    linker = Path(selected["VCTOOLSINSTALLDIR"]) / f"bin/Hostx64/{machine}/link.exe"
+    linker = Path(selected["VCTOOLSINSTALLDIR"]) / "bin/Hostx64/x64/link.exe"
     record = {
         "visual_studio": {key: instance[key] for key in
                           ("instanceId", "installationPath", "installationVersion", "productId", "isPrerelease")},
@@ -154,7 +153,7 @@ def msvc_environment(env, *, architecture="x64", toolset=None, sdk=None):
     return selected, record
 
 
-def capture_link(arguments, *, require_crt=True):
+def capture_link(arguments):
     """Called by rustc's final-binary linker wrapper, not by dependency builds."""
     directory = Path(os.environ["CODECONVOY_CRT_EVIDENCE"])
     response_files = []
@@ -177,8 +176,7 @@ def capture_link(arguments, *, require_crt=True):
     if result.returncode == 0:
         # Rust may remove generated import archives immediately after this
         # wrapper exits. Hash every selected archive while it still exists.
-        selected = loaded_libraries((directory / "link.log").read_text(encoding="utf-8", errors="replace"),
-                                    require_crt=require_crt)
+        selected = loaded_libraries((directory / "link.log").read_text(encoding="utf-8", errors="replace"))
         write_json(directory / "selected-libraries.json", [
             {"path": path, "sha256": checksum(path), "members": members,
              "crt_family": PureWindowsPath(path).name.lower() in CRT_NAMES}
@@ -288,7 +286,7 @@ def verify(binary, directory=EVIDENCE, *, source_commit=None):
 
 
 def record_packages(installer, archive, binary):
-    """Bind the already byte-verified final packages to the linker/helper evidence."""
+    """Bind the already byte-verified final packages to the application linker and final PE evidence."""
     report = verify(binary)
     helpers = json.loads((EVIDENCE / "packaged-binaries.json").read_text(encoding="utf-8"))
     if (helpers.get("application_sha256") != checksum(binary)
@@ -301,10 +299,6 @@ def record_packages(installer, archive, binary):
                 or checksum(EVIDENCE / record["inspection"]) != record["inspection_sha256"]):
             raise ValueError("Missing or altered Windows PE inspection")
     evidence_files = ["provenance.json", "packaged-binaries.json"]
-    if "nsis_provenance_sha256" in helpers:
-        if checksum(EVIDENCE / "nsis-provenance.json") != helpers["nsis_provenance_sha256"]:
-            raise ValueError("Missing or altered NSIS helper CRT provenance")
-        evidence_files.append("nsis-provenance.json")
     write_json(EVIDENCE / "packages.json", {
         "schema": 1, "source_commit": report["source_commit"], "license_assessment": "unresolved",
         "application_sha256": checksum(binary),
@@ -314,11 +308,8 @@ def record_packages(installer, archive, binary):
 
 
 def inspect_installer(installer, payload, binary):
-    """Record rebuilt helpers and remaining prebuilt NSIS components separately."""
-    import nsis_helpers
+    """Record the application and standard prebuilt NSIS components."""
     report = verify(binary)
-    helper_report = nsis_helpers.verify()
-    shutil.copyfile(nsis_helpers.OUTPUT / "provenance.json", EVIDENCE / "nsis-provenance.json")
     dumpbin = Path(report["toolchain"]["linker"]["path"]).with_name("dumpbin.exe")
     records = []
     paths = [("installer", installer)] + [(p.relative_to(payload).as_posix(), p)
@@ -327,18 +318,34 @@ def inspect_installer(installer, payload, binary):
         text = output([dumpbin, "/headers", "/imports", path], env={**os.environ, "VSLANG": "1033"})
         log = EVIDENCE / f"pe-{index}.txt"
         log.write_text(text, encoding="utf-8")
-        helper = helper_report["binaries"].get(path.name) if name.startswith("$PLUGINSDIR/") else None
-        if helper and helper["sha256"] != checksum(path):
-            raise ValueError("Final installer helper differs from captured linker inputs")
         records.append({"name": name, "sha256": checksum(path), "inspection": log.name,
                         "inspection_sha256": checksum(log),
                         "imports": sorted(set(re.findall(r"^\s+([\w.-]+\.dll)\s*$", text, re.I | re.M))),
                         "static_crt_provenance": "captured above" if name == "CodeConvoy.exe" else
-                        (f"nsis-provenance.json: {path.name}; CRT={helper['crt']}; redistribution assessment remains unresolved"
-                         if helper else "unresolved: prebuilt component; imports do not identify static library inputs")})
+                        "unresolved: prebuilt component; imports do not identify static library inputs"})
     write_json(EVIDENCE / "packaged-binaries.json", {"schema": 1, "application_sha256": checksum(binary),
-               "nsis_provenance_sha256": checksum(EVIDENCE / "nsis-provenance.json"),
                "license_assessment": "unresolved", "dumpbin_sha256": checksum(dumpbin), "binaries": records})
+
+
+def configure_installer(config, work):
+    """Use cargo-packager's supported template hook; no helper build or cache edits."""
+    import windows_runtime
+    template = (ROOT / "packaging/nsis/installer.nsi").read_text()
+    if "CODECONVOY_CRT_FIXTURE" in template:
+        raise ValueError("Runtime test hook is forbidden in production template")
+    prerequisites = work / "prerequisites.nsh"
+    prerequisites.write_text(windows_runtime.render_prerequisites(), encoding="utf-8-sig")
+    for token, path in (("@CODECONVOY_PREREQUISITES@", prerequisites),
+                        ("@CODECONVOY_NATIVE@", ROOT / "packaging/windows-installer.nsh")):
+        value = str(path.resolve())
+        if any(c in value for c in '$"\r\n') or template.count(token) != 1:
+            raise ValueError("Invalid NSIS template path or substitution")
+        template = template.replace(token, value)
+    rendered = work / "installer.nsi"
+    # cargo-packager adds its own UTF-16 BOM after rendering. A UTF-8 BOM here
+    # survives as an extra U+FEFF command character in the generated script.
+    rendered.write_text(template, encoding="utf-8")
+    config["nsis"]["template"] = str(rendered.resolve())
 
 
 if __name__ == "__main__":

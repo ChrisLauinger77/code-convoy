@@ -4,9 +4,8 @@ RequestExecutionLevel user
 SilentInstall silent
 Name "CodeConvoy prerequisite fixture"
 OutFile "@OUTPUT@"
-!addplugindir /x86-unicode "@HELPERS@"
+!include "@NATIVE@"
 !define CODECONVOY_CRT_FIXTURE
-!define CODECONVOY_CRT_X86 "$EXEDIR\runtime-x86"
 !define CODECONVOY_CRT_X64 "$EXEDIR\runtime-x64"
 Var PassiveMode
 !include "@PREREQUISITES@"
@@ -15,35 +14,32 @@ Function .onInit
   Call RequireWindowsRuntime
 FunctionEnd
 
-Function un.onInit
-  Call un.RequireWindowsRuntime
-FunctionEnd
-
-!macro ExerciseHelper MARKER
-  codeconvoy_utils::FindProcess "CodeConvoyMissingRuntimeFixture.exe"
+!macro ExerciseNative PREFIX MARKER
+  Push "CodeConvoyMissingRuntimeFixture.exe"
+  Push 0
+  Call ${PREFIX}CheckAppProcesses
   Pop $0
-  ${If} $0 != "1"
+  ${If} $0 != "0"
     SetErrorLevel 40
     Quit
   ${EndIf}
   FileOpen $0 "$EXEDIR\${MARKER}" w
-  FileWrite $0 "helper executed after prerequisites"
+  FileWrite $0 "native process check executed"
   FileClose $0
 !macroend
 
 Section
   !ifdef LOSE_RUNTIME
     ; Only an isolated copied fixture file, never a Windows system file.
-    Delete "$EXEDIR\runtime-x86\vcruntime140.dll"
+    Delete "$EXEDIR\runtime-x64\vcruntime140.dll"
   !endif
   Call RequireWindowsRuntime
-  !insertmacro ExerciseHelper "installer-helper.marker"
+  !insertmacro ExerciseNative "" "installer-native.marker"
   WriteUninstaller "$EXEDIR\prerequisite-uninstall.exe"
   SetErrorLevel 0
 SectionEnd
 
 Section Uninstall
-  Call un.RequireWindowsRuntime
-  !insertmacro ExerciseHelper "uninstaller-helper.marker"
+  !insertmacro ExerciseNative "un." "uninstaller-native.marker"
   SetErrorLevel 0
 SectionEnd
