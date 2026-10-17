@@ -41,7 +41,7 @@ requirements. The unchanged application requires at most GLIBC 2.39.
 
 The proposed minimal source ZIP was extracted into a new directory. Its supplied
 runtime/libfuse/squashfuse archives, upstream scripts and Makefile were used for
-a fresh build following the [recipient instructions](../third-party/runtime/upstream-relink-README.txt).
+a fresh build following the [recipient instructions](../third-party/runtime/runtime-README.txt).
 Only library download locations, source annotations, the demonstration patch
 and the build-time version label were changed. No launcher source was patched.
 The libfuse initialization modification prints an observable marker.

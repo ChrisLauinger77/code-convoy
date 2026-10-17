@@ -20,15 +20,14 @@ license/linking exception. The source is available directly in this package.
 Read its COPYING and build instructions. CodeConvoy has not modified that
 module; the exception permits linking separately licensed application code.
 
-AppImage source/relink build instructions are in runtime-README.txt. The
-standalone build-runtime.py and build-runtime.sh use runtime-inputs.json to
-reconstruct an offline checksum-pinned Alpine build filesystem, build all static
-libraries, and relink the original upstream runtime. libfuse-notice.patch adds
-a dated modification notice; libfuse-demo.patch is a recipient modification
-example and is never applied to the stock runtime. Read the applicable notices
-and LGPL2.txt inside the libfuse archive. Recipients may modify the combined
-runtime for their own use and reverse engineer it to debug those modifications.
-The separate CodeConvoy executable and its MIT license are unchanged.
+AppImage source/relink instructions are in runtime-README.txt. They use the
+supplied archives and original upstream build scripts with ordinary Alpine
+build tools. libfuse-notice.patch annotates the upstream mount modification
+in recipient source; libfuse-demo.patch is an observable LGPL modification
+example. Neither is applied to the official release runtime. Recipients may
+modify the combined runtime for their own use and reverse engineer it to debug
+those modifications. The separate CodeConvoy executable remains MIT licensed.
+No private builder, compiler or Alpine package inventory is required.
 
 All source archive checksums and retrieval locations are in the accompanying
 inventory. These files are shipped inside the existing packages; they are not
@@ -40,21 +39,16 @@ notices supplement COPYRIGHT-library.html where that report omits entries.
 
 AppImage compiler startup and system-header provenance
 -----------------------------------------------------
-Source-built musl supplies rcrt1.o, crti.o and crtn.o. The pinned Alpine GCC
-14.2.0-r4 package supplies crtbeginS.o and crtendS.o; exact object hashes are
-in runtime-inputs.json. gcc-14.2.0-alpine-r4.tar.gz retains the Alpine source
-recipe and patches at commit 1a03a2a9c9e77f1a07d48b6f6805e72c8c63c03f.
-gcc-14.2.0-crtstuff.c, COPYING3 and COPYING.RUNTIME retain the upstream source
-and terms. Compiler packages are fetched by exact filename and checksum, not
-resolved afresh. The full GCC source URL and SHA-512 are recorded in the input
-manifest for further inspection. No libgcc, libgcc_eh or libssp_nonshared archive
-member is selected into the reviewed launcher; a new selection fails the build.
-linux-uapi-6.6-r1.tar.gz contains every exact installed Linux UAPI header from
-the pinned package, including inline byte-order code, its Alpine recipe and
-GPLv2/Linux-syscall-note terms. No kernel binary is bundled.
-The Runtime Library Exception assessment concerns C compilation using GCC
-without plugins or LTO. It is documented evidence and interpretation, not legal
-approval. See the repository's AppImage validation record for results and gaps.
+The official runtime's matching debug asset and compiler comments identify
+musl 1.2.5, GCC 14.2.0 and Alpine clang 19.1.4. gcc-14.2.0-crtstuff.c, COPYING3
+and COPYING.RUNTIME retain reference source and applicable terms conservatively.
+linux-uapi-6.6-r1.tar.gz retains reference Linux headers and GPLv2/Linux-syscall-note
+terms. No kernel binary is bundled. Exact original APK revisions and CRT object
+hashes are not claimed. Upstream's C/clang build and the successful recipient
+relink procedure are documented in docs/appimage-upstream-runtime-validation.md.
+The eligible-compilation interpretation of the GCC exception does not require
+byte-identical output or proprietary intermediate-code processing. This is
+source/build evidence and a license interpretation, not legal approval.
 
 The Windows installer uses standard NSIS instructions, bundled headers and
 plugins, and Windows system APIs for version comparison, process handling and

@@ -51,8 +51,8 @@ or exhaustive inventory. The library lockfile is included in the source ZIP.
 | `epaint_default_fonts` 0.36.2 | Unmodified embedded Hack, Noto Emoji, Ubuntu Light and emoji-icon-font bytes; all four font notices included. Hack includes Bitstream-derived terms; OFL and Ubuntu font naming/reserved-name conditions remain applicable. |
 | Unicode | Unicode-3.0 texts for 18 Unicode-licensed crates, the combined `unicode-ident` expression, and Rust standard-library Unicode exceptions. |
 | `option-ext` 0.2.0 | MPL-2.0 notice and exact unmodified `.crate` source archive; checksum must equal Cargo.lock. |
-| AppImage runtime 20251108, CodeConvoy build 1 | Same MIT launcher revision `dd6cebedcbddde9c82f89b011e8e1d40b6e43868`; static libraries rebuilt from pinned sources. Exact input manifest and recipient relinking recipe are distributed. See the [verification record](appimage-runtime-validation.md). |
-| Compiler startup code | Source-built musl 1.2.5 CRT and checksum-identified GCC 14.2.0-r4 crtbeginS/crtendS objects. GCC source/Alpine recipe, copyright, GPLv3 and Runtime Library Exception 3.1 are included; the documented C compilation process supports the stated exception interpretation. |
+| Official AppImage runtime 20251108 | Checksum-pinned upstream MIT launcher at `dd6cebedcbddde9c82f89b011e8e1d40b6e43868`; sources, applicable patches/notices and upstream recipient build/relink instructions are distributed. See the [verification record](appimage-upstream-runtime-validation.md). |
+| Compiler startup code | musl 1.2.5 and observed GNU CRT code; GCC 14.2.0 reference source, copyright, GPLv3 and Runtime Library Exception 3.1 remain supplied. Upstream C/clang build evidence supports the eligible-compilation interpretation; exact original APK/object hashes are not claimed. |
 | NSIS 3.09 | Installer/uninstaller stub, standard plugins, artwork and LZMA decoder; original COPYING and full official source archive included. LZMA's CPL-1.0 linking exception does not relicense CodeConvoy. |
 | Windows installer operations | Native NSIS WordFunc/System/COM support and Windows APIs. Custom and legacy AppID/Tauri helpers are absent; no separate helper dependencies or source kit. See [installer validation](windows-installer-validation.md). |
 | Windows CRT / SDK support code | Original Windows-specific Microsoft Distributable Code notice included in the aggregate; runtime DLLs are supplied by users. Grant interpretation and recipient-agreement effectiveness remain uncertain under the maintainer-accepted 1.0.0 risk decision; conditions and operative terms remain applicable. |
@@ -75,10 +75,11 @@ No expiring download or future written offer is relied upon. See Mozilla's
 The same source ZIP contains the pinned AppImage runtime source, libfuse 3.15.0,
 its upstream runtime patch/build recipe, squashfuse 0.5.2, musl 1.2.5, zstd 1.5.6,
 zlib 1.3.1, mimalloc 2.1.7 source and official NSIS 3.09
-source. Each archive has a recorded digest and origin. The AppImage kit now includes the pinned build environment, build scripts,
-modification notices and a recipient patch example. Two clean outputs match;
-stock and modified-library relinking and startup were demonstrated. See the
-[AppImage record](appimage-runtime-validation.md) for scope and legal limits.
+source. Each archive has a recorded digest and origin. The AppImage kit includes
+upstream build scripts, source annotations and a recipient patch example.
+Modified-library relinking from the extracted kit and same-AppDir startup were
+demonstrated with ordinary Alpine build tools. See the
+[AppImage record](appimage-upstream-runtime-validation.md) for scope and legal limits.
 
 The custom NSIS helpers, their dependency archives and source/build kit are
 removed from the current payload and inventory. The released 1.0.0 sources and
@@ -136,15 +137,19 @@ for maintainer review, not authoritative legal approval. See
 for sources, notice obligations and limits. The original plugin investigation
 is historical; the replacement has a complete locked dependency inventory.
 
-The two AppImage obligations are resolved for the replacement source-built
-runtime under the documented provenance and LGPL-2.1 section 6(a) interpretation.
-The original binary's missing provenance has not been recovered or waived.
-Incomplete provenance was an internal evidence gap, not automatic proof of a
-license violation. The replacement binds actual output to identified sources,
-patches, CRT objects and build tools. Recipients receive the source/relink kit;
-the modified library runs with the same AppDir through both FUSE and extraction.
-Native Ubuntu 24.04, Debian 13 and Wayland desktop checks remain separate platform
-validation gaps. Neither reproducibility nor the demonstration is legal approval.
+The official AppImage runtime now has a usable recipient source/relink kit under
+the documented LGPL-2.1 section 6(a) interpretation. Source/version identities,
+upstream build scripts, applicable patches/notices and a modified-libfuse runtime
+launching the same AppDir in both modes are recorded in the
+[official-runtime validation](appimage-upstream-runtime-validation.md). Exact
+historical APK/CRT object reconstruction and byte-identical output are not
+requirements of this source-based approach. GNU CRT reference source and the
+eligible-compilation interpretation remain documented; no license is waived.
+Ubuntu 24.04/Debian 13 userspaces and native Forky GNOME Wayland/XWayland were
+checked separately. Native stable-distribution desktops and automated native
+Wayland normal close remain explicit test limits. The demonstration is not legal
+approval. The pre-existing extraction cleanup defect is a separate approved
+behavioral limitation, not a licensing-risk waiver.
 
 The 1.0.0 helper source/license assessment is historical; its evidence remains
 in [the tagged validation record](https://github.com/ChrisLauinger77/code-convoy/blob/v1.0.0/docs/nsis-helper-validation.md).

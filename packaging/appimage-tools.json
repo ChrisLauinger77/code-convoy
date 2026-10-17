@@ -10,9 +10,9 @@
   "runtime": {
     "source_revision": "dd6cebedcbddde9c82f89b011e8e1d40b6e43868",
     "upstream_version": "20251108",
-    "manifest_sha256": "1eacc73d986ed729c9b91df107b4ebce29ef6d2cb53388af052ecf68d2d1a707",
-    "sha256": "d5510b4077eb0e05083e576085326e76f3ffffb55ef81fd34e2a75279d80f912",
-    "size": 526976,
-    "md5_offset": 514304
+    "sha256": "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d",
+    "size": 944632,
+    "md5_offset": 932096,
+    "url": "https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64"
   }
 }

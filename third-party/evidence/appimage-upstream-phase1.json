@@ -95,5 +95,17 @@
     "debian": "dbus-daemon[395519]: [session uid=0 pid=395519 pidfd=5] Activating service name='org.a11y.Bus' requested by ':1.0' (uid=0 pid=395525 comm=\"/tmp/codeconvoy-linux-runtime-5sjxkgrr/tmp/.mount_\" label=\"chatgpt (unconfined)\")\ndbus-daemon[395519]: [session uid=0 pid=395519 pidfd=5] Successfully activated service 'org.a11y.Bus'\nPASS Official-same-payload.AppImage: fuse, Xvfb window/store initialization and normal close\nAppImage host Git, disposable worktree creation/removal, all four CLI fixture lookups, process cancellation, and environment preservation passed.\nAppImage host Git, disposable worktree creation/removal, all four CLI fixture lookups, process cancellation, and environment preservation passed.\n"
   },
   "cleanup_exception": "Maintainer approved pre-existing extraction cleanup defect; no LGPL waiver",
-  "recipient_recipe_sha256": "cbb1b70c25d811a8117671dbc3b6b5085eece538de3dd516374ed30ba6d6afd3"
+  "recipient_recipe_sha256": "cbb1b70c25d811a8117671dbc3b6b5085eece538de3dd516374ed30ba6d6afd3",
+  "recipient_inputs": {
+    "AppImage-runtime-dd6cebed.tar.gz": "f5fec23be76e50e2445ed2d018bac49b367490fc483c62c4637e99ec705d27ba",
+    "libfuse-3.15.0.tar.xz": "70589cfd5e1cff7ccd6ac91c86c01be340b227285c5e200baa284e401eea2ca0",
+    "squashfuse-0.5.2.tar.gz": "db0238c5981dabbd80ee09ae15387f390091668ca060a7bc38047912491443d3",
+    "musl-1.2.5.tar.gz": "a9a118bbe84d8764da0ea0d28b3ab3fae8477fc7e4085d90102b8596fc7c75e4",
+    "zstd-1.5.6.tar.gz": "30f35f71c1203369dc979ecde0400ffea93c27391bfd2ac5a9715d2173d92ff7",
+    "zlib-1.3.1.tar.gz": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+    "mimalloc-2.1.7-source.tar.gz": "c917cfd8f00354e1da7138b625dc7aae4c94584c721ebfcbd54dbc8a5d811b7a",
+    "runtime-README.txt": "cbb1b70c25d811a8117671dbc3b6b5085eece538de3dd516374ed30ba6d6afd3",
+    "libfuse-notice.patch": "af58e8224e51e855cea68b86d36c0e579f21514bd40740cf4188f8dca0326cfa",
+    "libfuse-demo.patch": "c8ffbf679fcf59f75d6b9c821299395aa8791339249c86b766ccd07ee8adb156"
+  }
 }

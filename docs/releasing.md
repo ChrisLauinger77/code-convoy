@@ -81,12 +81,15 @@ source/relink and attribution gaps.
 Packaging requires the audited Rust compiler version. Final DEB/RPM/AppImage
 payloads are extracted by the existing ABI gate and checked against the notice
 bundle; additional native binaries require inventory review. The AppImage
-runtime is rebuilt offline from the pinned source/toolchain manifest and
-byte-checked against the reviewed output except its documented MD5 field.
-The Linux candidate job repeats the runtime build in a fresh filesystem and
-compares the executable and link evidence. See the
-[runtime build and relinking record](appimage-runtime-validation.md) and the
-distributed [recipient instructions](../third-party/runtime/runtime-README.txt).
+runtime is downloaded from official release 20251108 at a fixed URL and SHA-256,
+passed explicitly to appimagetool, and byte-checked in the final image except
+its documented 16-byte MD5 field. There is no custom runtime build or toolchain.
+See the [official runtime verification record](appimage-upstream-runtime-validation.md)
+and distributed [recipient relinking instructions](../third-party/runtime/runtime-README.txt).
+The package probe repeats extraction launches and reports the exact-pin known
+upstream cleanup defect before cleaning its private test directory. Extra
+retained trees and execution failures fail packaging. FUSE mount and mountpoint
+removal are checked after normal close. Review this exception on each pin update.
 macOS resources and native contents are checked in the signed app and
 again inside the mounted final DMG. Windows verifies the final ZIP and extracts
 the final NSIS installer with the runner's `7z`, including hashes of its embedded
@@ -185,7 +188,7 @@ newer sysroot in the baseline build.
 | --- | --- | --- |
 | [cargo-packager 0.11.8](https://docs.rs/cargo-packager/0.11.8/cargo_packager/) | DEB, NSIS setup.exe, macOS app | Maintained Rust executable packager, independent of the UI framework. Shares identity, icons and metadata across three platforms. Does not support RPM. It is a build tool, not an application dependency. |
 | [RPM's rpmbuild](https://rpm.org/docs/6.0.x/man/rpmbuild.8) | RPM | Native RPM spec and automatic ELF requirements; no conversion of Debian dependencies into RPM names. Uses the runner's distribution tool. |
-| [linuxdeploy](https://github.com/linuxdeploy/linuxdeploy), [appimagetool](https://github.com/AppImage/appimagetool), [type2-runtime](https://github.com/AppImage/type2-runtime) | AppImage | Deployment/image tools have fixed URLs and SHA-256 in `appimage-tools.json`. The runtime uses the pinned source recipe in `third-party/runtime/`; its expected output and input-manifest hashes are pinned separately. Bubblewrap is a build-only isolation tool. |
+| [linuxdeploy](https://github.com/linuxdeploy/linuxdeploy), [appimagetool](https://github.com/AppImage/appimagetool), [type2-runtime](https://github.com/AppImage/type2-runtime) | AppImage | All three tools have fixed URLs and SHA-256 in `appimage-tools.json`. The official runtime is selected with `--runtime-file` and verified again after assembly; no runtime compilation runs in release CI. |
 | Apple's lipo, codesign, hdiutil | Universal binary, signing, DMG | Native Apple tools make both slices and signature verification explicit, including verification after mounting the finished image. |
 | Python standard library | Metadata, ZIP, inventory, checksums, orchestration | Already available on CI, no pip dependencies or application framework. Requires Python 3.11+. |
 
