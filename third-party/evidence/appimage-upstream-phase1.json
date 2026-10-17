@@ -1,0 +1,99 @@
+{
+  "published_image_sha256": "298d6a179ad8ef251b1bfdfc1715f2cffdf7c4c86e1d34ca382b3ab4928357a9",
+  "application_sha256": "c80e5565df8beb8f910342a38b25b8954038ae1c6b88af6aa0ec774de9bcce51",
+  "published_runtime_sha256_normalized": "d5510b4077eb0e05083e576085326e76f3ffffb55ef81fd34e2a75279d80f912",
+  "official_runtime_sha256": "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d",
+  "AppRun": "#!/bin/sh\n# Libraries use relative ELF RPATHs. Do not redirect PATH or LD_LIBRARY_PATH:\n# Git and coding-agent processes must inherit the user's host environment.\nset -eu\nappdir=${APPDIR:-$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)}\nexec \"$appdir/usr/bin/codeconvoy\" \"$@\"\n",
+  "official_image_sha256": "13adbd83c29ce944886585be392f1c38de1e6defdb4a9091f9d5828748d00089",
+  "payload_identical": true,
+  "date": "2026-10-17",
+  "baseline_commit": "ba96394b97842671b78cc9b7b50fb800bd4dd36b",
+  "official_elf": {
+    "md5_field_offset": 932096,
+    "md5_field_size": 16,
+    "only_runtime_mutation_is_md5_field": true,
+    "normalized_runtime_sha256": "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d",
+    "runtime_size": 944632,
+    "type2_magic": "414902",
+    "interpreter": false,
+    "dynamic_dependencies": false,
+    "runtime_glibc": null,
+    "application_glibc": "2.39"
+  },
+  "signature_key": "570C77ACEA40C0F1B758902CBF96CCA56490F695",
+  "recipient_runtime_sha256": "27d1b921d53e0708af6b6f088cbb5538c4bd1c4e2e97eb817555a207ab9688a5",
+  "recipient_payload_identical": true,
+  "recipient_native": [
+    {
+      "desktop": "native Debian Forky GNOME XWayland",
+      "fuse_mount_observed": true,
+      "image": "Recipient-kit.AppImage",
+      "mode": "fuse",
+      "modified_libfuse_marker": true,
+      "mount_cleaned": true,
+      "normal_close": 0,
+      "other_temporary_entries": [
+        "node-compile-cache"
+      ],
+      "owned_window": true,
+      "runtime_remaining_entries": [],
+      "runtime_temporary_directory_cleaned": true,
+      "store_created": true
+    },
+    {
+      "desktop": "native Debian Forky GNOME XWayland",
+      "fuse_mount_observed": false,
+      "image": "Recipient-kit.AppImage",
+      "mode": "extract",
+      "modified_libfuse_marker": true,
+      "mount_cleaned": true,
+      "normal_close": 0,
+      "other_temporary_entries": [
+        "node-compile-cache",
+        "appimage_extracted_65a26c014219f707397470623e939d1e"
+      ],
+      "owned_window": true,
+      "runtime_remaining_entries": [
+        "appimage_extracted_65a26c014219f707397470623e939d1e"
+      ],
+      "runtime_temporary_directory_cleaned": false,
+      "store_created": true
+    }
+  ],
+  "native_wayland_startup": [
+    {
+      "image": "CodeConvoy-1.0.0-x86_64.AppImage",
+      "mode": "fuse",
+      "native_wayland_surface_and_store": true,
+      "normal_close_tested": false,
+      "signal_mounts_remaining": []
+    },
+    {
+      "image": "CodeConvoy-1.0.0-x86_64.AppImage",
+      "mode": "extract",
+      "native_wayland_surface_and_store": true,
+      "normal_close_tested": false,
+      "signal_mounts_remaining": []
+    },
+    {
+      "image": "Official-same-payload.AppImage",
+      "mode": "fuse",
+      "native_wayland_surface_and_store": true,
+      "normal_close_tested": false,
+      "signal_mounts_remaining": []
+    },
+    {
+      "image": "Official-same-payload.AppImage",
+      "mode": "extract",
+      "native_wayland_surface_and_store": true,
+      "normal_close_tested": false,
+      "signal_mounts_remaining": []
+    }
+  ],
+  "userspace_results": {
+    "ubuntu": "dbus-daemon[395424]: [session uid=0 pid=395424] Activating service name='org.a11y.Bus' requested by ':1.0' (uid=0 pid=395430 comm=\"/tmp/codeconvoy-linux-runtime-32a8z6ac/tmp/.mount_\" label=\"chatgpt (unconfined)\")\ndbus-daemon[395424]: [session uid=0 pid=395424] Successfully activated service 'org.a11y.Bus'\nPASS Official-same-payload.AppImage: fuse, Xvfb window/store initialization and normal close\nAppImage host Git, disposable worktree creation/removal, all four CLI fixture lookups, process cancellation, and environment preservation passed.\nAppImage host Git, disposable worktree creation/removal, all four CLI fixture lookups, process cancellation, and environment preservation passed.\n",
+    "debian": "dbus-daemon[395519]: [session uid=0 pid=395519 pidfd=5] Activating service name='org.a11y.Bus' requested by ':1.0' (uid=0 pid=395525 comm=\"/tmp/codeconvoy-linux-runtime-5sjxkgrr/tmp/.mount_\" label=\"chatgpt (unconfined)\")\ndbus-daemon[395519]: [session uid=0 pid=395519 pidfd=5] Successfully activated service 'org.a11y.Bus'\nPASS Official-same-payload.AppImage: fuse, Xvfb window/store initialization and normal close\nAppImage host Git, disposable worktree creation/removal, all four CLI fixture lookups, process cancellation, and environment preservation passed.\nAppImage host Git, disposable worktree creation/removal, all four CLI fixture lookups, process cancellation, and environment preservation passed.\n"
+  },
+  "cleanup_exception": "Maintainer approved pre-existing extraction cleanup defect; no LGPL waiver",
+  "recipient_recipe_sha256": "cbb1b70c25d811a8117671dbc3b6b5085eece538de3dd516374ed30ba6d6afd3"
+}
