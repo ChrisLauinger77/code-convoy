@@ -1,0 +1,12 @@
+Cursor CLI (synthetic documentation contract, not captured executable help)
+Usage: agent [options] [prompt...]
+Commands:
+  agent [prompt...] Start in agent mode
+  -p, --print
+  --output-format <format>  text, json, stream-json
+  --workspace <path>
+  --model <model>
+  -f, --force
+  --trust
+  -v, --version
+  -h, --help

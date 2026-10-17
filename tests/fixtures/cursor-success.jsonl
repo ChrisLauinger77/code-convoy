@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","cwd":"/synthetic/worktree","session_id":"cursor-fixture","model":"fixture","permissionMode":"default"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Grüße 🌍. Task complete."}]},"session_id":"cursor-fixture"}
+{"type":"result","subtype":"success","is_error":false,"result":"Grüße 🌍. Task complete.","duration_ms":12,"duration_api_ms":10,"session_id":"cursor-fixture"}

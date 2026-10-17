@@ -4,6 +4,7 @@ use std::{
     process::Command,
     time::Duration,
 };
+mod cursor;
 mod workflow;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
@@ -63,6 +64,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
         return Ok(());
     }
+    if args.iter().any(|arg| arg.starts_with("--workspace=")) {
+        return cursor::run(&args);
+    }
     let mut _probe_lock = None;
     if args.iter().any(|arg| arg == "--help" || arg == "--version") {
         let directory = std::env::current_dir()?;
@@ -118,6 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         print!("{}", include_str!("../fixtures/copilot-1.0.65-help.txt"));
         print!("{}", include_str!("../fixtures/claude-help-contract.txt"));
+        print!("{}", include_str!("../fixtures/cursor-help-contract.txt"));
         return Ok(());
     }
     if args.iter().any(|a| a == "--version") {
@@ -248,7 +253,8 @@ fn gate(
     opencode: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use fs2::FileExt;
-    let claude = args.iter().any(|a| a == "--print");
+    let cursor = args.iter().any(|a| a.starts_with("--workspace="));
+    let claude = !cursor && args.iter().any(|a| a == "--print");
     // Attachment context follows the one-line control record. Capture the full
     // stdin below while keeping this test-only handshake independent of it.
     let config: serde_json::Value = serde_json::from_str(json.lines().next().unwrap_or(json))?;
@@ -286,7 +292,7 @@ fn gate(
         root.join(format!("{marker}.args")),
         serde_json::to_vec(args)?,
     )?;
-    if claude {
+    if claude || cursor {
         if let Some(init) = config.get("claude_init") {
             println!("{init}");
         }
@@ -316,7 +322,9 @@ fn gate(
         std::thread::sleep(Duration::from_millis(5));
     }
     if config["fail"].as_bool() == Some(true) {
-        if claude {
+        if cursor {
+            eprintln!("Cursor fixture failure");
+        } else if claude {
             claude_result(true);
         } else if opencode {
             println!("{{\"type\":\"error\",\"error\":{{\"name\":\"controlled failure\"}}}}");
@@ -342,7 +350,9 @@ fn gate(
             _ => {}
         }
     }
-    if claude {
+    if cursor {
+        print!("{}", include_str!("../fixtures/cursor-success.jsonl"));
+    } else if claude {
         claude_result(false);
     } else if opencode {
         opencode_complete();

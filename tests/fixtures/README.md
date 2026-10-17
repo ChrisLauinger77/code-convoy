@@ -1,5 +1,10 @@
 # Saved-state fixtures
 
+Cursor's `cursor-help-contract.txt` and `cursor-success.jsonl` are synthetic
+documentation-derived protocol fixtures, not captured help or authenticated CLI
+output. See [Cursor validation](../../docs/cursor-validation.md) for sources,
+version limits and remaining real-platform checks.
+
 These are synthetic representative saves with fields checked against the local
 release tags, not captured user data or recordings produced by old binaries.
 All use internal state format 1. No real user's paths, tasks or data were copied.

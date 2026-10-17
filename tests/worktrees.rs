@@ -1710,6 +1710,19 @@ async fn isolated_image_and_text_transport_remains_backend_owned_for_every_backe
             .iter()
             .map(|p| Attachment::inspect(p).unwrap())
             .collect();
+        if agent == AgentId::Cursor {
+            assert!(
+                runner::prepare(task, vec![repo])
+                    .await
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("image attachment")
+            );
+            assert!(!h.root.path().join("retained worktrees ü").exists());
+            h.close().await;
+            continue;
+        }
         let before = git::diff(&repo.path).await.unwrap();
         h.start(1, task, vec![repo.clone()]).await;
         h.until(|e| Harness::finished(e, 1, JobStatus::Succeeded))

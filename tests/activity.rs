@@ -99,7 +99,7 @@ fn warnings_errors_and_malformed_records_remain_visible_without_inventing_events
             AgentId::Codex => {
                 "{\"type\":\"turn.failed\",\"error\":{\"message\":\"fixture failure\"}}\n"
             }
-            AgentId::OpenCode | AgentId::Claude => {
+            AgentId::OpenCode | AgentId::Claude | AgentId::Cursor => {
                 "{\"type\":\"error\",\"error\":\"fixture failure\"}\n"
             }
             AgentId::Copilot => "Error: fixture failure\n",
@@ -146,7 +146,7 @@ fn oversized_backend_output_is_bounded_and_the_following_message_survives() {
                 "\n{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"Final message\"}}\n"
             }
             AgentId::OpenCode => "\n{\"type\":\"text\",\"part\":{\"text\":\"Final message\"}}\n",
-            AgentId::Claude => {
+            AgentId::Claude | AgentId::Cursor => {
                 "\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Final message\"}]}}\n"
             }
             AgentId::Copilot => "\nFinal message\n",
@@ -155,7 +155,7 @@ fn oversized_backend_output_is_bounded_and_the_following_message_survives() {
         activity.append(&decoder.take_activity().unwrap_or(fallback));
         assert!(activity.text.contains("Final message"), "{agent:?}");
         assert!(activity.text.len() <= LOG_LIMIT);
-        if matches!(agent, AgentId::OpenCode | AgentId::Claude) {
+        if matches!(agent, AgentId::OpenCode | AgentId::Claude | AgentId::Cursor) {
             assert!(activity.text.contains("exceeded"));
         } else {
             assert!(activity.truncated);
