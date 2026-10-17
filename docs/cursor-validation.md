@@ -1,8 +1,9 @@
-# Cursor CLI evidence and reliability — PR 2
+# Cursor CLI evidence, reliability and UI validation
 
 Evidence reviewed on 2026-10-17. PR 1 supplied the backend foundation; PR 2 adds
 structured Activity, completion validation and supervised lifecycle coverage.
-Cargo remains at 1.0.0. Final user guidance and release readiness belong to PR 3.
+PR 3 adds [user guidance](cursor.md), native-widget regressions and a separate
+[readiness record](cursor-readiness.md). Cargo remains at 1.0.0.
 
 ## Evidence and limits
 

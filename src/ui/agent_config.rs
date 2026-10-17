@@ -153,6 +153,13 @@ impl App {
                     ui.small(error.hint());
                     diagnostics::details(ui, "cli_diagnostics", &error.detail);
                 }
+                if self.state.draft.agent == AgentId::Cursor {
+                    ui.small(agents::cursor::SETUP_HINT);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.hyperlink_to("Install Cursor CLI", agents::cursor::INSTALLATION_URL);
+                        ui.hyperlink_to("Cursor sign-in help", agents::cursor::AUTHENTICATION_URL);
+                    });
+                }
                 egui::CollapsingHeader::new("Execution permissions").show(ui, |ui| {
                     ui.small(backend.execution_summary(&self.state.draft.options));
                 });

@@ -6,6 +6,8 @@ use egui::accesskit::{Node, NodeId};
 mod accessibility;
 #[path = "copy_results_tests.rs"]
 mod copy_results;
+#[path = "cursor_tests.rs"]
+mod cursor;
 #[path = "export_tests.rs"]
 mod export_tests;
 #[path = "history_tests.rs"]

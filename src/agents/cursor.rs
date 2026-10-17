@@ -11,6 +11,11 @@ use std::{path::Path, time::Duration};
 mod output;
 
 pub struct Cursor;
+// Presentation guidance only; CodeConvoy never runs login/status or installs Cursor.
+pub const SETUP_HINT: &str = "Check CLI verifies help/version, not sign-in. Use agent status or agent login separately in your terminal.";
+pub const INSTALLATION_URL: &str = "https://cursor.com/docs/cli/installation";
+pub const AUTHENTICATION_URL: &str = "https://cursor.com/docs/cli/reference/authentication";
+
 static OPTIONS: &[OptionSpec] = &[
     OptionSpec {
         key: "executable",
