@@ -566,7 +566,9 @@ Section Install
     ${GetOptions} $CMDLINE "/NS" $R0
     IfErrors 0 shortcuts_done
       Call CreateDesktopShortcut
-      Call CreateStartMenuShortcut
+      !insertmacro MUI_STARTMENU_WRITE_BEGIN Application
+        Call CreateStartMenuShortcut
+      !insertmacro MUI_STARTMENU_WRITE_END
   shortcuts_done:
 
   ; Auto close this page for passive mode

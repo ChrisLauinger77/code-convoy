@@ -71,6 +71,7 @@ class WindowsRuntime(unittest.TestCase):
             config = {"nsis": {}}
             crt.configure_installer(config, Path(temp))
             production = Path(config["nsis"]["template"]).read_text()
+            self.assertFalse(production.startswith("\ufeff"))
             self.assertNotIn('!define CODECONVOY_CRT_FIXTURE', production)
             self.assertNotIn('prerequisite-tests', production)
 

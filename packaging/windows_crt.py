@@ -342,7 +342,9 @@ def configure_installer(config, work):
             raise ValueError("Invalid NSIS template path or substitution")
         template = template.replace(token, value)
     rendered = work / "installer.nsi"
-    rendered.write_text(template, encoding="utf-8-sig")
+    # cargo-packager adds its own UTF-16 BOM after rendering. A UTF-8 BOM here
+    # survives as an extra U+FEFF command character in the generated script.
+    rendered.write_text(template, encoding="utf-8")
     config["nsis"]["template"] = str(rendered.resolve())
 
 
