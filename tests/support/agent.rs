@@ -447,6 +447,10 @@ fn validation_fixture(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
         } else {
             None
         };
+        std::fs::write(
+            control.join(format!("{name}.pid")),
+            std::process::id().to_string(),
+        )?;
         std::fs::write(control.join(format!("{name}.ready")), "ready")?;
         println!("validation {name} ready");
         let deadline = std::time::Instant::now() + Duration::from_secs(30);

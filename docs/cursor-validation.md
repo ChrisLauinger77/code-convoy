@@ -220,11 +220,23 @@ conflicting work is safely finished.
 
 ### Windows cleanup confirmation
 
-CI on `4d8792c` passed all 31 Cursor tests but exposed a process-supervisor gap:
+CI on `4d8792c` passed all 31 Cursor tests but failed the process deadline test:
 the expired-deadline test observed a descendant's OS lock still held immediately
-after execution returned. Inspection of process-wrap 10.0.1 found that its
+after execution returned. A retained file lock alone does not prove a live process
+on Windows: Microsoft's [LockFileEx documentation](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-lockfileex)
+permits lock release to lag process termination. Independent inspection of process-wrap 10.0.1 found that its
 Windows helper accepts any job completion-port notification and caches the
-leader exit before confirming the job is empty. The strict test is retained.
+leader exit before confirming the job is empty.
+
+The Windows regression now checks native process termination immediately when
+execution returns, using a read-only process-status probe of the PID recorded by
+the fixture before its readiness handshake. An absent PID or a signaled process
+is accepted; other access errors fail the test. The probe never signals a PID,
+and PID reuse can only produce a conservative failure, since the original fixture
+must already have terminated. Test handles are not retained across execution.
+Only the separate filesystem lock-release observation has a bounded wait. Unix
+retains its immediate lock assertion. This follows Microsoft's [process termination
+semantics](https://learn.microsoft.com/en-us/windows/win32/procthread/terminating-a-process).
 
 `process/windows` now creates an unnamed, non-inheritable private outer job and
 assigns the suspended child before the existing wrapper resumes it. Supervision
@@ -260,7 +272,9 @@ local fixture processes and disposable real Git repositories, without providers:
 - Cancellation stops descendants before nested repository admission; unrelated
   jobs and concurrent isolated results remain independent.
 - Shutdown, timeouts, a full Started-event queue and unconfirmed cleanup use OS
-  file locks to establish descendant liveness/termination, not PID guesses.
+  file-lock handshakes. The Windows platform deadline and normal-leader-exit
+  regressions additionally require immediate native descendant termination;
+  file-lock release may lag on that platform as documented above.
 - An already-expired deadline cleans up a live descendant, and a ready cancellation
   wins the deadline race. Permission/trust defaults and the verified argument
   arrays remain unchanged, including when a time limit is configured.

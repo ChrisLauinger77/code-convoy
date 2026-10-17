@@ -132,9 +132,10 @@ impl ManagedChild {
         {
             // Bypass process-wrap's cached leader/notification-based wait. Our
             // retained private job verifies actual descendant termination.
-            let status = self
-                .child
-                .try_inner_child_mut()
+            // SAFETY: spawn installs only JobObject as a child wrapper on
+            // Windows. Its wait/status cache is never used here; our retained
+            // private job owns descendant cleanup before reporting completion.
+            let status = unsafe { self.child.try_inner_child_mut() }
                 .context("Missing native Windows child for supervision.")?
                 .wait()
                 .await?;

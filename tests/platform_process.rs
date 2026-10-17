@@ -20,6 +20,58 @@ fn executable(root: &Path) -> std::path::PathBuf {
     path
 }
 
+#[cfg(windows)]
+fn descendant_stopped(control: &Path) -> bool {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows::Win32::{
+        Foundation::{ERROR_INVALID_PARAMETER, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
+    };
+
+    // The fixture writes its PID before the ready handshake. This read-only
+    // probe never signals a PID. Reuse can only cause a conservative failure:
+    // a reused PID means the original fixture has already stopped.
+    let pid: u32 = fs::read_to_string(control.join("child.pid"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_ne!(pid, 0);
+    // Open only while observing, so retained test handles cannot delay job
+    // accounting. An absent PID or a signaled process proves termination;
+    // access failures are test failures, never evidence of successful cleanup.
+    let process = match unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) } {
+        Ok(handle) => unsafe { OwnedHandle::from_raw_handle(handle.0) },
+        Err(error) if error.code() == ERROR_INVALID_PARAMETER.to_hresult() => return true,
+        Err(error) => panic!("Cannot observe fixture process {pid}: {error}"),
+    };
+    // SAFETY: fresh owned process handle with synchronization access; no wait.
+    let state = unsafe { WaitForSingleObject(HANDLE(process.as_raw_handle()), 0) };
+    assert!(state == WAIT_OBJECT_0 || state == WAIT_TIMEOUT);
+    state == WAIT_OBJECT_0
+}
+
+async fn assert_descendant_cleanup(control: &Path, lock: &fs::File) {
+    #[cfg(windows)]
+    assert!(
+        descendant_stopped(control),
+        "execution returned while its native descendant was still running"
+    );
+    #[cfg(not(windows))]
+    let _ = control;
+    #[cfg(unix)]
+    assert!(fs2::FileExt::try_lock_exclusive(lock).is_ok());
+    // Windows may release file locks later than process termination (LockFileEx
+    // documentation). Native termination above must already be observable;
+    // this bounded wait checks the separate filesystem cleanup consequence.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while fs2::FileExt::try_lock_exclusive(lock).is_err() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("descendant retained its OS lock after termination");
+}
+
 #[tokio::test]
 async fn native_executable_directory_arguments_and_stdin_preserve_unicode_and_spaces() {
     let temp = executable::directory();
@@ -80,6 +132,8 @@ async fn expired_deadline_stops_descendants_and_ready_cancellation_takes_precede
             .open(temp.path().join("child.lock"))
             .unwrap();
         assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        #[cfg(windows)]
+        assert!(!descendant_stopped(temp.path()));
         let cancellation = Cancellation::default();
         if cancel_first {
             cancellation.cancel();
@@ -97,7 +151,7 @@ async fn expired_deadline_stops_descendants_and_ready_cancellation_takes_precede
         assert_eq!(result.cancelled, cancel_first);
         assert_eq!(result.timed_out, !cancel_first);
         assert!(result.status.is_some());
-        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_ok());
+        assert_descendant_cleanup(temp.path(), &lock).await;
     }
 }
 
@@ -260,8 +314,13 @@ async fn parent_exit_cannot_complete_while_closed_stream_descendant_holds_a_lock
             .open(temp.path().join("child.lock"))
             .unwrap();
         assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        #[cfg(windows)]
+        assert!(!descendant_stopped(temp.path()));
         fs::write(temp.path().join("exit-parent"), "exit with live descendant").unwrap();
         let result = task.await.unwrap();
+        #[cfg(windows)]
+        let stopped_before_return = descendant_stopped(temp.path());
+        #[cfg(not(windows))]
         let stopped_before_return = fs2::FileExt::try_lock_exclusive(&lock).is_ok();
         // Always release the original unfixed fixture before asserting.
         fs::write(temp.path().join("release"), "finish fixture").unwrap();
