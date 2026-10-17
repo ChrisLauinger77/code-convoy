@@ -11,6 +11,7 @@ pub fn agent_name(agent: AgentId) -> &'static str {
         AgentId::OpenCode => "OpenCode",
         AgentId::Claude => "Claude Code",
         AgentId::Cursor => "Cursor",
+        AgentId::Antigravity => "Antigravity",
     }
 }
 

@@ -1,4 +1,5 @@
 //! Backends own their options and CLI protocol; process machinery is reusable.
+pub mod antigravity;
 pub mod availability;
 pub mod claude;
 pub mod codex;
@@ -46,6 +47,11 @@ pub trait AgentBackend: Send + Sync {
         Ok(None)
     }
     fn check_detection(&self, help: &str) -> Result<()>;
+    /// Optional version contract. `None` means the version command failed or
+    /// was truncated; the default keeps the version informational.
+    fn check_version(&self, _version: Option<&str>) -> Result<()> {
+        Ok(())
+    }
     fn build(&self, task: &TaskConfig, repository: &Repository) -> Result<CommandSpec>;
     fn output(&self) -> Box<dyn AgentOutput>;
     /// Initialize per-job decoding with the immutable execution options.
@@ -121,6 +127,7 @@ pub fn backend(id: AgentId) -> Result<std::sync::Arc<dyn AgentBackend>> {
         AgentId::OpenCode => Ok(std::sync::Arc::new(opencode::OpenCode)),
         AgentId::Claude => Ok(std::sync::Arc::new(claude::Claude)),
         AgentId::Cursor => Ok(std::sync::Arc::new(cursor::Cursor)),
+        AgentId::Antigravity => Ok(std::sync::Arc::new(antigravity::Antigravity)),
     }
 }
 pub fn value<'a>(options: &'a AgentOptions, spec: &'a OptionSpec) -> &'a str {
@@ -171,16 +178,19 @@ pub async fn detect_cancellable(
     let help = String::from_utf8_lossy(&result.stdout);
     backend.check_detection(&help)?;
     let version = if let Some(command) = backend.version_command(options, directory)? {
-        match process::capture_cancellable(command, 8192, cancellation).await {
-            Ok(result) if result.status.success() && !result.truncated => {
+        let reported = match process::capture_cancellable(command, 8192, cancellation).await {
+            Ok(result) if result.status.success() && !result.truncated => Some(
                 String::from_utf8_lossy(&result.stdout)
                     .lines()
                     .next()
                     .unwrap_or("Version unavailable")
-                    .to_owned()
-            }
-            _ => "Version unavailable (help check passed)".into(),
-        }
+                    .to_owned(),
+            ),
+            _ => None,
+        };
+        anyhow::ensure!(!cancellation.is_cancelled(), "CLI check cancelled.");
+        backend.check_version(reported.as_deref())?;
+        reported.unwrap_or_else(|| "Version unavailable (help check passed)".into())
     } else {
         backend.id().label().to_owned()
     };
@@ -194,13 +204,14 @@ async fn probe_lock(
     agent: AgentId,
     cancellation: &process::Cancellation,
 ) -> Result<tokio::sync::MutexGuard<'static, ()>> {
-    static PROBES: [tokio::sync::Mutex<()>; 5] = [const { tokio::sync::Mutex::const_new(()) }; 5];
+    static PROBES: [tokio::sync::Mutex<()>; 6] = [const { tokio::sync::Mutex::const_new(()) }; 6];
     let index = match agent {
         AgentId::Codex => 0,
         AgentId::Copilot => 1,
         AgentId::OpenCode => 2,
         AgentId::Claude => 3,
         AgentId::Cursor => 4,
+        AgentId::Antigravity => 5,
     };
     tokio::select! {
         biased;

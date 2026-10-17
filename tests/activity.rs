@@ -116,6 +116,9 @@ fn warnings_errors_and_malformed_records_remain_visible_without_inventing_events
                 "{\"type\":\"error\",\"error\":\"fixture failure\"}\n"
             }
             AgentId::Copilot => "Error: fixture failure\n",
+            AgentId::Antigravity => {
+                "{\"event\":\"result\",\"result\":{\"status\":\"ERROR\",\"error\":\"fixture failure\"}}\n"
+            }
         };
         let fallback = decoder.push(Stream::Stdout, error.as_bytes());
         activity.push_str(&decoder.take_activity().unwrap_or(fallback));
@@ -163,6 +166,9 @@ fn oversized_backend_output_is_bounded_and_the_following_message_survives() {
                 "\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Final message\"}]}}\n"
             }
             AgentId::Copilot => "\nFinal message\n",
+            AgentId::Antigravity => {
+                "\n{\"event\":\"step_update\",\"step_update\":{\"step_type\":\"agent_response\",\"state\":\"DONE\",\"text_delta\":\"Final message\"}}\n"
+            }
         };
         let fallback = decoder.push(Stream::Stdout, record.as_bytes());
         activity.append(&decoder.take_activity().unwrap_or(fallback));

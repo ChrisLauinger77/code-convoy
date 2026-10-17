@@ -108,6 +108,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("unrelated executable");
                 return Ok(());
             }
+            let version = directory.join(format!("{name}.version"));
+            if phase == "version" && version.exists() {
+                print!("{}", std::fs::read_to_string(version)?);
+                return Ok(());
+            }
         }
     }
     let opencode = args.get(1).is_some_and(|a| a == "run");
@@ -123,6 +128,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print!("{}", include_str!("../fixtures/copilot-1.0.65-help.txt"));
         print!("{}", include_str!("../fixtures/claude-help-contract.txt"));
         print!("{}", include_str!("../fixtures/cursor-help-contract.txt"));
+        print!(
+            "{}",
+            include_str!("../fixtures/antigravity-help-contract.txt")
+        );
         return Ok(());
     }
     if args.iter().any(|a| a == "--version") {

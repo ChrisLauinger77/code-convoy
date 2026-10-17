@@ -140,7 +140,7 @@ async fn native_image_preflight_rejects_missing_cli_interfaces_without_starting_
         let mut task = h.task(1, agent, 1, false);
         task.attachments.push(attachment.clone());
         let result = runner::prepare(task, vec![repo.clone()]).await;
-        if agent == AgentId::Cursor {
+        if matches!(agent, AgentId::Cursor | AgentId::Antigravity) {
             assert!(
                 result
                     .err()
@@ -282,13 +282,18 @@ async fn attachment_that_becomes_unreadable_while_queued_never_reaches_the_agent
 
 #[tokio::test]
 async fn every_backend_delivers_attachment_context_and_keeps_separate_raw_output() {
-    let count = AgentId::ALL.len();
+    // Antigravity execution is not implemented yet; it fails before spawn below.
+    let agents: Vec<_> = AgentId::ALL
+        .into_iter()
+        .filter(|agent| *agent != AgentId::Antigravity)
+        .collect();
+    let count = agents.len();
     let mut h = Harness::new(count);
     let path = h.directory.path().join("requirements.md");
     std::fs::write(&path, "attached context Grüße").unwrap();
     let attachment = codeconvoy::attachments::Attachment::inspect(&path).unwrap();
     let mut repos = Vec::new();
-    for (index, agent) in AgentId::ALL.into_iter().enumerate() {
+    for (index, agent) in agents.iter().copied().enumerate() {
         let id = index as u64 + 1;
         let repo = h.repo(&format!("repo{id}")).await;
         let mut task = h.task(id, agent, 1, false);
@@ -308,7 +313,7 @@ async fn every_backend_delivers_attachment_context_and_keeps_separate_raw_output
         h.release(*id, repo);
     }
     h.finish_all(count).await;
-    for (index, agent) in AgentId::ALL.into_iter().enumerate() {
+    for (index, agent) in agents.into_iter().enumerate() {
         let id = index as u64 + 1;
         assert!(Harness::finished(&h.events, id, 0, JobStatus::Succeeded));
         let activity: String = h
@@ -341,6 +346,44 @@ async fn every_backend_delivers_attachment_context_and_keeps_separate_raw_output
             assert_ne!(raw, activity);
         }
     }
+}
+
+#[tokio::test]
+async fn antigravity_jobs_fail_closed_before_spawn_and_release_capacity() {
+    let mut h = Harness::new(1);
+    let first = h.repo("antigravity").await;
+    let second = h.repo("after").await;
+    let prepared = h
+        .prepared(
+            1,
+            AgentId::Antigravity,
+            1,
+            false,
+            std::slice::from_ref(&first),
+        )
+        .await;
+    h.start(1, prepared);
+    h.finish_all(1).await;
+    assert!(h.events.iter().any(|event| matches!(
+        event,
+        Event::Finished { run: 1, job: 0, status: JobStatus::Failed, exit_code: None, detail }
+            if detail.contains("not available")
+    )));
+    assert!(
+        !h.events
+            .iter()
+            .any(|event| matches!(event, Event::Started { run: 1, .. }))
+    );
+    assert!(!h.control.join("1-antigravity.input").exists());
+    let next = h
+        .prepared(2, AgentId::Codex, 1, false, std::slice::from_ref(&second))
+        .await;
+    h.start(2, next);
+    h.until(|events| Harness::ready(events, 2, 0)).await;
+    h.release(2, &second);
+    h.finish_all(2).await;
+    assert!(Harness::finished(&h.events, 2, 0, JobStatus::Succeeded));
+    assert!(h.manager.is_idle());
 }
 
 #[tokio::test]
