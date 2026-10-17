@@ -3,15 +3,22 @@
 //! and caches the leader's exit before establishing that the whole job is empty.
 use ::windows::{
     Win32::{
-        Foundation::HANDLE,
-        System::JobObjects::{
-            AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-            JobObjectBasicAccountingInformation, JobObjectExtendedLimitInformation,
-            QueryInformationJobObject, SetInformationJobObject, TerminateJobObject,
+        Foundation::{ERROR_INVALID_PARAMETER, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        System::{
+            JobObjects::{
+                AssignProcessToJobObject, CreateJobObjectW, IsProcessInJob,
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_BASIC_ACCOUNTING_INFORMATION,
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectBasicAccountingInformation,
+                JobObjectBasicProcessIdList, JobObjectExtendedLimitInformation,
+                QueryInformationJobObject, SetInformationJobObject, TerminateJobObject,
+            },
+            Threading::{
+                OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+                WaitForSingleObject,
+            },
         },
     },
-    core::PCWSTR,
+    core::{BOOL, PCWSTR},
 };
 use process_wrap::tokio::{ChildWrapper, CommandWrap, CommandWrapper};
 use std::{
@@ -73,14 +80,103 @@ impl Job {
         Ok(info.ActiveProcesses)
     }
 
-    pub(super) async fn finish(&self) -> Result<()> {
-        if self.active()? == 0 {
-            return Ok(());
+    fn members(&self) -> Result<Vec<OwnedHandle>> {
+        // SDK variable-length JOBOBJECT_BASIC_PROCESS_ID_LIST layout. A larger
+        // tree fails closed with ERROR_MORE_DATA rather than allocating freely.
+        #[repr(C)]
+        struct Processes {
+            assigned: u32,
+            count: u32,
+            ids: [usize; 4096],
         }
+        let mut info = Processes {
+            assigned: 0,
+            count: 0,
+            ids: [0; 4096],
+        };
+        // SAFETY: live private job and aligned, matching variable-length buffer.
+        unsafe {
+            QueryInformationJobObject(
+                Some(self.handle()),
+                JobObjectBasicProcessIdList,
+                std::ptr::from_mut(&mut info).cast(),
+                std::mem::size_of_val(&info) as u32,
+                None,
+            )
+        }
+        .map_err(Error::other)?;
+        if info.count != info.assigned {
+            return Err(Error::other(
+                "Windows job process list exceeded its cleanup bound.",
+            ));
+        }
+        let ids = info
+            .ids
+            .get(..info.count as usize)
+            .ok_or_else(|| Error::other("Invalid Windows job process count."))?;
+        let mut members = Vec::with_capacity(ids.len());
+        for &pid in ids {
+            let pid = u32::try_from(pid).map_err(Error::other)?;
+            // No PID is ever signalled. Hold a read-only native handle before
+            // terminating the private job, to await actual process signalling.
+            let handle = match unsafe {
+                OpenProcess(
+                    PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+                    false,
+                    pid,
+                )
+            } {
+                Ok(handle) => unsafe { OwnedHandle::from_raw_handle(handle.0) },
+                Err(error) if error.code() == ERROR_INVALID_PARAMETER.to_hresult() => continue,
+                Err(error) => return Err(Error::other(error)),
+            };
+            let mut member = BOOL::default();
+            // SAFETY: both handles remain owned and the BOOL buffer is valid.
+            unsafe {
+                IsProcessInJob(
+                    HANDLE(handle.as_raw_handle()),
+                    Some(self.handle()),
+                    &mut member,
+                )
+            }
+            .map_err(Error::other)?;
+            // The listed process may have exited and its PID been reused.
+            // Such an unrelated handle grants no cleanup authority.
+            if member.as_bool() {
+                members.push(handle);
+            }
+        }
+        Ok(members)
+    }
+
+    pub(super) async fn finish(&self) -> Result<()> {
+        let members = self.members()?;
         // Match Unix ownership: once the leader exits, remaining attached
         // descendants cannot keep writing after this job releases its lease.
+        // Always terminate the job, including its nested jobs; an accounting
+        // observation alone must never skip the owned termination request.
         self.terminate()?;
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let mut pending = false;
+            for process in &members {
+                // SAFETY: retained owned process handle with SYNCHRONIZE access.
+                match unsafe { WaitForSingleObject(HANDLE(process.as_raw_handle()), 0) } {
+                    WAIT_OBJECT_0 => {}
+                    WAIT_TIMEOUT => pending = true,
+                    _ => return Err(Error::last_os_error()),
+                }
+            }
+            if !pending {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(Error::other("Windows job member termination timed out."));
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        // Native handles must be released before checking final job accounting.
+        drop(members);
         loop {
             if self.active()? == 0 {
                 return Ok(());

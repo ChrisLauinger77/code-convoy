@@ -232,8 +232,14 @@ async fn job_work(
         };
         run_agent(run, job, &execution, task, backend, cancellation, stopping, repository_safe, tx, &mut launched).await
     }.await;
-    let cancelled = (stopping.load(Ordering::Acquire) || cancellation.is_cancelled())
-        && repository_safe.load(Ordering::Acquire);
+    // Once execution chose its terminal cause, a Stop during cleanup must not
+    // overwrite an elapsed timeout (or a completed process) with Cancelled.
+    let cancelled = repository_safe.load(Ordering::Acquire)
+        && if launched {
+            matches!(&outcome, Ok((JobStatus::Cancelled, ..)))
+        } else {
+            stopping.load(Ordering::Acquire) || cancellation.is_cancelled()
+        };
     let message = if cancelled {
         if ready {
             "Agent cancelled"
@@ -486,7 +492,7 @@ async fn run_agent(
             })
             .await;
     }
-    if result.cancelled || (result.timed_out && cancellation.is_cancelled()) {
+    if result.cancelled {
         return Ok(cancelled());
     }
     if result.timed_out {

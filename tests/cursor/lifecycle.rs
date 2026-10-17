@@ -463,6 +463,7 @@ async fn cursor_timeout_stops_descendants_and_releases_repository_after_confirme
 struct SupervisedCursor {
     fill: Option<mpsc::Sender<Event>>,
     refuse_cancel: bool,
+    delayed_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 impl AgentBackend for SupervisedCursor {
     fn id(&self) -> AgentId {
@@ -505,10 +506,89 @@ impl AgentBackend for SupervisedCursor {
         Ok(child)
     }
     fn cancel(&self, child: &mut ManagedChild) -> std::io::Result<()> {
-        if self.refuse_cancel {
+        if let Some(started) = &self.delayed_cancel {
+            // Model an accepted termination request whose owned process has
+            // not exited yet. The test controls its eventual graceful exit.
+            started.store(true, std::sync::atomic::Ordering::Release);
+            Ok(())
+        } else if self.refuse_cancel {
             Err(std::io::Error::other("fixture cancellation refusal"))
         } else {
             Cursor.cancel(child)
+        }
+    }
+}
+
+#[tokio::test]
+async fn timeout_remains_failed_when_stop_or_shutdown_arrives_during_cleanup() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    for mode in [ExecutionMode::Direct, ExecutionMode::IsolatedWorktree] {
+        for shutdown in [false, true] {
+            let mut h = Harness::new(1, 512);
+            let repo = h.repository("source").await;
+            let mut task = h.task(1, mode, json!({"spawn_child":true, "edit_before":true}));
+            task.options.insert("timeout_seconds".into(), "3".into());
+            let prepared = runner::prepare(task, vec![repo.clone()]).await.unwrap();
+            let cleanup_started = Arc::new(AtomicBool::new(false));
+            h.manager
+                .start(
+                    1,
+                    prepared,
+                    Arc::new(SupervisedCursor {
+                        fill: None,
+                        refuse_cancel: false,
+                        delayed_cancel: Some(cleanup_started.clone()),
+                    }),
+                )
+                .unwrap();
+            h.until(|events| Harness::ready(events, 1)).await;
+            file_ready(&h.root.path().join("control/child.ready")).await;
+            let lock = child_lock(h.root.path());
+            tokio::time::timeout(Duration::from_secs(10), async {
+                while !cleanup_started.load(Ordering::Acquire) {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+            // The timeout already won; cleanup is now waiting for live native
+            // processes. Stop/shutdown must not rewrite that terminal cause.
+            if shutdown {
+                h.manager.shutdown();
+            } else {
+                h.manager.cancel_run(1);
+            }
+            fs::write(h.root.path().join("control/release"), "release descendant").unwrap();
+            h.release(
+                1,
+                if mode == ExecutionMode::Direct {
+                    "source"
+                } else {
+                    "tree"
+                },
+            );
+            h.until(|events| {
+                events
+                    .iter()
+                    .any(|event| matches!(event, Event::Finished { run: 1, .. }))
+            })
+            .await;
+            assert!(h.events.iter().any(|event| matches!(event, Event::Finished {run:1,status:JobStatus::Failed,detail,..} if detail.contains("timed out after 3 seconds") && detail.contains("cleanup was confirmed"))), "{mode:?}, shutdown={shutdown}: {:?}", h.events);
+            lock_released(&lock).await;
+            if mode == ExecutionMode::IsolatedWorktree {
+                assert_eq!(
+                    worktrees::inspect(&h.metadata(1)).await.unwrap().changed,
+                    Some(true)
+                );
+                assert_eq!(
+                    fs::read_to_string(repo.path.join("tracked.txt")).unwrap(),
+                    "base\n"
+                );
+            }
+            assert!(!h.manager.history_protected(1));
+            h.close().await;
         }
     }
 }
@@ -540,6 +620,7 @@ async fn completed_process_is_not_reclassified_when_started_delivery_outlasts_de
                 Arc::new(SupervisedCursor {
                     fill: Some(tx),
                     refuse_cancel: false,
+                    delayed_cancel: None,
                 }),
             )
             .unwrap();
@@ -599,6 +680,7 @@ async fn deadline_cleans_up_even_when_started_event_is_backpressured() {
             Arc::new(SupervisedCursor {
                 fill: Some(tx),
                 refuse_cancel: false,
+                delayed_cancel: None,
             }),
         )
         .unwrap();
@@ -646,6 +728,7 @@ async fn closed_started_receiver_awaits_owned_cleanup_without_quarantining_the_r
             Arc::new(SupervisedCursor {
                 fill: Some(tx),
                 refuse_cancel: false,
+                delayed_cancel: None,
             }),
         )
         .unwrap();
@@ -691,6 +774,7 @@ async fn cancellation_interrupts_blocked_started_publication_and_awaits_descenda
             Arc::new(SupervisedCursor {
                 fill: Some(tx),
                 refuse_cancel: false,
+                delayed_cancel: None,
             }),
         )
         .unwrap();
@@ -733,6 +817,7 @@ async fn unconfirmed_timeout_cleanup_keeps_lease_and_history_protection_even_aft
             Arc::new(SupervisedCursor {
                 fill: None,
                 refuse_cancel: true,
+                delayed_cancel: None,
             }),
         )
         .unwrap();

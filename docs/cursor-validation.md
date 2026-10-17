@@ -209,6 +209,9 @@ and owned cleanup before returning the publication error. Cleanup uncertainty
 takes precedence over that error. A cleanup error preserves the existing quarantined lease,
 capacity and history protection; later observations do not retroactively declare
 cleanup safe. Existing backends retain unlimited execution by default.
+The cause selected by execution remains authoritative through cleanup and result
+inspection: Stop/shutdown arriving after timeout expiry cannot turn that timeout
+into Cancelled, in either Direct or isolated mode.
 
 Scheduler fairness, global/per-convoy limits, canonical/nested repository locks,
 Git baseline revalidation, worktree ownership, explicit cleanup and result
@@ -240,16 +243,27 @@ semantics](https://learn.microsoft.com/en-us/windows/win32/procthread/terminatin
 
 `process/windows` now creates an unnamed, non-inheritable private outer job and
 assigns the suspended child before the existing wrapper resumes it. Supervision
-waits through the owned native child handle, then stops any remaining attached
-descendants and requires the private job's active-process count to reach zero
-within the cleanup deadline. Cancellation targets that same private job.
+waits through the owned native child handle. It snapshots up to 4096 private-job
+members (including nested jobs), opens read-only wait handles and rechecks their
+membership to handle PID reuse. It always terminates the private job, awaits the
+members' native process signals, releases the wait handles, and requires the
+private job's active-process count to reach zero within the cleanup deadline.
+An incomplete/oversized list fails closed. Cancellation targets that same private job.
 Termination/query errors and timeout retain repository/history protection;
 Drop/kill-on-close remain unconfirmed fallbacks. Normal leader exit with a
 closed-stream descendant is now tested on Windows too. No inherited host job,
 persisted PID or unrelated process is targeted.
 
+On `6cbda50`, Windows passed the expired-deadline/cancellation-precedence test
+but failed the new normal leader-exit test's immediate native descendant check.
+The follow-up removes the accounting-only early return and adds the explicit
+member-handle wait above. Its native CI result is recorded in the PR.
+
 This follows Microsoft's [nested-job accounting and termination](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs)
 and [active-process accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information).
+[Job member lists](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list)
+include nested jobs; [membership checks](https://learn.microsoft.com/en-us/windows/win32/api/jobapi/nf-jobapi-isprocessinjob)
+require limited query access in addition to synchronization access for waiting.
 [Completion-port messages](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_associate_completion_port)
 are notifications, not unconditional evidence that all members have exited.
 The existing `windows` dependency's API features are explicit in Cargo; versions,
@@ -278,6 +292,9 @@ local fixture processes and disposable real Git repositories, without providers:
 - An already-expired deadline cleans up a live descendant, and a ready cancellation
   wins the deadline race. Permission/trust defaults and the verified argument
   arrays remain unchanged, including when a time limit is configured.
+- A controlled cleanup gate admits Stop/shutdown only after the deadline has
+  won. All four Direct/isolated and Stop/shutdown combinations remain Failed
+  with the timeout diagnostic, retain results, and release confirmed-safe leases.
 - A completed process (both successful and nonzero exits) retains its real result
   while Started delivery stays blocked beyond the deadline. OS exit is established
   by a fixture lock released by process termination. This regression first
@@ -291,7 +308,7 @@ local fixture processes and disposable real Git repositories, without providers:
 Existing all-backend process, convoy, worktree, attachment, persistence, compact
 UI, results and packaging suites remain relevant. On 2026-10-17, local formatting,
 strict Clippy, all-feature Rust tests and the release build passed, including
-31 focused Cursor tests and 98 packaging tests. Rust integration tests used
+32 focused Cursor tests and 98 packaging tests. Rust integration tests used
 `TMPDIR=/var/tmp` to avoid the execution sandbox's synthetic `/tmp` Git boundary.
 Commands and CI results are also recorded in the PR. Local process/Git coverage
 is Linux. The existing CI matrix

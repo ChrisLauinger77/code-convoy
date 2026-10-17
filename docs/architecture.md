@@ -223,7 +223,9 @@ Started/Running publication is cancellable. A closed Started receiver signals
 job cancellation; a non-fail-fast join always awaits supervision/cleanup before
 handling the publication error, with cleanup uncertainty taking precedence.
 Confirmed expiry fails the job, retains edits/worktrees and releases leases only
-after cleanup. Unconfirmed cleanup retains the existing quarantine and history
+after cleanup. The chosen execution cause is stable: Stop/shutdown during timeout
+cleanup cannot relabel the timeout as Cancelled, including in isolated execution.
+Unconfirmed cleanup retains the existing quarantine and history
 protection. Other backend timeout defaults remain unlimited. Native permission
 enforcement and full authenticated protocol compatibility remain unverified.
 See [Cursor evidence, tests and limitations](cursor-validation.md).
@@ -256,12 +258,16 @@ dependency version. The existing Windows API features are declared explicitly;
 their resolved four-target dependency/feature graphs are unchanged. The 10.0.1
 wrapper's wait helper accepts any completion-port notification and caches the
 leader exit before confirming all descendants, so `process/windows` waits on
-the owned native leader handle and then terminates any remaining private-job
-members. It polls `JobObjectBasicAccountingInformation.ActiveProcesses` to zero
-within five seconds before cleanup can be marked safe. Query/termination errors
+the owned native leader handle and then unconditionally terminates the private
+job. Before termination it obtains a bounded member list, opens read-only process
+handles and verifies job membership. It awaits their native termination signals,
+releases those handles, and polls `JobObjectBasicAccountingInformation.ActiveProcesses`
+to zero within five seconds before cleanup can be marked safe. Incomplete lists,
+query/termination errors
 or a nonempty job retain quarantine/history protection. Kill-on-close and Drop
 remain fallbacks, never confirmation. Only the newly created private job and
-its nested descendants are targeted; inherited host jobs/PID lookups are unused.
+its nested descendants are targeted. PID lookups only acquire read-only,
+membership-checked wait handles; no PID is signalled and inherited host jobs are unused.
 The deadline/cancellation lock test and normal leader-exit closed-stream test
 exercise this guarantee on Windows as well as Unix.
 
