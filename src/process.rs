@@ -3,6 +3,8 @@ use anyhow::{Context, Result};
 use process_wrap::tokio::{ChildWrapper, CommandWrap};
 #[cfg(unix)]
 mod unix;
+#[cfg(windows)]
+mod windows;
 use std::{
     ffi::OsString,
     path::PathBuf,
@@ -78,6 +80,8 @@ pub struct ManagedChild {
     child: Box<dyn ChildWrapper>,
     #[cfg(unix)]
     group: std::io::Result<unix::Group>,
+    #[cfg(windows)]
+    job: std::sync::Arc<windows::Job>,
     #[cfg(not(unix))]
     reaped: bool,
 }
@@ -87,7 +91,11 @@ impl Drop for ManagedChild {
         if let Ok(group) = &mut self.group {
             let _ = group.terminate();
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        if !self.reaped {
+            let _ = self.job.terminate();
+        }
+        #[cfg(not(any(unix, windows)))]
         if !self.reaped {
             let _ = self.child.start_kill();
         }
@@ -120,7 +128,23 @@ impl ManagedChild {
                 "Process group cleanup timed out; repository protection must remain reserved.",
             )?
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            // Bypass process-wrap's cached leader/notification-based wait. Our
+            // retained private job verifies actual descendant termination.
+            let status = self
+                .child
+                .try_inner_child_mut()
+                .context("Missing native Windows child for supervision.")?
+                .wait()
+                .await?;
+            self.job
+                .finish()
+                .await
+                .context("Cannot confirm Windows process-tree cleanup.")?;
+            Ok(status)
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             Ok(self.child.wait().await?)
         }
@@ -153,14 +177,17 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
     #[cfg(unix)]
     command.wrap(process_wrap::tokio::ProcessGroup::leader());
     #[cfg(windows)]
-    {
+    let job = {
+        let job = windows::Job::new().context("Cannot create an owned Windows Job Object.")?;
+        command.wrap(windows::Assign(job.clone()));
         command.wrap(process_wrap::tokio::JobObject);
         // Use the wrapper so JobObject preserves this flag when adding
         // CREATE_SUSPENDED for race-free descendant containment.
         command.wrap(process_wrap::tokio::CreationFlags(
-            windows::Win32::System::Threading::CREATE_NO_WINDOW,
+            ::windows::Win32::System::Threading::CREATE_NO_WINDOW,
         ));
-    }
+        job
+    };
     let child = command.spawn().with_context(|| {
         format!(
             "Cannot start {:?} in {}. Check the executable path and installation.",
@@ -174,6 +201,8 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
         // wait/cancel report it and Drop cannot signal an unconfirmed identity.
         #[cfg(unix)]
         group: unix::Group::new(child.id()),
+        #[cfg(windows)]
+        job,
         child,
         #[cfg(not(unix))]
         reaped: false,
@@ -186,7 +215,9 @@ pub fn cancel(child: &mut ManagedChild) -> std::io::Result<()> {
         .as_mut()
         .map_err(|error| std::io::Error::new(error.kind(), error.to_string()))?
         .terminate();
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    return child.job.terminate();
+    #[cfg(not(any(unix, windows)))]
     child.child.start_kill()
 }
 

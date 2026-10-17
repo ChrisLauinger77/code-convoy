@@ -250,6 +250,21 @@ Overall status is Running while any job is running, otherwise Preparing while an
 
 `process-wrap` supplies Unix process groups and Windows Job Objects. Windows children start suspended, join their Job Object, and then resume. Cancellation forcefully stops the process group/job and waits for termination. A drop guard also initiates cleanup if a worker future is dropped. Normal application close first confirms active work, then cancels all jobs and keeps servicing events until workers finish; an exit fallback attempts bounded cleanup.
 
+Windows also retains a private outer Job Object, assigned in a post-spawn hook
+before process-wrap resumes the suspended leader. This adds no executable or
+dependency version. The existing Windows API features are declared explicitly;
+their resolved four-target dependency/feature graphs are unchanged. The 10.0.1
+wrapper's wait helper accepts any completion-port notification and caches the
+leader exit before confirming all descendants, so `process/windows` waits on
+the owned native leader handle and then terminates any remaining private-job
+members. It polls `JobObjectBasicAccountingInformation.ActiveProcesses` to zero
+within five seconds before cleanup can be marked safe. Query/termination errors
+or a nonempty job retain quarantine/history protection. Kill-on-close and Drop
+remain fallbacks, never confirmation. Only the newly created private job and
+its nested descendants are targeted; inherited host jobs/PID lookups are unused.
+The deadline/cancellation lock test and normal leader-exit closed-stream test
+exercise this guarantee on Windows as well as Unix.
+
 On Unix, `process/unix` adds a narrow POSIX identity guard using `libc` (already a
 transitive dependency). `waitid(WEXITED | WNOHANG | WNOWAIT)` observes the direct
 child without reaping it. CodeConvoy exclusively owns that child: no competing

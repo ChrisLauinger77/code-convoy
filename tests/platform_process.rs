@@ -239,7 +239,6 @@ async fn cancellation_racing_leader_failure_stops_descendants_but_preserves_a_pe
 }
 
 #[tokio::test]
-#[cfg(unix)]
 async fn parent_exit_cannot_complete_while_closed_stream_descendant_holds_a_lock() {
     for code in [0, 7] {
         let temp = executable::directory();

@@ -218,6 +218,34 @@ Direct fallback, source edits, permission escalation or agent restart is added.
 Concurrent isolated results can run independently; Direct access waits until all
 conflicting work is safely finished.
 
+### Windows cleanup confirmation
+
+CI on `4d8792c` passed all 31 Cursor tests but exposed a process-supervisor gap:
+the expired-deadline test observed a descendant's OS lock still held immediately
+after execution returned. Inspection of process-wrap 10.0.1 found that its
+Windows helper accepts any job completion-port notification and caches the
+leader exit before confirming the job is empty. The strict test is retained.
+
+`process/windows` now creates an unnamed, non-inheritable private outer job and
+assigns the suspended child before the existing wrapper resumes it. Supervision
+waits through the owned native child handle, then stops any remaining attached
+descendants and requires the private job's active-process count to reach zero
+within the cleanup deadline. Cancellation targets that same private job.
+Termination/query errors and timeout retain repository/history protection;
+Drop/kill-on-close remain unconfirmed fallbacks. Normal leader exit with a
+closed-stream descendant is now tested on Windows too. No inherited host job,
+persisted PID or unrelated process is targeted.
+
+This follows Microsoft's [nested-job accounting and termination](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs)
+and [active-process accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information).
+[Completion-port messages](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_associate_completion_port)
+are notifications, not unconditional evidence that all members have exited.
+The existing `windows` dependency's API features are explicit in Cargo; versions,
+resolved features and dependency edges remain unchanged for Linux, both macOS
+architectures and Windows. The reviewed inventory fingerprint is updated; no
+new license/source payload is introduced. Native validation results belong in
+the PR, separately from the unauthenticated Cursor syntax evidence.
+
 ## Deterministic validation and platform coverage
 
 The Cursor tests exercise the production manager, supervisor and decoder using

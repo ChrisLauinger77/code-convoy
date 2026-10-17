@@ -2,7 +2,7 @@
   "schema": 1,
   "scope": "Conservative Cargo release-target closure, including build/proc-macro inputs; not a claim that every object survives linking. All locked crates are inventoried; entries with no targets are excluded from these release targets. Native unresolved entries are release blockers.",
   "inputs": {
-    "dependencies_sha256": "2c5ab84e57bc4682bf92f830a3a86ddc24778e063f4aa84f64639de1b3dbb614",
+    "dependencies_sha256": "519a81bb00f1cc8862baa63f70f94fbb5b4f4221f70bd24497eb1ec2497e89f1",
     "appimage_tools_sha256": "4a389f02b39708dbeaa113a67d22168b506bb35bcea639001b577f0551fe5cec",
     "rust": "1.99.0",
     "packager": "0.11.8"
