@@ -1,8 +1,9 @@
-# Cursor CLI evidence and reliability — PR 2
+# Cursor CLI evidence, reliability and UI validation
 
 Evidence reviewed on 2026-10-17. PR 1 supplied the backend foundation; PR 2 adds
 structured Activity, completion validation and supervised lifecycle coverage.
-Cargo remains at 1.0.0. Final user guidance and release readiness belong to PR 3.
+PR 3 adds [user guidance](cursor.md), native-widget regressions and a separate
+[readiness record](cursor-readiness.md). Cargo remains at 1.0.0.
 
 ## Evidence and limits
 
@@ -131,7 +132,9 @@ Workspace trust is separate: configured preserves saved decisions; explicit
 trust adds `--trust` for the assigned checkout. Neither setting is enabled by
 fallback, cancellation, timeout or retry. No interactive approval host, automatic
 MCP approval or sandbox-disabling flag is added. Native rules/hooks/MCP behavior
-continues to belong to Cursor; PR 3 must investigate rules acceptance.
+continues to belong to Cursor. PR 3 documents the official rules contract and
+tests checkout/transport boundaries; see [repository rules](cursor.md#repository-rules).
+Authenticated rule loading and enforcement remain unverified.
 
 The official headless guide says writes require force; the parameters/permissions
 references describe print-mode tools governed by policy. Without force, a task
@@ -332,5 +335,7 @@ runs Linux/macOS/Windows checks with native fixture processes; it is not real
 Cursor execution. macOS/Windows Cursor smoke tests and authenticated acceptance
 remain unperformed. No release-readiness claim is made.
 
-Stop after the PR 2 draft for maintainer review. Do not start PR 3 or merge
-without explicit authorization.
+PR 2 stopped at its draft for maintainer review and was subsequently merged by
+the maintainer. The authorized PR 3 handoff is recorded in
+[Cursor readiness](cursor-readiness.md); it does not authorize automatic merging
+or release publication.
