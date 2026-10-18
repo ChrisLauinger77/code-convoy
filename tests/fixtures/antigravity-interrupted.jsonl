@@ -1,0 +1,4 @@
+{"event":"init","conversation_id":"055a398f-0000-4c5f-abbb-000000000004","init":{"cwd":"/synthetic/worktree","tools":["run_command"],"permission_mode":"always-proceed"}}
+{"event":"step_update","step_update":{"conversation_id":"055a398f-0000-4c5f-abbb-000000000004","step_index":0,"state":"DONE","step_type":"user_input"}}
+{"event":"step_update","step_update":{"conversation_id":"055a398f-0000-4c5f-abbb-000000000004","step_index":1,"state":"ACTIVE","step_type":"tool","tool_name":"run_command"}}
+{"event":"result","result":{"conversation_id":"055a398f-0000-4c5f-abbb-000000000004","status":"INTERRUPTED","response":"","duration_seconds":0.4,"num_turns":1,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0}}}

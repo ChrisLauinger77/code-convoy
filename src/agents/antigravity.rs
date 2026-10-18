@@ -1,13 +1,15 @@
-//! Google Antigravity CLI (`agy`) discovery and configuration. Headless execution
-//! is not wired yet: jobs fail before any process starts. Sources, decisions
-//! and unverified behavior are recorded in docs/antigravity-validation.md.
+//! Google Antigravity CLI (`agy`) headless stream-json protocol, independent of
+//! other backends. Sources, decisions and unverified behavior are recorded in
+//! docs/antigravity-validation.md.
 use super::{AgentBackend, AgentOutput, OptionKind, OptionSpec, value};
 use crate::{
-    domain::{AgentId, AgentOptions, JobStatus, Repository, TaskConfig},
-    process::{CommandSpec, Stream},
+    domain::{AgentId, AgentOptions, Repository, TaskConfig},
+    process::CommandSpec,
 };
 use anyhow::Result;
-use std::{path::Path, process::ExitStatus, time::Duration};
+use std::{path::Path, time::Duration};
+
+mod output;
 
 pub struct Antigravity;
 // Presentation guidance only; CodeConvoy never signs in or installs Antigravity.
@@ -20,6 +22,10 @@ pub const HEADLESS_URL: &str = "https://antigravity.google/docs/cli/headless/";
 /// `denied_actions` (1.1.27), streamed errors exiting 3 (1.2.10) and no early
 /// exit before background commands are answered (1.2.16).
 pub const MINIMUM_VERSION: (u32, u32, u32) = (1, 2, 16);
+/// Antigravity's own headless deadline. The guide documents a five-minute
+/// default, after which partial output may exit successfully (1.1.28). Keep it
+/// above CodeConvoy's 24-hour maximum so the application time limit governs.
+pub const PRINT_TIMEOUT: &str = "--print-timeout=1500m";
 
 static OPTIONS: &[OptionSpec] = &[
     OptionSpec {
@@ -90,6 +96,7 @@ const REQUIRED_FLAGS: &[&str] = &[
     "--effort",
     "--dangerously-skip-permissions",
     "--sandbox",
+    "--print-timeout",
 ];
 
 impl AgentBackend for Antigravity {
@@ -174,13 +181,52 @@ impl AgentBackend for Antigravity {
         );
         task.validate(std::slice::from_ref(repository))?;
         self.validate_attachments(task)?;
-        self.detection(&task.options, &repository.path)?;
-        anyhow::bail!(
-            "Antigravity CLI execution is not available in this CodeConvoy build yet. No Antigravity process was started and the repository was not modified."
-        )
+        let mut spec = self.detection(&task.options, &repository.path)?;
+        spec.args.clear();
+        // The documented stdin transport takes no -p prompt; one user message is
+        // written and stdin closed, so the session ends after that turn.
+        spec = spec.args(&[
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            PRINT_TIMEOUT,
+        ]);
+        for (index, flag) in [(1, "--model"), (2, "--effort")] {
+            let selected = value(&task.options, &OPTIONS[index]).trim();
+            if !selected.is_empty() {
+                spec.args.push(format!("{flag}={selected}").into());
+            }
+        }
+        if value(&task.options, &OPTIONS[3]) == "skip" {
+            spec.args.push("--dangerously-skip-permissions".into());
+        }
+        if value(&task.options, &OPTIONS[4]) == "enabled" {
+            spec.args.push("--sandbox".into());
+        }
+        let prompt = crate::attachments::text_prompt(task)?;
+        let mut input = serde_json::to_vec(
+            &serde_json::json!({"event": "user", "message": {"content": prompt}}),
+        )?;
+        input.push(b'\n');
+        spec.input = Some(input);
+        spec.remove_env = std::env::vars_os()
+            .filter_map(|(key, _)| {
+                key.to_str()
+                    .filter(|key| crate::process::git_environment_override(key, cfg!(windows)))
+                    .map(str::to_owned)
+            })
+            .collect();
+        // Antigravity scopes conversations to the process directory; do not let
+        // it or its tools consult another invocation's logical directory.
+        spec.remove_env.push("PWD".into());
+        Ok(spec)
     }
     fn output(&self) -> Box<dyn AgentOutput> {
-        Box::<UnavailableOutput>::default()
+        Box::<output::AntigravityOutput>::default()
+    }
+    fn output_for(&self, _options: &AgentOptions, directory: &Path) -> Box<dyn AgentOutput> {
+        Box::new(output::AntigravityOutput::for_workspace(directory))
     }
     fn execution_timeout(&self, options: &AgentOptions) -> Result<Option<Duration>> {
         let timeout = value(options, &OPTIONS[5]).trim();
@@ -197,7 +243,7 @@ impl AgentBackend for Antigravity {
         Ok(seconds.map(|seconds| Duration::from_secs(u64::from(seconds))))
     }
     fn attachment_summary(&self) -> &'static str {
-        "Execution is not available in this build yet, so no attachment transport is offered. Image attachments are unsupported."
+        "UTF-8 text context via stdin in one stream-json user message. Image attachments are unsupported."
     }
     fn execution_summary(&self, options: &AgentOptions) -> String {
         let permissions = if value(options, &OPTIONS[3]) == "skip" {
@@ -212,14 +258,14 @@ impl AgentBackend for Antigravity {
         };
         let timeout = match self.execution_timeout(options) {
             Ok(Some(timeout)) => format!(
-                "CodeConvoy time limit: {} seconds after spawn.",
+                "CodeConvoy time limit: {} seconds after spawn; expiry stops the process tree and retains edits.",
                 timeout.as_secs()
             ),
-            Ok(None) => "No CodeConvoy execution time limit.".into(),
+            Ok(None) => "No CodeConvoy execution time limit; Antigravity's own headless deadline is set to 25 hours.".into(),
             Err(_) => "Invalid CodeConvoy time limit; review will reject it.".into(),
         };
         format!(
-            "Execution is not available in this build yet: jobs fail before any Antigravity process starts. Planned settings: {permissions} {sandbox} {timeout} Sign in with agy separately; CodeConvoy does not manage credentials."
+            "{permissions} {sandbox} {timeout} No interactive approval host. Existing Antigravity sign-in, settings, rules, hooks and MCP configuration apply. Process directory selection is not an OS sandbox. The task and text context are sent on stdin as one stream-json message. Success requires a SUCCESS result; it confirms CLI completion, not that files changed. Sign in with agy separately; CodeConvoy does not manage credentials."
         )
     }
 }
@@ -237,24 +283,6 @@ fn parse_version(line: &str) -> Option<(u32, u32, u32)> {
             );
             parts.next().is_none().then_some(version)
         })
-}
-
-/// Never reports success: execution is not implemented, so nothing is decoded.
-#[derive(Default)]
-struct UnavailableOutput;
-impl AgentOutput for UnavailableOutput {
-    fn push(&mut self, _stream: Stream, bytes: &[u8]) -> String {
-        String::from_utf8_lossy(bytes).into_owned()
-    }
-    fn finish(&mut self) -> String {
-        String::new()
-    }
-    fn interpret(&self, _status: ExitStatus) -> (JobStatus, String) {
-        (
-            JobStatus::Failed,
-            "Antigravity CLI execution is not available in this CodeConvoy build yet.".into(),
-        )
-    }
 }
 
 #[cfg(test)]

@@ -63,7 +63,7 @@ version/platform evidence. Preparing 1.1.0 does not itself publish a new release
 | OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally |
 | Claude Code        | Supported | User-verified on Linux (five-repository README summarization convoy) and macOS                  |
 | Cursor CLI         | Experimental | Linux CLI `2026.10.16-e3cb207` syntax verified without sign-in; authenticated tasks and full protocol compatibility unverified |
-| Antigravity CLI    | In development | Discovery, version check and settings only; jobs fail before any process starts |
+| Antigravity CLI    | Experimental | Headless protocol implemented from Google's documentation and fixtures; no installed or authenticated `agy` tested |
 
 ## Downloads and platform support
 
@@ -442,8 +442,8 @@ For a guided walkthrough including groups, validation and history, start with
 [Getting started](docs/getting-started.md). The reference below covers detailed
 execution and result-safety behavior.
 
-1. Enter a task and select Codex, GitHub Copilot CLI, OpenCode, Claude Code or the experimental Cursor CLI.
-2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. OpenCode offers its own model, agent, variant and permission controls. Claude offers model, effort, turn limit and tool permissions. Cursor offers model, permissions, workspace trust and an execution time limit. Model and reasoning support depends on the selected CLI/model.
+1. Enter a task and select Codex, GitHub Copilot CLI, OpenCode, Claude Code, or the experimental Cursor CLI or Antigravity CLI.
+2. Configure the settings shown for that backend. Codex offers **Read-only** or **Workspace-write** sandboxes. Copilot offers tool approvals and temporary-directory access; these are not Codex sandbox modes. OpenCode offers its own model, agent, variant and permission controls. Claude offers model, effort, turn limit and tool permissions. Cursor offers model, permissions, workspace trust and an execution time limit. Antigravity offers model, effort, permissions, terminal sandbox and an execution time limit. Model and reasoning support depends on the selected CLI/model.
 3. Enter an existing repository **root directory**, or use **Browse…** to fill the path field, then choose **Add repository**. Cancelling the picker preserves the field; choosing a folder never registers it automatically. Select the repository checkboxes for this task.
 4. Choose **Current working tree** (the default) or **Isolated worktree**. Set **This convoy** (its job limit) and **Global job limit** (shared by every convoy), then **Run Convoy**. This action becomes available once the selected agent's CLI check settles, so review uses the resolved executable.
 5. Review branches and existing changes. Dirty working trees require acknowledgment before **Start convoy**.
@@ -765,7 +765,7 @@ every platform. See [setup and troubleshooting](docs/cursor.md) and the exact
 
 CodeConvoy inspects registered working trees and, when requested, creates owned detached worktrees. Registration/removal never clones, deletes, resets, stashes, checks out, commits, or pushes. External diff/textconv and filesystem-monitor commands are disabled for inspection. Duplicate and nested repository selections are rejected. Each direct job rechecks branch, HEAD, common repository identity and porcelain status immediately before starting; detected state changes fail that job without affecting other jobs.
 
-Codex Workspace-write, Copilot file-write/tool approvals, and OpenCode/Claude/Cursor permissions can permit the **agent** to modify files. CodeConvoy is an orchestrator, not an extra security sandbox. Stop terminates processes and retains partial edits; it cannot roll changes back. Review the diff before committing. Git checks are not filesystem locks: another application can still edit a repository, and changes within an already-dirty file may leave the same porcelain status.
+Codex Workspace-write, Copilot file-write/tool approvals, and OpenCode/Claude/Cursor/Antigravity permissions can permit the **agent** to modify files. CodeConvoy is an orchestrator, not an extra security sandbox. Stop terminates processes and retains partial edits; it cannot roll changes back. Review the diff before committing. Git checks are not filesystem locks: another application can still edit a repository, and changes within an already-dirty file may leave the same porcelain status.
 
 State is saved atomically in the conventional per-user application data directory, available from the footer’s Local session tooltip:
 

@@ -75,6 +75,23 @@ fn representative_activity_fixtures_preserve_progress_results_and_backend_semant
                 "Review complete",
             ][..],
         ),
+        (
+            AgentId::Antigravity,
+            include_str!("fixtures/antigravity-activity.jsonl"),
+            &[
+                "Antigravity conversation: edb1c8c1",
+                "model: fixture-model",
+                "reported permissions: request-review",
+                "Antigravity received the task",
+                "Inspecting README. Grüße 🌍",
+                "tool started: run_command",
+                "run_command · cargo fmt --check",
+                "tool failed: view_file · file not found",
+                "Review complete",
+                "Warning: Antigravity refused 1 tool action(s)",
+                "Usage: 30424 total tokens",
+            ][..],
+        ),
     ] {
         let mut decoder = agents::backend(agent).unwrap().output();
         let mut activity = String::new();
@@ -167,14 +184,17 @@ fn oversized_backend_output_is_bounded_and_the_following_message_survives() {
             }
             AgentId::Copilot => "\nFinal message\n",
             AgentId::Antigravity => {
-                "\n{\"event\":\"step_update\",\"step_update\":{\"step_type\":\"agent_response\",\"state\":\"DONE\",\"text_delta\":\"Final message\"}}\n"
+                "\n{\"event\":\"step_update\",\"step_update\":{\"conversation_id\":\"fixture\",\"step_index\":1,\"step_type\":\"agent_response\",\"state\":\"DONE\",\"text_delta\":\"Final message\"}}\n"
             }
         };
         let fallback = decoder.push(Stream::Stdout, record.as_bytes());
         activity.append(&decoder.take_activity().unwrap_or(fallback));
         assert!(activity.text.contains("Final message"), "{agent:?}");
         assert!(activity.text.len() <= LOG_LIMIT);
-        if matches!(agent, AgentId::OpenCode | AgentId::Claude | AgentId::Cursor) {
+        if matches!(
+            agent,
+            AgentId::OpenCode | AgentId::Claude | AgentId::Cursor | AgentId::Antigravity
+        ) {
             assert!(activity.text.contains("exceeded"));
         } else {
             assert!(activity.truncated);

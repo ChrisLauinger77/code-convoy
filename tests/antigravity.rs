@@ -1,14 +1,14 @@
 #![allow(clippy::unwrap_used)]
-//! Antigravity discovery/configuration contract. Never invokes agy, signs in or
-//! reads credentials; execution is intentionally unavailable in this milestone.
+//! Antigravity CLI contract. Never invokes agy, signs in or reads credentials;
+//! protocol fixtures are documentation-derived (see tests/fixtures/README.md).
 use codeconvoy::{
     agents::{
         self, AgentBackend,
-        antigravity::{Antigravity, MINIMUM_VERSION},
+        antigravity::{Antigravity, MINIMUM_VERSION, PRINT_TIMEOUT},
     },
-    domain::{AgentId, AppState, JobStatus, Repository, TaskConfig},
-    process::Stream,
+    domain::{AgentId, AppState, Repository, TaskConfig},
 };
+use serde_json::Value;
 use std::{path::Path, process::ExitStatus};
 
 fn task() -> TaskConfig {
@@ -49,6 +49,7 @@ fn availability_checks_antigravity_identity_and_each_required_flag_without_authe
         "--effort",
         "--dangerously-skip-permissions",
         "--sandbox",
+        "--print-timeout",
     ] {
         let error = Antigravity
             .check_detection(&help.replace(flag, "--unrelated"))
@@ -170,13 +171,69 @@ fn backend_rejects_invalid_options_secrets_and_relative_launchers() {
 }
 
 #[test]
-fn execution_fails_closed_before_any_process_is_built() {
+fn shell_free_command_sends_one_stdin_message_and_keeps_options_as_data() {
     let mut task = task();
-    task.options.insert("permissions".into(), "skip".into());
-    let error = Antigravity.build(&task, &repository()).unwrap_err();
-    assert!(error.to_string().contains("not available"), "{error}");
-    assert!(error.to_string().contains("No Antigravity process"));
-    let mut invalid = task.clone();
+    task.options
+        .insert("model".into(), "--literal;$(no shell)".into());
+    task.options.insert("effort".into(), "high".into());
+    let repository = repository();
+    let spec = Antigravity.build(&task, &repository).unwrap();
+    assert_eq!(spec.program, "agy");
+    assert_eq!(spec.directory, repository.path);
+    assert_eq!(
+        spec.args,
+        [
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            PRINT_TIMEOUT,
+            "--model=--literal;$(no shell)",
+            "--effort=high",
+        ]
+    );
+    // The prompt never becomes an argument, flag or -p value.
+    assert!(
+        !spec
+            .args
+            .iter()
+            .any(|arg| arg.to_str().unwrap().contains("whoami"))
+    );
+    let input = spec.input.unwrap();
+    assert_eq!(input.last(), Some(&b'\n'));
+    assert_eq!(input.iter().filter(|byte| **byte == b'\n').count(), 1);
+    let message: Value = serde_json::from_slice(&input).unwrap();
+    assert_eq!(
+        message,
+        serde_json::json!({"event": "user", "message": {"content": task.prompt}})
+    );
+    assert!(spec.remove_env.iter().any(|key| key == "PWD"));
+    assert!(!spec.env.iter().any(|(key, _)| {
+        let key = key.to_ascii_uppercase();
+        key.starts_with("AGY_") || key.contains("GEMINI") || key.contains("GOOGLE")
+    }));
+}
+
+#[test]
+fn permission_and_sandbox_flags_are_only_passed_when_explicitly_selected() {
+    let configured = Antigravity.build(&task(), &repository()).unwrap();
+    assert!(!configured.args.iter().any(|arg| {
+        arg == "--dangerously-skip-permissions" || arg == "--sandbox" || arg == "--mode"
+    }));
+    for (key, value, flag) in [
+        ("permissions", "skip", "--dangerously-skip-permissions"),
+        ("sandbox", "enabled", "--sandbox"),
+    ] {
+        let mut task = task();
+        task.options.insert(key.into(), value.into());
+        let spec = Antigravity.build(&task, &repository()).unwrap();
+        assert_eq!(
+            spec.args.iter().filter(|arg| *arg == flag).count(),
+            1,
+            "{key}"
+        );
+    }
+    let mut invalid = task();
     invalid.options.insert("effort".into(), "max".into());
     assert!(
         Antigravity
@@ -185,7 +242,7 @@ fn execution_fails_closed_before_any_process_is_built() {
             .to_string()
             .contains("Unsupported value")
     );
-    let mut wrong = task;
+    let mut wrong = task();
     wrong.agent = AgentId::Claude;
     assert!(
         Antigravity
@@ -194,21 +251,14 @@ fn execution_fails_closed_before_any_process_is_built() {
             .to_string()
             .contains("Antigravity task")
     );
-    // The placeholder decoder can never classify a run as successful.
-    let mut decoder = Antigravity.output();
-    decoder.push(
-        Stream::Stdout,
-        br#"{"event":"result","result":{"status":"SUCCESS"}}"#,
-    );
-    decoder.finish();
-    assert_eq!(decoder.interpret(status(0)).0, JobStatus::Failed);
 }
 
 #[test]
-fn execution_summary_states_unavailability_and_explicit_choices() {
+fn execution_summary_describes_explicit_choices_and_completion_limits() {
     let configured = Antigravity.execution_summary(&Default::default());
-    assert!(configured.contains("not available in this build"));
     assert!(configured.contains("configured permission rules"));
+    assert!(configured.contains("SUCCESS result"));
+    assert!(configured.contains("25 hours"));
     assert!(!configured.contains("--dangerously-skip-permissions"));
     assert!(!configured.contains("--sandbox"));
     let explicit = Antigravity.execution_summary(
@@ -271,3 +321,10 @@ fn registry_preferences_and_persistence_keep_antigravity_independent() {
     assert_eq!(restored.draft.options, state.draft.options);
     assert_eq!(restored.agent_options, state.agent_options);
 }
+
+#[path = "antigravity/output.rs"]
+mod output;
+
+#[cfg(feature = "test-support")]
+#[path = "antigravity/execution.rs"]
+mod execution;

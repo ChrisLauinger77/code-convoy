@@ -74,7 +74,7 @@ async fn execute(task: TaskConfig, repos: Vec<Repository>) -> (Run, Vec<Event>) 
 
 #[tokio::test]
 async fn maintenance_groups_and_image_context_reach_independent_jobs_for_every_backend() {
-    // Cursor's foundation deliberately rejects image attachments.
+    // Cursor and Antigravity deliberately reject image attachments.
     for agent in [
         AgentId::Codex,
         AgentId::Copilot,

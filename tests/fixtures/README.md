@@ -15,8 +15,12 @@ See [Cursor validation](../../docs/cursor-validation.md) for sources, commands,
 exit codes, isolation and platform limits.
 
 `antigravity-help-contract.txt` is a synthetic documentation-derived Antigravity
-CLI contract, not captured `agy --help` output. See
-[Antigravity validation](../../docs/antigravity-validation.md#unverified).
+CLI contract, not captured `agy --help` output. `antigravity-success.jsonl`
+reproduces the headless guide's recorded stream with sanitized values;
+`antigravity-activity.jsonl`, `antigravity-error.jsonl` and
+`antigravity-interrupted.jsonl` are synthetic variants of the documented shapes.
+None is authenticated CLI output. See
+[Antigravity validation](../../docs/antigravity-validation.md#fixtures).
 
 These are synthetic representative saves with fields checked against the local
 release tags, not captured user data or recordings produced by old binaries.

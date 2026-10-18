@@ -28,7 +28,7 @@ do not establish compatibility with every CLI version or platform. See
 | `agents/opencode` | OpenCode run/help/version contract, model/agent/variant/permission options, native JSON event decoding and conservative completion |
 | `agents/claude` | Claude print/help/version contract, model/effort/turn/permission options, stream-json decoding and final-result validation |
 | `agents/cursor` | Cursor direct print arguments, model/permission/trust/deadline options, native NDJSON decoding and conservative completion |
-| `agents/antigravity` | `agy` help/version contract with minimum-version gate and model/effort/permission/sandbox/deadline options; execution fails closed until implemented |
+| `agents/antigravity` | `agy` help/version contract with minimum-version gate, model/effort/permission/sandbox/deadline options, one stdin stream-json turn, native NDJSON decoding and conservative completion |
 | `process` | Shell-free process spawning, pipes, cancellation tokens, process-tree ownership, short-command timeouts |
 | `git` | Root/common-directory identity, working-tree inspection, direct diff and isolated diff dispatch |
 | `worktrees` | Owned attempt reservation, detached Git creation, ownership verification and fixed-base result inspection |
@@ -236,17 +236,24 @@ protection. Other backend timeout defaults remain unlimited. Native permission
 enforcement and full authenticated protocol compatibility remain unverified.
 See [Cursor evidence, tests and limitations](cursor-validation.md).
 
-### Antigravity foundation (1.2 milestone, PR 1)
+### Antigravity foundation and execution (1.2 milestone, PRs 1–2)
 
 Antigravity CLI is the sixth registered backend. Its additive persisted ID is
 `antigravity`. Discovery adds the `agy` launcher name to the shared directories.
 `AgentBackend::check_version` is an optional hook; only Antigravity enforces a
-minimum release, and it receives `None` when the version command fails. Its
-`build()` validates the task and options, then fails before constructing a
-command, so review and scheduling are unchanged and no process starts. The
-placeholder decoder never reports success. Scheduler, Git, process and other
-backend behavior are unchanged. See
-[feasibility, minimum version and unverified behavior](antigravity-validation.md).
+minimum release, and it receives `None` when the version command fails.
+
+`agents/antigravity` runs `agy --input-format stream-json --output-format
+stream-json` with the runner-assigned checkout as process directory and writes
+one user message to stdin before closing it. It always passes a 25-hour
+`--print-timeout` so Antigravity's documented five-minute default cannot end a
+job with partial output. `output_for()` checks `init.cwd` against the checkout.
+The decoder requires one init, a consistent conversation ID and a final
+`SUCCESS` result (every result must succeed) plus exit zero; reported failure
+statuses, `AGY_ERROR`, authentication text and malformed or incomplete streams
+fail the job. Refused actions keep a successful status but are stated in the
+result detail. Scheduler, Git, process and other backend behavior are unchanged.
+See [contract, classification and unverified behavior](antigravity-validation.md).
 
 ## Scheduling and shutdown
 

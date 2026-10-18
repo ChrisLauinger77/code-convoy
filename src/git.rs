@@ -458,6 +458,7 @@ mod tests {
             crate::domain::AgentId::OpenCode,
             crate::domain::AgentId::Claude,
             crate::domain::AgentId::Cursor,
+            crate::domain::AgentId::Antigravity,
         ] {
             let task = crate::domain::TaskConfig {
                 agent,
