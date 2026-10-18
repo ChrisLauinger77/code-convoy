@@ -85,13 +85,15 @@ static OPTIONS: &[OptionSpec] = &[
     },
 ];
 
-// Documented headless flags the planned invocation relies on.
+// agy's help has no product-name banner (Google's captured help starts with
+// "Usage of agy:"), so identify it by flags no other supported CLI advertises.
+const IDENTITY_FLAGS: &[&str] = &["--print-timeout", "--prompt-interactive"];
+// Documented flags the invocation relies on; older releases lack the first three.
 const REQUIRED_FLAGS: &[&str] = &[
-    "--print",
-    "--output-format",
     "--input-format",
-    "--model",
+    "--output-format",
     "--effort",
+    "--model",
     "--dangerously-skip-permissions",
     "--sandbox",
 ];
@@ -138,18 +140,20 @@ impl AgentBackend for Antigravity {
         Ok(Some(spec.args(&["--version"])))
     }
     fn check_detection(&self, help: &str) -> Result<()> {
+        let advertises = |flag: &str| {
+            help.split_whitespace().any(|word| {
+                word.strip_prefix(flag)
+                    .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['[', '=', ',']))
+            })
+        };
         // Claude Code shares several flag names, so identity is checked first.
         anyhow::ensure!(
-            help.contains("Antigravity"),
-            "Expected Antigravity CLI help. Install the Antigravity CLI (agy) separately or choose its executable, then Check CLI again."
+            IDENTITY_FLAGS.iter().all(|flag| advertises(flag)),
+            "Expected Antigravity CLI (agy) help with --print-timeout and --prompt-interactive. Install the Antigravity CLI separately or choose its agy executable, then Check CLI again."
         );
         for flag in REQUIRED_FLAGS {
             anyhow::ensure!(
-                help.split_whitespace().any(|word| {
-                    word.strip_prefix(flag).is_some_and(|suffix| {
-                        suffix.is_empty() || suffix.starts_with(['[', '=', ','])
-                    })
-                }),
+                advertises(flag),
                 "Antigravity CLI help is missing {flag}. Update the Antigravity CLI and Check CLI again."
             );
         }

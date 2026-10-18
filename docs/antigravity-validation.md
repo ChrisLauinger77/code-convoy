@@ -49,6 +49,22 @@ changelog fix the planned protocol depends on:
 The version gate is a backend hook (`AgentBackend::check_version`); other
 backends keep version output informational.
 
+## Help contract
+
+Google's [spec-driven development codelab](https://codelabs.developers.google.com/sdd-agy-cli)
+shows real `agy --help` output from a release older than 1.1.8. It starts with
+`Usage of agy:`, lists double-dash flags, mentions no product name and does not
+yet show `--output-format`, `--input-format` or `--effort`. Its
+`--print-timeout` default of `5m0s` also places it before 1.2.6.
+
+Check CLI therefore identifies `agy` by two flags from that capture that no
+other supported CLI advertises, `--print-timeout` and `--prompt-interactive`,
+rather than by a product name. It then requires the flags the invocation uses:
+`--input-format`, `--output-format`, `--effort`, `--model`,
+`--dangerously-skip-permissions` and `--sandbox`. A release like the captured one
+is recognized as agy but rejected with an update message. Claude Code and Cursor
+help are rejected as not agy.
+
 ## Execution contract
 
 Checked on **2026-10-18** against the
@@ -130,8 +146,10 @@ malformed and incomplete output, refused actions, edits and a different `cwd`.
 
 ## Unverified
 
-- Actual `agy --help` text: `tests/fixtures/antigravity-help-contract.txt` is a
-  synthetic documentation contract, including the `Antigravity` identity marker.
+- `agy --help` text from an installed 1.2.16+ release.
+  `tests/fixtures/antigravity-help-contract.txt` follows the layout of Google's
+  published capture with the flags documented since 1.1.8; see
+  [Help contract](#help-contract).
 - `agy --version` output format.
 - Installation locations; discovery uses the shared generic directories only.
 - The real `stream-json` stream from an installed release, `denied_actions`

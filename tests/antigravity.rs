@@ -40,32 +40,55 @@ fn status(code: i32) -> ExitStatus {
 #[test]
 fn availability_checks_antigravity_identity_and_each_required_flag_without_authentication() {
     let help = include_str!("fixtures/antigravity-help-contract.txt");
+    // Google's captured help has no product-name banner, only "Usage of agy:".
+    assert!(help.starts_with("Usage of agy:") && !help.contains("Antigravity"));
     Antigravity.check_detection(help).unwrap();
+    let without = |flag: &str| {
+        help.lines()
+            .filter(|line| line.split_whitespace().next() != Some(flag))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     for flag in [
-        "--print",
-        "--output-format",
         "--input-format",
-        "--model",
+        "--output-format",
         "--effort",
+        "--model",
         "--dangerously-skip-permissions",
         "--sandbox",
     ] {
-        let error = Antigravity
-            .check_detection(&help.replace(flag, "--unrelated"))
-            .unwrap_err();
+        let error = Antigravity.check_detection(&without(flag)).unwrap_err();
         assert!(error.to_string().contains(flag), "{error}");
+        assert!(error.to_string().contains("Update"), "{error}");
     }
+    for flag in ["--print-timeout", "--prompt-interactive"] {
+        let error = Antigravity.check_detection(&without(flag)).unwrap_err();
+        assert!(
+            error.to_string().contains("Expected Antigravity CLI (agy)"),
+            "{error}"
+        );
+    }
+    // Older releases (before stream-json and --effort) are agy but unsupported.
+    let older = help
+        .lines()
+        .filter(|line| {
+            !["--input-format", "--output-format", "--effort"]
+                .contains(&line.split_whitespace().next().unwrap_or_default())
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let error = Antigravity.check_detection(&older).unwrap_err().to_string();
     assert!(
-        Antigravity
-            .check_detection(&help.replace("Antigravity", "Other"))
-            .is_err()
+        error.contains("--input-format") && error.contains("Update"),
+        "{error}"
     );
     // Claude Code shares several flag names; neither it nor Cursor is agy.
     for other in [
         include_str!("fixtures/claude-help-contract.txt"),
         include_str!("fixtures/cursor-help-contract.txt"),
     ] {
-        assert!(Antigravity.check_detection(other).is_err());
+        let error = Antigravity.check_detection(other).unwrap_err();
+        assert!(error.to_string().contains("Expected Antigravity CLI (agy)"));
     }
     let options = [("executable".into(), "agy".into())].into();
     let probe = Antigravity.detection(&options, Path::new(".")).unwrap();
