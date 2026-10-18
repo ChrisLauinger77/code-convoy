@@ -44,7 +44,7 @@ a usable sign-in fails with an authentication message.
 | Model | Blank keeps Antigravity's default; otherwise a slug from `agy models`, passed as `--model`. Unknown slugs fail rather than fall back |
 | Effort | Blank keeps Antigravity's configuration; Low/Medium/High map to `--effort` |
 | Permissions | **Antigravity configuration** passes no permission flag; **Approve all tool requests** explicitly passes `--dangerously-skip-permissions` |
-| Terminal sandbox | **Antigravity configuration** keeps your setting; **Enable for this job** passes `--sandbox` |
+| Terminal sandbox | **Antigravity configuration** keeps your setting; **Enable for this job** passes `--sandbox`. On Windows it requires Windows 11 24H2 (build 26100) or newer and is rejected at review otherwise, because Antigravity turns the sandbox off on older Windows |
 | Time limit (seconds) | Blank is unlimited; 1–86400 limits execution after spawn, excluding queueing/preparation |
 
 Headless `agy` runs have no approval prompt. With **Antigravity configuration**,
@@ -58,16 +58,16 @@ automatically. Neither choice is an OS sandbox provided by CodeConvoy.
 Each job runs, with each argument passed directly and no shell:
 
 ```text
-agy --input-format stream-json --output-format stream-json --print-timeout=1500m [--model=SLUG] [--effort=LEVEL] [--dangerously-skip-permissions] [--sandbox]
+agy --input-format stream-json --output-format stream-json [--model=SLUG] [--effort=LEVEL] [--dangerously-skip-permissions] [--sandbox]
 ```
 
 The process directory is the assigned checkout. The task and UTF-8 text context
 are written to stdin as one `{"event":"user","message":{"content":…}}` line, and
 stdin is closed, so the session ends after that turn. The prompt never appears in
-the process arguments. Image attachments are unsupported. Antigravity's own
-headless deadline is set to 25 hours, above CodeConvoy's maximum time limit,
-because the guide documents a five-minute default after which partial output can
-exit successfully.
+the process arguments. Image attachments are unsupported. CodeConvoy passes no
+`--print-timeout`: headless runs have no Antigravity deadline by default since
+1.2.6, so a blank time limit stays unlimited. A configured CodeConvoy time limit
+stops the process tree and fails the job.
 
 A job **succeeds** only when all of these hold:
 

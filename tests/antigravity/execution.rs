@@ -186,16 +186,20 @@ async fn refused_actions_are_reported_and_edits_are_retained() {
             .contains("[stderr] Antigravity fixture refused")
     );
 
-    let (_temp, repository, outcome) = run(
-        "antigravity-fixture:edit",
-        &[("permissions", "skip"), ("sandbox", "enabled")],
-    )
-    .await;
+    // Windows sandbox support depends on the host build; see the unit test.
+    let sandbox = !cfg!(windows);
+    let mut options = vec![("permissions", "skip")];
+    if sandbox {
+        options.push(("sandbox", "enabled"));
+    }
+    let (_temp, repository, outcome) = run("antigravity-fixture:edit", &options).await;
     assert_eq!(outcome.status, JobStatus::Succeeded, "{}", outcome.detail);
     assert_eq!(
         fs::read_to_string(repository.path.join("tracked.txt")).unwrap(),
         "Antigravity fixture edit\n"
     );
     let args = fs::read_to_string(repository.path.join("antigravity-args")).unwrap();
-    assert!(args.contains("--dangerously-skip-permissions") && args.contains("--sandbox"));
+    assert!(args.contains("--dangerously-skip-permissions"));
+    assert_eq!(args.contains("--sandbox"), sandbox);
+    assert!(!args.contains("--print-timeout"));
 }

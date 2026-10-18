@@ -245,9 +245,9 @@ minimum release, and it receives `None` when the version command fails.
 
 `agents/antigravity` runs `agy --input-format stream-json --output-format
 stream-json` with the runner-assigned checkout as process directory and writes
-one user message to stdin before closing it. It always passes a 25-hour
-`--print-timeout` so Antigravity's documented five-minute default cannot end a
-job with partial output. `output_for()` checks `init.cwd` against the checkout.
+one user message to stdin before closing it. It passes no `--print-timeout`, so
+a blank CodeConvoy time limit stays unlimited, and rejects an explicit sandbox on
+Windows builds below 26100. `output_for()` checks `init.cwd` against the checkout.
 The decoder requires one init, a consistent conversation ID and a final
 `SUCCESS` result (every result must succeed) plus exit zero; reported failure
 statuses, `AGY_ERROR`, authentication text and malformed or incomplete streams

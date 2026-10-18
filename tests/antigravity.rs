@@ -4,7 +4,7 @@
 use codeconvoy::{
     agents::{
         self, AgentBackend,
-        antigravity::{Antigravity, MINIMUM_VERSION, PRINT_TIMEOUT},
+        antigravity::{Antigravity, MINIMUM_VERSION},
     },
     domain::{AgentId, AppState, Repository, TaskConfig},
 };
@@ -49,7 +49,6 @@ fn availability_checks_antigravity_identity_and_each_required_flag_without_authe
         "--effort",
         "--dangerously-skip-permissions",
         "--sandbox",
-        "--print-timeout",
     ] {
         let error = Antigravity
             .check_detection(&help.replace(flag, "--unrelated"))
@@ -125,6 +124,8 @@ fn backend_rejects_invalid_options_secrets_and_relative_launchers() {
         ("effort", "high"),
         ("effort", ""),
         ("permissions", "skip"),
+        // Windows support depends on the host build; see the unit test.
+        #[cfg(not(windows))]
         ("sandbox", "enabled"),
         ("timeout_seconds", "86400"),
         ("timeout_seconds", ""),
@@ -187,7 +188,6 @@ fn shell_free_command_sends_one_stdin_message_and_keeps_options_as_data() {
             "stream-json",
             "--output-format",
             "stream-json",
-            PRINT_TIMEOUT,
             "--model=--literal;$(no shell)",
             "--effort=high",
         ]
@@ -220,8 +220,23 @@ fn permission_and_sandbox_flags_are_only_passed_when_explicitly_selected() {
     assert!(!configured.args.iter().any(|arg| {
         arg == "--dangerously-skip-permissions" || arg == "--sandbox" || arg == "--mode"
     }));
+    // A blank CodeConvoy limit stays unlimited: never cap Antigravity itself.
+    for timeout in ["", "90"] {
+        let mut task = task();
+        task.options
+            .insert("timeout_seconds".into(), timeout.into());
+        let spec = Antigravity.build(&task, &repository()).unwrap();
+        assert!(
+            !spec
+                .args
+                .iter()
+                .any(|arg| arg.to_str().unwrap().starts_with("--print-timeout"))
+        );
+    }
+    // Windows below 11 24H2 rejects the explicit sandbox (unit-tested by build).
     for (key, value, flag) in [
         ("permissions", "skip", "--dangerously-skip-permissions"),
+        #[cfg(not(windows))]
         ("sandbox", "enabled", "--sandbox"),
     ] {
         let mut task = task();
@@ -258,7 +273,7 @@ fn execution_summary_describes_explicit_choices_and_completion_limits() {
     let configured = Antigravity.execution_summary(&Default::default());
     assert!(configured.contains("configured permission rules"));
     assert!(configured.contains("SUCCESS result"));
-    assert!(configured.contains("25 hours"));
+    assert!(configured.contains("passes no Antigravity --print-timeout"));
     assert!(!configured.contains("--dangerously-skip-permissions"));
     assert!(!configured.contains("--sandbox"));
     let explicit = Antigravity.execution_summary(

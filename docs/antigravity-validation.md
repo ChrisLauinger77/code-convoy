@@ -66,12 +66,15 @@ of process arguments and avoids command-line length limits. `--model=`,
 `--effort=`, `--dangerously-skip-permissions` and `--sandbox` are added only
 when selected.
 
-**Deadline.** The guide's flag table documents a five-minute `--print-timeout`
-default; the 1.2.6 changelog says the default became unlimited. In 1.1.28 expiry
-was changed to return partial output and exit successfully. CodeConvoy therefore
-always passes `--print-timeout=1500m`, above its own 24-hour maximum, so an
-Antigravity expiry cannot end a normal job early and the CodeConvoy time limit
-governs.
+**Deadline.** CodeConvoy passes no `--print-timeout`. The 1.2.6 changelog
+changed the headless default from five minutes to unlimited, and the minimum
+supported release is 1.2.16. Since 1.1.28 an explicit expiry returns partial
+output and exits successfully, so passing any deadline would cap runs whose
+CodeConvoy time limit is blank and could end them with partial output. The
+guide's flag table still lists a five-minute default; the more specific
+changelog entry is followed. A configured CodeConvoy time limit stops the
+process tree itself and fails the job. If an Antigravity deadline did end a
+turn early, a step left `ACTIVE` without `DONE` would still fail the job.
 
 **Events.** Records are NDJSON with an `event` name and a payload under the same
 key. `init` carries the conversation ID at top level and `cwd`,
@@ -102,8 +105,14 @@ produce one result. Additional results are accepted only if each one is
 the 1.0 Claude Code misclassification of background follow-up results while an
 earlier failure can never be erased by a later success.
 
-Not used: `-p`, `--continue`, `--conversation`, `--agent`, `--json-schema`,
-`--mode`, Antigravity's own worktrees, `/fork` and remote control. Tasks starting
+**Windows sandbox.** The 1.4.1 changelog says Antigravity turns the terminal
+sandbox off and asks before commands on Windows 10 and Windows 11 before 24H2;
+earlier releases fail to start sandboxed commands there. An explicit **Enable for
+this job** is therefore rejected at review unless the registry's
+`CurrentBuildNumber` is 26100 or newer, or when it cannot be read.
+
+Not used: `-p`, `--print-timeout`, `--continue`, `--conversation`, `--agent`,
+`--json-schema`, `--mode`, Antigravity's own worktrees, `/fork` and remote control. Tasks starting
 with a CLI-handled slash command end with an `ERROR` result in this transport.
 
 ## Fixtures
@@ -126,7 +135,8 @@ malformed and incomplete output, refused actions, edits and a different `cwd`.
 - Installation locations; discovery uses the shared generic directories only.
 - The real `stream-json` stream from an installed release, `denied_actions`
   shape, stderr wording of soft-deny and authentication notices, and whether
-  `--print-timeout` is honored with `--input-format stream-json`.
+  the guide's five-minute or the changelog's unlimited default applies to
+  stdin stream-json sessions.
 - Whether `init.cwd` reports a linked worktree path or its main repository.
 - Concurrent headless instances sharing one sign-in and conversation store.
 - Process-tree cancellation leaving no daemon (fixed in 1.2.9 according to the

@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.iter().any(|arg| arg.starts_with("--workspace=")) {
         return cursor::run(&args);
     }
-    if args.iter().any(|arg| arg.starts_with("--print-timeout=")) {
+    if is_antigravity(&args) {
         return antigravity::run(&args);
     }
     let mut _probe_lock = None;
@@ -267,7 +267,7 @@ fn gate(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use fs2::FileExt;
     let cursor = args.iter().any(|a| a.starts_with("--workspace="));
-    let antigravity = args.iter().any(|a| a.starts_with("--print-timeout="));
+    let antigravity = is_antigravity(args);
     let claude = !cursor && args.iter().any(|a| a == "--print");
     // Attachment context follows the one-line control record. Capture the full
     // stdin below while keeping this test-only handshake independent of it.
@@ -418,6 +418,13 @@ fn gate(
         println!("{{\"type\":\"turn.completed\",\"usage\":{{}}}}");
     }
     Ok(())
+}
+
+// Antigravity streams stdin without --print; Claude's stream-json input uses it.
+fn is_antigravity(args: &[String]) -> bool {
+    args.windows(2)
+        .any(|pair| pair == ["--input-format", "stream-json"])
+        && !args.iter().any(|arg| arg == "--print")
 }
 
 fn opencode_complete() {

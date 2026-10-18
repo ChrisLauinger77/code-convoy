@@ -14,7 +14,8 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         args.windows(2)
             .any(|pair| pair == ["--output-format", "stream-json"])
     );
-    assert!(args.iter().any(|arg| arg == "--print-timeout=1500m"));
+    // A blank CodeConvoy limit must not cap Antigravity's own run.
+    assert!(!args.iter().any(|arg| arg.starts_with("--print-timeout")));
     // The streaming transport drops prompts passed as flags.
     assert!(
         !args
