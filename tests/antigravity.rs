@@ -233,12 +233,12 @@ fn permission_and_sandbox_flags_are_only_passed_when_explicitly_selected() {
                 .any(|arg| arg.to_str().unwrap().starts_with("--print-timeout"))
         );
     }
+    let mut explicit = vec![("permissions", "skip", "--dangerously-skip-permissions")];
     // Windows below 11 24H2 rejects the explicit sandbox (unit-tested by build).
-    for (key, value, flag) in [
-        ("permissions", "skip", "--dangerously-skip-permissions"),
-        #[cfg(not(windows))]
-        ("sandbox", "enabled", "--sandbox"),
-    ] {
+    if !cfg!(windows) {
+        explicit.push(("sandbox", "enabled", "--sandbox"));
+    }
+    for (key, value, flag) in explicit {
         let mut task = task();
         task.options.insert(key.into(), value.into());
         let spec = Antigravity.build(&task, &repository()).unwrap();
