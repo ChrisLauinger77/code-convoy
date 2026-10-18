@@ -114,7 +114,7 @@ fn reported_failures_are_explicit_even_when_the_process_exits_zero() {
     let (status, detail, text) =
         outcome(include_str!("../fixtures/antigravity-error.jsonl"), "", 0);
     assert_eq!(status, JobStatus::Failed);
-    assert!(detail.contains("Antigravity reported ERROR: fixture quota exhausted"));
+    assert!(detail.contains("Antigravity reported ERROR — fixture quota exhausted"));
     assert!(text.contains("Partial answer"));
     let (status, detail, _) = outcome(
         include_str!("../fixtures/antigravity-interrupted.jsonl"),
@@ -161,10 +161,10 @@ fn authentication_failures_are_classified_without_reading_credentials() {
         let (status, detail, text) = outcome("", stderr, code);
         assert_eq!(status, JobStatus::Failed);
         assert!(
-            detail.contains("authentication is required or expired"),
+            detail.contains("sign-in is required or has expired"),
             "{detail}"
         );
-        assert!(detail.contains("interactive agy session"));
+        assert!(detail.contains("Run agy once in a terminal"));
         assert!(text.contains("[stderr]"));
     }
     // Split across chunks and reported in a result error as well.
@@ -176,12 +176,12 @@ fn authentication_failures_are_classified_without_reading_credentials() {
         decoder
             .interpret(status(1))
             .1
-            .contains("authentication is required")
+            .contains("sign-in is required")
     );
     let mut records = lines(include_str!("../fixtures/antigravity-error.jsonl"));
     records[3]["result"]["error"] = json!("Authentication expired. Please log back in.");
     let (_, detail, _) = outcome(&join(&records), "", 0);
-    assert!(detail.contains("authentication is required or expired"));
+    assert!(detail.contains("sign-in is required or has expired"));
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn installed_1_4_2_unauthenticated_output_is_an_authentication_failure() {
     let (status, detail, text) = outcome(stdout, stderr, 1);
     assert_eq!(status, JobStatus::Failed);
     assert!(
-        detail.contains("authentication is required or expired"),
+        detail.contains("sign-in is required or has expired"),
         "{detail}"
     );
     assert!(text.contains("Antigravity result: ERROR · authentication failed"));
@@ -201,9 +201,64 @@ fn installed_1_4_2_unauthenticated_output_is_an_authentication_failure() {
     let (status, detail, _) = outcome(stdout, "", 1);
     assert_eq!(status, JobStatus::Failed);
     assert!(
-        detail.contains("authentication is required or expired"),
+        detail.contains("sign-in is required or has expired"),
         "{detail}"
     );
+}
+
+#[test]
+fn failure_details_lead_with_actionable_text_and_recovery_hints() {
+    let records = lines(SUCCESS);
+    for (error, advice) in [
+        (
+            "invalid model selection (--model \"x\" --effort \"\"): model x is not recognized as a known model or custom model in settings",
+            "choose a slug listed by agy models",
+        ),
+        (
+            "Your AI credits balance is too low to continue.",
+            "check agy -p /usage",
+        ),
+        ("fixture quota exhausted", "check agy -p /usage"),
+        (
+            "/model is answered by the CLI itself and is unavailable with --input-format stream-json",
+            "start the task with ordinary text",
+        ),
+    ] {
+        let mut changed = records.clone();
+        changed[4]["result"]["status"] = json!("ERROR");
+        changed[4]["result"]["error"] = json!(error);
+        let (status, detail, _) = outcome(&join(&changed), "", 0);
+        assert_eq!(status, JobStatus::Failed);
+        assert!(detail.contains(advice), "{error}: {detail}");
+        assert!(
+            detail.contains("(exit code 0; conversation 4e502687"),
+            "{detail}"
+        );
+    }
+    // Advice from a structured stderr error, without a result error.
+    let (_, detail, _) = outcome(
+        SUCCESS,
+        "AGY_ERROR: {\"status\":\"RESOURCE_EXHAUSTED\",\"code\":429}\n",
+        0,
+    );
+    assert!(detail.contains("AGY_ERROR") && detail.contains("check agy -p /usage"));
+    // No advice is invented for an unrecognized error, and success stays clean.
+    let (_, detail, _) = outcome(
+        include_str!("../fixtures/antigravity-interrupted.jsonl"),
+        "",
+        130,
+    );
+    assert!(!detail.contains("agy models") && !detail.contains("/usage"));
+    assert!(detail.contains("(exit code 130;"), "{detail}");
+    // Summaries show text before the first colon; keep it actionable.
+    for (stdout, stderr, code) in [
+        ("", "Error: authentication required\n", 1),
+        (include_str!("../fixtures/antigravity-error.jsonl"), "", 0),
+        (SUCCESS, "", 7),
+    ] {
+        let (_, detail, _) = outcome(stdout, stderr, code);
+        assert!(!detail.contains(": "), "{detail}");
+    }
 }
 
 #[test]

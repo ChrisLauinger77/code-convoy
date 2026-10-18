@@ -98,6 +98,46 @@ errors are shown in **Activity** without failing the job. Review **Activity**,
 Tasks that start with a slash command answered by the CLI, such as `/model`,
 end with an `ERROR` result in this transport.
 
+### Failure messages
+
+A failed job's detail starts with what to do, followed by the exit code and,
+when known, the Antigravity conversation ID. CodeConvoy adds advice when
+Antigravity's own error text indicates a known cause; the classification is
+unchanged and the original output stays in **Activity** and **Raw output**.
+
+| Antigravity reports | Advice in the job detail |
+| --- | --- |
+| `authentication required`, `authentication failed`, `Authentication expired` | Run `agy` once in a terminal with the same installation and user account to sign in, then retry |
+| `invalid model selection`, model not recognized | Choose a slug listed by `agy models`, or leave **Model** blank |
+| Quota, `RESOURCE_EXHAUSTED`, AI credits balance | Check `agy -p /usage` in a terminal before retrying |
+| Slash command answered by the CLI itself | Start the task with ordinary text |
+| `WAITING` | The run waited for input a headless run cannot provide |
+| `CANCELED`, `INTERRUPTED` | The run was stopped before it completed |
+
+## Repository customizations
+
+`agy` loads its own workspace customizations from the assigned checkout, such as
+rules, skills and hooks in `.agents/` directories between the checkout and the
+project root. CodeConvoy does not read, copy or translate them. Direct mode
+exposes the registered checkout including uncommitted customizations; isolated
+mode contains only files committed at the reviewed commit. Existing user-level
+Antigravity configuration in `~/.gemini` applies in both modes.
+
+## Session continuation and conversation history
+
+CodeConvoy does not continue Antigravity sessions. `agy` documents `--continue`
+and `--conversation <id>`, but CodeConvoy has no resume model for any backend:
+**Retry** and follow-ups start a fresh convoy with the original task and settings,
+and recovery never resumes an agent. Emulating continuation would require reusing
+Antigravity's directory-scoped conversation state, which CodeConvoy does not do.
+
+`agy` itself keeps every job's conversation, including the task text and tool
+output, in its local history below `~/.gemini/antigravity-cli`. There is no
+documented opt-out comparable to Codex's ephemeral mode or Claude Code's
+disabled session persistence. The conversation ID appears in the job detail for
+reference; CodeConvoy stores no other Antigravity session data and never deletes
+Antigravity's history.
+
 ## Lifecycle and safety
 
 Antigravity jobs use the same scheduler, repository leases, worktrees and
@@ -139,8 +179,10 @@ neither creates nor removes them.
 - Authenticated runs are untested; successful-run stream fixtures are
   documentation-derived. Check CLI and the unauthenticated failure were verified
   with agy 1.4.2 on macOS only.
-- Session continuation (`--continue`, `--conversation`) is not used. CodeConvoy
-  retries and follow-ups start fresh convoys.
+- Session continuation (`--continue`, `--conversation`) is not supported; see
+  [Session continuation](#session-continuation-and-conversation-history).
+- Antigravity keeps local conversation history for every job; CodeConvoy cannot
+  disable it.
 - Lifecycle behavior is verified with a fixture executable; with real `agy` only
   the process layout of an unauthenticated run was observed. See
   [Lifecycle evidence](antigravity-validation.md#lifecycle-and-safety).
