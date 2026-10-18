@@ -45,7 +45,7 @@ through the first convoy, Git review, manual validation and history.
 | Storage measurement and safe cleanup | [Storage Overview](docs/storage.md) · [Managed worktrees](docs/worktree-cleanup.md) |
 | Keyboard and alerts | [Shortcuts](#keyboard-shortcuts) · [Notifications](docs/notifications.md) |
 | Cursor setup, permissions and limitations | [Cursor CLI guide](docs/cursor.md) · [Validation evidence](docs/cursor-validation.md) |
-| Antigravity status and prerequisites | [Antigravity CLI guide](docs/antigravity.md) · [Feasibility record](docs/antigravity-validation.md) |
+| Antigravity setup, permissions and limitations | [Antigravity CLI guide](docs/antigravity.md) · [Validation evidence](docs/antigravity-validation.md) · [Release readiness](docs/antigravity-readiness.md) |
 | Upgrade and external CLI boundaries | [1.x compatibility](docs/compatibility.md) |
 | Platform evidence and remaining checks | [Verification matrix](docs/platform-validation.md) |
 | Build, contribute and report issues | [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Releasing](docs/releasing.md) |
@@ -63,7 +63,7 @@ version/platform evidence. Preparing 1.1.0 does not itself publish a new release
 | OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally |
 | Claude Code        | Supported | User-verified on Linux (five-repository README summarization convoy) and macOS                  |
 | Cursor CLI         | Experimental | Linux CLI `2026.10.16-e3cb207` syntax verified without sign-in; authenticated tasks and full protocol compatibility unverified |
-| Antigravity CLI    | Experimental | macOS CLI `1.4.2` Check CLI and unauthenticated failure verified; authenticated tasks unverified |
+| Antigravity CLI    | Experimental | macOS CLI `1.4.2` Check CLI, argument syntax and unauthenticated jobs verified; authenticated tasks unverified |
 
 ## Downloads and platform support
 
@@ -254,7 +254,7 @@ Discovery does not run candidates, install software, read shell profiles, change
 (such as Node) on the app's `PATH`. On Windows, discovery offers native `.exe`
 files, including WinGet links and Scoop shims; shell wrappers are not offered.
 
-On every launch, CodeConvoy checks all five agent CLIs in the background. The
+On every launch, CodeConvoy checks all six agent CLIs in the background. The
 selected agent shows **Checking…**, then **Available**, **Unavailable**, or
 **Invalid configuration**. Hover Available for the resolved executable and
 supported version information. Missing agents are normal; repository/history
@@ -761,6 +761,38 @@ permission enforcement and full protocol compatibility remain unverified on
 every platform. See [setup and troubleshooting](docs/cursor.md) and the exact
 [commands, exit codes and evidence](docs/cursor-validation.md).
 
+## Antigravity CLI contract
+
+Antigravity is an independent, experimental backend using the official `agy`
+CLI's headless `stream-json` mode. Select **Antigravity CLI** in **NEW CONVOY**.
+Install agy and sign in once in a terminal; the app links the official setup
+instructions. **Check CLI** runs `agy --help` (read from stderr) and
+`agy --version` only, requiring agy 1.2.16 or newer.
+
+| Control | Behavior |
+| --- | --- |
+| Executable | `agy` or an absolute path; native `agy.exe` required on Windows (`%LOCALAPPDATA%\agy\bin` is searched) |
+| Model | Blank keeps Antigravity's default; a slug from `agy models` is passed as `--model` |
+| Effort | Blank keeps Antigravity's configuration; Low/Medium/High map to `--effort` |
+| Permissions | **Antigravity configuration** passes no flag; **Approve all tool requests** explicitly passes `--dangerously-skip-permissions` |
+| Terminal sandbox | **Antigravity configuration** keeps your setting; **Enable for this job** passes `--sandbox` (Windows 11 24H2 or newer on Windows) |
+| Time limit (seconds) | Blank is unlimited; 1–86400 limits execution after spawn |
+
+The invocation is `agy --input-format stream-json --output-format stream-json
+[--model=SLUG] [--effort=LEVEL] [--dangerously-skip-permissions] [--sandbox]`,
+with each argument passed directly, the assigned checkout as process directory
+and the task plus text context as one `stream-json` user message on stdin.
+Images are unsupported; session continuation is not used.
+
+Success requires an `init` for the assigned checkout, one conversation, only
+`SUCCESS` results with no unfinished step, and exit zero; it does not establish
+file changes. Refused tool actions keep success but are stated. Failures lead with
+recovery advice, the exit code or signal and the conversation ID. agy 1.4.2 on
+macOS passed Check CLI and failed real jobs at the sign-in gate as expected;
+authenticated tasks remain unverified. See the [guide](docs/antigravity.md),
+[evidence](docs/antigravity-validation.md) and
+[release readiness](docs/antigravity-readiness.md).
+
 ## Repository safety and data
 
 CodeConvoy inspects registered working trees and, when requested, creates owned detached worktrees. Registration/removal never clones, deletes, resets, stashes, checks out, commits, or pushes. External diff/textconv and filesystem-monitor commands are disabled for inspection. Duplicate and nested repository selections are rejected. Each direct job rechecks branch, HEAD, common repository identity and porcelain status immediately before starting; detected state changes fail that job without affecting other jobs.
@@ -803,15 +835,24 @@ Renovate maintains dependencies and CI/release tooling. See
 [CI and Renovate policy](docs/releasing.md#ci-and-renovate) for the inherited
 preset, approval rules, and release compatibility checks.
 
-The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous backend fixture convoys, including Cursor lifecycle scenarios, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover all five backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
+The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous backend fixture convoys, including Cursor lifecycle scenarios, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover all six backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
 
 ```sh
 cargo test --all-features --test copilot installed_copilot_accepts_the_exact_command_flags -- --ignored --nocapture
 ```
 
+The same help/version-only check exists for an installed Antigravity CLI. Two
+further opt-in tests start real Antigravity jobs; each also requires an explicit
+acknowledgement because a signed-in agy makes a model call (see
+[Antigravity readiness](docs/antigravity-readiness.md#remaining-release-checks)):
+
+```sh
+CODECONVOY_AGY=/path/to/agy cargo test --all-features --test antigravity installed_agy_passes_check_cli -- --ignored --nocapture
+```
+
 Read [the architecture](docs/architecture.md) for module boundaries and implementation
-tradeoffs. The five backends keep their own CLI contracts. Authenticated OpenCode
-and Cursor E2E remain unverified; Claude has Linux/macOS user evidence and an authenticated
+tradeoffs. The six backends keep their own CLI contracts. Authenticated OpenCode,
+Cursor and Antigravity E2E remain unverified; Claude has Linux/macOS user evidence and an authenticated
 Linux Auto probe in [its validation record](docs/claude-validation.md).
 Windows package/process checks have passed in hosted CI; interactive desktop
 checks remain separate in the [platform matrix](docs/platform-validation.md).

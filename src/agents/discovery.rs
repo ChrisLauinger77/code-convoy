@@ -102,6 +102,10 @@ fn directories(agent: AgentId) -> Vec<PathBuf> {
         if agent == AgentId::Cursor {
             directories.push(local.join("cursor-agent"));
         }
+        // Google's install.ps1 places agy.exe in %LOCALAPPDATA%\agy\bin.
+        if agent == AgentId::Antigravity {
+            directories.push(local.join("agy").join("bin"));
+        }
     }
     directories
 }
@@ -310,6 +314,26 @@ mod tests {
         assert!(search("codex", "", vec![invalid]).is_empty());
         std::fs::create_dir(temp.path().join("codex")).unwrap();
         assert!(search("codex", "", vec![temp.path().into()]).is_empty());
+    }
+
+    #[test]
+    fn antigravity_searches_the_official_install_locations() {
+        let directories = directories(AgentId::Antigravity);
+        // install.sh defaults to ~/.local/bin on Linux and macOS.
+        if let Some(home) = directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_owned()) {
+            assert!(directories.contains(&home.join(".local/bin")));
+        }
+        #[cfg(windows)]
+        {
+            let local = PathBuf::from(env::var_os("LOCALAPPDATA").unwrap());
+            let official = local.join("agy").join("bin");
+            assert!(directories.contains(&official));
+            for other in AgentId::ALL {
+                if other != AgentId::Antigravity {
+                    assert!(!super::directories(other).contains(&official), "{other:?}");
+                }
+            }
+        }
     }
 
     #[cfg(windows)]

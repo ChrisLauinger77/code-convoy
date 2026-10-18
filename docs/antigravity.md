@@ -4,9 +4,11 @@ Antigravity CLI is an experimental backend in the current source. Published
 packages do not include it. CodeConvoy uses your local CLI installation and
 existing sign-in; it does not install Antigravity or manage accounts. Its
 headless protocol is implemented from Google's documentation and deterministic
-fixtures. An installed **agy 1.4.2** on macOS passed Check CLI and failed an
-unauthenticated job as expected; authenticated tasks have not been tested. See
-the [feasibility and validation record](antigravity-validation.md).
+fixtures. An installed **agy 1.4.2** on macOS passed Check CLI, accepted every
+argument form CodeConvoy uses and failed real jobs at the sign-in gate as
+expected; authenticated tasks have not been tested. See the
+[feasibility and validation record](antigravity-validation.md) and
+[release readiness](antigravity-readiness.md).
 
 CodeConvoy integrates the official command-line agent `agy` only. It does not
 automate the Antigravity desktop app or IDE, use private APIs, use the Python SDK
@@ -21,7 +23,8 @@ Use `agy --version` to record the installed version. CodeConvoy requires
 Desktop launchers can have a different PATH from your terminal.
 
 Select **Antigravity CLI** under **NEW CONVOY → Agent**. **Find CLI** searches for
-`agy`. Choose **Use and check**, or enter an absolute path to the executable. On
+`agy`, including `~/.local/bin` (the Linux/macOS installer default) and, on
+Windows, `%LOCALAPPDATA%\agy\bin`. Choose **Use and check**, or enter an absolute path to the executable. On
 Windows choose a native `agy.exe`; `.cmd`, `.bat`, `.ps1`, WSL wrappers and shell
 command strings are unsupported.
 

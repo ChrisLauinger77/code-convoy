@@ -112,7 +112,7 @@ Reuse copies a run's task/options and selects its still-registered canonical rep
 
 `ui/text_view` caches a line index for the selected output/diff and uses egui's visible-row layout. Copy actions preserve the original retained text. Diff coloring is presentation-only: no agent protocol parsing, Git behavior, or stored output format is changed. Main panes and long details scroll independently; execution controls remain visible at the bottom of the editor. Appearance follows the system by default; overrides are saved as an optional appearance preference (Part 3.3); older state defaults to System. The editor is rendered before execution controls to match visual and Tab order. CLI probes have independent per-backend state, so their completion cannot clear repository/preflight work. An in-memory set of retained runs launched this session distinguishes empty live output from unrestored history logs.
 
-App construction schedules checks for all five configured/default executables on Tokio without awaiting them. `agents/availability` resolves exact launcher names with the existing filesystem-only discovery locations on blocking workers, then runs each backend's normal help/version check. Explicit absolute paths never fall back to another installation. Matching results adopt resolved paths into the existing per-agent settings so GUI launches and subsequent jobs use the same executable. The UI reports Checking… while a probe or its latest replacement is pending; success/error details are backend-local. Availability and probe state are never serialized.
+App construction schedules checks for all six configured/default executables on Tokio without awaiting them. `agents/availability` resolves exact launcher names with the existing filesystem-only discovery locations on blocking workers, then runs each backend's normal help/version check. Explicit absolute paths never fall back to another installation. Matching results adopt resolved paths into the existing per-agent settings so GUI launches and subsequent jobs use the same executable. The UI reports Checking… while a probe or its latest replacement is pending; success/error details are backend-local. Availability and probe state are never serialized.
 
 Run Convoy is disabled while the selected backend's check is pending. The preflight entry point also reconciles executable edits and refuses to snapshot a pending selection. This ensures a discovered absolute path is applied before preflight captures immutable options, including when the default launcher is absent from the GUI PATH. Checks for other backends do not delay review; task editing, repository loading and existing convoys stay independent.
 
@@ -236,10 +236,11 @@ protection. Other backend timeout defaults remain unlimited. Native permission
 enforcement and full authenticated protocol compatibility remain unverified.
 See [Cursor evidence, tests and limitations](cursor-validation.md).
 
-### Antigravity foundation, execution, lifecycle and UX (1.2 milestone, PRs 1–4)
+### Antigravity foundation, execution, lifecycle, UX and readiness (1.2 milestone, PRs 1–5)
 
 Antigravity CLI is the sixth registered backend. Its additive persisted ID is
-`antigravity`. Discovery adds the `agy` launcher name to the shared directories.
+`antigravity`. Discovery adds the `agy` launcher name to the shared directories and, on
+Windows, Google's `%LOCALAPPDATA%\agy\bin` install location.
 `AgentBackend::check_version` is an optional hook; only Antigravity enforces a
 minimum release, and it receives `None` when the version command fails.
 `AgentBackend::help_stream` selects the stream checked by `check_detection`; it
@@ -498,7 +499,7 @@ exclusive protection boundary for a future Apply operation, without implementing
 Apply or a new scheduling system. External Git applications and agent-initiated
 shared-administration commands are outside CodeConvoy's coordination.
 
-All five backends receive a `Repository` with the isolated checkout path for
+All six backends receive a `Repository` with the isolated checkout path for
 command construction; their own working-directory flags, model/options, permissions,
 stdin, attachments, decoders and completion criteria are unchanged. Attachment
 capability checks and queued-job revalidation still run before agent spawn; files
