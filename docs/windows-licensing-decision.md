@@ -1,5 +1,44 @@
 # CodeConvoy — Windows licensing and maintainer release decisions
 
+## Component and distribution decision — 2026-10-18
+
+The maintainer explicitly authorized carrying the existing Windows
+Microsoft-component licensing-risk acceptance forward to **CodeConvoy 1.2.0**
+and reusing it when the relevant components and distribution remain unchanged.
+This supersedes the application-version limits in the historical decisions
+below. A version bump alone requires neither renewed acceptance nor a repeated
+Microsoft licensing audit.
+
+The accepted scope remains the recorded MSVC 14.51.36231 / Windows SDK
+10.0.26100.0 startup/support code, the existing NSIS 3.09 binaries/plugins,
+and Windows x86-64 per-user installer and portable ZIP distribution. The
+application dynamically links the CRT; runtime DLLs remain user-supplied.
+Microsoft notices, recipient terms, downstream agreement responsibilities and
+all objective notice, source, binary, prerequisite and publication checks remain
+required. Grant interpretation and recipient-agreement effectiveness remain
+uncertain; this is not a new Microsoft grant or a finding of legal compliance.
+A known unmet mandatory condition remains a blocker.
+
+The existing `windows-crt` catalog decision now binds `scope_sha256` to the
+recorded Windows provenance and components, NSIS binary/source identities,
+packager version, Windows distribution configuration, runtime policy and
+installer templates. The separate `notice_sha256` still binds the exact
+Microsoft notice and recipient terms. Neither binding includes the application
+version or ordinary Rust dependency versions; their existing checks still apply.
+
+Material changes to the relevant MSVC/SDK toolchain, linked Microsoft
+components, NSIS binaries, redistribution model or applicable terms require a
+targeted reassessment of the affected inputs and risks before reuse. Investigate
+scope drift and update its binding only after that review; do not merely refresh
+the hash to clear a failure. Unchanged evidence and decisions carry forward.
+A nonmaterial change needs only a focused explanation, not renewed acceptance
+or a full audit. Fresh candidate linker and final-package checks remain required.
+
+Compared with v1.1.0, the recorded Microsoft/NSIS inputs, terms, runtime policy
+and Windows packaging configuration are unchanged. Rust 1.99.1 and 27 crate
+updates have separate retained license-evidence records; they do not establish
+fresh native Windows execution. No tag, push or publication is authorized here.
+
 ## Maintainer renewal — 2026-10-17
 
 During preparation of CodeConvoy **1.1.0**, the maintainer explicitly authorized

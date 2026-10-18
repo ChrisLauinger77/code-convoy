@@ -4,13 +4,15 @@
 
 `Cargo.toml` is the version authority. About, Windows resources, package
 metadata, bundle versions and final filenames derive from it. For this release
-it is `1.1.0`, with the prospective tag `v1.1.0`, without a prerelease suffix.
+it is `1.2.0`, with the prospective tag `v1.2.0`, without a prerelease suffix.
 This metadata prepares a candidate; packaging, licensing and native platform
 checks remain required before the maintainer authorizes any tag or publication.
 The [1.0.0 readiness report](release-readiness.md) records historical evidence.
-The maintainer [renewed the existing Windows licensing-risk acceptance for
-1.1.0](windows-licensing-decision.md#maintainer-renewal--2026-10-17), preserving
-the canonical component terms and all enforcement checks.
+The existing [component- and distribution-bound Windows licensing-risk
+decision](windows-licensing-decision.md#component-and-distribution-decision--2026-10-18)
+applies to 1.2.0. Reuse it for unchanged inputs; a version bump alone needs no
+renewed acceptance or repeated audit. Material changes require targeted
+reassessment. Preserve the component terms, residual uncertainty and all checks.
 
 `docs/release-notes.md` contains only the current release and its changes since
 the immediately previous version. Replace the previous release's content during
@@ -317,7 +319,7 @@ do not resolve the remaining source and license obligations in the audit.
 python3 packaging/build.py
 python3 packaging/build.py --probe
 python3 packaging/release.py linux
-xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-1.1.0-x86_64.AppImage
+xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-1.2.0-x86_64.AppImage
 ```
 
 On Windows, from a development shell with Python, Rust MSVC and Windows SDK:

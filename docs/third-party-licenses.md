@@ -132,7 +132,11 @@ legal compliance; `accepted_licensing_risks` records that distinct disposition.
 The [follow-up evidence record](license-blocker-evidence.md) documents the deeper
 investigation, exact binary/debug identities, newly recovered sources/notices
 and remaining requirements. The Windows CRT interpretation risk is accepted
-for 1.0.0 under the current documented decision. The `dispatch` notice blocker
+under the existing [component- and distribution-bound decision](windows-licensing-decision.md#component-and-distribution-decision--2026-10-18).
+Application version changes alone require no new acceptance or full Microsoft
+audit. Material MSVC/SDK, linked-component, NSIS, distribution or terms changes
+require targeted reassessment; all objective checks and residual uncertainty
+remain. The `dispatch` notice blocker
 is resolved under the documented interpretation of its explicit MIT declaration:
 the bundle now preserves its original manifest/author metadata and reproduces
 the standard MIT permission, condition and disclaimer, without inventing a

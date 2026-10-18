@@ -1,12 +1,12 @@
 # Antigravity CLI
 
-Antigravity CLI is an experimental backend in the current source. Published
-packages do not include it. CodeConvoy uses your local CLI installation and
-existing sign-in; it does not install Antigravity or manage accounts. Its
-headless protocol is implemented from Google's documentation and deterministic
-fixtures. An installed **agy 1.4.2** on macOS passed Check CLI, accepted every
-argument form CodeConvoy uses and failed real jobs at the sign-in gate as
-expected; authenticated tasks have not been tested. See the
+CodeConvoy 1.2.0 introduces Antigravity CLI as an experimental backend.
+Packages older than 1.2.0 do not include it. CodeConvoy uses your local CLI
+installation and existing sign-in; it does not install Antigravity or manage
+accounts. Its headless protocol is implemented from Google's documentation and
+deterministic fixtures. An installed **agy 1.4.2** on macOS passed Check CLI,
+accepted every argument form CodeConvoy uses and failed real jobs at the sign-in
+gate as expected; authenticated tasks have not been tested. See the
 [feasibility and validation record](antigravity-validation.md) and
 [release readiness](antigravity-readiness.md).
 

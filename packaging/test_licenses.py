@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -21,6 +22,7 @@ class LicenseEvidence(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         for name in ("Cargo.lock", "Cargo.toml", "packaging/appimage-tools.json", ".github/workflows/release.yml",
+                     "packaging/packager.json", "packaging/windows-installer.nsh",
                      "packaging/windows_crt.py",
                      "packaging/windows_runtime.py", "packaging/windows-runtime.json"):
             destination = self.root / name
@@ -133,7 +135,7 @@ class LicenseEvidence(unittest.TestCase):
     def test_accepted_risk_cannot_waive_missing_notices_or_new_obligations(self):
         original = copy.deepcopy(self.catalog)
         for mode, error in (("missing decision", "Untracked accepted"),
-                            ("stale version", "stale maintainer"),
+                            ("missing scope", "licensing-risk scope changed"),
                             ("changed terms", "reviewed component terms"),
                             ("empty conditions", "Malformed"),
                             ("also blocked", "Malformed"),
@@ -144,8 +146,8 @@ class LicenseEvidence(unittest.TestCase):
             risk = self.catalog["accepted_licensing_risks"][0]
             if mode == "missing decision":
                 self.catalog["accepted_licensing_risks"] = []
-            elif mode == "stale version":
-                risk["version"] = "0.0.0"
+            elif mode == "missing scope":
+                risk.pop("scope_sha256")
             elif mode == "changed terms":
                 risk["notice_sha256"] = "0" * 64
             elif mode == "empty conditions":
@@ -168,6 +170,44 @@ class LicenseEvidence(unittest.TestCase):
         with patch.object(licenses, "checked_catalog", return_value=checked):
             with self.assertRaisesRegex(ValueError, "new-source-obligation"):
                 licenses.require_release_ready()
+
+    def test_windows_decision_survives_application_version_changes(self):
+        path = self.root / "Cargo.toml"
+        original = path.read_text()
+        version = tomllib.loads(original)["package"]["version"]
+        decision = copy.deepcopy(self.catalog["accepted_licensing_risks"])
+        for next_version in ("1.2.1", "2.0.0"):
+            path.write_text(original.replace(f'version = "{version}"', f'version = "{next_version}"', 1))
+            self.check(release=True)
+            self.assertEqual(self.catalog["accepted_licensing_risks"], decision)
+
+    def test_windows_scope_changes_require_targeted_reassessment(self):
+        original = copy.deepcopy(self.catalog)
+        config_path = self.root / "packaging/packager.json"
+        config_text = config_path.read_text()
+        for mode in ("MSVC", "SDK", "linked component", "terms", "NSIS binary", "distribution"):
+            self.catalog = copy.deepcopy(original)
+            if mode in ("MSVC", "SDK"):
+                environment = self.catalog["native_provenance"]["windows_crt"]["dynamic_application_link_audit"]["toolchain"]["environment"]
+                environment["VCTOOLSVERSION" if mode == "MSVC" else "WINDOWSSDKVERSION"] = "changed toolchain"
+            elif mode == "linked component":
+                next(c for c in self.catalog["components"] if c["name"] == licenses.MICROSOFT_COMPONENT)["version"] += " changed"
+            elif mode == "terms":
+                self.catalog["native_provenance"]["windows_crt"]["terms_docx_sha256"] = "0" * 64
+            elif mode == "NSIS binary":
+                self.catalog["windows_installer_plugins"]["$PLUGINSDIR/System.dll"] = "0" * 64
+            else:
+                config = json.loads(config_text)
+                config["nsis"]["installMode"] = "perMachine"
+                config_path.write_text(json.dumps(config))
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "licensing-risk scope changed"):
+                self.check(release=True)
+            config_path.write_text(config_text)
+        self.catalog = original
+        template = self.root / "packaging/nsis/installer.nsi"
+        template.write_text(template.read_text() + "\n; changed installer\n")
+        with self.assertRaisesRegex(ValueError, "licensing-risk scope changed"):
+            self.check()
 
     def test_microsoft_notice_cannot_lose_its_component_or_source_binding(self):
         original = copy.deepcopy(self.catalog)

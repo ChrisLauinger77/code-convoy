@@ -17549,9 +17549,9 @@
   "accepted_licensing_risks": [
     {
       "id": "windows-crt",
-      "accepted_by": "CodeConvoy maintainer, explicit instruction of 2026-10-17",
-      "version": "1.1.0",
-      "decision": "docs/windows-licensing-decision.md#maintainer-renewal--2026-10-17",
+      "accepted_by": "CodeConvoy maintainer, explicit instruction of 2026-10-18",
+      "scope_sha256": "2375e056bfa60617e832bd628d49e75f3a5bbd2fe938351af01ac5632de2b7e9",
+      "decision": "docs/windows-licensing-decision.md#component-and-distribution-decision--2026-10-18",
       "detail": "Maintainer accepts the ordinary linked VC output interpretation without demanding an express grant for every startup object. Microsoft permission is not conclusively established. SDK linked-output coverage and all Microsoft conditions remain applicable. The Windows component terms and notice/conduct or existing-agreement arrangement implement recipient protection; their legal sufficiency and effectiveness remain uncertain, not proven by delivery. CPython, yt-dlp and Firefox are comparison evidence, not grants. No specifically identified contrary prohibition is waived. A known unmet mandatory condition must be recorded as a release blocker.",
       "conditions": "Preserve Microsoft ownership, conditions and operative component terms; provide conspicuous pre-use notice and an opportunity to review, require recipient/downstream agreement, and retain distributor undertakings. Preserve all objective notice, source, binary, prerequisite and package checks. Reassess affected terms or inputs when they change or a concrete contradictory fact is identified.",
       "notice_sha256": "f116aaae4987e94ef9ae1eb8b131cf69d6a64cffa21e688d4d74bfd85e3e366f"

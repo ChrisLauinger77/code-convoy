@@ -12,7 +12,7 @@ A local, native desktop task runner for coding-agent CLIs.
 
 **Write one task → choose an agent → select local Git repositories → run with a concurrency limit → inspect each result.**
 
-CodeConvoy is a native Rust/egui implementation with five independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
+CodeConvoy is a native Rust/egui implementation with six independent coding-agent backends. There is no web frontend, provider API integration, built-in terminal, or cloud service.
 
 Inspect saved execution outcomes, Git completion observations and validation results,
 then use **Copy Summary** or **Copy Repository Result** to share concise Markdown.
@@ -52,7 +52,7 @@ through the first convoy, Git review, manual validation and history.
 
 The guides describe the current source. Published packages can predate these
 changes; use their release notes and the dated verification records for exact
-version/platform evidence. Preparing 1.1.0 does not itself publish a new release.
+version/platform evidence. Preparing 1.2.0 does not itself publish a new release.
 
 ## Agent support
 
@@ -96,7 +96,7 @@ CodeConvoy neither bundles these runtimes nor downloads or installs them.
 The CodeConvoy installer stops with guidance if a required runtime is missing,
 old or unusable; silent/passive installation fails without a blocking dialog.
 Uninstallation requires the x86 runtime so it can safely check running processes.
-The 1.1.0 candidate installer uses native Windows APIs and requires only the x64
+The 1.2.0 candidate installer uses native Windows APIs and requires only the x64
 application runtime; its uninstaller needs no Visual C++ runtime. An upgrade
 that invokes the released 1.0.0 uninstaller still needs that uninstaller's x86
 runtime. The 1.0.0 downloads above are unchanged.
@@ -220,7 +220,7 @@ A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
-`./CodeConvoy-1.1.0-x86_64.AppImage --appimage-extract-and-run`.
+`./CodeConvoy-1.2.0-x86_64.AppImage --appimage-extract-and-run`.
 
 X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
 `libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,

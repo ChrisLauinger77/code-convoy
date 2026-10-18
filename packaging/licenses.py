@@ -162,6 +162,26 @@ def dependency_inputs(manifest):
             if key in manifest}
 
 
+def windows_risk_scope(root, catalog):
+    """Bind the existing decision to Windows inputs, independent of app versions."""
+    config = json.loads((root / "packaging/packager.json").read_text(encoding="utf-8"))
+    inputs = {
+        "components": [c for c in catalog["components"] if c["name"] in
+                       (MICROSOFT_COMPONENT, "NSIS installer stub, bundled plugins and LZMA decoder")],
+        "provenance": catalog["native_provenance"]["windows_crt"],
+        "plugins": catalog["windows_installer_plugins"],
+        "packager": catalog["inputs"]["packager"],
+        "nsis_sources": [s for s in catalog["sources"] if s["path"].startswith("sources/nsis-")],
+        "distribution": {key: value for key, value in config.items()
+                         if key not in ("deb", "macos", "icons", "category")},
+        "runtime": json.loads((root / "packaging/windows-runtime.json").read_text(encoding="utf-8")),
+        "installer": {name: digest((root / name).read_bytes()) for name in
+                      ("packaging/nsis/installer.nsi", "packaging/nsis/prerequisites.nsh",
+                       "packaging/windows-installer.nsh")},
+    }
+    return digest(json.dumps(inputs, sort_keys=True).encode())
+
+
 def checked_catalog(root=ROOT, evidence=EVIDENCE, *, release=False):
     catalog = json.loads((evidence / "catalog.json").read_text(encoding="utf-8"))
     texts = json.loads((evidence / "texts.json").read_text(encoding="utf-8"))
@@ -198,8 +218,8 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE, *, release=False):
     if (len(risk_ids) != len(risks) or risk_ids & blocker_ids
             or any(not all(item.get(key, "").strip() for key in
                            ("accepted_by", "decision", "detail", "conditions", "notice_sha256"))
-                   or item.get("version") != manifest["package"]["version"] for item in risks)):
-        raise ValueError("Malformed or stale maintainer licensing-risk decision")
+                   for item in risks)):
+        raise ValueError("Malformed maintainer licensing-risk decision")
     for key, text in texts.items():
         if not text.strip() or digest(text.encode()) != key:
             raise ValueError(f"Missing or altered notice text: {key}")
@@ -310,6 +330,10 @@ def checked_catalog(root=ROOT, evidence=EVIDENCE, *, release=False):
                    and c["version"] == package["version"] and c.get("checksum") == package["checksum"]
                    and c["notices"] for c in catalog["components"]):
             raise ValueError(f"Missing Rust standard-library notice coverage: {package['name']}")
+    for risk in risks:
+        if risk["id"] == "windows-crt" and risk.get("scope_sha256") != windows_risk_scope(root, catalog):
+            raise ValueError("Windows licensing-risk scope changed: reassess affected MSVC/SDK, "
+                             "Microsoft component, NSIS, distribution or terms inputs")
     return catalog, texts
 
 
