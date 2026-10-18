@@ -55,9 +55,10 @@ class LicenseEvidence(unittest.TestCase):
                 self.check()
 
     def test_feature_and_tool_changes_require_reaudit(self):
+        inputs = self.catalog["inputs"]
         for name, before, after in (("Cargo.toml", '[features]', '[features]\nlicense_test = []'),
-                                    (".github/workflows/release.yml", '1.99.0', '1.100.0'),
-                                    (".github/workflows/release.yml", '0.11.8', '0.11.9'),
+                                    (".github/workflows/release.yml", f'toolchain: "{inputs["rust"]}"', 'toolchain: "0.0.0"'),
+                                    (".github/workflows/release.yml", f'PACKAGER_VERSION: "{inputs["packager"]}"', 'PACKAGER_VERSION: "0.0.0"'),
                                     ("packaging/appimage-tools.json", '20251108', '20251109')):
             path = self.root / name
             original = path.read_text()

@@ -31,9 +31,11 @@ Rust library components**,
 with unresolved versions expressly marked. Rust's separate standard-library
 report covers **141 out-of-tree entries** plus in-tree exceptions; its complete
 upstream HTML is included, with those component/version/license entries indexed
-in the catalog. It was recovered from the checksum-verified Rust **1.99.0**
+in the catalog. It was recovered from the checksum-verified Rust **1.99.1**
 compiler distribution. That report conservatively includes tooling and targets
-beyond CodeConvoy; the compiler itself is not shipped in the application.
+beyond CodeConvoy; the compiler itself is not shipped in the application. The
+[1.99.1 review](rust-1.99.1-license-validation.md) records the verified archives
+and unchanged notice bytes.
 
 Cross-checking the verified `rust-src` distribution exposed omissions in that
 generated report: `compiler_builtins` and some versions in `library/Cargo.lock`
