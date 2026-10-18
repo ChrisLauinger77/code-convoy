@@ -54,7 +54,8 @@ and run:
 CODECONVOY_AGY=/path/to/agy CODECONVOY_AGY_AUTHENTICATED=1 cargo test --all-features --test antigravity authenticated_agy_completes_a_disposable_task -- --ignored --nocapture
 ```
 
-It makes one model call that creates one file in a temporary repository.
+It makes one model call that creates one file in a temporary repository and
+fails if the repository shows any other change, including untracked files.
 Record the agy version, platform, model, the native events in Raw output, the
 file change and the result. Also check configured versus approved tool
 behavior, `denied_actions`, `.agents/` customization loading, Stop and time

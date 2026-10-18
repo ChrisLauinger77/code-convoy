@@ -61,6 +61,19 @@ async fn repository(root: &Path) -> Repository {
     git::register(&path).await.unwrap()
 }
 
+/// Complete repository state, including untracked files, so unexpected
+/// changes beyond the requested ones fail the check.
+fn porcelain(repository: &Repository) -> String {
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(&repository.path)
+        .args(["status", "--porcelain", "--untracked-files=all"])
+        .output()
+        .unwrap();
+    assert!(status.status.success());
+    String::from_utf8(status.stdout).unwrap()
+}
+
 async fn run(
     repository: &Repository,
     prompt: &str,
@@ -149,13 +162,7 @@ async fn installed_agy_job_without_sign_in_fails_with_sign_in_guidance() {
         }
     }
     // agy wrote nothing into the registered checkout.
-    let status = Command::new("git")
-        .arg("-C")
-        .arg(&repository.path)
-        .args(["status", "--porcelain", "--untracked-files=all"])
-        .output()
-        .unwrap();
-    assert_eq!(String::from_utf8_lossy(&status.stdout), "");
+    assert_eq!(porcelain(&repository), "");
 }
 
 #[tokio::test]
@@ -181,8 +188,6 @@ async fn authenticated_agy_completes_a_disposable_task() {
             .trim(),
         "ok"
     );
-    assert_eq!(
-        fs::read_to_string(repository.path.join("tracked.txt")).unwrap(),
-        "base\n"
-    );
+    // Exactly the requested file was created; nothing else changed.
+    assert_eq!(porcelain(&repository), "?? codeconvoy-e2e.txt\n");
 }
