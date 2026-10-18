@@ -95,12 +95,39 @@ errors are shown in **Activity** without failing the job. Review **Activity**,
 Tasks that start with a slash command answered by the CLI, such as `/model`,
 end with an `ERROR` result in this transport.
 
+## Lifecycle and safety
+
+Antigravity jobs use the same scheduler, repository leases, worktrees and
+process supervision as every other backend; nothing is Antigravity-specific.
+
+- **Stop** and the optional time limit end the whole owned `agy` process tree,
+  including commands and background tasks it started, before the repository is
+  released. The job is Cancelled or Failed; edits are retained, nothing is rolled
+  back.
+- When `agy` exits, any process it left behind in the owned tree (for example a
+  background server) is stopped before the job finishes.
+- **Quit** cancels all running Antigravity jobs the same way and retains isolated
+  worktrees.
+- Every outcome (success, reported failure, authentication failure, malformed
+  output, interruption, time limit) releases its execution slot and repository
+  lease. A failure in one job does not affect other jobs or convoys.
+- Isolated jobs on the same repository run concurrently in separate checkouts;
+  direct access waits for them. Nested repositories never run concurrently.
+- **Retry** reuses the original permission and sandbox choices; CodeConvoy never
+  broadens them.
+
+Processes that deliberately leave the owned process tree (a new Unix session or
+process group) cannot be stopped by CodeConvoy; this is a general platform
+limitation. Antigravity runs a background auto-updater for which no headless
+opt-out is documented; whether it runs inside a CodeConvoy job is unverified.
+Antigravity's own subagent worktrees are managed by Antigravity; CodeConvoy
+neither creates nor removes them.
+
 ## Current limitations
 
 - Captured `agy --help` / `--version` output and authenticated runs are still
   missing; the protocol fixtures are documentation-derived.
 - Session continuation (`--continue`, `--conversation`) is not used. CodeConvoy
   retries and follow-ups start fresh convoys.
-- Background "daemon" tasks that Antigravity deliberately leaves running are
-  covered by CodeConvoy's process-tree cleanup only if they stay in the owned
-  process tree; lifecycle verification is pending.
+- Lifecycle behavior is verified with a fixture executable, not with real `agy`
+  processes; see [Lifecycle evidence](antigravity-validation.md#lifecycle-and-safety).

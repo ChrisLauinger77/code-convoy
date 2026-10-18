@@ -366,3 +366,7 @@ mod output;
 #[cfg(feature = "test-support")]
 #[path = "antigravity/execution.rs"]
 mod execution;
+
+#[cfg(feature = "test-support")]
+#[path = "antigravity/lifecycle.rs"]
+mod lifecycle;

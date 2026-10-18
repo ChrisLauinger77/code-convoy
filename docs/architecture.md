@@ -236,7 +236,7 @@ protection. Other backend timeout defaults remain unlimited. Native permission
 enforcement and full authenticated protocol compatibility remain unverified.
 See [Cursor evidence, tests and limitations](cursor-validation.md).
 
-### Antigravity foundation and execution (1.2 milestone, PRs 1–2)
+### Antigravity foundation, execution and lifecycle (1.2 milestone, PRs 1–3)
 
 Antigravity CLI is the sixth registered backend. Its additive persisted ID is
 `antigravity`. Discovery adds the `agy` launcher name to the shared directories.
@@ -253,7 +253,11 @@ The decoder requires one init, a consistent conversation ID and a final
 statuses, `AGY_ERROR`, authentication text and malformed or incomplete streams
 fail the job. Refused actions keep a successful status but are stated in the
 result detail. Scheduler, Git, process and other backend behavior are unchanged.
-See [contract, classification and unverified behavior](antigravity-validation.md).
+Lifecycle needs no Antigravity-specific handling: the shared process
+group/Job Object, leases and worktree ownership cover cancellation, quit,
+time limits, concurrency and processes `agy` leaves behind after exit; fixture
+evidence is recorded with the
+[contract, classification and unverified behavior](antigravity-validation.md).
 
 ## Scheduling and shutdown
 

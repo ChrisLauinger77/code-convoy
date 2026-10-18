@@ -37,7 +37,31 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("expected string content")?
         .to_owned();
     if let Some(json) = prompt.strip_prefix("codeconvoy-fixture-gate\n") {
-        return super::gate(json, &prompt, args, false, false);
+        let config: serde_json::Value = serde_json::from_str(json.lines().next().unwrap_or(json))?;
+        // A lock-holding descendant: awaited like a tool process, or left behind
+        // like a background "daemon" that outlives the agy process.
+        let mut child = if config["spawn_child"].as_bool() == Some(true)
+            || config["daemon"].as_bool() == Some(true)
+        {
+            let control = config["control"].as_str().ok_or("missing child control")?;
+            Some(
+                std::process::Command::new(std::env::current_exe()?)
+                    .args(["validation-child", control])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()?,
+            )
+        } else {
+            None
+        };
+        let result = super::gate(json, &prompt, args, false, false);
+        if config["daemon"].as_bool() != Some(true)
+            && let Some(child) = child.as_mut()
+        {
+            let _ = child.wait()?;
+        }
+        return result;
     }
     std::fs::write("agent-input", &prompt)?;
     std::fs::write("antigravity-args", serde_json::to_vec(&args[1..])?)?;
@@ -122,6 +146,13 @@ pub fn text(text: &str) {
     println!(
         "{}",
         json!({"event":"step_update","step_update":{"conversation_id":CONVERSATION,"step_index":1,"state":"DONE","step_type":"agent_response","text_delta":format!("{text}\n")}})
+    );
+}
+
+pub fn active_tool() {
+    println!(
+        "{}",
+        json!({"event":"step_update","step_update":{"conversation_id":CONVERSATION,"step_index":2,"state":"ACTIVE","step_type":"tool","tool_name":"run_command"}})
     );
 }
 

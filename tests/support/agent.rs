@@ -378,6 +378,24 @@ fn gate(
         }
     }
     if antigravity {
+        match config["antigravity_outcome"].as_str() {
+            Some("missing_auth") => {
+                eprintln!("Error: authentication required. Run agy in a terminal to sign in.");
+                std::process::exit(1);
+            }
+            Some("interrupted") => {
+                antigravity::result("INTERRUPTED", "", None);
+                std::process::exit(130);
+            }
+            Some("malformed") => {
+                println!("{{broken JSON");
+                return Ok(());
+            }
+            Some("incomplete") => return Ok(()),
+            Some("active_step") => antigravity::active_tool(),
+            Some("agy_error") => eprintln!("AGY_ERROR: {{\"status\":\"UNAVAILABLE\"}}"),
+            _ => {}
+        }
         antigravity::result("SUCCESS", "", None);
     } else if cursor {
         match config["cursor_outcome"].as_str() {

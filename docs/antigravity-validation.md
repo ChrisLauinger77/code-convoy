@@ -144,6 +144,34 @@ same shapes from the test executable for process-level scenarios: success,
 authentication failure, `ERROR` with exit 3 and with exit 0, interruption,
 malformed and incomplete output, refused actions, edits and a different `cwd`.
 
+## Lifecycle and safety
+
+Checked on **2026-10-18** with the test executable's `agy` mode through the real
+`RunManager`, leases, worktrees and process supervision
+(`tests/antigravity/lifecycle.rs`). No Antigravity-specific process handling was
+added; the shared infrastructure covered every scenario.
+
+| Scenario | Verified behavior |
+| --- | --- |
+| Success, `ERROR` (exit 0), authentication failure, malformed, incomplete, `INTERRUPTED`, unfinished step, `AGY_ERROR`; Direct and Isolated | One start per job, the reported diagnostic, isolated result retained at the fixed base with the source unchanged, default flags never widened, slot and lease released for the next job |
+| Stop during a tool process | Tool descendant stopped before a nested repository is admitted; unrelated peer keeps running |
+| Two isolated jobs on one repository | Separate checkouts reported as `cwd`, independent edits; Direct access waits for both |
+| Quit | Both Antigravity process trees cancelled, isolated evidence retained |
+| Time limit | Failed after confirmed cleanup of the tool descendant; repository released; edits retained |
+| Background process left by a successful run | Stopped before the job finishes, in Direct and Isolated modes |
+| Retry of a failed job | Original `configured` permissions and sandbox reused; no widening flags |
+
+Changelog facts relevant to cleanup: 1.2.9 made headless runs terminate daemon
+background processes when the run ends; 1.1.28 and 1.2.6 describe daemon
+background tasks being left running in earlier releases. CodeConvoy stops any
+such process that remains in the owned process group or Windows Job Object
+after `agy` exits. A process that starts a new Unix session or group escapes
+that cleanup (general limitation in [architecture](architecture.md)).
+
+Runner edge cases that do not depend on the backend (event backpressure, delayed
+or refused cancellation, unconfirmed cleanup) remain covered by the Cursor and
+core suites rather than duplicated here.
+
 ## Unverified
 
 - `agy --help` text from an installed 1.2.16+ release.
@@ -157,6 +185,14 @@ malformed and incomplete output, refused actions, edits and a different `cwd`.
   the guide's five-minute or the changelog's unlimited default applies to
   stdin stream-json sessions.
 - Whether `init.cwd` reports a linked worktree path or its main repository.
+- Real `agy` process trees: whether Remote Control, the Antigravity Hub or the
+  background auto-updater (1.1.6 changelog) start inside a CodeConvoy job, and
+  whether stopping one mid-update is safe. No headless auto-update opt-out is
+  documented, so CodeConvoy passes none.
+- Concurrent headless `agy` processes sharing one sign-in, keyring and
+  conversation store.
+- Antigravity subagent worktrees (`.system_generated/worktrees`) and their effect
+  on a repository's Git worktree list.
 - Concurrent headless instances sharing one sign-in and conversation store.
 - Process-tree cancellation leaving no daemon (fixed in 1.2.9 according to the
   changelog).
