@@ -2,7 +2,6 @@
 import hashlib
 import json
 from pathlib import Path
-import subprocess
 import tempfile
 import tomllib
 import unittest
@@ -67,11 +66,14 @@ class ReleaseGates(unittest.TestCase):
                             release.verify_windows_zip(archive, exe)
 
     def test_installer_and_app_ship_license_as_resource(self):
-        rust = licenses.checked_catalog()[0]["inputs"]["rust"]
-        compiler = subprocess.CompletedProcess([], 0, f"rustc {rust} (fixture)\n")
         with tempfile.TemporaryDirectory() as temporary, patch.object(release, "run"), \
                 patch("windows_crt.configure_installer"), patch.object(licenses, "BUNDLE", Path(temporary) / "notices"), \
-                patch.object(licenses.subprocess, "run", return_value=compiler):
+                patch.object(licenses, "prepare", return_value=licenses.BUNDLE):
+            # Test resource delivery with the reviewed evidence fixture. Current
+            # dependency versions need not match it until release preparation.
+            licenses.BUNDLE.mkdir()
+            for name, contents in licenses.materials().items():
+                (licenses.BUNDLE / name).write_bytes(contents)
             work = Path(temporary)
             microsoft_notice = (licenses.EVIDENCE / licenses.MICROSOFT_NOTICE).read_bytes()
             for format_name in ("app", "nsis"):

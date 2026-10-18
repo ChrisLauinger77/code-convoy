@@ -24,7 +24,7 @@ the intended 1.x boundaries without promising support for every CLI or desktop.
 ## Build prerequisites
 
 `Cargo.toml` declares Rust **1.95** as the minimum. Normal CI uses current stable
-Rust; the release workflow pins **1.99.0**. There is no separate minimum-toolchain
+Rust; the release workflow pins **1.99.1**. There is no separate minimum-toolchain
 CI job, so the manifest floor is not evidence that every dependency update has
 been tested on 1.95. Use stable Rust with `rustfmt` and `clippy` for development,
 and the release pin when reproducing candidate builds. Keep `Cargo.lock` intact.
@@ -143,23 +143,29 @@ The project and original icon artwork use [MIT](LICENSE); see
 license. Keep dependencies conservative and explain additions or feature changes.
 Do not assume dependencies or packaged tools inherit CodeConvoy's MIT license.
 
-For dependency changes, inspect the resolved `Cargo.lock` graph with
-`cargo metadata --locked --format-version 1` and review each new crate's license
-expression, license files and bundled assets in its actual source. Include
-target-specific/transitive dependencies, fonts, native libraries and packaging
-tools. Preserve required notices when redistributing them. The AppImage runtime
-and `linuxdeploy` pins live in `packaging/appimage-tools.json`; their upstream
-licenses need review when pins or payloads change. Run
-`python3 packaging/licenses.py check` and the packaging tests after any change.
-The inventory gate detects unreviewed lockfile, feature and toolchain changes;
-it does not replace review of license terms and actual bundled contents.
+For dependency changes, run `python3 packaging/licenses.py check-dependencies`.
+It checks current Cargo license declarations across all targets/features.
+Routine updates using supported permissive choices do not require catalog edits
+or a repeat of the historical audit. New/changed copyleft, restricted, custom or
+unknown terms require review of the affected component's actual source, notices
+and obligations. Checksum-bound font/MPL reviews need targeted updates when
+their inputs change. Run `python3 packaging/licenses.py check` and the packaging
+tests to verify retained evidence. Exact lockfile/catalog and dependency/feature
+coverage synchronization is required during release preparation only.
+
+Preserve required notices when redistributing components. The AppImage runtime
+and `linuxdeploy` pins live in `packaging/appimage-tools.json`; review affected
+provenance when build tools, bundled assets/native code, runtime sources or
+redistribution obligations change. The declaration policy does not replace
+checking actual notice/source delivery in final packages.
 
 The current graph includes `epaint_default_fonts` with OFL/Ubuntu font license
 terms in addition to MIT/Apache, Unicode-licensed crates, and `option-ext` under
 MPL-2.0. The font crate embeds its font bytes in the application. Packaging
 installs the project `LICENSE` and the reviewed third-party notice/source bundle.
-Follow [the inventory update procedure](docs/third-party-licenses.md#updating-the-audit)
-when dependencies or packaging inputs change. Resolve the documented native
+Follow [the release-material update procedure](docs/third-party-licenses.md#refreshing-release-materials)
+when preparing releases, and the [maintenance policy](docs/third-party-licenses.md#ordinary-ci-and-release-validation)
+for ordinary PRs. Resolve documented native
 source/license blockers before publication; do not remove blockers merely to
 make the release gate pass. Passing checks is not certification of compliance.
 

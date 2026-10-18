@@ -1,4 +1,4 @@
-"""Offline, reviewed third-party evidence and final-package omission gates."""
+"""Dependency obligation policy, reviewed evidence and final-package omission gates."""
 import argparse
 import hashlib
 import io
@@ -18,6 +18,110 @@ FILES = ("THIRD-PARTY-NOTICES.txt", "THIRD-PARTY-INVENTORY.json",
          "THIRD-PARTY-SOURCES.zip", "RUST-STDLIB-LICENSES.html")
 MICROSOFT_NOTICE = "MICROSOFT-DISTRIBUTABLE-CODE.txt"
 MICROSOFT_COMPONENT = "Microsoft CRT startup / Windows SDK support code"
+# Known notice-only choices already present in the reviewed inventory. Other
+# terms need a component-specific review, never a blanket copyleft exception.
+NOTICE_LICENSES = {"MIT", "Apache-2.0", "0BSD", "BSD-2-Clause", "BSD-3-Clause",
+                   "ISC", "Zlib", "BSL-1.0", "Unlicense", "Unicode-3.0"}
+
+
+def notice_only(expression):
+    """Recognize a supported SPDX choice; unknown/malformed terms fail closed.
+
+    AND is cumulative, OR permits a supported choice, and WITH binds to its
+    license. Cargo's historical slash separator means OR. This deliberately
+    small policy is not an SPDX database or a legal compliance assessment.
+    """
+    expression = (expression or "").replace("/", " OR ")
+    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9.+-]*|[()]", expression)
+    if "".join(tokens) != re.sub(r"\s+", "", expression):
+        return False
+    position = 0
+
+    def take(token):
+        nonlocal position
+        if position < len(tokens) and tokens[position] == token:
+            position += 1
+            return True
+        return False
+
+    def term():
+        nonlocal position
+        if take("("):
+            result = choice()
+            if not take(")"):
+                raise ValueError("Unclosed license expression")
+            return result
+        if position == len(tokens) or tokens[position] in ("AND", "OR", "WITH", ")"):
+            raise ValueError("Missing license identifier")
+        license = tokens[position]
+        position += 1
+        if take("WITH"):
+            if position == len(tokens) or tokens[position] in ("AND", "OR", "WITH", "(", ")"):
+                raise ValueError("Missing exception")
+            exception = tokens[position]
+            position += 1
+            return (license, exception) == ("Apache-2.0", "LLVM-exception")
+        return license in NOTICE_LICENSES
+
+    def cumulative():
+        result = term()
+        while take("AND"):
+            other = term()
+            result = result and other
+        return result
+
+    def choice():
+        result = cumulative()
+        while take("OR"):
+            other = cumulative()
+            result = result or other
+        return result
+
+    try:
+        result = choice()
+        return position == len(tokens) and result
+    except ValueError:
+        return False
+
+
+def check_dependencies(metadata, catalog, lock):
+    """Check current Cargo declarations without synchronizing the audit snapshot.
+
+    Metadata must include all targets/features. Nonstandard terms (currently
+    fonts and MPL) may reuse only the exact checksum-reviewed component.
+    """
+    if not metadata.get("resolve") or not metadata["resolve"].get("root"):
+        raise ValueError("License policy requires resolved Cargo metadata, including dependencies")
+    package_ids = {p["id"] for p in metadata["packages"]}
+    if (metadata["resolve"]["root"] not in package_ids
+            or package_ids != {n["id"] for n in metadata["resolve"]["nodes"]}):
+        raise ValueError("License policy requires complete resolved Cargo metadata")
+    locked = {(p["name"], p["version"], p.get("source")): p.get("checksum") for p in lock["package"]}
+    reviewed = {(p["name"], p["version"], p["source"], p["checksum"], p["license"])
+                for p in catalog["crates"]}
+    problems = []
+    for package in metadata["packages"]:
+        if package["id"] == metadata["resolve"]["root"]:
+            continue
+        identity = (package["name"], package["version"], package["source"])
+        checksum = locked.get(identity)
+        expression = package.get("license")
+        if not checksum:
+            problems.append(f"{package['name']} {package['version']}: source has no reviewed registry checksum")
+        elif not notice_only(expression) and (*identity, checksum, expression) not in reviewed:
+            problems.append(f"{package['name']} {package['version']}: review changed/new license obligations "
+                            f"({expression or 'unknown / license-file only'}) and required notices/sources")
+    if problems:
+        raise ValueError("Dependency license review required:\n" + "\n".join(problems))
+
+
+def current_dependencies(root=ROOT, evidence=EVIDENCE):
+    catalog, _ = checked_catalog(root, evidence)
+    metadata = json.loads(subprocess.run(
+        ["cargo", "metadata", "--locked", "--all-features", "--format-version", "1"],
+        cwd=root, check=True, stdout=subprocess.PIPE, text=True).stdout)
+    lock = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
+    check_dependencies(metadata, catalog, lock)
 
 
 def digest(data):
@@ -58,19 +162,27 @@ def dependency_inputs(manifest):
             if key in manifest}
 
 
-def checked_catalog(root=ROOT, evidence=EVIDENCE):
+def checked_catalog(root=ROOT, evidence=EVIDENCE, *, release=False):
     catalog = json.loads((evidence / "catalog.json").read_text(encoding="utf-8"))
     texts = json.loads((evidence / "texts.json").read_text(encoding="utf-8"))
     if catalog["schema"] != 1:
         raise ValueError("Unsupported license inventory schema")
-    lock = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
-    expected = {(p["name"], p["version"], p.get("checksum")) for p in lock["package"] if p.get("source")}
-    actual = [(p["name"], p["version"], p["checksum"]) for p in catalog["crates"]]
-    if len(actual) != len(set(actual)) or set(actual) != expected:
-        raise ValueError("Cargo.lock changed: review the third-party license inventory")
+    actual = [(p["name"], p["version"], p["source"], p["checksum"]) for p in catalog["crates"]]
+    if len(actual) != len(set(actual)):
+        raise ValueError("Duplicate crate in third-party license inventory")
+    if release:
+        lock = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
+        expected = {(p["name"], p["version"], p["source"], p.get("checksum"))
+                    for p in lock["package"] if p.get("source")}
+        if set(actual) != expected:
+            raise ValueError("Release notice inventory differs from Cargo.lock: refresh affected crate entries "
+                             "and notices with collect_licenses.py; unchanged provenance reviews carry forward")
     manifest = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
-    if digest(json.dumps(dependency_inputs(manifest), sort_keys=True).encode()) != catalog["inputs"]["dependencies_sha256"]:
-        raise ValueError("Cargo dependencies/features changed: review license target coverage")
+    # Release snapshots still record target coverage. Ordinary CI checks current
+    # declarations instead; a requirement-string/feature edit is not an audit.
+    if (release and digest(json.dumps(dependency_inputs(manifest), sort_keys=True).encode())
+            != catalog["inputs"]["dependencies_sha256"]):
+        raise ValueError("Release dependency inputs changed: refresh notice target coverage for affected crates")
     if digest((root / "packaging/appimage-tools.json").read_bytes()) != catalog["inputs"]["appimage_tools_sha256"]:
         raise ValueError("AppImage tools changed: review bundled licenses and sources")
     workflow = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
@@ -237,7 +349,7 @@ def materials(root=ROOT, evidence=EVIDENCE):
 
 
 def prepare():
-    catalog, _ = checked_catalog()
+    catalog, _ = checked_catalog(release=True)
     compiler = subprocess.run(["rustc", "--version"], check=True, capture_output=True, text=True).stdout.split()
     if len(compiler) < 2 or compiler[:2] != ["rustc", catalog["inputs"]["rust"]]:
         raise ValueError("Packaging compiler differs from the audited Rust standard-library version")
@@ -326,21 +438,24 @@ def verify_windows_installer(archive, work, exe):
 
 
 def require_release_ready():
-    catalog, _ = checked_catalog()
+    catalog, _ = checked_catalog(release=True)
     if catalog["release_blockers"]:
         raise ValueError("Third-party license release blockers remain: " + ", ".join(p["id"] for p in catalog["release_blockers"]))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("check", "prepare", "release-ready", "verify"))
+    parser.add_argument("command", choices=("check", "check-dependencies", "prepare", "release-ready", "verify"))
     parser.add_argument("directory", nargs="?", type=Path)
     args = parser.parse_args()
     if args.command == "check":
         inventory, _ = checked_catalog()
-        print(f"License inventory checked: {len(inventory['crates'])} locked crates; "
+        print(f"License evidence checked: {len(inventory['crates'])} reviewed crate entries; "
               f"{len(inventory['release_blockers'])} unresolved release obligations; "
               f"{len(inventory.get('accepted_licensing_risks', []))} maintainer-accepted licensing risks")
+    elif args.command == "check-dependencies":
+        current_dependencies()
+        print("Current dependency license choices checked; no inventory refresh required for notice-only updates.")
     elif args.command == "prepare":
         print(prepare())
     elif args.command == "release-ready":
