@@ -93,6 +93,7 @@ optional `error` and `usage`.
 | `AGY_ERROR` line on stderr | Failed |
 | Non-zero exit | Failed, even after a `SUCCESS` result |
 | Invalid/unknown/oversized record, missing payload, changed conversation ID, duplicate init, `cwd` not the assigned checkout | Failed |
+| Result `error` that is present but not a string, or a non-empty error on a `SUCCESS` result | Failed |
 | `SUCCESS` result while any step (tool, streamed response or other type) is still `ACTIVE` without its `DONE`, or more than 1,024 unfinished steps | Failed |
 | No init, no result, or step activity after the last result | Failed (incomplete) |
 | `denied_actions` present | Succeeded; the detail and Activity name the refused count |

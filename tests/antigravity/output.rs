@@ -80,6 +80,10 @@ fn zero_exit_requires_initialization_consistent_identity_and_a_success_result() 
         (4, "/result/num_turns", json!(0)),
         (4, "/result/num_turns", json!(null)),
         (4, "/result/error", json!("success with an error")),
+        (4, "/result/error", json!({"message": "structured error"})),
+        (4, "/result/error", json!(["error"])),
+        (4, "/result/error", json!(1)),
+        (4, "/result/error", json!(false)),
         (4, "/event", json!("future_event")),
     ] {
         let mut changed = records.clone();
@@ -88,6 +92,17 @@ fn zero_exit_requires_initialization_consistent_identity_and_a_success_result() 
         let (status, detail, _) = outcome(&join(&changed), "", 0);
         assert_eq!(status, JobStatus::Failed, "{pointer}={value}: {detail}");
     }
+    // An absent or empty error remains a consistent successful result.
+    let mut empty_error = records.clone();
+    empty_error[4]["result"]["error"] = json!("");
+    assert_eq!(outcome(&join(&empty_error), "", 0).0, JobStatus::Succeeded);
+    let mut structured = records.clone();
+    structured[4]["result"]["error"] = json!({"message": "structured error"});
+    assert!(
+        outcome(&join(&structured), "", 0)
+            .1
+            .contains("non-string error")
+    );
     // A non-zero exit fails even after a SUCCESS result.
     let (status, detail, _) = outcome(SUCCESS, "", 1);
     assert_eq!(status, JobStatus::Failed);

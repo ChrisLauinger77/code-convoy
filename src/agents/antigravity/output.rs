@@ -250,7 +250,15 @@ impl AntigravityOutput {
             self.conversation(&result["conversation_id"]);
         }
         let status = result["status"].as_str().unwrap_or("");
-        let error = result["error"].as_str().unwrap_or("").trim();
+        // The documented error field is a string, present only on failure.
+        let error = match &result["error"] {
+            Value::Null => "",
+            Value::String(error) => error.trim(),
+            _ => {
+                self.invalid("Antigravity result has a non-string error");
+                ""
+            }
+        };
         self.observe_diagnostic(error);
         if !result["response"].is_string() || result["num_turns"].as_u64().is_none() {
             self.invalid("Antigravity result is missing its response or turn count");
