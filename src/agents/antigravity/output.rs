@@ -236,10 +236,16 @@ impl AntigravityOutput {
                 .unwrap_or("tool"),
         );
         if !done {
-            if self.started_tools.len() < STEP_LIMIT && self.started_tools.insert(index) {
-                return format!("[CodeConvoy] Antigravity tool started: {name}.\n");
+            if self.started_tools.contains(&index) {
+                return String::new();
             }
-            return String::new();
+            // Untracked steps could hide an unfinished tool, so overflow fails.
+            if self.started_tools.len() >= STEP_LIMIT {
+                self.invalid("Too many unfinished Antigravity tool steps");
+                return String::new();
+            }
+            self.started_tools.insert(index);
+            return format!("[CodeConvoy] Antigravity tool started: {name}.\n");
         }
         self.started_tools.remove(&index);
         if info["error"].is_object() {
@@ -272,6 +278,10 @@ impl AntigravityOutput {
         if status == "SUCCESS" {
             if !error.is_empty() || result["num_turns"].as_u64() == Some(0) {
                 self.invalid("Antigravity reported an inconsistent successful result");
+            }
+            // ACTIVE means still running; a finished turn cannot have one left.
+            if !self.started_tools.is_empty() {
+                self.invalid("Antigravity reported success while a tool step was still active");
             }
         } else {
             self.failed.get_or_insert_with(|| {

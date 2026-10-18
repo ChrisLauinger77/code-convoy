@@ -90,6 +90,7 @@ optional `error` and `usage`.
 | `AGY_ERROR` line on stderr | Failed |
 | Non-zero exit | Failed, even after a `SUCCESS` result |
 | Invalid/unknown/oversized record, missing payload, changed conversation ID, duplicate init, `cwd` not the assigned checkout | Failed |
+| `SUCCESS` result while a tool step is still `ACTIVE` (no `DONE`), or more than 1,024 unfinished tool steps | Failed |
 | No init, no result, or step activity after the last result | Failed (incomplete) |
 | `denied_actions` present | Succeeded; the detail and Activity name the refused count |
 | `tool_info.error` | Shown in Activity; not fatal (Antigravity treats benign tool errors as non-fatal since 1.1.20) |
