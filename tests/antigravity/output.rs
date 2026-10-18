@@ -220,26 +220,45 @@ fn refused_actions_and_recoverable_tool_errors_stay_visible_on_success() {
 }
 
 #[test]
-fn success_is_rejected_while_a_tool_step_is_still_active() {
+fn success_is_rejected_while_any_step_is_still_active() {
     let records = lines(SUCCESS);
     let conversation = records[0]["conversation_id"].clone();
-    let tool = |index: u64, state: &str| json!({"event":"step_update","step_update":{"conversation_id":conversation,"step_index":index,"state":state,"step_type":"tool","tool_name":"run_command"}});
-    let mut active = records.clone();
-    active.insert(2, tool(7, "ACTIVE"));
-    let (status, detail, _) = outcome(&join(&active), "", 0);
-    assert_eq!(status, JobStatus::Failed);
-    assert!(detail.contains("tool step was still active"), "{detail}");
-    // Repeated ACTIVE updates for one step finish with its single DONE update.
-    let mut finished = records.clone();
-    for (offset, state) in ["ACTIVE", "ACTIVE", "DONE"].into_iter().enumerate() {
-        finished.insert(2 + offset, tool(7, state));
+    let step = |index: u64, state: &str, kind: &str| {
+        let mut step = json!({"event":"step_update","step_update":{"conversation_id":conversation,"step_index":index,"state":state,"step_type":kind}});
+        if kind == "tool" {
+            step["step_update"]["tool_name"] = json!("run_command");
+        } else if kind == "agent_response" {
+            step["step_update"]["text_delta"] = json!("partial ");
+        }
+        step
+    };
+    for kind in [
+        "tool",
+        "agent_response",
+        "user_input",
+        "checkpoint",
+        "future_step",
+    ] {
+        let mut active = records.clone();
+        active.insert(2, step(7, "ACTIVE", kind));
+        let (status, detail, _) = outcome(&join(&active), "", 0);
+        assert_eq!(status, JobStatus::Failed, "{kind}");
+        assert!(detail.contains("step was still active"), "{kind}: {detail}");
+        // Repeated ACTIVE updates for one step finish with its single DONE update.
+        let mut finished = records.clone();
+        for (offset, state) in ["ACTIVE", "ACTIVE", "DONE"].into_iter().enumerate() {
+            finished.insert(2 + offset, step(7, state, kind));
+        }
+        let (status, detail, text) = outcome(&join(&finished), "", 0);
+        assert_eq!(status, JobStatus::Succeeded, "{kind}: {detail}");
+        if kind == "tool" {
+            assert_eq!(text.matches("tool started: run_command").count(), 1);
+        }
     }
-    let (status, detail, _) = outcome(&join(&finished), "", 0);
-    assert_eq!(status, JobStatus::Succeeded, "{detail}");
     // More unfinished steps than can be tracked cannot be accepted silently.
     let mut overflow = records[..2].to_vec();
-    overflow.extend((0..1025).map(|index| tool(100 + index, "ACTIVE")));
-    overflow.extend((0..1025).map(|index| tool(100 + index, "DONE")));
+    overflow.extend((0..1025).map(|index| step(100 + index, "ACTIVE", "tool")));
+    overflow.extend((0..1025).map(|index| step(100 + index, "DONE", "tool")));
     overflow.extend_from_slice(&records[2..]);
     let (status, detail, _) = outcome(&join(&overflow), "", 0);
     assert_eq!(status, JobStatus::Failed);

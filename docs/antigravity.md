@@ -75,8 +75,8 @@ A job **succeeds** only when all of these hold:
 - every event uses the same conversation ID;
 - the stream ends with a `result` whose status is `SUCCESS`, and every earlier
   result is also `SUCCESS`;
-- no tool step reported as `ACTIVE` is left without its `DONE` update when a
-  `SUCCESS` result arrives;
+- no step of any type (tool, streamed response or other) reported as `ACTIVE`
+  is left without its `DONE` update when a `SUCCESS` result arrives;
 - every record is valid JSON within 1 MiB;
 - the process exits zero, and stderr reports no `AGY_ERROR` or authentication
   failure.

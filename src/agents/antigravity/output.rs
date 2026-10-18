@@ -35,7 +35,8 @@ pub(super) struct AntigravityOutput {
     denied: usize,
     denied_unrecognized: bool,
     streamed: bool,
-    started_tools: BTreeSet<u64>,
+    // Steps reported ACTIVE that have not yet reported DONE, of any type.
+    active_steps: BTreeSet<u64>,
 }
 
 impl AntigravityOutput {
@@ -183,6 +184,19 @@ impl AntigravityOutput {
                 return "[CodeConvoy] Invalid Antigravity step state; see Raw output.\n".into();
             }
         };
+        // ACTIVE means still running for every step type, including streamed
+        // responses; untracked steps could hide one, so overflow fails.
+        let started = if done {
+            self.active_steps.remove(&index);
+            false
+        } else if self.active_steps.contains(&index) {
+            false
+        } else if self.active_steps.len() >= STEP_LIMIT {
+            self.invalid("Too many unfinished Antigravity steps");
+            false
+        } else {
+            self.active_steps.insert(index)
+        };
         let kind = step["step_type"].as_str().unwrap_or("");
         let mut text = String::new();
         if !step["text_delta"].is_null() {
@@ -201,7 +215,7 @@ impl AntigravityOutput {
                 text.push_str("[CodeConvoy] Antigravity received the task.\n");
             }
             "user_input" => {}
-            "tool" => text.push_str(&self.tool(index, done, step)),
+            "tool" => text.push_str(&tool(done, started, step)),
             "" => self.invalid("Missing Antigravity step type"),
             other => text.push_str(&format!(
                 "[CodeConvoy] Antigravity step: {}; details in Raw output.\n",
@@ -227,40 +241,6 @@ impl AntigravityOutput {
         }
         text
     }
-    fn tool(&mut self, index: u64, done: bool, step: &Value) -> String {
-        let info = &step["tool_info"];
-        let name = short(
-            step["tool_name"]
-                .as_str()
-                .or_else(|| info["name"].as_str())
-                .unwrap_or("tool"),
-        );
-        if !done {
-            if self.started_tools.contains(&index) {
-                return String::new();
-            }
-            // Untracked steps could hide an unfinished tool, so overflow fails.
-            if self.started_tools.len() >= STEP_LIMIT {
-                self.invalid("Too many unfinished Antigravity tool steps");
-                return String::new();
-            }
-            self.started_tools.insert(index);
-            return format!("[CodeConvoy] Antigravity tool started: {name}.\n");
-        }
-        self.started_tools.remove(&index);
-        if info["error"].is_object() {
-            // Antigravity reports recoverable tool errors without failing the run.
-            return format!(
-                "[CodeConvoy] Antigravity tool failed: {name} · {}; details in Raw output.\n",
-                short(info["error"]["message"].as_str().unwrap_or("no message"))
-            );
-        }
-        let detail = info["parameters"]["CommandLine"]
-            .as_str()
-            .map(|command| format!(" · {}", short(command)))
-            .unwrap_or_default();
-        format!("[CodeConvoy] Antigravity tool: {name}{detail}; details in Raw output.\n")
-    }
     fn result(&mut self, result: &Value) -> String {
         self.results += 1;
         self.unfinished = false;
@@ -280,8 +260,8 @@ impl AntigravityOutput {
                 self.invalid("Antigravity reported an inconsistent successful result");
             }
             // ACTIVE means still running; a finished turn cannot have one left.
-            if !self.started_tools.is_empty() {
-                self.invalid("Antigravity reported success while a tool step was still active");
+            if !self.active_steps.is_empty() {
+                self.invalid("Antigravity reported success while a step was still active");
             }
         } else {
             self.failed.get_or_insert_with(|| {
@@ -492,6 +472,34 @@ impl AgentOutput for AntigravityOutput {
     }
 }
 
+fn tool(done: bool, started: bool, step: &Value) -> String {
+    let info = &step["tool_info"];
+    let name = short(
+        step["tool_name"]
+            .as_str()
+            .or_else(|| info["name"].as_str())
+            .unwrap_or("tool"),
+    );
+    if !done {
+        return if started {
+            format!("[CodeConvoy] Antigravity tool started: {name}.\n")
+        } else {
+            String::new()
+        };
+    }
+    if info["error"].is_object() {
+        // Antigravity reports recoverable tool errors without failing the run.
+        return format!(
+            "[CodeConvoy] Antigravity tool failed: {name} · {}; details in Raw output.\n",
+            short(info["error"]["message"].as_str().unwrap_or("no message"))
+        );
+    }
+    let detail = info["parameters"]["CommandLine"]
+        .as_str()
+        .map(|command| format!(" · {}", short(command)))
+        .unwrap_or_default();
+    format!("[CodeConvoy] Antigravity tool: {name}{detail}; details in Raw output.\n")
+}
 fn valid_id(id: &str) -> bool {
     !id.trim().is_empty() && id.len() <= 256 && !id.chars().any(char::is_control)
 }
