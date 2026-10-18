@@ -169,6 +169,41 @@ The installed release passes the opt-in test
 `installed_agy_passes_check_cli` (`CODECONVOY_AGY=/path/to/agy cargo test
 --all-features --test antigravity installed_agy_passes_check_cli -- --ignored`).
 
+## Argument syntax and end-to-end jobs
+
+Checked on **2026-10-18** with the same isolated, never signed-in agy 1.4.2.
+
+Every argument form CodeConvoy produces passed agy's flag parser and stopped at
+the authentication gate (exit 1, the `ERROR` result above):
+
+| Arguments after `--input-format stream-json --output-format stream-json` | Result |
+| --- | --- |
+| none | Authentication gate |
+| `--model=gemini-3.8-flash-medium --effort=high` | Authentication gate |
+| `--dangerously-skip-permissions --sandbox` | Authentication gate |
+| all of the above | Authentication gate |
+| `--model=--literal;$(no shell)` (value starting with `--`, shell syntax as data) | Authentication gate |
+| `--effort=extreme` (invalid value) | Authentication gate; values are checked only after sign-in, CodeConvoy offers fixed choices |
+| `--definitely-not-a-flag` | Exit 2, `flags provided but not defined`, usage on stderr |
+
+The opt-in test `installed_agy_job_without_sign_in_fails_with_sign_in_guidance`
+then ran **8 real jobs** through CodeConvoy's `runner::prepare` (real Check CLI)
+and `RunManager`: Direct and Isolated mode, each with default settings, model and
+effort, Approve all tool requests, and terminal sandbox. Every job finished
+Failed with exit code 1 and the sign-in guidance, Activity showed the reported
+`ERROR` result, and the committed checkout stayed clean. Command (run with an
+isolated `HOME`, keeping the real Cargo home):
+
+```sh
+CARGO_HOME="$HOME/.cargo" HOME=/tmp/agy-sandbox/home5 CODECONVOY_AGY=/tmp/agy-sandbox/bin/agy CODECONVOY_AGY_SIGNED_OUT=1 cargo test --all-features --test antigravity installed_agy_job_without_sign_in -- --ignored
+```
+
+`authenticated_agy_completes_a_disposable_task` (gated by
+`CODECONVOY_AGY_AUTHENTICATED=1`) creates one file through a real model call; it
+was not run. Google's Windows installer (`install.ps1`, read only) places a
+native `agy.exe` in `%LOCALAPPDATA%\agy\bin`, which discovery now searches for
+this backend.
+
 ## Fixtures
 
 `antigravity-1.4.2-authentication.stdout.jsonl` and
@@ -258,5 +293,5 @@ error). Tests pin each case, the absence of invented advice and the summary.
   conversation store.
 - Antigravity subagent worktrees (`.system_generated/worktrees`) and their effect
   on a repository's Git worktree list.
-- Installation locations other than `~/.local/bin`; discovery uses the shared
-  generic directories, which include it.
+- The Windows install location in practice; discovery follows `install.ps1`
+  (`%LOCALAPPDATA%\agy\bin`) without a Windows run.

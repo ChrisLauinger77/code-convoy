@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
         !directory.path().join("checkout").exists(),
         "Worktree was not removed"
     );
-    for name in ["codex", "copilot", "opencode", "claude", "agent"] {
+    for name in ["codex", "copilot", "opencode", "claude", "agent", "agy"] {
         let result = process::capture(
             CommandSpec::new(name, &repository).args(&["--version"]),
             8192,
@@ -86,7 +86,7 @@ async fn main() -> Result<()> {
     #[cfg(unix)]
     cancellation_probe(&repository).await?;
     println!(
-        "AppImage host Git, disposable worktree creation/removal, all five CLI fixture lookups, process cancellation, and environment preservation passed."
+        "AppImage host Git, disposable worktree creation/removal, all six CLI fixture lookups, process cancellation, and environment preservation passed."
     );
     Ok(())
 }

@@ -130,7 +130,7 @@ def package_linux():
     shutil.copy2(ROOT / "target/release/examples/package_probe", probe_dir / "usr/bin/codeconvoy")
     host_bin = work / "host-bin"
     host_bin.mkdir()
-    for name in ("codex", "copilot", "opencode", "claude", "agent"):
+    for name in ("codex", "copilot", "opencode", "claude", "agent", "agy"):
         executable = host_bin / name
         executable.write_text(f"#!/bin/sh\nprintf 'package-host-{name}\\n'\n")
         executable.chmod(0o755)

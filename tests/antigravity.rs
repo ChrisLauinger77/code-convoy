@@ -393,6 +393,9 @@ async fn installed_agy_passes_check_cli() {
 #[path = "antigravity/output.rs"]
 mod output;
 
+#[path = "antigravity/installed.rs"]
+mod installed;
+
 #[cfg(feature = "test-support")]
 #[path = "antigravity/execution.rs"]
 mod execution;
