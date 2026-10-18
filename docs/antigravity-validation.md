@@ -1,9 +1,11 @@
 # Antigravity CLI feasibility and validation
 
 Assessed on **2026-10-17** from Google's public documentation, the public
-`google-antigravity/antigravity-cli` changelog and issue tracker. No Antigravity
-CLI was installed on the assessment machine; nothing below was executed,
-authenticated or observed locally unless stated.
+`google-antigravity/antigravity-cli` changelog and issue tracker. On
+**2026-10-18** an isolated **agy 1.4.2** was installed and checked without sign-in
+on macOS (see [Installed CLI check](#installed-cli-check-agy-142)). Nothing was
+authenticated; everything else below is documentation- or fixture-based unless
+stated.
 
 ## Interface decision
 
@@ -59,7 +61,10 @@ yet show `--output-format`, `--input-format` or `--effort`. Its
 
 Check CLI therefore identifies `agy` by two flags from that capture that no
 other supported CLI advertises, `--print-timeout` and `--prompt-interactive`,
-rather than by a product name. It then requires the flags the invocation uses:
+rather than by a product name. The installed 1.4.2 confirmed this layout and
+showed that `--help`, `-h` and `help` write the help text **only to stderr**;
+`AgentBackend::help_stream()` lets this backend select stderr, while every other
+backend keeps reading stdout. It then requires the flags the invocation uses:
 `--input-format`, `--output-format`, `--effort`, `--model`,
 `--dangerously-skip-permissions` and `--sandbox`. A release like the captured one
 is recognized as agy but rejected with an update message. Claude Code and Cursor
@@ -132,7 +137,45 @@ Not used: `-p`, `--print-timeout`, `--continue`, `--conversation`, `--agent`,
 `--json-schema`, `--mode`, Antigravity's own worktrees, `/fork` and remote control. Tasks starting
 with a CLI-handled slash command end with an `ERROR` result in this transport.
 
+## Installed CLI check (agy 1.4.2)
+
+Performed on **2026-10-18**, macOS on Apple Silicon. No sign-in, no model call,
+nothing written outside `/tmp/agy-sandbox`.
+
+**Installation.** Google's `https://antigravity.google/cli/install.sh` was
+downloaded and read, not executed. It queries
+`https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/<platform>.json`,
+downloads the listed archive, verifies its SHA-512, copies `antigravity` to
+`~/.local/bin/agy` and runs `agy install` to edit the shell profile. Those steps
+were repeated by hand: manifest version `1.4.2`, archive
+`storage.googleapis.com/antigravity-public/antigravity-cli/1.4.2-4835981233356800/darwin-arm/cli_mac_arm64.tar.gz`
+(56,104,322 bytes) with matching SHA-512, binary code-signed by Apple team
+`EQHXZ8M8AV`. `agy install` was skipped. Every run used a temporary `HOME`/XDG
+directory, an empty working directory, `PATH=/usr/bin:/bin` and a hard timeout.
+
+| Check | Observation | CodeConvoy consequence |
+| --- | --- | --- |
+| `agy --version` | Exit 0, stdout `1.4.2` | Version gate parses it (test) |
+| `agy --help`, `-h`, `help` | Exit 0, **stdout empty**, help on stderr; `Usage of agy:`; identity and required flags present | Fixed: stderr selected via `help_stream()`; contract fixture uses the 1.4.2 flag set |
+| Side effects of help/version | No files written, no processes started | Check CLI is side-effect free |
+| `--print-timeout` | Help: default `0s`, waits until the turn completes | Confirms passing no deadline |
+| Extra 1.4.2 flags | `--effort` `xhigh`/`max`, `--mode`, `--disable-slash-commands`, `--remote-control`, `--json-schema`, `--agent` | Not used; no setting added |
+| CodeConvoy invocation, not signed in | Exit 1 after about 1 s; stdout one `result` (`ERROR`, empty conversation ID, `authentication failed or timed out`) **without `init`**; stderr `authentication required` | Classified as authentication failure (captured fixtures) |
+| `-p /usage` (no agent turn), not signed in | Prints an OAuth URL, waits up to 60 s for a code on stdin; with empty stdin ends with exit 1 | Not used by CodeConvoy; the stdin transport fails fast instead |
+| Files written | Only below `~/.gemini/antigravity-cli` and `~/.gemini/config`; none in the working directory | No repository side effects observed |
+| Auto-updater | First run (then at most every 15 minutes) starts `agy --bg-updater …` in its own session/process group, reparented to PID 1; exits on its own within seconds; the caller's pipeline finished after 0.5 s while it still ran | Outside CodeConvoy ownership; not stopped mid-update and does not delay completion on macOS |
+
+The installed release passes the opt-in test
+`installed_agy_passes_check_cli` (`CODECONVOY_AGY=/path/to/agy cargo test
+--all-features --test antigravity installed_agy_passes_check_cli -- --ignored`).
+
 ## Fixtures
+
+`antigravity-1.4.2-authentication.stdout.jsonl` and
+`antigravity-1.4.2-authentication.stderr.txt` are the unmodified stdout and stderr
+of CodeConvoy's invocation of the installed 1.4.2 without sign-in.
+`antigravity-help-contract.txt` keeps the 1.4.2 help layout and flag set with
+placeholder descriptions.
 
 `tests/fixtures/antigravity-success.jsonl` reproduces the guide's recorded
 single-turn stream with sanitized IDs, text and `cwd`.
@@ -168,33 +211,27 @@ such process that remains in the owned process group or Windows Job Object
 after `agy` exits. A process that starts a new Unix session or group escapes
 that cleanup (general limitation in [architecture](architecture.md)).
 
-Runner edge cases that do not depend on the backend (event backpressure, delayed
-or refused cancellation, unconfirmed cleanup) remain covered by the Cursor and
-core suites rather than duplicated here.
+These guarantees hold once process cleanup is confirmed. If supervision or
+termination fails, or a descendant may still be alive, the shared manager still
+publishes the terminal event but keeps the repository lease and execution slot
+reserved, pins the run's history and tells the user to inspect remaining
+processes. Runner edge cases that do not depend on the backend (event
+backpressure, delayed or refused cancellation, unconfirmed cleanup) remain
+covered by the Cursor and core suites rather than duplicated here.
 
 ## Unverified
 
-- `agy --help` text from an installed 1.2.16+ release.
-  `tests/fixtures/antigravity-help-contract.txt` follows the layout of Google's
-  published capture with the flags documented since 1.1.8; see
-  [Help contract](#help-contract).
-- `agy --version` output format.
-- Installation locations; discovery uses the shared generic directories only.
-- The real `stream-json` stream from an installed release, `denied_actions`
-  shape, stderr wording of soft-deny and authentication notices, and whether
-  the guide's five-minute or the changelog's unlimited default applies to
-  stdin stream-json sessions.
+- Authenticated execution: the real successful `stream-json` stream, model
+  access, `denied_actions` shape, soft-deny stderr wording and permission
+  enforcement, on every platform.
 - Whether `init.cwd` reports a linked worktree path or its main repository.
-- Real `agy` process trees: whether Remote Control, the Antigravity Hub or the
-  background auto-updater (1.1.6 changelog) start inside a CodeConvoy job, and
-  whether stopping one mid-update is safe. No headless auto-update opt-out is
-  documented, so CodeConvoy passes none.
+- Linux and Windows behavior of the installed CLI, including whether the
+  Windows auto-updater leaves CodeConvoy's Job Object and whether stopping it
+  mid-update is safe.
+- Whether Remote Control or the Antigravity Hub start inside a CodeConvoy job.
 - Concurrent headless `agy` processes sharing one sign-in, keyring and
   conversation store.
 - Antigravity subagent worktrees (`.system_generated/worktrees`) and their effect
   on a repository's Git worktree list.
-- Concurrent headless instances sharing one sign-in and conversation store.
-- Process-tree cancellation leaving no daemon (fixed in 1.2.9 according to the
-  changelog).
-- Authenticated execution, model access and permission enforcement on every
-  platform.
+- Installation locations other than `~/.local/bin`; discovery uses the shared
+  generic directories, which include it.

@@ -4,7 +4,7 @@
 use super::{AgentBackend, AgentOutput, OptionKind, OptionSpec, value};
 use crate::{
     domain::{AgentId, AgentOptions, Repository, TaskConfig},
-    process::CommandSpec,
+    process::{CommandSpec, Stream},
 };
 use anyhow::Result;
 use std::{path::Path, time::Duration};
@@ -158,6 +158,10 @@ impl AgentBackend for Antigravity {
             );
         }
         Ok(())
+    }
+    /// agy 1.4.2 prints `--help`, `-h` and `help` output only to stderr.
+    fn help_stream(&self) -> Stream {
+        Stream::Stderr
     }
     fn check_version(&self, version: Option<&str>) -> Result<()> {
         let (major, minor, patch) = MINIMUM_VERSION;

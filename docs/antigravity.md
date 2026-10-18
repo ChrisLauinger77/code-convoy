@@ -4,8 +4,9 @@ Antigravity CLI is an experimental backend in the current source. Published
 packages do not include it. CodeConvoy uses your local CLI installation and
 existing sign-in; it does not install Antigravity or manage accounts. Its
 headless protocol is implemented from Google's documentation and deterministic
-fixtures; no installed or authenticated `agy` has been tested yet. See the
-[feasibility and validation record](antigravity-validation.md).
+fixtures. An installed **agy 1.4.2** on macOS passed Check CLI and failed an
+unauthenticated job as expected; authenticated tasks have not been tested. See
+the [feasibility and validation record](antigravity-validation.md).
 
 CodeConvoy integrates the official command-line agent `agy` only. It does not
 automate the Antigravity desktop app or IDE, use private APIs, use the Python SDK
@@ -24,7 +25,9 @@ Select **Antigravity CLI** under **NEW CONVOY → Agent**. **Find CLI** searches
 Windows choose a native `agy.exe`; `.cmd`, `.bat`, `.ps1`, WSL wrappers and shell
 command strings are unsupported.
 
-**Check CLI** runs `agy --help` and `agy --version` only. **Available** means the
+**Check CLI** runs `agy --help` and `agy --version` only; `agy` prints its help to
+stderr, which CodeConvoy reads for this backend. Neither command writes files or
+starts other processes. **Available** means the
 required headless flags were advertised and the version is supported, not that
 you are signed in or can use a model. Google's
 [headless guide](https://antigravity.google/docs/cli/headless/) requires one
@@ -100,17 +103,22 @@ end with an `ERROR` result in this transport.
 Antigravity jobs use the same scheduler, repository leases, worktrees and
 process supervision as every other backend; nothing is Antigravity-specific.
 
-- **Stop** and the optional time limit end the whole owned `agy` process tree,
-  including commands and background tasks it started, before the repository is
-  released. The job is Cancelled or Failed; edits are retained, nothing is rolled
-  back.
-- When `agy` exits, any process it left behind in the owned tree (for example a
-  background server) is stopped before the job finishes.
+- **Stop** and the optional time limit terminate the whole owned `agy` process
+  tree, including commands and background tasks it started. The job is Cancelled
+  or Failed; edits are retained, nothing is rolled back.
+- When `agy` exits, CodeConvoy terminates any process it left behind in the owned
+  tree (for example a background server) before the job finishes.
 - **Quit** cancels all running Antigravity jobs the same way and retains isolated
   worktrees.
-- Every outcome (success, reported failure, authentication failure, malformed
-  output, interruption, time limit) releases its execution slot and repository
-  lease. A failure in one job does not affect other jobs or convoys.
+- Once process cleanup is confirmed, every outcome (success, reported failure,
+  authentication failure, malformed output, interruption, time limit) releases
+  its execution slot and repository lease. A failure in one job does not affect
+  other jobs or convoys.
+- If cleanup **cannot be confirmed** (supervision or termination fails, or a
+  descendant may still be alive), the job still ends, but its repository access
+  and execution slot **stay reserved** and its history is protected. The job
+  detail says so; inspect remaining processes before restarting CodeConvoy. This
+  is the shared quarantine behavior, not specific to Antigravity.
 - Isolated jobs on the same repository run concurrently in separate checkouts;
   direct access waits for them. Nested repositories never run concurrently.
 - **Retry** reuses the original permission and sandbox choices; CodeConvoy never
@@ -118,16 +126,21 @@ process supervision as every other backend; nothing is Antigravity-specific.
 
 Processes that deliberately leave the owned process tree (a new Unix session or
 process group) cannot be stopped by CodeConvoy; this is a general platform
-limitation. Antigravity runs a background auto-updater for which no headless
-opt-out is documented; whether it runs inside a CodeConvoy job is unverified.
+limitation. Antigravity's background auto-updater is such a process: on macOS,
+agy 1.4.2 starts `agy --bg-updater` at most every 15 minutes in its own session.
+It is not stopped when the job ends, does not hold the job's output pipes, so it
+does not delay completion, and exits on its own. It may replace the installed
+`agy` binary; no headless opt-out is documented. Windows behavior is unverified.
 Antigravity's own subagent worktrees are managed by Antigravity; CodeConvoy
 neither creates nor removes them.
 
 ## Current limitations
 
-- Captured `agy --help` / `--version` output and authenticated runs are still
-  missing; the protocol fixtures are documentation-derived.
+- Authenticated runs are untested; successful-run stream fixtures are
+  documentation-derived. Check CLI and the unauthenticated failure were verified
+  with agy 1.4.2 on macOS only.
 - Session continuation (`--continue`, `--conversation`) is not used. CodeConvoy
   retries and follow-ups start fresh convoys.
-- Lifecycle behavior is verified with a fixture executable, not with real `agy`
-  processes; see [Lifecycle evidence](antigravity-validation.md#lifecycle-and-safety).
+- Lifecycle behavior is verified with a fixture executable; with real `agy` only
+  the process layout of an unauthenticated run was observed. See
+  [Lifecycle evidence](antigravity-validation.md#lifecycle-and-safety).

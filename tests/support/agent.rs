@@ -132,7 +132,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print!("{}", include_str!("../fixtures/copilot-1.0.65-help.txt"));
         print!("{}", include_str!("../fixtures/claude-help-contract.txt"));
         print!("{}", include_str!("../fixtures/cursor-help-contract.txt"));
-        print!(
+        // agy 1.4.2 prints help only to stderr; keep it off stdout here so
+        // detection must read the stream the backend selects.
+        eprint!(
             "{}",
             include_str!("../fixtures/antigravity-help-contract.txt")
         );

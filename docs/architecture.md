@@ -242,6 +242,9 @@ Antigravity CLI is the sixth registered backend. Its additive persisted ID is
 `antigravity`. Discovery adds the `agy` launcher name to the shared directories.
 `AgentBackend::check_version` is an optional hook; only Antigravity enforces a
 minimum release, and it receives `None` when the version command fails.
+`AgentBackend::help_stream` selects the stream checked by `check_detection`; it
+defaults to stdout, and Antigravity selects stderr because agy prints its help
+there.
 
 `agents/antigravity` runs `agy --input-format stream-json --output-format
 stream-json` with the runner-assigned checkout as process directory and writes
