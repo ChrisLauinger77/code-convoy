@@ -262,9 +262,11 @@ time limits, concurrency and processes `agy` leaves behind after exit; fixture
 evidence is recorded with the
 [contract, classification and unverified behavior](antigravity-validation.md).
 
-Failure details lead with the recovery action, avoid a colon before it (the UI
-summary shows the first clause) and add presentation-only advice recognized in
-Antigravity's error text (sign-in, model, quota, CLI slash command). Session
+Failure details lead with the recovery action, place recognized advice before
+Antigravity's own error text (the UI summary ends at the first colon), keep the
+known conversation ID on every failure path and add presentation-only advice
+recognized in Antigravity's error text (sign-in, model, quota, CLI slash
+command). Session
 continuation is not implemented: like every backend, Retry and follow-ups start
 fresh convoys, and only the conversation ID is shown for reference.
 

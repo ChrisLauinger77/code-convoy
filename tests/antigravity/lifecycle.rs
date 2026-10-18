@@ -178,7 +178,7 @@ async fn terminal_outcomes_keep_results_and_release_slots_in_both_execution_mode
             (
                 "failure",
                 JobStatus::Failed,
-                "reported ERROR — controlled failure",
+                "Antigravity error — controlled failure",
             ),
             ("missing_auth", JobStatus::Failed, "sign-in is required"),
             ("malformed", JobStatus::Failed, "Invalid Antigravity JSON"),

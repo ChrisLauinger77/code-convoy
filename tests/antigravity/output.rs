@@ -114,7 +114,7 @@ fn reported_failures_are_explicit_even_when_the_process_exits_zero() {
     let (status, detail, text) =
         outcome(include_str!("../fixtures/antigravity-error.jsonl"), "", 0);
     assert_eq!(status, JobStatus::Failed);
-    assert!(detail.contains("Antigravity reported ERROR — fixture quota exhausted"));
+    assert!(detail.contains("Antigravity error — fixture quota exhausted"));
     assert!(text.contains("Partial answer"));
     let (status, detail, _) = outcome(
         include_str!("../fixtures/antigravity-interrupted.jsonl"),
@@ -229,7 +229,10 @@ fn failure_details_lead_with_actionable_text_and_recovery_hints() {
         changed[4]["result"]["error"] = json!(error);
         let (status, detail, _) = outcome(&join(&changed), "", 0);
         assert_eq!(status, JobStatus::Failed);
-        assert!(detail.contains(advice), "{error}: {detail}");
+        // The compact summary ends at the first colon, which provider error
+        // text may contain; the advice must come before it.
+        let summary = detail.split(": ").next().unwrap();
+        assert!(summary.contains(advice), "{error}: {summary}");
         assert!(
             detail.contains("(exit code 0; conversation 4e502687"),
             "{detail}"
@@ -259,6 +262,40 @@ fn failure_details_lead_with_actionable_text_and_recovery_hints() {
         let (_, detail, _) = outcome(stdout, stderr, code);
         assert!(!detail.contains(": "), "{detail}");
     }
+}
+
+#[test]
+fn every_failure_keeps_a_known_conversation_id() {
+    let records = lines(SUCCESS);
+    let initialized = join(&records[..2]);
+    let without_cwd = {
+        let mut changed = records.clone();
+        changed[0]["init"]["cwd"] = Value::Null;
+        join(&changed)
+    };
+    for (stdout, stderr, code, expected) in [
+        (
+            initialized.as_str(),
+            "Authentication expired. Please log back in.\n",
+            1,
+            "sign-in is required",
+        ),
+        (SUCCESS, "", 1, "process failed"),
+        (without_cwd.as_str(), "", 0, "missing its working directory"),
+        (initialized.as_str(), "", 0, "incomplete"),
+    ] {
+        let (status, detail, _) = outcome(stdout, stderr, code);
+        assert_eq!(status, JobStatus::Failed);
+        assert!(detail.contains(expected), "{detail}");
+        assert!(
+            detail.contains(&format!("(exit code {code}; conversation 4e502687")),
+            "{detail}"
+        );
+        assert!(!detail.contains(": "), "{detail}");
+    }
+    // No conversation is invented when none was reported.
+    let (_, detail, _) = outcome("", "Error: authentication required\n", 1);
+    assert!(detail.contains("(exit code 1)") && !detail.contains("conversation"));
 }
 
 #[test]

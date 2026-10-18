@@ -456,22 +456,24 @@ impl AgentOutput for AntigravityOutput {
         text
     }
     fn interpret(&self, status: ExitStatus) -> (JobStatus, String) {
-        // Summaries show the first clause, so actionable text precedes any
-        // colon and the process outcome is stated without one.
-        let process = exit(status);
+        // Summaries show the text before the first colon. Recognized advice
+        // therefore precedes Antigravity's own error text, which may contain
+        // colons, and the outcome suffix is stated without one. Every failure
+        // keeps the known conversation ID for Antigravity's local history.
         let advice = self.hint.map(Hint::advice).unwrap_or_default();
-        let conversation = self
-            .conversation
-            .as_deref()
-            .map(|id| format!("; conversation {}", short(id)))
-            .unwrap_or_default();
+        let outcome = format!(
+            "({}{}) See Activity/Raw output.",
+            exit(status),
+            self.conversation
+                .as_deref()
+                .map(|id| format!("; conversation {}", short(id)))
+                .unwrap_or_default()
+        );
+        let failed = |detail: String| (JobStatus::Failed, detail);
         if self.diagnostic == Some(Diagnostic::Authentication) {
-            return (
-                JobStatus::Failed,
-                format!(
-                    "Antigravity sign-in is required or has expired. Run agy once in a terminal with the same installation and user account to sign in, then retry; CodeConvoy does not manage credentials ({process}). See Activity/Raw output."
-                ),
-            );
+            return failed(format!(
+                "Antigravity sign-in is required or has expired. Run agy once in a terminal with the same installation and user account to sign in, then retry; CodeConvoy does not manage credentials. {outcome}"
+            ));
         }
         if let Some((reported, error)) = &self.failed {
             let state = match reported.as_str() {
@@ -479,43 +481,30 @@ impl AgentOutput for AntigravityOutput {
                 "CANCELED" | "INTERRUPTED" => " The run was stopped before it completed.",
                 _ => "",
             };
-            return (
-                JobStatus::Failed,
-                format!(
-                    "Antigravity reported {reported}{}.{state}{advice} ({process}{conversation}) See Activity/Raw output.",
-                    if error.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" — {error}")
-                    }
-                ),
-            );
+            let error = if error.is_empty() {
+                String::new()
+            } else {
+                format!(" Antigravity error — {error}.")
+            };
+            return failed(format!(
+                "Antigravity reported {reported}.{state}{advice}{error} {outcome}"
+            ));
         }
         if self.diagnostic == Some(Diagnostic::Agent) {
-            return (
-                JobStatus::Failed,
-                format!(
-                    "Antigravity reported a model or agent error (AGY_ERROR), so task completion cannot be confirmed.{advice} ({process}{conversation}) See Activity/Raw output."
-                ),
-            );
+            return failed(format!(
+                "Antigravity reported a model or agent error (AGY_ERROR), so task completion cannot be confirmed.{advice} {outcome}"
+            ));
         }
         if !status.success() {
-            return (
-                JobStatus::Failed,
-                format!("Antigravity process failed ({process}).{advice} See Activity/Raw output."),
-            );
+            return failed(format!("Antigravity process failed.{advice} {outcome}"));
         }
         if let Some(reason) = self.invalid {
-            return (
-                JobStatus::Failed,
-                format!("{reason}. See Activity/Raw output."),
-            );
+            return failed(format!("{reason}. {outcome}"));
         }
         if !self.initialized || self.results == 0 || self.unfinished {
-            return (
-                JobStatus::Failed,
-                "Antigravity event stream was incomplete or had no final SUCCESS result. See Activity/Raw output.".into(),
-            );
+            return failed(format!(
+                "Antigravity event stream was incomplete or had no final SUCCESS result. {outcome}"
+            ));
         }
         let mut detail = format!(
             "Antigravity reported a SUCCESS result (conversation {}).",

@@ -145,13 +145,10 @@ async fn successful_run_receives_the_task_on_stdin_in_the_assigned_checkout() {
 async fn failed_interrupted_malformed_and_incomplete_runs_fail_closed() {
     for (scenario, expected) in [
         ("missing-auth", "sign-in is required"),
-        (
-            "error",
-            "Antigravity reported ERROR — fixture quota exhausted",
-        ),
+        ("error", "Antigravity error — fixture quota exhausted"),
         (
             "error-exit-zero",
-            "Antigravity reported ERROR — fixture model failure",
+            "Antigravity error — fixture model failure",
         ),
         ("interrupted", "INTERRUPTED"),
         ("malformed", "Invalid Antigravity JSON record"),
