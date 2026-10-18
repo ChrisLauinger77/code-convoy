@@ -83,10 +83,13 @@ Every selected job receives the same task references. The backend owns transport
 | OpenCode | Same explicit text context through stdin | Repeated native `--file=PATH` arguments |
 | Claude Code | Text stdin, or a text block when images are present | Base64 image blocks in a documented `stream-json` stdin user message |
 | Cursor CLI (experimental) | Text/context blocks in one positional prompt argument; visible to local process inspection and subject to platform length limits | Unsupported |
+| Antigravity CLI (experimental) | Same explicit text context in one `stream-json` user message on stdin; not in process arguments | Unsupported |
 
 Cursor delegates `AGENTS.md` and `.cursor/rules` to the CLI in the assigned
 checkout; CodeConvoy does not duplicate repository rules in task context. See
-[Cursor rules and limitations](cursor.md#repository-rules).
+[Cursor rules and limitations](cursor.md#repository-rules). Antigravity likewise
+loads its own `.agents/` customizations from the checkout; see
+[Antigravity repository customizations](antigravity.md#repository-customizations).
 
 Text inclusion avoids requiring tool access to external documents. Image models
 must support vision. Preflight checks image flag availability for Codex, Copilot

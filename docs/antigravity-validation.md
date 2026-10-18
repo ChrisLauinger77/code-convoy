@@ -219,6 +219,31 @@ processes. Runner edge cases that do not depend on the backend (event
 backpressure, delayed or refused cancellation, unconfirmed cleanup) remain
 covered by the Cursor and core suites rather than duplicated here.
 
+## Session continuation and UX
+
+Decided on **2026-10-18**. `agy` documents `--continue` and `--conversation <id>`,
+scoped to the process directory. CodeConvoy has no continuation architecture for
+any backend: Retry and follow-ups create fresh convoys, Codex runs ephemeral
+sessions and Claude Code disables session persistence. Integrating Antigravity
+resumption would be a new cross-backend feature and would reuse Antigravity's
+directory-scoped state in retained worktrees, so it is not implemented.
+
+The installed 1.4.2 created `conversations/`, `conversation_summaries.db` and
+`brain/` below `~/.gemini/antigravity-cli` on its first run, and its help lists no
+flag that disables history. Every Antigravity job therefore leaves local
+conversation history that CodeConvoy neither stores nor removes.
+
+Failure details state the recovery action before any colon, because the UI
+summary shows the text before the first colon: recognized advice precedes
+Antigravity's error text, which may contain colons (the documented unknown-model
+error does), and every failure path ends with the exit code, or on Unix the
+terminating signal number and name, and the known conversation ID. Advice is added only for causes
+named in Antigravity's own text: sign-in (`authentication required`/`failed`/
+`expired`), model selection (`invalid model selection`, the documented error
+for an unknown `--model`), quota or credits (`quota`, `RESOURCE_EXHAUSTED`,
+`credits balance`) and CLI-answered slash commands (the documented stream-json
+error). Tests pin each case, the absence of invented advice and the summary.
+
 ## Unverified
 
 - Authenticated execution: the real successful `stream-json` stream, model

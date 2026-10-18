@@ -178,9 +178,9 @@ async fn terminal_outcomes_keep_results_and_release_slots_in_both_execution_mode
             (
                 "failure",
                 JobStatus::Failed,
-                "reported ERROR: controlled failure",
+                "Antigravity error — controlled failure",
             ),
-            ("missing_auth", JobStatus::Failed, "authentication"),
+            ("missing_auth", JobStatus::Failed, "sign-in is required"),
             ("malformed", JobStatus::Failed, "Invalid Antigravity JSON"),
             ("incomplete", JobStatus::Failed, "incomplete"),
             ("interrupted", JobStatus::Failed, "INTERRUPTED"),
@@ -547,7 +547,7 @@ async fn retry_reuses_the_original_permissions_without_broadening_them() {
     h.release(1, "source");
     h.until(|events| Harness::finished(events, 1, JobStatus::Failed))
         .await;
-    assert!(h.detail(1).contains("authentication"));
+    assert!(h.detail(1).contains("sign-in is required"));
     run.jobs[0].status = JobStatus::Failed;
     let state = AppState {
         repositories: vec![repo.clone()],

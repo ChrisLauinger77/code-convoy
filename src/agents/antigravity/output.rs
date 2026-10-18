@@ -17,6 +17,30 @@ enum Diagnostic {
     Authentication,
 }
 
+/// Recovery guidance recognized in Antigravity's own error text. It only adds
+/// advice to a failure; it never changes classification.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Hint {
+    SlashCommand,
+    Model,
+    Quota,
+}
+impl Hint {
+    fn advice(self) -> &'static str {
+        match self {
+            Self::SlashCommand => {
+                " The task starts with a slash command that agy answers itself, such as /model; start the task with ordinary text."
+            }
+            Self::Model => {
+                " The selected model is not available; choose a slug listed by agy models, or leave Model blank."
+            }
+            Self::Quota => {
+                " Antigravity reports exhausted quota or AI credits; check agy -p /usage in a terminal before retrying."
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 pub(super) struct AntigravityOutput {
     pending: Vec<u8>,
@@ -24,6 +48,7 @@ pub(super) struct AntigravityOutput {
     stderr_pending: Vec<u8>,
     diagnostic_tail: String,
     diagnostic: Option<Diagnostic>,
+    hint: Option<Hint>,
     invalid: Option<&'static str>,
     workspace: Option<PathBuf>,
     conversation: Option<String>,
@@ -71,6 +96,26 @@ impl AntigravityOutput {
         // Model/agent failures print a structured AGY_ERROR line on stderr.
         if text.contains("AGY_ERROR") {
             self.diagnostic(Diagnostic::Agent);
+        }
+        for (hint, markers) in [
+            (Hint::SlashCommand, &["answered by the cli itself"][..]),
+            (
+                Hint::Model,
+                &["invalid model selection", "not recognized as a known model"][..],
+            ),
+            (
+                Hint::Quota,
+                &[
+                    "quota",
+                    "resource_exhausted",
+                    "credits balance",
+                    "out of credits",
+                ][..],
+            ),
+        ] {
+            if markers.iter().any(|marker| lower.contains(marker)) {
+                self.hint = self.hint.max(Some(hint));
+            }
         }
         self.diagnostic_tail = text
             .chars()
@@ -411,57 +456,55 @@ impl AgentOutput for AntigravityOutput {
         text
     }
     fn interpret(&self, status: ExitStatus) -> (JobStatus, String) {
+        // Summaries show the text before the first colon. Recognized advice
+        // therefore precedes Antigravity's own error text, which may contain
+        // colons, and the outcome suffix is stated without one. Every failure
+        // keeps the known conversation ID for Antigravity's local history.
+        let advice = self.hint.map(Hint::advice).unwrap_or_default();
+        let outcome = format!(
+            "({}{}) See Activity/Raw output.",
+            exit(status),
+            self.conversation
+                .as_deref()
+                .map(|id| format!("; conversation {}", short(id)))
+                .unwrap_or_default()
+        );
+        let failed = |detail: String| (JobStatus::Failed, detail);
         if self.diagnostic == Some(Diagnostic::Authentication) {
-            return (
-                JobStatus::Failed,
-                format!(
-                    "Antigravity authentication is required or expired. Sign in again in an interactive agy session in your terminal; CodeConvoy does not manage credentials. Process {status}. See Activity/Raw output."
-                ),
-            );
+            return failed(format!(
+                "Antigravity sign-in is required or has expired. Run agy once in a terminal with the same installation and user account to sign in, then retry; CodeConvoy does not manage credentials. {outcome}"
+            ));
         }
         if let Some((reported, error)) = &self.failed {
-            let hint = match reported.as_str() {
+            let state = match reported.as_str() {
                 "WAITING" => " The run ended waiting for input that a headless run cannot provide.",
                 "CANCELED" | "INTERRUPTED" => " The run was stopped before it completed.",
                 _ => "",
             };
-            return (
-                JobStatus::Failed,
-                format!(
-                    "Antigravity reported {reported}{}.{hint} Process {status}. See Activity/Raw output.",
-                    if error.is_empty() {
-                        String::new()
-                    } else {
-                        format!(": {error}")
-                    }
-                ),
-            );
+            let error = if error.is_empty() {
+                String::new()
+            } else {
+                format!(" Antigravity error — {error}.")
+            };
+            return failed(format!(
+                "Antigravity reported {reported}.{state}{advice}{error} {outcome}"
+            ));
         }
         if self.diagnostic == Some(Diagnostic::Agent) {
-            return (
-                JobStatus::Failed,
-                format!(
-                    "Antigravity reported a model or agent error (AGY_ERROR); task completion cannot be confirmed. Process {status}. See Activity/Raw output."
-                ),
-            );
+            return failed(format!(
+                "Antigravity reported a model or agent error (AGY_ERROR), so task completion cannot be confirmed.{advice} {outcome}"
+            ));
         }
         if !status.success() {
-            return (
-                JobStatus::Failed,
-                format!("Antigravity process failed ({status}). See Activity/Raw output."),
-            );
+            return failed(format!("Antigravity process failed.{advice} {outcome}"));
         }
         if let Some(reason) = self.invalid {
-            return (
-                JobStatus::Failed,
-                format!("{reason}. See Activity/Raw output."),
-            );
+            return failed(format!("{reason}. {outcome}"));
         }
         if !self.initialized || self.results == 0 || self.unfinished {
-            return (
-                JobStatus::Failed,
-                "Antigravity event stream was incomplete or had no final SUCCESS result. See Activity/Raw output.".into(),
-            );
+            return failed(format!(
+                "Antigravity event stream was incomplete or had no final SUCCESS result. {outcome}"
+            ));
         }
         let mut detail = format!(
             "Antigravity reported a SUCCESS result (conversation {}).",
@@ -481,6 +524,50 @@ impl AgentOutput for AntigravityOutput {
     }
 }
 
+/// Outcome without a colon (summaries end at the first one), keeping the
+/// signal so an external kill stays distinguishable from a crash.
+fn exit(status: ExitStatus) -> String {
+    if let Some(code) = status.code() {
+        return format!("exit code {code}");
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return format!(
+                "terminated by signal {signal}{}{}",
+                signal_name(signal)
+                    .map(|name| format!(" ({name})"))
+                    .unwrap_or_default(),
+                if status.core_dumped() {
+                    ", core dumped"
+                } else {
+                    ""
+                }
+            );
+        }
+    }
+    "process ended without an exit code".to_owned()
+}
+#[cfg(unix)]
+fn signal_name(signal: i32) -> Option<&'static str> {
+    Some(match signal {
+        libc::SIGHUP => "SIGHUP",
+        libc::SIGINT => "SIGINT",
+        libc::SIGQUIT => "SIGQUIT",
+        libc::SIGILL => "SIGILL",
+        libc::SIGTRAP => "SIGTRAP",
+        libc::SIGABRT => "SIGABRT",
+        libc::SIGBUS => "SIGBUS",
+        libc::SIGFPE => "SIGFPE",
+        libc::SIGKILL => "SIGKILL",
+        libc::SIGSEGV => "SIGSEGV",
+        libc::SIGPIPE => "SIGPIPE",
+        libc::SIGALRM => "SIGALRM",
+        libc::SIGTERM => "SIGTERM",
+        _ => return None,
+    })
+}
 fn tool(done: bool, started: bool, step: &Value) -> String {
     let info = &step["tool_info"];
     let name = short(

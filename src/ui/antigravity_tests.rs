@@ -67,3 +67,40 @@ fn antigravity_selection_settings_and_setup_are_keyboard_accessible_and_backend_
     assert_eq!(app.store.load().unwrap().draft.options, antigravity_options);
     assert!(app.manager.is_idle() && app.state.runs.is_empty());
 }
+
+#[test]
+fn antigravity_failure_summaries_keep_the_recovery_action() {
+    let decode = |stdout: &str, stderr: &str, code: i32| {
+        let mut output = agents::backend(AgentId::Antigravity).unwrap().output();
+        output.push(crate::process::Stream::Stderr, stderr.as_bytes());
+        output.push(crate::process::Stream::Stdout, stdout.as_bytes());
+        output.finish();
+        #[cfg(unix)]
+        let status = {
+            use std::os::unix::process::ExitStatusExt;
+            std::process::ExitStatus::from_raw(code << 8)
+        };
+        #[cfg(windows)]
+        let status = {
+            use std::os::windows::process::ExitStatusExt;
+            std::process::ExitStatus::from_raw(code as u32)
+        };
+        output.interpret(status).1
+    };
+    let sign_in = decode(
+        include_str!("../../tests/fixtures/antigravity-1.4.2-authentication.stdout.jsonl"),
+        include_str!("../../tests/fixtures/antigravity-1.4.2-authentication.stderr.txt"),
+        1,
+    );
+    let summary = diagnostics::summary(&sign_in);
+    assert!(summary.contains("Run agy once in a terminal"), "{summary}");
+    assert!(!summary.contains("Process exit status"), "{summary}");
+    let quota = decode(
+        include_str!("../../tests/fixtures/antigravity-error.jsonl"),
+        "",
+        0,
+    );
+    let summary = diagnostics::summary(&quota);
+    assert!(summary.contains("fixture quota exhausted"), "{summary}");
+    assert!(summary.contains("agy -p /usage"), "{summary}");
+}
