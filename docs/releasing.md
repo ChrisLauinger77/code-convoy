@@ -34,7 +34,7 @@ remain in Git history; preserve separate historical validation records.
    and points to the exact tested commit. Tag creation is a maintainer action.
 
 Only manual runs build packages. They build Linux x86-64 on `ubuntu-24.04`,
-Windows x86-64 on `windows-2025`, and both macOS architectures using Apple's SDK on `macos-26`. Rust 1.99.0,
+Windows x86-64 on `windows-2025`, and both macOS architectures using Apple's SDK on `macos-26`. Rust 1.99.1,
 Python 3.15 and the committed lockfile are used. Each platform runs formatting,
 strict Clippy and all non-ignored tests; no authenticated agent tasks or provider
 credentials are used.
@@ -291,7 +291,7 @@ python3 -m unittest discover -s packaging -p 'test_*.py'
 paths out of release diagnostics, and selects a dynamic CRT on Windows. It does
 not change global environment settings. Package assembly expects the repository's
 normal `target/` directory; do not override `CARGO_TARGET_DIR` for these commands.
-Use the audited Rust 1.99.0 compiler for package assembly: a different compiler's
+Use the audited Rust 1.99.1 compiler for package assembly: a different compiler's
 standard-library code must not be shipped with this version's notice evidence.
 
 On Linux, install the README's source prerequisites plus packaging/test-only

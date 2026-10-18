@@ -54,14 +54,14 @@ jobs:
       - name: Install audited Windows release tools
         if: runner.os == 'Windows' && inputs.windows_crt_audit
         run: |
-          rustup toolchain install 1.99.0 --profile minimal
+          rustup toolchain install 1.99.1 --profile minimal
           if ($LASTEXITCODE -ne 0) { throw 'Cannot install audited Rust toolchain' }
-          cargo +1.99.0 install --locked --version 0.11.8 cargo-packager
+          cargo +1.99.1 install --locked --version 0.11.8 cargo-packager
           if ($LASTEXITCODE -ne 0) { throw 'Cannot install audited packager' }
       - name: Capture Windows CRT provenance and verify packages
         if: runner.os == 'Windows' && inputs.windows_crt_audit
         env:
-          RUSTUP_TOOLCHAIN: "1.99.0"
+          RUSTUP_TOOLCHAIN: "1.99.1"
         run: |
           python packaging/build.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows CRT provenance capture failed' }
