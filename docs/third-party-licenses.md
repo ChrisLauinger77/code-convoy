@@ -12,13 +12,15 @@ and the two-stage release architecture are unchanged.
 packages in Cargo.lock**, with exact versions, registry checksums, declared
 license expressions, authors, source revisions and notice provenance. A
 conservative non-dev dependency traversal for Linux x86-64, Windows x86-64,
-macOS arm64 and macOS x86-64 reaches **383** crates, including build scripts and
+macOS arm64 and macOS x86-64 reaches **382** crates, including build scripts and
 procedural macros. `targets` records that closure; `application_targets`
-separately records normal dependency edges. The other 74 entries are explicit
+separately records normal dependency edges. The other 75 entries are explicit
 exclusions for these release targets. This does not imply every object survives
-linking, or that every listed crate is in every package.
+linking, or that every listed crate is in every package. The
+[lock-file maintenance review](lockfile-maintenance-license-validation.md)
+records the 27 updated versions and refreshed target coverage.
 
-The collection contains **367 distinct notice texts**, deduplicated by
+The collection contains **371 distinct notice texts**, deduplicated by
 their content hashes in [texts.json](../third-party/texts.json). It retains
 upstream copyright statements, notices, font licenses and protocol XML copyright
 blocks. When a crate omits a license file, the evidence refers to its exact
