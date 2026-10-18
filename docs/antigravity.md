@@ -102,8 +102,9 @@ end with an `ERROR` result in this transport.
 
 A failed job's detail starts with what to do. Recognized advice comes before
 Antigravity's own error text, so the compact summary keeps it even when that text
-contains a colon. Every failure ends with the exit code and, when Antigravity
-reported one, the conversation ID. CodeConvoy adds advice only when Antigravity's
+contains a colon. Every failure ends with the exit code (or, on Unix, the
+terminating signal such as `SIGKILL` or `SIGSEGV`, and whether a core was dumped)
+and, when Antigravity reported one, the conversation ID. CodeConvoy adds advice only when Antigravity's
 own error text indicates a known cause; the classification is unchanged and the
 original output stays in **Activity** and **Raw output**.
 

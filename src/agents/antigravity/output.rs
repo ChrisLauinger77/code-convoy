@@ -524,11 +524,49 @@ impl AgentOutput for AntigravityOutput {
     }
 }
 
+/// Outcome without a colon (summaries end at the first one), keeping the
+/// signal so an external kill stays distinguishable from a crash.
 fn exit(status: ExitStatus) -> String {
-    status.code().map_or_else(
-        || "process ended by a signal".to_owned(),
-        |code| format!("exit code {code}"),
-    )
+    if let Some(code) = status.code() {
+        return format!("exit code {code}");
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return format!(
+                "terminated by signal {signal}{}{}",
+                signal_name(signal)
+                    .map(|name| format!(" ({name})"))
+                    .unwrap_or_default(),
+                if status.core_dumped() {
+                    ", core dumped"
+                } else {
+                    ""
+                }
+            );
+        }
+    }
+    "process ended without an exit code".to_owned()
+}
+#[cfg(unix)]
+fn signal_name(signal: i32) -> Option<&'static str> {
+    Some(match signal {
+        libc::SIGHUP => "SIGHUP",
+        libc::SIGINT => "SIGINT",
+        libc::SIGQUIT => "SIGQUIT",
+        libc::SIGILL => "SIGILL",
+        libc::SIGTRAP => "SIGTRAP",
+        libc::SIGABRT => "SIGABRT",
+        libc::SIGBUS => "SIGBUS",
+        libc::SIGFPE => "SIGFPE",
+        libc::SIGKILL => "SIGKILL",
+        libc::SIGSEGV => "SIGSEGV",
+        libc::SIGPIPE => "SIGPIPE",
+        libc::SIGALRM => "SIGALRM",
+        libc::SIGTERM => "SIGTERM",
+        _ => return None,
+    })
 }
 fn tool(done: bool, started: bool, step: &Value) -> String {
     let info = &step["tool_info"];

@@ -298,6 +298,32 @@ fn every_failure_keeps_a_known_conversation_id() {
     assert!(detail.contains("(exit code 1)") && !detail.contains("conversation"));
 }
 
+#[cfg(unix)]
+#[test]
+fn signal_terminations_keep_the_signal_without_a_colon() {
+    use std::os::unix::process::ExitStatusExt;
+    let records = lines(SUCCESS);
+    let initialized = join(&records[..2]);
+    // Raw wait statuses: signal in the low bits, 0x80 marks a core dump.
+    for (raw, expected) in [
+        (libc::SIGKILL, "terminated by signal 9 (SIGKILL)"),
+        (
+            libc::SIGSEGV | 0x80,
+            "terminated by signal 11 (SIGSEGV), core dumped",
+        ),
+        (libc::SIGTERM, "(SIGTERM)"),
+    ] {
+        let mut output = Antigravity.output();
+        output.push(Stream::Stdout, initialized.as_bytes());
+        output.finish();
+        let (status, detail) = output.interpret(ExitStatus::from_raw(raw));
+        assert_eq!(status, JobStatus::Failed);
+        assert!(detail.contains(expected), "{detail}");
+        assert!(detail.contains("; conversation 4e502687"), "{detail}");
+        assert!(!detail.contains(": "), "{detail}");
+    }
+}
+
 #[test]
 fn malformed_unknown_and_oversized_records_fail_closed() {
     let records = lines(SUCCESS);

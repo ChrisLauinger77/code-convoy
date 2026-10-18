@@ -236,8 +236,8 @@ conversation history that CodeConvoy neither stores nor removes.
 Failure details state the recovery action before any colon, because the UI
 summary shows the text before the first colon: recognized advice precedes
 Antigravity's error text, which may contain colons (the documented unknown-model
-error does), and every failure path ends with the exit code and the known
-conversation ID. Advice is added only for causes
+error does), and every failure path ends with the exit code, or on Unix the
+terminating signal number and name, and the known conversation ID. Advice is added only for causes
 named in Antigravity's own text: sign-in (`authentication required`/`failed`/
 `expired`), model selection (`invalid model selection`, the documented error
 for an unknown `--model`), quota or credits (`quota`, `RESOURCE_EXHAUSTED`,
