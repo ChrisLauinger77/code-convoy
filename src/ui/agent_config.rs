@@ -160,6 +160,19 @@ impl App {
                         ui.hyperlink_to("Cursor sign-in help", agents::cursor::AUTHENTICATION_URL);
                     });
                 }
+                if self.state.draft.agent == AgentId::Antigravity {
+                    ui.small(agents::antigravity::SETUP_HINT);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.hyperlink_to(
+                            "Install Antigravity CLI",
+                            agents::antigravity::INSTALLATION_URL,
+                        );
+                        ui.hyperlink_to(
+                            "Antigravity headless help",
+                            agents::antigravity::HEADLESS_URL,
+                        );
+                    });
+                }
                 egui::CollapsingHeader::new("Execution permissions").show(ui, |ui| {
                     ui.small(backend.execution_summary(&self.state.draft.options));
                 });

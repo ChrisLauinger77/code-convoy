@@ -45,6 +45,7 @@ through the first convoy, Git review, manual validation and history.
 | Storage measurement and safe cleanup | [Storage Overview](docs/storage.md) · [Managed worktrees](docs/worktree-cleanup.md) |
 | Keyboard and alerts | [Shortcuts](#keyboard-shortcuts) · [Notifications](docs/notifications.md) |
 | Cursor setup, permissions and limitations | [Cursor CLI guide](docs/cursor.md) · [Validation evidence](docs/cursor-validation.md) |
+| Antigravity status and prerequisites | [Antigravity CLI guide](docs/antigravity.md) · [Feasibility record](docs/antigravity-validation.md) |
 | Upgrade and external CLI boundaries | [1.x compatibility](docs/compatibility.md) |
 | Platform evidence and remaining checks | [Verification matrix](docs/platform-validation.md) |
 | Build, contribute and report issues | [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Releasing](docs/releasing.md) |
@@ -62,6 +63,7 @@ version/platform evidence. Preparing 1.1.0 does not itself publish a new release
 | OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally |
 | Claude Code        | Supported | User-verified on Linux (five-repository README summarization convoy) and macOS                  |
 | Cursor CLI         | Experimental | Linux CLI `2026.10.16-e3cb207` syntax verified without sign-in; authenticated tasks and full protocol compatibility unverified |
+| Antigravity CLI    | In development | Discovery, version check and settings only; jobs fail before any process starts |
 
 ## Downloads and platform support
 

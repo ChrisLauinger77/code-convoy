@@ -234,6 +234,7 @@ impl Convoy {
                 AgentId::OpenCode => "opencode",
                 AgentId::Claude => "claude",
                 AgentId::Cursor => "cursor",
+                AgentId::Antigravity => "antigravity",
             },
             backend_label: run.task.agent.label(),
             task_summary: run

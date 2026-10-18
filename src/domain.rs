@@ -22,14 +22,16 @@ pub enum AgentId {
     #[serde(rename = "opencode")]
     OpenCode,
     Cursor,
+    Antigravity,
 }
 impl AgentId {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Codex,
         Self::Copilot,
         Self::OpenCode,
         Self::Claude,
         Self::Cursor,
+        Self::Antigravity,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -38,6 +40,7 @@ impl AgentId {
             Self::Copilot => "GitHub Copilot CLI",
             Self::OpenCode => "OpenCode",
             Self::Cursor => "Cursor CLI",
+            Self::Antigravity => "Antigravity CLI",
         }
     }
 }

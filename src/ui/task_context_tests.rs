@@ -4,6 +4,8 @@ use egui::accesskit::{Node, NodeId};
 
 #[path = "accessibility_tests.rs"]
 mod accessibility;
+#[path = "antigravity_tests.rs"]
+mod antigravity;
 #[path = "copy_results_tests.rs"]
 mod copy_results;
 #[path = "cursor_tests.rs"]

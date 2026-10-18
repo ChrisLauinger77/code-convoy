@@ -49,6 +49,7 @@ pub fn default_name(agent: AgentId) -> &'static str {
         AgentId::OpenCode => "opencode",
         AgentId::Claude => "claude",
         AgentId::Cursor => "agent",
+        AgentId::Antigravity => "agy",
     }
 }
 
@@ -232,11 +233,11 @@ mod tests {
     }
 
     #[test]
-    fn finds_all_five_agents_in_search_order_without_running_them() {
+    fn finds_all_six_agents_in_search_order_without_running_them() {
         let temp = tempfile::tempdir().unwrap();
         let path_dir = temp.path().join("path with spaces ü");
         let known_dir = temp.path().join("known install");
-        for name in ["codex", "copilot", "opencode", "claude", "agent"] {
+        for name in ["codex", "copilot", "opencode", "claude", "agent", "agy"] {
             let first = executable(&path_dir, name);
             let second = executable(&known_dir, name);
             assert_eq!(

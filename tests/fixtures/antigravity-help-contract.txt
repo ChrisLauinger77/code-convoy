@@ -1,0 +1,12 @@
+Antigravity CLI (synthetic documentation contract, not captured executable help)
+Usage: agy [flags]
+  -p, --print, --prompt <prompt>
+  --output-format <format>  text, json, stream-json
+  --input-format <format>   text, stream-json
+  --model <slug>
+  --effort <level>          low, medium, high
+  --dangerously-skip-permissions
+  --sandbox
+  --print-timeout <duration>
+  -c, --continue
+  --conversation <id>

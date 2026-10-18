@@ -662,3 +662,64 @@ fn automatic_discovery_and_exact_manual_names_use_gui_safe_locations() {
         );
     });
 }
+
+#[tokio::test]
+async fn antigravity_version_gate_rejects_old_or_unreadable_releases_and_recheck_recovers() {
+    let mut fixture = Fixture::new();
+    let agy = fixture.executable("agy");
+    let missing = fixture.marker("missing-agy").to_str().unwrap().to_owned();
+    std::fs::write(fixture.marker("agy.version"), "agy version 1.2.15\n").unwrap();
+    fixture
+        .checks
+        .ensure(AgentId::Antigravity, Some(agy.clone()));
+    fixture.complete().await;
+    let error = fixture
+        .checks
+        .result(AgentId::Antigravity, Some(&agy))
+        .unwrap()
+        .as_ref()
+        .unwrap_err();
+    assert!(!error.missing);
+    assert!(error.detail.contains("1.2.15 is unsupported"), "{error:?}");
+    assert_eq!(fixture.probes("agy"), vec!["help", "version"]);
+
+    std::fs::write(fixture.marker("agy.version"), "\n").unwrap();
+    fixture.checks.recheck(AgentId::Antigravity);
+    fixture.complete().await;
+    let error = fixture
+        .checks
+        .result(AgentId::Antigravity, Some(&agy))
+        .unwrap()
+        .as_ref()
+        .unwrap_err();
+    assert!(
+        error.detail.contains("could not be determined"),
+        "{error:?}"
+    );
+
+    std::fs::write(fixture.marker("agy.version"), "agy version 1.4.0\n").unwrap();
+    fixture.checks.recheck(AgentId::Antigravity);
+    fixture.complete().await;
+    let info = fixture
+        .checks
+        .result(AgentId::Antigravity, Some(&agy))
+        .unwrap()
+        .as_ref()
+        .unwrap();
+    assert!(info.detail.starts_with("agy version 1.4.0 detected."));
+
+    fixture
+        .checks
+        .ensure(AgentId::Antigravity, Some(missing.clone()));
+    fixture.complete().await;
+    assert!(
+        fixture
+            .checks
+            .result(AgentId::Antigravity, Some(&missing))
+            .unwrap()
+            .as_ref()
+            .unwrap_err()
+            .missing
+    );
+    assert!(!fixture.marker("agent-input").exists());
+}

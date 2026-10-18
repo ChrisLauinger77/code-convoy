@@ -144,6 +144,18 @@ fn every_backend_supplies_escaped_text_via_stdin_without_changing_permissions() 
             prompt: "Review attached context".into(),
             ..Default::default()
         };
+        if agent == AgentId::Antigravity {
+            // Execution and its text transport are not implemented yet.
+            task.attachments = vec![attachment.clone()];
+            assert!(
+                backend
+                    .build(&task, &repository)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("not available")
+            );
+            continue;
+        }
         let original = backend.build(&task, &repository).unwrap();
         task.attachments = vec![attachment.clone()];
         let supplied = backend.build(&task, &repository).unwrap();
@@ -199,7 +211,7 @@ fn image_transport_preserves_paths_and_uses_backend_owned_native_or_structured_i
             attachments: images.clone(),
             ..Default::default()
         };
-        if agent == AgentId::Cursor {
+        if matches!(agent, AgentId::Cursor | AgentId::Antigravity) {
             assert!(
                 backend
                     .build(&task, &repository)
@@ -268,7 +280,9 @@ fn image_transport_preserves_paths_and_uses_backend_owned_native_or_structured_i
                     );
                 }
             }
-            AgentId::Cursor => unreachable!("Cursor image transport is explicitly unsupported"),
+            AgentId::Cursor | AgentId::Antigravity => {
+                unreachable!("{agent:?} image transport is explicitly unsupported")
+            }
         }
     }
 }
