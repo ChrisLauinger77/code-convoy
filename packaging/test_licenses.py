@@ -30,10 +30,16 @@ class LicenseEvidence(unittest.TestCase):
         self.evidence = self.root / "third-party"
         shutil.copytree(licenses.EVIDENCE, self.evidence)
         self.catalog = json.loads((self.evidence / "catalog.json").read_text())
+        # Release-policy tests use the reviewed graph as their fixture. The
+        # repository's current lockfile may legitimately have newer versions.
+        (self.root / "Cargo.lock").write_text("version = 4\n" + "".join(
+            "\n[[package]]\n" + "".join(f"{key} = {json.dumps(p[key])}\n"
+                                     for key in ("name", "version", "source", "checksum"))
+            for p in self.catalog["crates"]))
 
-    def check(self):
+    def check(self, *, release=False):
         (self.evidence / "catalog.json").write_text(json.dumps(self.catalog))
-        return licenses.checked_catalog(self.root, self.evidence)
+        return licenses.checked_catalog(self.root, self.evidence, release=release)
 
     def test_locked_graph_has_coverage_and_explicit_exclusions(self):
         catalog, texts = self.check()
@@ -45,19 +51,32 @@ class LicenseEvidence(unittest.TestCase):
         for term in ("SIL OPEN FONT LICENSE", "UBUNTU FONT LICENCE", "Bitstream", "Unicode", "Mozilla Public License"):
             self.assertIn(term, combined)
 
-    def test_new_missing_duplicate_and_changed_crates_fail(self):
+    def test_release_requires_current_notices_but_ci_allows_catalog_drift(self):
         original = copy.deepcopy(self.catalog["crates"])
         changed = copy.deepcopy(original)
         changed[0]["checksum"] = "0" * 64
-        for packages in (original[:-1], original + [original[0]], changed):
-            with self.subTest(count=len(packages)), self.assertRaisesRegex(ValueError, "Cargo.lock changed"):
+        for packages in (original[:-1], changed):
+            with self.subTest(count=len(packages)), self.assertRaisesRegex(ValueError, "Release notice inventory"):
                 self.catalog["crates"] = packages
-                self.check()
+                self.check(release=True)
+            # Ordinary checks still verify notice/source integrity, without
+            # requiring an audit-snapshot edit for every lockfile change.
+            self.check()
+        self.catalog["crates"] = original + [original[0]]
+        with self.assertRaisesRegex(ValueError, "Duplicate crate"):
+            self.check()
 
-    def test_feature_and_tool_changes_require_reaudit(self):
+    def test_dependency_and_feature_edits_do_not_require_fingerprint_updates(self):
+        path = self.root / "Cargo.toml"
+        path.write_text(path.read_text().replace('[features]', '[features]\nlicense_test = []')
+                        .replace('anyhow = "1"', 'anyhow = "1.0"'))
+        self.check()
+        with self.assertRaisesRegex(ValueError, "Release dependency inputs"):
+            self.check(release=True)
+
+    def test_release_tool_changes_require_focused_provenance_review(self):
         inputs = self.catalog["inputs"]
-        for name, before, after in (("Cargo.toml", '[features]', '[features]\nlicense_test = []'),
-                                    (".github/workflows/release.yml", f'toolchain: "{inputs["rust"]}"', 'toolchain: "0.0.0"'),
+        for name, before, after in ((".github/workflows/release.yml", f'toolchain: "{inputs["rust"]}"', 'toolchain: "0.0.0"'),
                                     (".github/workflows/release.yml", f'PACKAGER_VERSION: "{inputs["packager"]}"', 'PACKAGER_VERSION: "0.0.0"'),
                                     ("packaging/appimage-tools.json", '20251108', '20251109')):
             path = self.root / name
@@ -348,9 +367,20 @@ class FinalLicensePayload(unittest.TestCase):
 
     def test_packaging_rejects_a_compiler_with_different_stdlib_notices(self):
         wrong = subprocess.CompletedProcess([], 0, "rustc 1.98.0 (fixture)\n")
-        with patch.object(licenses.subprocess, "run", return_value=wrong):
+        catalog = licenses.checked_catalog()
+        with patch.object(licenses, "checked_catalog", return_value=catalog) as checked, \
+                patch.object(licenses.subprocess, "run", return_value=wrong):
             with self.assertRaisesRegex(ValueError, "compiler differs"):
                 licenses.prepare()
+            checked.assert_called_once_with(release=True)
+
+    def test_packaging_and_publication_require_fresh_release_notices(self):
+        for gate in (licenses.prepare, licenses.require_release_ready):
+            with self.subTest(gate=gate.__name__), \
+                    patch.object(licenses, "checked_catalog", side_effect=ValueError("stale release notices")) as checked:
+                with self.assertRaisesRegex(ValueError, "stale release notices"):
+                    gate()
+                checked.assert_called_once_with(release=True)
 
     def test_final_appimage_checks_runtime_code_not_just_payload(self):
         with tempfile.TemporaryDirectory() as temporary:

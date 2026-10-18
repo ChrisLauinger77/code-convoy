@@ -1,4 +1,4 @@
-# Third-party license audit — readiness PR 5
+# Third-party licenses and maintenance policy
 
 CodeConvoy's original code and artwork remain **MIT licensed**. This audit adds
 notice/source delivery and omission checks; it does **not** certify complete
@@ -8,8 +8,9 @@ and the two-stage release architecture are unchanged.
 
 ## Inventory and evidence
 
-[catalog.json](../third-party/catalog.json) inventories all **457 third-party
-packages in Cargo.lock**, with exact versions, registry checksums, declared
+[catalog.json](../third-party/catalog.json) is the reviewed release snapshot,
+not a lockstep dependency database for ordinary pull requests. The audit below
+records **457 third-party packages**, with exact versions, registry checksums, declared
 license expressions, authors, source revisions and notice provenance. A
 conservative non-dev dependency traversal for Linux x86-64, Windows x86-64,
 macOS arm64 and macOS x86-64 reaches **382** crates, including build scripts and
@@ -191,7 +192,41 @@ Installer evidence: [NSIS licenses and linking exception](https://nsis.sourcefor
 [ApplicationID upstream links](https://nsis.sourceforge.io/ApplicationID_plug-in),
 [nsis-tauri-utils 0.2.1](https://github.com/tauri-apps/nsis-tauri-utils/tree/nsis_tauri_utils-v0.2.1).
 
-## Updating the audit
+## Ordinary CI and release validation
+
+Routine Renovate updates do **not** require regenerating or manually reviewing
+the complete 1.0.0 audit. The former unconditional Cargo.lock equality and
+dependency/feature fingerprint checks made ordinary updates fail even when no
+license obligation changed. These synchronization checks now run only when
+preparing release materials or checking publication readiness.
+
+| Ordinary pull-request CI | Final release validation |
+| --- | --- |
+| Formatting, strict Clippy, Rust tests, platform/process safety tests, release compilation and packaging regressions remain enabled. | The same checks plus existing native package/startup checks remain enabled. |
+| `licenses.py check-dependencies` reads current `cargo metadata --locked --all-features --format-version 1`, without a platform filter, once on Linux. It checks dependencies for every target, including build/dev inputs, rather than trusting old catalog versions or target exclusions. | `prepare` and `release-ready` require the catalog to match locked crate versions, registry sources/checksums and dependency/feature coverage. Refresh affected entries once during release preparation. |
+| Known notice-only license choices pass without catalog edits. The policy supports MIT, Apache-2.0 (including its LLVM exception), 0BSD, BSD-2/3-Clause, ISC, Zlib, BSL-1.0, Unlicense and Unicode-3.0. AND obligations accumulate; OR selects a supported alternative (including Apache for `self_cell`). | Actual notices are retained, including nested font/protocol copyrights and existing upstream-recovered texts; a supported SPDX declaration alone is not notice delivery. Use the existing collector to update changed entries and texts. |
+| New/changed copyleft, restricted, custom, unknown or license-file-only declarations fail with the affected crate named. Existing nonstandard reviews, currently MPL and fonts, carry forward only at the same source/version/checksum and terms. Git/path dependencies require a targeted source review. | Exact MPL sources, AppImage relinking inputs, NSIS sources, Rust library notices and Microsoft terms remain checksum-bound and delivered. Missing/altered materials and unexpected bundled ELF/PE/Mach-O binaries still fail final extraction checks. |
+| Retained evidence integrity and relevant release-tool/runtime pin checks remain covered by packaging tests. No manual complete-inventory refresh is needed for ordinary dependency version changes. | Compiler/runtime identity, GLIBC compatibility, original candidate checksums and provenance, all six assets and the two-stage candidate/publish workflow remain enforced. Publication still refuses recorded obligations. |
+
+This is an automated declaration policy and omission check, not a legal
+compliance certification or an exhaustive scan of source contents. Normal CI
+does not download/reconstruct the historical native audit. The existing
+standard-library Python scripts and Cargo metadata are used; no license
+management framework or new dependency is introduced.
+
+## When to review provenance
+
+Review the **affected component**, not the whole historical audit, when release
+Rust/compiler libraries, cargo-packager/NSIS templates or plugins, AppImage
+build tools/runtime, bundled native code/assets, retained source/relink recipes,
+governing terms or redistribution arrangements change. Contrary facts and new
+obligations also require review. Ordinary crate version bumps using the supported
+license choices need current notices at release time, not a repeat of unrelated
+native provenance investigations. CI runner/Python/action updates alone do not
+invalidate the native audit; changes to the actual release SDK/toolchain or
+licensing channel still need the relevant compatibility/provenance review.
+
+## Refreshing release materials
 
 For unchanged Windows components, reuse the final review and retain automated
 notice, source and binary/package checks. Revisit affected licensing questions
@@ -199,8 +234,9 @@ when toolchain/components, the runner licensing channel, governing terms,
 bundled Microsoft payloads or recipient/distribution arrangements change, or
 when a concrete contrary fact appears. Do not repeat the historical audit or
 require external confirmation for every application release. The following
-collection steps apply to changed inputs; they are not a requirement to reopen
-unchanged dependency decisions.
+collection steps apply to changed inputs during release preparation; they are
+not a requirement to reopen unchanged dependency decisions or edit the snapshot
+in every dependency PR. Keep existing evidence and update affected entries only.
 
 1. Fetch locked sources and export `cargo metadata --locked --format-version 1`.
    `packaging/collect_licenses.py METADATA_JSON OUTPUT_JSON` collects candidate
@@ -219,7 +255,11 @@ unchanged dependency decisions.
    archive; the generated report can omit them. Recheck installer/runtime
    native inputs when changing packaging tools or runner toolchains. Do not
    replace unknown identities with guesses or generic SPDX templates.
-5. Run `python3 packaging/licenses.py check`, all packaging tests and required
+5. Refresh the release snapshot's dependency-input fingerprint after checking
+   target coverage, using the existing `dependency_inputs`/SHA-256 calculation
+   in `licenses.py`. This is release inventory maintenance, not a new native
+   audit. Run `python3 packaging/licenses.py check-dependencies`,
+   `python3 packaging/licenses.py check`, all packaging tests and required
    Rust checks. After merge, produce a fresh non-publishing candidate from `main`
    and inspect all six final formats. Update the verification record and resolve
    remaining blockers before running `python3 packaging/licenses.py release-ready`.
@@ -230,8 +270,9 @@ dependency. These APIs were already enabled by locked process-wrap 10.0.1.
 Before/after `cargo metadata --locked --filter-platform` exports for all four
 release targets showed identical non-root dependency versions, features and
 edges. No crate, source, native payload or notice coverage changed. The catalog's
-manifest fingerprint is updated for the explicit declarations; the inventory
-gate and packaging tests verify the existing evidence unchanged.
+manifest fingerprint was updated for the explicit declarations. Under the
+current policy that fingerprint is checked only during release preparation;
+ordinary CI verifies current license declarations and the retained evidence.
 
 ## Earlier candidate verification record
 

@@ -79,8 +79,12 @@ All six final formats include `THIRD-PARTY-NOTICES.txt`,
 `RUST-STDLIB-LICENSES.html`, alongside CodeConvoy's MIT license. These are
 resources inside the existing packages, not additional release asset formats.
 The source bundle includes the exact locked MPL crate and the available
-AppImage/NSIS sources. See the [audit](third-party-licenses.md) for remaining
-source/relink and attribution gaps.
+AppImage/NSIS sources. The [maintenance policy](third-party-licenses.md#ordinary-ci-and-release-validation)
+separates routine dependency checks from release inventory preparation. Before
+building a candidate, refresh affected crate notices and release target coverage
+with the existing collector; unchanged native provenance reviews carry forward.
+`prepare` and `release-ready` enforce the current release snapshot. Routine PRs
+do not need exact catalog/version or manifest-fingerprint synchronization.
 
 Packaging requires the audited Rust compiler version. Final DEB/RPM/AppImage
 payloads are extracted by the existing ABI gate and checked against the notice
@@ -154,7 +158,12 @@ files. Mixed Markdown/code/configuration changes still run CI. Its matrix uses
 `ubuntu-latest`, `macos-latest`, and `windows-latest`, stable Rust, and Python
 3.15. Packaging unit tests, formatting, strict Clippy, all non-ignored Rust tests
 and a locked release build run on each platform; Windows also runs the explicit
-software graphics initialization test. Markdown-only edits have no new CI run.
+software graphics initialization test. Linux also checks current dependency
+license obligations across all targets/features with `licenses.py check-dependencies`.
+Supported notice-only updates need no audit snapshot edits. Copyleft, restricted,
+unknown/custom terms and changed checksum-bound exceptions require review of
+the affected component. Packaging regressions still check retained notice/source
+integrity and relevant native tool pins. Markdown-only edits have no new CI run.
 
 [Release packaging](../.github/workflows/release.yml) has separate triggers:
 `v*` tag pushes publish a previously tested candidate; manual dispatch builds
