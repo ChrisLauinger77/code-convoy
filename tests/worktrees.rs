@@ -612,12 +612,7 @@ async fn dirty_source_concurrent_same_repository_jobs_keep_independent_retained_
 
 #[tokio::test]
 async fn all_backends_preserve_invocations_attachments_and_failed_cancelled_results() {
-    // Antigravity execution is not implemented yet; its build fails closed.
-    for (index, agent) in AgentId::ALL
-        .into_iter()
-        .filter(|agent| *agent != AgentId::Antigravity)
-        .enumerate()
-    {
+    for (index, agent) in AgentId::ALL.into_iter().enumerate() {
         let mut h = Harness::new(1);
         let repo = repository(h.root.path(), "source").await;
         let before = git::diff(&repo.path).await.unwrap();

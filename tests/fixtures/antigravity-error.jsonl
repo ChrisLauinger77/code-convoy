@@ -1,0 +1,4 @@
+{"event":"init","conversation_id":"9ec58bfd-0000-4d67-83a5-000000000003","init":{"cwd":"/synthetic/worktree","tools":["run_command"],"permission_mode":"request-review"}}
+{"event":"step_update","step_update":{"conversation_id":"9ec58bfd-0000-4d67-83a5-000000000003","step_index":0,"state":"DONE","step_type":"user_input"}}
+{"event":"step_update","step_update":{"conversation_id":"9ec58bfd-0000-4d67-83a5-000000000003","step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"Partial answer"}}
+{"event":"result","result":{"conversation_id":"9ec58bfd-0000-4d67-83a5-000000000003","status":"ERROR","response":"Partial answer","error":"fixture quota exhausted","duration_seconds":1.2,"num_turns":1,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0}}}

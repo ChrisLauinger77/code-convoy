@@ -1,12 +1,21 @@
-Antigravity CLI (synthetic documentation contract, not captured executable help)
-Usage: agy [flags]
-  -p, --print, --prompt <prompt>
-  --output-format <format>  text, json, stream-json
-  --input-format <format>   text, stream-json
-  --model <slug>
-  --effort <level>          low, medium, high
-  --dangerously-skip-permissions
-  --sandbox
-  --print-timeout <duration>
-  -c, --continue
-  --conversation <id>
+Usage of agy:
+  --add-dir                       Synthetic contract: workspace directory
+  -c                              Synthetic contract: alias
+  --continue                      Synthetic contract: continue
+  --conversation                  Synthetic contract: conversation ID
+  --dangerously-skip-permissions  Synthetic contract: approve tool requests
+  --effort                        Synthetic contract: low, medium, high
+  -i                              Synthetic contract: alias
+  --input-format                  Synthetic contract: text, stream-json
+  --model                         Synthetic contract: model slug
+  --output-format                 Synthetic contract: text, json, stream-json
+  -p                              Synthetic contract: alias
+  --print                         Synthetic contract: one prompt
+  --print-timeout                 Synthetic contract: print-mode wait
+  --prompt                        Synthetic contract: alias
+  --prompt-interactive            Synthetic contract: interactive prompt
+  --sandbox                       Synthetic contract: terminal restrictions
+
+Available subcommands:
+  help            Synthetic contract
+  models          Synthetic contract

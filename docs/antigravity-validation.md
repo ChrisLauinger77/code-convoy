@@ -49,27 +49,114 @@ changelog fix the planned protocol depends on:
 The version gate is a backend hook (`AgentBackend::check_version`); other
 backends keep version output informational.
 
-## Planned execution constraints
+## Help contract
 
-These are review conditions for the execution milestone, not implemented
-behavior:
+Google's [spec-driven development codelab](https://codelabs.developers.google.com/sdd-agy-cli)
+shows real `agy --help` output from a release older than 1.1.8. It starts with
+`Usage of agy:`, lists double-dash flags, mentions no product name and does not
+yet show `--output-format`, `--input-format` or `--effort`. Its
+`--print-timeout` default of `5m0s` also places it before 1.2.6.
 
-- Exit 0 alone is never success. Success requires exactly one terminal
-  `result` with `status` `SUCCESS`, matching the exit status.
-- Soft-denied tools exit 0. `denied_actions` must remain visible and must not be
-  reported as a clean result.
-- `--print-timeout` returned partial output with exit 0 in 1.1.28, and the
-  documented default differs between the guide (5 minutes) and changelog
-  (unlimited since 1.2.6). Expiry must not become success.
-- `init.cwd` must match the assigned checkout.
-- Antigravity's own Git operations, `/fork` and remote control are not used.
+Check CLI therefore identifies `agy` by two flags from that capture that no
+other supported CLI advertises, `--print-timeout` and `--prompt-interactive`,
+rather than by a product name. It then requires the flags the invocation uses:
+`--input-format`, `--output-format`, `--effort`, `--model`,
+`--dangerously-skip-permissions` and `--sandbox`. A release like the captured one
+is recognized as agy but rejected with an update message. Claude Code and Cursor
+help are rejected as not agy.
+
+## Execution contract
+
+Checked on **2026-10-18** against the
+[headless guide](https://antigravity.google/docs/cli/headless/), including its
+example invocations and recorded `stream-json` output, and the changelog through
+**1.4.2**. No `agy` was installed; nothing was executed.
+
+**Transport.** The guide's driver example runs
+`agy --input-format stream-json --output-format stream-json` without `-p` and
+writes `{"event":"user","message":{"content":…}}` lines to stdin. It states that
+closing stdin ends the session after the current turn, with its final `result`
+still delivered, and that prompts passed with `-p` are dropped in this mode.
+CodeConvoy writes exactly one such line and closes stdin. This keeps the task out
+of process arguments and avoids command-line length limits. `--model=`,
+`--effort=`, `--dangerously-skip-permissions` and `--sandbox` are added only
+when selected.
+
+**Deadline.** CodeConvoy passes no `--print-timeout`. The 1.2.6 changelog
+changed the headless default from five minutes to unlimited, and the minimum
+supported release is 1.2.16. Since 1.1.28 an explicit expiry returns partial
+output and exits successfully, so passing any deadline would cap runs whose
+CodeConvoy time limit is blank and could end them with partial output. The
+guide's flag table still lists a five-minute default; the more specific
+changelog entry is followed. A configured CodeConvoy time limit stops the
+process tree itself and fails the job. If an Antigravity deadline did end a
+turn early, a step left `ACTIVE` without `DONE` would still fail the job.
+
+**Events.** Records are NDJSON with an `event` name and a payload under the same
+key. `init` carries the conversation ID at top level and `cwd`,
+`permission_mode` and optional `model` in its payload. `step_update` and
+`result` carry the conversation ID in their payload. Steps have `step_index`,
+`state` (`ACTIVE`/`DONE`) and `step_type` (`user_input`, `agent_response`,
+`tool`, `checkpoint` observed). Results have `status`, `response`, `num_turns`,
+optional `error` and `usage`.
+
+**Classification** (`agents/antigravity/output.rs`):
+
+| Evidence | Outcome |
+| --- | --- |
+| Authentication text on stderr or in a result error | Failed, sign-in guidance |
+| Any result whose status is not `SUCCESS` | Failed with the reported status and error |
+| `AGY_ERROR` line on stderr | Failed |
+| Non-zero exit | Failed, even after a `SUCCESS` result |
+| Invalid/unknown/oversized record, missing payload, changed conversation ID, duplicate init, `cwd` not the assigned checkout | Failed |
+| Result `error` that is present but not a string, or a non-empty error on a `SUCCESS` result | Failed |
+| `SUCCESS` result while any step (tool, streamed response or other type) is still `ACTIVE` without its `DONE`, or more than 1,024 unfinished steps | Failed |
+| No init, no result, or step activity after the last result | Failed (incomplete) |
+| `denied_actions` present | Succeeded; the detail and Activity name the refused count |
+| `tool_info.error` | Shown in Activity; not fatal (Antigravity treats benign tool errors as non-fatal since 1.1.20) |
+
+Streaming sessions can report a turn `ERROR` and still exit 0 (1.2.10 note), so
+the result status, not the exit code, decides failure. One stdin turn should
+produce one result. Additional results are accepted only if each one is
+`SUCCESS` for the same conversation and the stream ends on a result. This avoids
+the 1.0 Claude Code misclassification of background follow-up results while an
+earlier failure can never be erased by a later success.
+
+**Windows sandbox.** The 1.4.1 changelog says Antigravity turns the terminal
+sandbox off and asks before commands on Windows 10 and Windows 11 before 24H2;
+earlier releases fail to start sandboxed commands there. An explicit **Enable for
+this job** is therefore rejected at review unless the registry's
+`CurrentBuildNumber` is 26100 or newer, or when it cannot be read.
+
+Not used: `-p`, `--print-timeout`, `--continue`, `--conversation`, `--agent`,
+`--json-schema`, `--mode`, Antigravity's own worktrees, `/fork` and remote control. Tasks starting
+with a CLI-handled slash command end with an `ERROR` result in this transport.
+
+## Fixtures
+
+`tests/fixtures/antigravity-success.jsonl` reproduces the guide's recorded
+single-turn stream with sanitized IDs, text and `cwd`.
+`antigravity-activity.jsonl`, `antigravity-error.jsonl` and
+`antigravity-interrupted.jsonl` are synthetic variants of the documented event
+shapes. The `denied_actions` array of strings is an assumed shape; only its
+presence and length are interpreted. `tests/support/antigravity.rs` emits the
+same shapes from the test executable for process-level scenarios: success,
+authentication failure, `ERROR` with exit 3 and with exit 0, interruption,
+malformed and incomplete output, refused actions, edits and a different `cwd`.
 
 ## Unverified
 
-- Actual `agy --help` text: `tests/fixtures/antigravity-help-contract.txt` is a
-  synthetic documentation contract, including the `Antigravity` identity marker.
+- `agy --help` text from an installed 1.2.16+ release.
+  `tests/fixtures/antigravity-help-contract.txt` follows the layout of Google's
+  published capture with the flags documented since 1.1.8; see
+  [Help contract](#help-contract).
 - `agy --version` output format.
 - Installation locations; discovery uses the shared generic directories only.
+- The real `stream-json` stream from an installed release, `denied_actions`
+  shape, stderr wording of soft-deny and authentication notices, and whether
+  the guide's five-minute or the changelog's unlimited default applies to
+  stdin stream-json sessions.
+- Whether `init.cwd` reports a linked worktree path or its main repository.
 - Concurrent headless instances sharing one sign-in and conversation store.
 - Process-tree cancellation leaving no daemon (fixed in 1.2.9 according to the
   changelog).

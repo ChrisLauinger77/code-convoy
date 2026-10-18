@@ -4,6 +4,7 @@ use std::{
     process::Command,
     time::Duration,
 };
+mod antigravity;
 mod cursor;
 mod workflow;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -66,6 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.iter().any(|arg| arg.starts_with("--workspace=")) {
         return cursor::run(&args);
+    }
+    if is_antigravity(&args) {
+        return antigravity::run(&args);
     }
     let mut _probe_lock = None;
     if args.iter().any(|arg| arg == "--help" || arg == "--version") {
@@ -263,6 +267,7 @@ fn gate(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use fs2::FileExt;
     let cursor = args.iter().any(|a| a.starts_with("--workspace="));
+    let antigravity = is_antigravity(args);
     let claude = !cursor && args.iter().any(|a| a == "--print");
     // Attachment context follows the one-line control record. Capture the full
     // stdin below while keeping this test-only handshake independent of it.
@@ -301,7 +306,10 @@ fn gate(
         root.join(format!("{marker}.args")),
         serde_json::to_vec(args)?,
     )?;
-    if cursor {
+    if antigravity {
+        antigravity::init()?;
+        antigravity::text(&format!("fixture gate ready {marker}"));
+    } else if cursor {
         cursor::init()?;
         println!(
             "{}",
@@ -337,7 +345,11 @@ fn gate(
         std::thread::sleep(Duration::from_millis(5));
     }
     if config["fail"].as_bool() == Some(true) {
-        if cursor {
+        if antigravity {
+            // A turn error may still exit 0; the result status must govern.
+            antigravity::result("ERROR", "controlled failure", None);
+            std::process::exit(0);
+        } else if cursor {
             eprintln!("Cursor fixture failure");
         } else if claude {
             claude_result(true);
@@ -365,7 +377,9 @@ fn gate(
             _ => {}
         }
     }
-    if cursor {
+    if antigravity {
+        antigravity::result("SUCCESS", "", None);
+    } else if cursor {
         match config["cursor_outcome"].as_str() {
             Some("missing_auth") => {
                 eprint!(
@@ -404,6 +418,13 @@ fn gate(
         println!("{{\"type\":\"turn.completed\",\"usage\":{{}}}}");
     }
     Ok(())
+}
+
+// Antigravity streams stdin without --print; Claude's stream-json input uses it.
+fn is_antigravity(args: &[String]) -> bool {
+    args.windows(2)
+        .any(|pair| pair == ["--input-format", "stream-json"])
+        && !args.iter().any(|arg| arg == "--print")
 }
 
 fn opencode_complete() {

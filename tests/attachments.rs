@@ -144,18 +144,6 @@ fn every_backend_supplies_escaped_text_via_stdin_without_changing_permissions() 
             prompt: "Review attached context".into(),
             ..Default::default()
         };
-        if agent == AgentId::Antigravity {
-            // Execution and its text transport are not implemented yet.
-            task.attachments = vec![attachment.clone()];
-            assert!(
-                backend
-                    .build(&task, &repository)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("not available")
-            );
-            continue;
-        }
         let original = backend.build(&task, &repository).unwrap();
         task.attachments = vec![attachment.clone()];
         let supplied = backend.build(&task, &repository).unwrap();
@@ -172,6 +160,13 @@ fn every_backend_supplies_escaped_text_via_stdin_without_changing_permissions() 
         let input = if agent == AgentId::Cursor {
             assert!(supplied.input.is_none());
             supplied.args.last().unwrap().to_str().unwrap().to_owned()
+        } else if agent == AgentId::Antigravity {
+            // One stream-json user message carries the task and text context.
+            let input = supplied.input.unwrap();
+            assert_eq!(input.iter().filter(|byte| **byte == b'\n').count(), 1);
+            let message: serde_json::Value = serde_json::from_slice(&input).unwrap();
+            assert_eq!(message["event"], "user");
+            message["message"]["content"].as_str().unwrap().to_owned()
         } else {
             String::from_utf8(supplied.input.unwrap()).unwrap()
         };

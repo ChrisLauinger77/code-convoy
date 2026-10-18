@@ -13,7 +13,7 @@ Check the exact release's requirements and SHA-256 checksums. The
 native desktop testing; Linux's glibc 2.39 target alone is not desktop certification.
 
 Install Git and at least one supported CLI separately: Codex, GitHub Copilot CLI,
-OpenCode, Claude Code or the experimental Cursor CLI. Authenticate using that
+OpenCode, Claude Code, or the experimental Cursor CLI or Antigravity CLI. Authenticate using that
 CLI's own instructions, then confirm it works in a terminal. Do not enter credentials in CodeConvoy tasks.
 
 Launch CodeConvoy and select the agent in **NEW CONVOY**. Availability checks run
@@ -28,8 +28,8 @@ are not interchangeable sandbox guarantees. See the contracts for
 [Codex](../README.md#codex-contract), [Copilot](../README.md#copilot-contract),
 [OpenCode](../README.md#opencode-contract),
 [Claude Code](../README.md#claude-code-contract) and
-[Cursor CLI](cursor.md). Cursor sign-in and authenticated execution are separate
-from its help/version check. Claude Auto requires CLI/account
+[Cursor CLI](cursor.md) and [Antigravity CLI](antigravity.md). Their sign-in and
+authenticated execution are separate from the help/version check. Claude Auto requires CLI/account
 support and can be disabled by policy; inspect its reported effective mode.
 
 ## 2. Register and group repositories

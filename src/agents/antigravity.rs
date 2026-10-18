@@ -1,13 +1,15 @@
-//! Google Antigravity CLI (`agy`) discovery and configuration. Headless execution
-//! is not wired yet: jobs fail before any process starts. Sources, decisions
-//! and unverified behavior are recorded in docs/antigravity-validation.md.
+//! Google Antigravity CLI (`agy`) headless stream-json protocol, independent of
+//! other backends. Sources, decisions and unverified behavior are recorded in
+//! docs/antigravity-validation.md.
 use super::{AgentBackend, AgentOutput, OptionKind, OptionSpec, value};
 use crate::{
-    domain::{AgentId, AgentOptions, JobStatus, Repository, TaskConfig},
-    process::{CommandSpec, Stream},
+    domain::{AgentId, AgentOptions, Repository, TaskConfig},
+    process::CommandSpec,
 };
 use anyhow::Result;
-use std::{path::Path, process::ExitStatus, time::Duration};
+use std::{path::Path, time::Duration};
+
+mod output;
 
 pub struct Antigravity;
 // Presentation guidance only; CodeConvoy never signs in or installs Antigravity.
@@ -20,6 +22,8 @@ pub const HEADLESS_URL: &str = "https://antigravity.google/docs/cli/headless/";
 /// `denied_actions` (1.1.27), streamed errors exiting 3 (1.2.10) and no early
 /// exit before background commands are answered (1.2.16).
 pub const MINIMUM_VERSION: (u32, u32, u32) = (1, 2, 16);
+/// Antigravity's terminal sandbox needs Windows 11 24H2 (build 26100) or newer.
+pub const WINDOWS_SANDBOX_BUILD: u32 = 26100;
 
 static OPTIONS: &[OptionSpec] = &[
     OptionSpec {
@@ -64,7 +68,7 @@ static OPTIONS: &[OptionSpec] = &[
         key: "sandbox",
         label: "Terminal sandbox",
         default: "configured",
-        help: "Antigravity configuration keeps your terminal sandbox setting. Enable restricts agent-launched commands with Antigravity's OS containment (--sandbox) for this job. CodeConvoy does not provide a sandbox itself.",
+        help: "Antigravity configuration keeps your terminal sandbox setting. Enable restricts agent-launched commands with Antigravity's OS containment (--sandbox) for this job. On Windows it requires Windows 11 24H2 or newer; older Windows is rejected because Antigravity turns the sandbox off there. CodeConvoy does not provide a sandbox itself.",
         kind: OptionKind::Choice(&[
             ("configured", "Antigravity configuration"),
             ("enabled", "Enable for this job"),
@@ -81,13 +85,15 @@ static OPTIONS: &[OptionSpec] = &[
     },
 ];
 
-// Documented headless flags the planned invocation relies on.
+// agy's help has no product-name banner (Google's captured help starts with
+// "Usage of agy:"), so identify it by flags no other supported CLI advertises.
+const IDENTITY_FLAGS: &[&str] = &["--print-timeout", "--prompt-interactive"];
+// Documented flags the invocation relies on; older releases lack the first three.
 const REQUIRED_FLAGS: &[&str] = &[
-    "--print",
-    "--output-format",
     "--input-format",
-    "--model",
+    "--output-format",
     "--effort",
+    "--model",
     "--dangerously-skip-permissions",
     "--sandbox",
 ];
@@ -118,6 +124,10 @@ impl AgentBackend for Antigravity {
                 .is_none_or(|ext| ext.eq_ignore_ascii_case("exe")),
             "Use the native Antigravity agy.exe on Windows; .cmd/.bat/.ps1 wrappers are unsupported."
         );
+        if value(options, &OPTIONS[4]) == "enabled" {
+            #[cfg(windows)]
+            windows_sandbox(windows_build())?;
+        }
         Ok(CommandSpec::new(executable, directory).args(&["--help"]))
     }
     fn version_command(
@@ -130,18 +140,20 @@ impl AgentBackend for Antigravity {
         Ok(Some(spec.args(&["--version"])))
     }
     fn check_detection(&self, help: &str) -> Result<()> {
+        let advertises = |flag: &str| {
+            help.split_whitespace().any(|word| {
+                word.strip_prefix(flag)
+                    .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['[', '=', ',']))
+            })
+        };
         // Claude Code shares several flag names, so identity is checked first.
         anyhow::ensure!(
-            help.contains("Antigravity"),
-            "Expected Antigravity CLI help. Install the Antigravity CLI (agy) separately or choose its executable, then Check CLI again."
+            IDENTITY_FLAGS.iter().all(|flag| advertises(flag)),
+            "Expected Antigravity CLI (agy) help with --print-timeout and --prompt-interactive. Install the Antigravity CLI separately or choose its agy executable, then Check CLI again."
         );
         for flag in REQUIRED_FLAGS {
             anyhow::ensure!(
-                help.split_whitespace().any(|word| {
-                    word.strip_prefix(flag).is_some_and(|suffix| {
-                        suffix.is_empty() || suffix.starts_with(['[', '=', ','])
-                    })
-                }),
+                advertises(flag),
                 "Antigravity CLI help is missing {flag}. Update the Antigravity CLI and Check CLI again."
             );
         }
@@ -174,13 +186,53 @@ impl AgentBackend for Antigravity {
         );
         task.validate(std::slice::from_ref(repository))?;
         self.validate_attachments(task)?;
-        self.detection(&task.options, &repository.path)?;
-        anyhow::bail!(
-            "Antigravity CLI execution is not available in this CodeConvoy build yet. No Antigravity process was started and the repository was not modified."
-        )
+        let mut spec = self.detection(&task.options, &repository.path)?;
+        spec.args.clear();
+        // The documented stdin transport takes no -p prompt; one user message is
+        // written and stdin closed, so the session ends after that turn. No
+        // --print-timeout: headless runs are unlimited by default since 1.2.6,
+        // and an explicit expiry returns partial output with exit 0 (1.1.28).
+        spec = spec.args(&[
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+        ]);
+        for (index, flag) in [(1, "--model"), (2, "--effort")] {
+            let selected = value(&task.options, &OPTIONS[index]).trim();
+            if !selected.is_empty() {
+                spec.args.push(format!("{flag}={selected}").into());
+            }
+        }
+        if value(&task.options, &OPTIONS[3]) == "skip" {
+            spec.args.push("--dangerously-skip-permissions".into());
+        }
+        if value(&task.options, &OPTIONS[4]) == "enabled" {
+            spec.args.push("--sandbox".into());
+        }
+        let prompt = crate::attachments::text_prompt(task)?;
+        let mut input = serde_json::to_vec(
+            &serde_json::json!({"event": "user", "message": {"content": prompt}}),
+        )?;
+        input.push(b'\n');
+        spec.input = Some(input);
+        spec.remove_env = std::env::vars_os()
+            .filter_map(|(key, _)| {
+                key.to_str()
+                    .filter(|key| crate::process::git_environment_override(key, cfg!(windows)))
+                    .map(str::to_owned)
+            })
+            .collect();
+        // Antigravity scopes conversations to the process directory; do not let
+        // it or its tools consult another invocation's logical directory.
+        spec.remove_env.push("PWD".into());
+        Ok(spec)
     }
     fn output(&self) -> Box<dyn AgentOutput> {
-        Box::<UnavailableOutput>::default()
+        Box::<output::AntigravityOutput>::default()
+    }
+    fn output_for(&self, _options: &AgentOptions, directory: &Path) -> Box<dyn AgentOutput> {
+        Box::new(output::AntigravityOutput::for_workspace(directory))
     }
     fn execution_timeout(&self, options: &AgentOptions) -> Result<Option<Duration>> {
         let timeout = value(options, &OPTIONS[5]).trim();
@@ -197,7 +249,7 @@ impl AgentBackend for Antigravity {
         Ok(seconds.map(|seconds| Duration::from_secs(u64::from(seconds))))
     }
     fn attachment_summary(&self) -> &'static str {
-        "Execution is not available in this build yet, so no attachment transport is offered. Image attachments are unsupported."
+        "UTF-8 text context via stdin in one stream-json user message. Image attachments are unsupported."
     }
     fn execution_summary(&self, options: &AgentOptions) -> String {
         let permissions = if value(options, &OPTIONS[3]) == "skip" {
@@ -212,16 +264,41 @@ impl AgentBackend for Antigravity {
         };
         let timeout = match self.execution_timeout(options) {
             Ok(Some(timeout)) => format!(
-                "CodeConvoy time limit: {} seconds after spawn.",
+                "CodeConvoy time limit: {} seconds after spawn; expiry stops the process tree and retains edits.",
                 timeout.as_secs()
             ),
-            Ok(None) => "No CodeConvoy execution time limit.".into(),
+            Ok(None) => "No CodeConvoy execution time limit; CodeConvoy passes no Antigravity --print-timeout.".into(),
             Err(_) => "Invalid CodeConvoy time limit; review will reject it.".into(),
         };
         format!(
-            "Execution is not available in this build yet: jobs fail before any Antigravity process starts. Planned settings: {permissions} {sandbox} {timeout} Sign in with agy separately; CodeConvoy does not manage credentials."
+            "{permissions} {sandbox} {timeout} No interactive approval host. Existing Antigravity sign-in, settings, rules, hooks and MCP configuration apply. Process directory selection is not an OS sandbox. The task and text context are sent on stdin as one stream-json message. Success requires a SUCCESS result; it confirms CLI completion, not that files changed. Sign in with agy separately; CodeConvoy does not manage credentials."
         )
     }
+}
+
+/// Antigravity 1.4.1+ turns its terminal sandbox off and asks before commands
+/// on Windows 10 and Windows 11 before 24H2; earlier releases fail to start
+/// them. Reject the explicit choice there rather than run without it.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_sandbox(build: Option<u32>) -> Result<()> {
+    anyhow::ensure!(
+        build.is_some_and(|build| build >= WINDOWS_SANDBOX_BUILD),
+        "Antigravity's terminal sandbox requires Windows 11 24H2 (build {WINDOWS_SANDBOX_BUILD}) or newer; {}. Antigravity turns the sandbox off on older Windows, so choose Antigravity configuration for Terminal sandbox.",
+        build.map_or_else(
+            || "this Windows build could not be determined".to_owned(),
+            |build| format!("this system reports build {build}")
+        )
+    );
+    Ok(())
+}
+
+#[cfg(windows)]
+fn windows_build() -> Option<u32> {
+    windows_registry::LOCAL_MACHINE
+        .open(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
+        .and_then(|key| key.get_string("CurrentBuildNumber"))
+        .ok()
+        .and_then(|build| build.trim().parse().ok())
 }
 
 /// First `MAJOR.MINOR.PATCH` sequence in the reported line, ignoring prefixes
@@ -239,27 +316,23 @@ fn parse_version(line: &str) -> Option<(u32, u32, u32)> {
         })
 }
 
-/// Never reports success: execution is not implemented, so nothing is decoded.
-#[derive(Default)]
-struct UnavailableOutput;
-impl AgentOutput for UnavailableOutput {
-    fn push(&mut self, _stream: Stream, bytes: &[u8]) -> String {
-        String::from_utf8_lossy(bytes).into_owned()
-    }
-    fn finish(&mut self) -> String {
-        String::new()
-    }
-    fn interpret(&self, _status: ExitStatus) -> (JobStatus, String) {
-        (
-            JobStatus::Failed,
-            "Antigravity CLI execution is not available in this CodeConvoy build yet.".into(),
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::parse_version;
+    #![allow(clippy::unwrap_used)]
+    use super::{WINDOWS_SANDBOX_BUILD, parse_version, windows_sandbox};
+
+    #[test]
+    fn windows_sandbox_requires_a_known_24h2_or_newer_build() {
+        for build in [WINDOWS_SANDBOX_BUILD, 26200, 27000] {
+            windows_sandbox(Some(build)).unwrap();
+        }
+        // Windows 10 22H2, Windows 11 21H2/23H2 and unknown builds are rejected.
+        for build in [Some(19045), Some(22000), Some(22631), Some(26099), None] {
+            let error = windows_sandbox(build).unwrap_err().to_string();
+            assert!(error.contains("Windows 11 24H2"), "{error}");
+            assert!(error.contains("Antigravity configuration"), "{error}");
+        }
+    }
 
     #[test]
     fn parses_the_first_semantic_version_in_common_spellings() {
