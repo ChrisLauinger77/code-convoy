@@ -132,7 +132,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print!("{}", include_str!("../fixtures/copilot-1.0.65-help.txt"));
         print!("{}", include_str!("../fixtures/claude-help-contract.txt"));
         print!("{}", include_str!("../fixtures/cursor-help-contract.txt"));
-        print!(
+        // agy 1.4.2 prints help only to stderr; keep it off stdout here so
+        // detection must read the stream the backend selects.
+        eprint!(
             "{}",
             include_str!("../fixtures/antigravity-help-contract.txt")
         );
@@ -378,6 +380,24 @@ fn gate(
         }
     }
     if antigravity {
+        match config["antigravity_outcome"].as_str() {
+            Some("missing_auth") => {
+                eprintln!("Error: authentication required. Run agy in a terminal to sign in.");
+                std::process::exit(1);
+            }
+            Some("interrupted") => {
+                antigravity::result("INTERRUPTED", "", None);
+                std::process::exit(130);
+            }
+            Some("malformed") => {
+                println!("{{broken JSON");
+                return Ok(());
+            }
+            Some("incomplete") => return Ok(()),
+            Some("active_step") => antigravity::active_tool(),
+            Some("agy_error") => eprintln!("AGY_ERROR: {{\"status\":\"UNAVAILABLE\"}}"),
+            _ => {}
+        }
         antigravity::result("SUCCESS", "", None);
     } else if cursor {
         match config["cursor_outcome"].as_str() {

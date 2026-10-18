@@ -1,12 +1,14 @@
 #![allow(clippy::unwrap_used)]
 //! Antigravity CLI contract. Never invokes agy, signs in or reads credentials;
-//! protocol fixtures are documentation-derived (see tests/fixtures/README.md).
+//! fixtures are documentation-derived or captured from an unauthenticated agy
+//! 1.4.2 (see tests/fixtures/README.md).
 use codeconvoy::{
     agents::{
         self, AgentBackend,
         antigravity::{Antigravity, MINIMUM_VERSION},
     },
     domain::{AgentId, AppState, Repository, TaskConfig},
+    process::Stream,
 };
 use serde_json::Value;
 use std::{path::Path, process::ExitStatus};
@@ -40,6 +42,16 @@ fn status(code: i32) -> ExitStatus {
 #[test]
 fn availability_checks_antigravity_identity_and_each_required_flag_without_authentication() {
     let help = include_str!("fixtures/antigravity-help-contract.txt");
+    // agy 1.4.2 writes help only to stderr; other backends keep stdout.
+    assert_eq!(Antigravity.help_stream(), Stream::Stderr);
+    for agent in AgentId::ALL {
+        if agent != AgentId::Antigravity {
+            assert_eq!(
+                agents::backend(agent).unwrap().help_stream(),
+                Stream::Stdout
+            );
+        }
+    }
     // Google's captured help has no product-name banner, only "Usage of agy:".
     assert!(help.starts_with("Usage of agy:") && !help.contains("Antigravity"));
     Antigravity.check_detection(help).unwrap();
@@ -109,6 +121,8 @@ fn availability_checks_antigravity_identity_and_each_required_flag_without_authe
 fn version_gate_requires_a_readable_supported_release() {
     let (major, minor, patch) = MINIMUM_VERSION;
     for supported in [
+        // Exact `agy --version` stdout of the installed 1.4.2 release.
+        "1.4.2".to_owned(),
         format!("{major}.{minor}.{patch}"),
         format!("agy version {major}.{minor}.{}", patch + 1),
         format!("v{major}.{}.0 (build abc123)", minor + 1),
@@ -360,9 +374,29 @@ fn registry_preferences_and_persistence_keep_antigravity_independent() {
     assert_eq!(restored.agent_options, state.agent_options);
 }
 
+#[tokio::test]
+#[ignore = "Requires a locally installed agy; runs only --help/--version, never a task or sign-in"]
+async fn installed_agy_passes_check_cli() {
+    // CODECONVOY_AGY may name an absolute path, such as an isolated install.
+    let executable = std::env::var("CODECONVOY_AGY").unwrap_or_else(|_| "agy".into());
+    let dir = tempfile::tempdir().unwrap();
+    let options = [("executable".into(), executable)].into();
+    let detection = agents::detect(&Antigravity, &options, dir.path())
+        .await
+        .unwrap();
+    println!("{detection}");
+    assert!(detection.contains("detected. CLI compatibility checked"));
+    // Help and version leave nothing in the working directory.
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
 #[path = "antigravity/output.rs"]
 mod output;
 
 #[cfg(feature = "test-support")]
 #[path = "antigravity/execution.rs"]
 mod execution;
+
+#[cfg(feature = "test-support")]
+#[path = "antigravity/lifecycle.rs"]
+mod lifecycle;

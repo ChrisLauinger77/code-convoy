@@ -1,21 +1,39 @@
 Usage of agy:
-  --add-dir                       Synthetic contract: workspace directory
-  -c                              Synthetic contract: alias
-  --continue                      Synthetic contract: continue
-  --conversation                  Synthetic contract: conversation ID
-  --dangerously-skip-permissions  Synthetic contract: approve tool requests
-  --effort                        Synthetic contract: low, medium, high
-  -i                              Synthetic contract: alias
-  --input-format                  Synthetic contract: text, stream-json
-  --model                         Synthetic contract: model slug
-  --output-format                 Synthetic contract: text, json, stream-json
-  -p                              Synthetic contract: alias
-  --print                         Synthetic contract: one prompt
-  --print-timeout                 Synthetic contract: print-mode wait
-  --prompt                        Synthetic contract: alias
-  --prompt-interactive            Synthetic contract: interactive prompt
-  --sandbox                       Synthetic contract: terminal restrictions
+  --add-dir                       Placeholder (default [])
+  --agent                         Placeholder
+  -c                              Placeholder
+  --continue                      Placeholder
+  --conversation                  Placeholder
+  --dangerously-skip-permissions  Placeholder
+  --disable-slash-commands        Placeholder
+  --effort                        Placeholder (low|medium|high|xhigh|max)
+  -i                              Placeholder
+  --input-format                  Placeholder (text, stream-json) (default text)
+  --json-schema                   Placeholder
+  --log-file                      Placeholder
+  --mode                          Placeholder (accept-edits, auto, plan)
+  --model                         Placeholder
+  --new-project                   Placeholder
+  --output-format                 Placeholder (text, json, stream-json) (default text)
+  -p                              Placeholder
+  --print                         Placeholder
+  --print-timeout                 Placeholder (default 0s)
+  --project                       Placeholder
+  --prompt                        Placeholder
+  --prompt-interactive            Placeholder
+  --remote-control                Placeholder
+  --sandbox                       Placeholder
 
 Available subcommands:
-  help            Synthetic contract
-  models          Synthetic contract
+  agent           Placeholder
+  agents          Placeholder
+  changelog       Placeholder
+  help            Placeholder
+  install         Placeholder
+  mcp             Placeholder
+  mic-serve       Placeholder
+  models          Placeholder
+  plugin          Placeholder
+  plugins         Placeholder
+  remote-control  Placeholder
+  update          Placeholder

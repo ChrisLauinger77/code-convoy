@@ -63,7 +63,7 @@ version/platform evidence. Preparing 1.1.0 does not itself publish a new release
 | OpenCode           | Supported | Unverified; official-source contract and deterministic fixtures tested, CLI unavailable locally |
 | Claude Code        | Supported | User-verified on Linux (five-repository README summarization convoy) and macOS                  |
 | Cursor CLI         | Experimental | Linux CLI `2026.10.16-e3cb207` syntax verified without sign-in; authenticated tasks and full protocol compatibility unverified |
-| Antigravity CLI    | Experimental | Headless protocol implemented from Google's documentation and fixtures; no installed or authenticated `agy` tested |
+| Antigravity CLI    | Experimental | macOS CLI `1.4.2` Check CLI and unauthenticated failure verified; authenticated tasks unverified |
 
 ## Downloads and platform support
 

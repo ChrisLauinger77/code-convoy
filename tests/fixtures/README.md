@@ -14,10 +14,13 @@ the authentication gate, not structured protocol or native permission behavior.
 See [Cursor validation](../../docs/cursor-validation.md) for sources, commands,
 exit codes, isolation and platform limits.
 
-`antigravity-help-contract.txt` is a synthetic Antigravity CLI contract, not
-captured `agy --help` output. It follows the layout of Google's published help
-capture (`Usage of agy:` and a double-dash flag column) with placeholder
-descriptions, and adds the flags documented since 1.1.8. `antigravity-success.jsonl`
+`antigravity-help-contract.txt` keeps the layout and exact flag set of the
+installed agy 1.4.2 help (`Usage of agy:` and a double-dash flag column, printed
+to stderr) with placeholder descriptions instead of Google's text.
+`antigravity-1.4.2-authentication.stdout.jsonl` and
+`antigravity-1.4.2-authentication.stderr.txt` are the unmodified output of
+CodeConvoy's invocation of agy 1.4.2 without sign-in; no credentials, URLs or
+paths appear in them. `antigravity-success.jsonl`
 reproduces the headless guide's recorded stream with sanitized values;
 `antigravity-activity.jsonl`, `antigravity-error.jsonl` and
 `antigravity-interrupted.jsonl` are synthetic variants of the documented shapes.

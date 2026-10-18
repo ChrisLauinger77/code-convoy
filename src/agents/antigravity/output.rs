@@ -58,6 +58,7 @@ impl AntigravityOutput {
         let lower = text.to_lowercase();
         if [
             "authentication required",
+            "authentication failed",
             "authentication expired",
             "please log back in",
             "not authenticated",

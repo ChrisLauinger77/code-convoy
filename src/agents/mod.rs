@@ -47,6 +47,11 @@ pub trait AgentBackend: Send + Sync {
         Ok(None)
     }
     fn check_detection(&self, help: &str) -> Result<()>;
+    /// Stream that carries the detection command's help text. Most CLIs print
+    /// help to stdout; a backend whose CLI prints it to stderr overrides this.
+    fn help_stream(&self) -> Stream {
+        Stream::Stdout
+    }
     /// Optional version contract. `None` means the version command failed or
     /// was truncated; the default keeps the version informational.
     fn check_version(&self, _version: Option<&str>) -> Result<()> {
@@ -175,7 +180,10 @@ pub async fn detect_cancellable(
         !result.truncated,
         "CLI help output was truncated; compatibility cannot be checked."
     );
-    let help = String::from_utf8_lossy(&result.stdout);
+    let help = String::from_utf8_lossy(match backend.help_stream() {
+        Stream::Stdout => &result.stdout,
+        Stream::Stderr => &result.stderr,
+    });
     backend.check_detection(&help)?;
     let version = if let Some(command) = backend.version_command(options, directory)? {
         let reported = match process::capture_cancellable(command, 8192, cancellation).await {

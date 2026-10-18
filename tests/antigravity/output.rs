@@ -185,6 +185,28 @@ fn authentication_failures_are_classified_without_reading_credentials() {
 }
 
 #[test]
+fn installed_1_4_2_unauthenticated_output_is_an_authentication_failure() {
+    // Captured from agy 1.4.2 with CodeConvoy's exact invocation, no sign-in:
+    // a lone ERROR result without init, exit 1, and a stderr notice.
+    let stdout = include_str!("../fixtures/antigravity-1.4.2-authentication.stdout.jsonl");
+    let stderr = include_str!("../fixtures/antigravity-1.4.2-authentication.stderr.txt");
+    let (status, detail, text) = outcome(stdout, stderr, 1);
+    assert_eq!(status, JobStatus::Failed);
+    assert!(
+        detail.contains("authentication is required or expired"),
+        "{detail}"
+    );
+    assert!(text.contains("Antigravity result: ERROR · authentication failed"));
+    // The result error alone is recognized too, even if stderr wording changes.
+    let (status, detail, _) = outcome(stdout, "", 1);
+    assert_eq!(status, JobStatus::Failed);
+    assert!(
+        detail.contains("authentication is required or expired"),
+        "{detail}"
+    );
+}
+
+#[test]
 fn malformed_unknown_and_oversized_records_fail_closed() {
     let records = lines(SUCCESS);
     let mut malformed = join(&records[..2]);
