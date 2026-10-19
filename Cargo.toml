@@ -15,7 +15,7 @@ anyhow = "1"
 base64 = "0.23.0"
 directories = "6"
 # Native hyperlinks need this explicit feature because eframe defaults are disabled.
-eframe = { version = "0.36.0", default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "accesskit", "links"] }
+eframe = { version = "0.37.0", default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "accesskit", "links"] }
 fs2 = "0.4"
 process-wrap = { version = "10.0", default-features = false, features = ["tokio1", "process-group", "job-object", "kill-on-drop", "creation-flags"] }
 rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal", "wayland"] }
@@ -74,7 +74,7 @@ windows-registry = "0.100"
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 # DX12 exposes Windows' WARP software adapter as well as hardware GPUs, avoiding
 # a modern OpenGL requirement in VMs. Other platforms keep their existing renderer.
-eframe = { version = "0.36.0", default-features = false, features = ["wgpu_no_default_features"] }
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu_no_default_features"] }
 wgpu = { version = "30.0", default-features = false, features = ["dx12", "wgsl"] }
 
 [target.'cfg(windows)'.build-dependencies]
