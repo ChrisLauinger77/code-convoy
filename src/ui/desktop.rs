@@ -59,11 +59,6 @@ impl App {
             },
         );
         ui.small("Minimized convoys keep running. Dock/taskbar access stays available.");
-        ui.separator();
-        if ui.button("Quit CodeConvoy").clicked() {
-            self.explicit_quit = true;
-            ui.close();
-        }
     }
 
     pub(super) fn desktop_action(&mut self, action: Action) {

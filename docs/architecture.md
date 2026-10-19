@@ -31,6 +31,7 @@ do not establish compatibility with every CLI version or platform. See
 | `agents/antigravity` | `agy` help/version contract with minimum-version gate, model/effort/permission/sandbox/deadline options, one stdin stream-json turn, native NDJSON decoding and conservative completion |
 | `process` | Shell-free process spawning, pipes, cancellation tokens, process-tree ownership, short-command timeouts |
 | `git` | Root/common-directory identity, working-tree inspection, direct diff and isolated diff dispatch |
+| `git_client` | Verified external Git client presets, filesystem-only launcher lookup, shell-free `{repo}` arguments and detached client start; runs no Git |
 | `worktrees` | Owned attempt reservation, detached Git creation, ownership verification and fixed-base result inspection |
 | `runner` | Preflight, immutable snapshots, per-job Git recheck and execution events |
 | `runner/raw_output` | Bounded UTF-8 stream decoding for original CLI text, separate from Activity |
@@ -1286,3 +1287,22 @@ Storage keeps the domain Run parser and a required envelope, without recovery.
 Export keeps its schema/format/worker and adds Unix directory synchronization.
 No scheduler, repository lease, backend, notification or cleanup algorithm changed.
 See [measurement and reliability evidence](history-reliability-validation.md).
+
+## v1.3 external Git client
+
+The global `git_client` preference (client, optional executable, Custom argument
+list) is an additive, default-omitted state field. `git_client::resolve` maps it
+to a program plus structured arguments on a blocking worker: presets come from a
+per-platform table that contains only verified methods, and an unverified
+platform reports the preset unavailable instead of guessing. `{repo}` is
+substituted per argument, single-pass, on `OsString`, so paths are never joined
+into a command line. `git_client::open` checks that the target is an existing
+absolute directory and starts the client with Tokio, null stdio, inherited
+environment minus `GIT_*` (and CodeConvoy's own AppImage variables), its own
+process group, and no kill-on-drop. It waits at most two seconds to report a
+failed hand-off, then leaves the client running; Tokio reaps it later. This is
+separate from `process`, whose children are supervised and cancelled with
+convoys. `ui/git_client_settings` edits a draft in a modal dialog (egui menus
+close on any click, so fields cannot live in a submenu), dispatches one check per
+draft change, ignores stale or closed-dialog results and saves synchronously on
+Save. See [Git clients](git-clients.md).
