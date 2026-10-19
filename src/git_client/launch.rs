@@ -1,6 +1,6 @@
 //! Detached, shell-free start of a Git client. Unlike agent processes, the
 //! client outlives CodeConvoy and is never cancelled, supervised or killed.
-use super::{Command, Error, Preferences};
+use super::{Command, Error, Preferences, Target};
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -22,6 +22,18 @@ pub async fn open(preferences: Preferences, directory: PathBuf) -> Result<(), Er
     .await
     .map_err(|error| Error::Internal(error.to_string()))??;
     start(&command, &directory, OBSERVE).await
+}
+
+/// Open a recorded repository or worktree after proving, from Git's metadata
+/// files, that it is still that working tree. Nothing is substituted for it.
+pub async fn open_target(preferences: Preferences, target: Target) -> Result<(), Error> {
+    let directory = tokio::task::spawn_blocking(move || {
+        super::target::verify(&target)?;
+        Ok::<_, Error>(target.path)
+    })
+    .await
+    .map_err(|error| Error::Internal(error.to_string()))??;
+    open(preferences, directory).await
 }
 
 pub(crate) async fn start(

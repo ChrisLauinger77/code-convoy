@@ -40,6 +40,7 @@ through the first convoy, Git review, manual validation and history.
 | Groups, filtering, templates and attachments | [Task context](docs/task-context.md) |
 | Worktree location, tray and window lifecycle | [Desktop workflow](docs/desktop-workflow.md) |
 | Result review, comparison and copying | [Visibility and review](docs/visibility.md) |
+| Opening repositories and worktrees in GitKraken, SourceGit, AngKorGit, Sublime Merge, Fork or a custom client | [External Git clients](docs/git-clients.md) |
 | Validation commands, presets and bulk assignment | [Manual validation](docs/validation.md) |
 | History, retention and reports | [History](docs/history.md) · [Markdown/JSON export](docs/history-export.md) |
 | Storage measurement and safe cleanup | [Storage Overview](docs/storage.md) · [Managed worktrees](docs/worktree-cleanup.md) |
@@ -339,6 +340,23 @@ is available. Direct counts include pre-existing edits relative to the reviewed
 HEAD; isolated results retain a changed/unchanged flag against their fixed base.
 Template names were not saved in run history and are not searchable. See
 [visibility behavior, compatibility and validation](docs/visibility.md).
+
+## External Git clients (1.3.0)
+
+Choose your Git client once under **Settings → Git client…**. Built-in presets
+cover GitKraken, SourceGit, AngKorGit, Sublime Merge and Fork where their launch
+method is documented for your platform, and **Custom** takes any executable with
+`{repo}` arguments. Then use **⬈ Open in Git Client** on a registered repository,
+or on a repository in convoy results and history.
+
+CodeConvoy picks the directory from the recorded execution context: the
+repository for Direct jobs and the job's own retained worktree for isolated
+jobs. This also holds for older convoys and multi-repository convoys, after any
+later settings change. Missing, moved or mismatched directories are reported;
+nothing else is opened and nothing is recreated. Opening starts the client
+without a shell, runs no Git command and changes no repository. See
+[external Git clients](docs/git-clients.md) for verified launch methods, platform
+support and limits.
 
 ## Repeated maintenance tasks
 

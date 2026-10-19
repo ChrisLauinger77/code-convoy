@@ -4,10 +4,12 @@
 //! never runs Git, never changes a repository and never supervises the client.
 mod launch;
 mod presets;
+mod target;
 #[cfg(test)]
 mod tests;
 
-pub use launch::open;
+pub use launch::{open, open_target};
+pub use target::{Kind, Target};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
@@ -221,6 +223,11 @@ pub enum Error {
         path: PathBuf,
         problem: &'static str,
     },
+    /// The recorded repository or worktree cannot be opened as it is.
+    Target {
+        path: Option<PathBuf>,
+        problem: String,
+    },
     Start {
         program: PathBuf,
         detail: String,
@@ -278,6 +285,18 @@ impl fmt::Display for Error {
                 "Cannot open {} in the Git client: {problem}",
                 path.display()
             ),
+            Self::Target {
+                path: Some(path),
+                problem,
+            } => write!(
+                f,
+                "Cannot open {} in the Git client: {problem}",
+                path.display()
+            ),
+            Self::Target {
+                path: None,
+                problem,
+            } => write!(f, "Cannot open this result in the Git client: {problem}"),
             Self::Start { program, detail } => write!(
                 f,
                 "Could not start the Git client {}: {detail}. Check its installation and path in Settings › Git client.",

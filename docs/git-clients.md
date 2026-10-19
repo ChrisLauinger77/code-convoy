@@ -4,6 +4,58 @@ CodeConvoy can open a repository or worktree in the Git client you already use.
 It starts the client as a separate program. It does not run Git, change the
 repository, embed Git features or manage client accounts.
 
+## Open in Git Client
+
+The **⬈ Open in Git Client** action appears in two places:
+
+- In each registered repository row, next to **Configure validation…**. It opens
+  the registered repository.
+- For the selected repository in a convoy's results, for current and historical
+  convoys alike. In Review it sits beside the line that shows where the job
+  ran, such as **Direct · current working tree**; in the other result tabs it
+  sits next to **Copy Repository Result**.
+
+You never choose between the original repository and a worktree. CodeConvoy
+uses what it recorded when the job ran:
+
+| Job | Opens |
+| --- | --- |
+| Current working tree (Direct) | The repository path saved with the convoy |
+| Isolated worktree | That job's retained worktree |
+
+Each repository in a multi-repository convoy resolves on its own. Later changes
+do not affect a saved convoy: a different default execution mode, worktree
+location or registration list. Saves from before isolated execution existed
+open their repository.
+
+Before starting the client, CodeConvoy checks Git's metadata files. It does not
+run Git:
+
+- The recorded path still exists, is a directory and still resolves to itself.
+  A path that now resolves elsewhere, for example through a symlink left after
+  a move, is rejected.
+- The directory is still a Git working tree (`.git` is present).
+- A worktree's `.git` link and Git's backlink still name each other, inside the
+  recorded repository's `worktrees` administration.
+- When CodeConvoy recorded the Git common directory, the tree still belongs to
+  it.
+
+If a check fails, the action reports why, with the path, in the footer. It never
+opens another directory, the original repository, the current directory or a
+new worktree, and it never restores, repairs or recreates anything. Typical
+messages cover a deleted or cleaned-up worktree, a moved or renamed repository
+(register it again at its new location), missing Git metadata, a worktree that
+now belongs to another tree or repository, and a job whose isolated worktree was
+never created.
+
+The action is disabled, with a hover explanation, while no Git client is
+configured, while an isolated worktree is still being prepared, and while Apply,
+Discard or cleanup may change that worktree. Otherwise opening is available for
+running and finished jobs. It takes no repository lease, doesn't wait for or
+affect running convoys, and has no effect on cancellation or process supervision.
+Hover over the action to see which repository or worktree it opens, and in which
+client. The result appears as a footer notice.
+
 ## Settings
 
 Open **Settings → Git client…** and choose a client. Changes apply when you
@@ -124,6 +176,30 @@ Sources, as checked in October 2026:
 
 ## Validation
 
+Automated tests for the action use real Git repositories and linked worktrees.
+They cover:
+
+- Direct and isolated jobs, including running jobs.
+- Multi-repository convoys, each job resolved independently.
+- Historical runs after settings and registrations change, and after a save
+  and reload.
+- Isolated jobs whose worktree was never created.
+- Deleted worktrees (never recreated) and moved repositories.
+- Missing or invalid `.git` metadata, a worktree path holding another tree or
+  repository, and symlinked paths (Unix).
+- Opening during Apply or Discard.
+- Unchanged Git metadata and `git status` after verifying and launching.
+
+An end-to-end test runs real isolated and Direct convoys with the test agent.
+It checks that each job's target is the directory where its agent ran and made
+its edit, and that opening a worktree while its agent runs neither blocks nor
+fails the job. UI tests cover:
+
+- The disabled state and its explanation when no client is configured.
+- Keyboard activation from repository rows and from both result views.
+- Per-job paths.
+- Unchanged run state and an idle scheduler.
+
 Automated tests use a probe executable in place of a client on Linux, macOS and
 Windows CI. They cover preset resolution and platform availability, custom
 commands, missing and invalid executables, rejected Windows scripts, `{repo}`
@@ -144,6 +220,16 @@ characters and `$(x)`:
 
 Each client recorded the exact path in its recent-repository list. `git status`
 and `HEAD` of both repositories were unchanged and no files were added.
+
+Native check of the verified open path on the same Mac, using SourceGit 2026.22
+and a disposable repository with a linked worktree:
+
+- The worktree opened while SourceGit was not running.
+- The repository opened in the running instance.
+- A deleted worktree was reported, and SourceGit never received it. A worktree
+  checked against another repository was rejected.
+- SourceGit recorded only the two valid paths. `git status` and the worktree
+  registrations were unchanged, and the deleted directory was not recreated.
 
 Not yet tested with an installed client: GitKraken, Sublime Merge and Fork on any
 platform, and every client on Linux and Windows.

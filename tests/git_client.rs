@@ -198,3 +198,101 @@ async fn missing_targets_and_executables_start_nothing() {
         Err(Error::NotConfigured)
     );
 }
+
+fn git(directory: &Path, args: &[&str]) -> String {
+    let output = std::process::Command::new("git")
+        .args(["-c", "commit.gpgsign=false", "-c", "user.name=Fixture"])
+        .args(["-c", "user.email=fixture@example.invalid"])
+        .arg("-C")
+        .arg(directory)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{args:?}");
+    String::from_utf8(output.stdout).unwrap()
+}
+
+/// Every path, size, modification time and content hash below `root`.
+fn snapshot(root: &Path) -> Vec<(PathBuf, u64, std::time::SystemTime, Vec<u8>)> {
+    let mut entries = Vec::new();
+    let mut pending = vec![root.to_owned()];
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(directory).unwrap() {
+            let entry = entry.unwrap();
+            let metadata = entry.metadata().unwrap();
+            let content = if metadata.is_dir() {
+                pending.push(entry.path());
+                Vec::new()
+            } else {
+                fs::read(entry.path()).unwrap()
+            };
+            entries.push((
+                entry.path(),
+                metadata.len(),
+                metadata.modified().unwrap(),
+                content,
+            ));
+        }
+    }
+    entries.sort();
+    entries
+}
+
+#[tokio::test]
+async fn opening_a_repository_or_worktree_modifies_no_git_state() {
+    let temp = executable::directory();
+    let source = temp.path().join("source ü");
+    fs::create_dir(&source).unwrap();
+    git(&source, &["init", "--quiet"]);
+    git(
+        &source,
+        &["commit", "--quiet", "--allow-empty", "-m", "base"],
+    );
+    fs::write(source.join("dirty.txt"), "uncommitted\n").unwrap();
+    let tree = temp.path().join("worktree ü");
+    git(
+        &source,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            tree.to_str().unwrap(),
+        ],
+    );
+    let source = source.canonicalize().unwrap();
+    let tree = tree.canonicalize().unwrap();
+    let common = source.join(".git");
+    let status = git(
+        &source,
+        &["status", "--porcelain=v1", "--untracked-files=all"],
+    );
+    let before = (snapshot(&common), snapshot(&tree));
+    let probe = probe(temp.path(), "");
+    for target in [
+        git_client::Target {
+            kind: git_client::Kind::Repository,
+            path: source.clone(),
+            common_dir: Some(common.clone()),
+        },
+        git_client::Target {
+            kind: git_client::Kind::Worktree,
+            path: tree.clone(),
+            common_dir: Some(common.clone()),
+        },
+    ] {
+        let expected = target.path.to_str().unwrap().to_owned();
+        git_client::open_target(preferences(Client::Custom, &probe, &["{repo}"]), target)
+            .await
+            .unwrap();
+        assert_eq!(arguments(&record(&probe).unwrap()), [expected]);
+    }
+    assert_eq!((snapshot(&common), snapshot(&tree)), before);
+    assert_eq!(
+        git(
+            &source,
+            &["status", "--porcelain=v1", "--untracked-files=all"]
+        ),
+        status
+    );
+}

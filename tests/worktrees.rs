@@ -1,10 +1,13 @@
 #![cfg(feature = "test-support")]
 #![allow(clippy::unwrap_used)]
+#[path = "support/executable.rs"]
+mod executable;
+
 use codeconvoy::{
     agents,
     attachments::Attachment,
     domain::*,
-    git,
+    git, git_client,
     persistence::Store,
     process::Cancellation,
     runner::{self, Event, PreparedRun, RunManager},
@@ -2320,5 +2323,156 @@ async fn binding_failure_retains_attempt_metadata_through_restart_and_blocks_git
     );
     // History protections still pin this unbound partial result.
     assert!(restored.runs[0].unresolved_results());
+    h.close().await;
+}
+
+/// Opens a target with a probe executable in place of a Git client and
+/// returns the arguments it received.
+async fn open_with_probe(target: git_client::Target) -> Vec<String> {
+    let temp = executable::directory();
+    let probe = temp
+        .path()
+        .join(format!("git-client-probe{}", std::env::consts::EXE_SUFFIX));
+    executable::install(&probe);
+    let preferences = git_client::Preferences {
+        client: Some(git_client::Client::Custom),
+        executable: probe.to_str().unwrap().into(),
+        arguments: vec!["{repo}".into()],
+    };
+    git_client::open_target(preferences, target).await.unwrap();
+    let record: serde_json::Value =
+        serde_json::from_slice(&fs::read(probe.with_extension("json")).unwrap()).unwrap();
+    serde_json::from_value(record["arguments"].clone()).unwrap()
+}
+
+/// What the UI holds for a job after applying its runner events.
+fn recorded_job(events: &[Event], snapshot: &Run, index: usize) -> Job {
+    let mut job = snapshot.jobs[index].clone();
+    for event in events {
+        match event {
+            Event::Preparing {
+                run,
+                job: j,
+                worktree,
+            } if *run == snapshot.id && *j == index => job.worktree = worktree.clone(),
+            Event::Started {
+                run,
+                job: j,
+                before,
+            } if *run == snapshot.id && *j == index => {
+                job.before = Some(before.clone());
+                job.status = JobStatus::Running;
+            }
+            Event::Finished {
+                run,
+                job: j,
+                status,
+                ..
+            } if *run == snapshot.id && *j == index => job.status = *status,
+            _ => {}
+        }
+    }
+    job
+}
+
+fn every_job_ready(events: &[Event], run: u64, jobs: usize) -> bool {
+    (0..jobs).all(|index| {
+        events.iter().any(|e| {
+            matches!(e, Event::Output { run: r, job, text, .. }
+                if *r == run && *job == index && text.contains("fixture gate ready"))
+        })
+    })
+}
+
+#[tokio::test]
+async fn git_client_targets_are_where_each_job_actually_ran() {
+    let mut h = Harness::new(4);
+    let alpha = repository(h.root.path(), "alpha ü").await;
+    let beta = repository(h.root.path(), "beta with spaces").await;
+    let direct = repository(h.root.path(), "direct").await;
+
+    // A multi-repository isolated convoy: each job edits its own checkout.
+    let isolated = h
+        .start(
+            1,
+            h.task(1, AgentId::Codex, true, false),
+            vec![alpha.clone(), beta.clone()],
+        )
+        .await;
+    h.until(|e| every_job_ready(e, 1, 2)).await;
+    // While both agents run, opening a worktree neither waits for nor
+    // disturbs them: it reads Git metadata and starts a separate program.
+    for index in 0..2 {
+        let job = recorded_job(&h.events, &isolated, index);
+        assert_eq!(job.status, JobStatus::Running);
+        let target = git_client::Target::job(&job).unwrap();
+        assert_eq!(target.kind, git_client::Kind::Worktree);
+        assert_eq!(
+            open_with_probe(target.clone()).await,
+            [target.path.to_str().unwrap()]
+        );
+    }
+    h.release(1, "tree");
+    h.until(|e| {
+        (0..2).all(|job| {
+            e.iter().any(|e| matches!(e, Event::Finished { run: 1, job: j, status: JobStatus::Succeeded, .. } if *j == job))
+        })
+    })
+    .await;
+
+    let direct_run = h
+        .start(
+            2,
+            TaskConfig {
+                execution_mode: ExecutionMode::Direct,
+                ..h.task(2, AgentId::Codex, true, false)
+            },
+            vec![direct.clone()],
+        )
+        .await;
+    h.until(|e| Harness::ready(e, 2)).await;
+    h.release(2, "direct");
+    h.until(|e| Harness::finished(e, 2, JobStatus::Succeeded))
+        .await;
+
+    let mut targets = Vec::new();
+    for (index, source) in [&alpha, &beta].into_iter().enumerate() {
+        let job = recorded_job(&h.events, &isolated, index);
+        let target = git_client::Target::job(&job).unwrap();
+        // The agent's edit is in the opened worktree, not the original.
+        assert_eq!(
+            fs::read_to_string(target.path.join("tracked.txt")).unwrap(),
+            "1"
+        );
+        assert_eq!(
+            fs::read_to_string(source.path.join("tracked.txt")).unwrap(),
+            "committed base\n"
+        );
+        assert_eq!(job.worktree.as_ref().unwrap().repository, *source);
+        targets.push(target.path.clone());
+        assert_eq!(open_with_probe(target).await.len(), 1);
+    }
+    assert_ne!(targets[0], targets[1], "each job resolves independently");
+
+    let job = recorded_job(&h.events, &direct_run, 0);
+    let target = git_client::Target::job(&job).unwrap();
+    let ran_in = fs::read_to_string(h.root.path().join("control").join("2-direct.cwd")).unwrap();
+    assert_eq!(
+        Path::new(&ran_in).canonicalize().unwrap(),
+        target.path,
+        "the Direct target is the agent's working directory"
+    );
+    assert_eq!(
+        (target.kind, &target.path),
+        (git_client::Kind::Repository, &direct.path)
+    );
+    assert_eq!(
+        fs::read_to_string(direct.path.join("tracked.txt")).unwrap(),
+        "2"
+    );
+    assert_eq!(
+        open_with_probe(target).await,
+        [direct.path.to_str().unwrap()]
+    );
     h.close().await;
 }
