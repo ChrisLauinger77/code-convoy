@@ -233,7 +233,8 @@ fn text_focus_blocks_run_and_views_and_preserves_copy_paste_select_all() {
     let mut keys = Keyboard::new(|app, ui, ctx| {
         app.handle_shortcuts(ctx);
         let edit = ui.add(
-            egui::TextEdit::multiline(&mut app.state.draft.prompt).id(egui::Id::new("test_task")),
+            egui::TextEdit::multiline(&mut app.state.draft.prompt)
+                .id(egui::Id::unique("test_task")),
         );
         if app.focus_draft {
             edit.request_focus();
@@ -368,7 +369,7 @@ fn review_start_waits_for_state_save_and_preserves_acknowledgement() {
         .summary
         .changed = 1;
     let mut keys = execution();
-    keys.frame(&mut app, vec![]);
+    keys.settle_new_area(&mut app);
     assert!(
         keys.nodes
             .values()
@@ -514,15 +515,19 @@ fn full_ui_help_fits_compact_sizes_and_all_themes() {
             ctx.enable_accesskit();
             ctx.set_theme(theme::preference(preference));
             app.shortcuts_open = true;
-            let mut output = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
-                    ..Default::default()
-                },
-                |ui| app.main_ui(ui),
-            );
-            output.textures_delta.clear();
-            let nodes = output.platform_output.accesskit_update.unwrap().nodes;
+            // A new area is invisible during its initial sizing frame.
+            let mut nodes = Vec::new();
+            for _ in 0..2 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+                        ..Default::default()
+                    },
+                    |ui| app.main_ui(ui),
+                );
+                output.textures_delta.clear();
+                nodes = output.platform_output.accesskit_update.unwrap().nodes;
+            }
             for label in [
                 "Keyboard Shortcuts",
                 "Close shortcuts",

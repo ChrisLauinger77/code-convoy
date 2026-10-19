@@ -70,7 +70,7 @@ impl RepositorySections {
             .collect();
         let mut assigned = HashSet::new();
         let mut sections = vec![Section {
-            id: egui::Id::new("ungrouped_repositories"),
+            id: egui::Id::unique("ungrouped_repositories"),
             name: "Ungrouped".into(),
             group: None,
             repositories: Vec::new(),
@@ -86,7 +86,7 @@ impl RepositorySections {
                 .map(|section| section.id)
                 .unwrap_or_else(|| {
                     self.next_id += 1;
-                    egui::Id::new(("repository_group", self.next_id))
+                    egui::Id::unique(("repository_group", self.next_id))
                 });
             let mut section = Section {
                 id,

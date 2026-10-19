@@ -338,7 +338,7 @@ fn group_dialog_with_long_names_keeps_actions_on_screen() {
                 .clear();
             }
             let rect = ctx
-                .memory(|m| m.area_rect(egui::Id::new("task_library")))
+                .memory(|m| m.area_rect(egui::Id::unique("task_library")))
                 .unwrap();
             assert!(
                 rect.left() >= 0.0

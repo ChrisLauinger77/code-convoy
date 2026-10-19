@@ -98,7 +98,7 @@ impl App {
             );
             button.widget_info(|| {
                 egui::WidgetInfo::labeled(
-                    egui::WidgetType::Button,
+                    egui::Role::Button,
                     button.enabled(),
                     "Check for updates on GitHub",
                 )

@@ -34,7 +34,7 @@ fn button(
     confirmation: &str,
     text: impl FnOnce() -> String,
 ) {
-    let id = egui::Id::new(key);
+    let id = egui::Id::unique(key);
     let now = ui.input(|input| input.time);
     let response = ui
         .add(theme::quiet(label).small())

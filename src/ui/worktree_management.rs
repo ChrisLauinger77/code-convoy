@@ -41,7 +41,7 @@ pub(super) fn rows(
                         );
                         checkbox.widget_info(|| {
                             egui::WidgetInfo::selected(
-                                egui::WidgetType::Checkbox,
+                                egui::Role::CheckBox,
                                 checkbox.enabled(),
                                 selected,
                                 format!(

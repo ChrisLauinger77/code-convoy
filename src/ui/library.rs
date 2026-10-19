@@ -39,7 +39,7 @@ impl App {
                     let load_button = ui.button("Load");
                     load_button.widget_info(|| {
                         egui::WidgetInfo::labeled(
-                            egui::WidgetType::Button,
+                            egui::Role::Button,
                             load_button.enabled(),
                             format!("Load template {}", template.name),
                         )
@@ -51,7 +51,7 @@ impl App {
                     let edit_button = ui.button("Edit…");
                     edit_button.widget_info(|| {
                         egui::WidgetInfo::labeled(
-                            egui::WidgetType::Button,
+                            egui::Role::Button,
                             edit_button.enabled(),
                             format!("Edit template {}", template.name),
                         )

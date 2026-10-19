@@ -239,7 +239,7 @@ fn managed_cleanup_confirmation_defaults_to_cancel_and_success_refreshes_sizes()
     app.dirty = true;
     app.save_background();
     let mut storage_keys = Keyboard::new(|app, _, ctx| app.storage_window(ctx));
-    storage_keys.frame(&mut app, vec![]);
+    storage_keys.settle_new_area(&mut app);
     assert!(
         storage_keys
             .nodes

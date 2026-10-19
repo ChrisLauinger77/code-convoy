@@ -150,7 +150,7 @@ impl Dispatcher {
 }
 
 pub(super) fn repository_filter_id() -> egui::Id {
-    egui::Id::new("repository_filter")
+    egui::Id::unique("repository_filter")
 }
 
 impl App {

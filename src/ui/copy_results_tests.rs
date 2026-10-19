@@ -126,7 +126,7 @@ fn copy_feedback_expires_and_buttons_fit_compact_theme_layouts() {
     let ctx = egui::Context::default();
     ctx.enable_accesskit();
     let run = run(42, &[JobStatus::Succeeded]);
-    ctx.data_mut(|d| d.insert_temp(egui::Id::new(("copy_summary", 42u64, 0usize)), 4.0f64));
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique(("copy_summary", 42u64, 0usize)), 4.0f64));
     for (time, visible) in [(2.0, true), (5.0, false)] {
         let mut output = ctx.run_ui(
             egui::RawInput {
