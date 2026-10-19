@@ -13,6 +13,7 @@ mod dialog;
 mod editor;
 mod export;
 mod format;
+mod git_client_settings;
 mod history;
 mod library;
 mod messages;
@@ -93,6 +94,8 @@ enum Message {
     ExportSaved(Result<String, String>),
     StorageMeasured(u64, Result<Option<crate::storage::Snapshot>, String>),
     UpdateChecked(Result<crate::updates::Outcome, crate::updates::Failure>),
+    GitClientChecked(u64, Result<String, String>),
+    GitClientExecutable(Option<PathBuf>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
@@ -120,6 +123,7 @@ pub struct App {
     repository_dialog: rfd::AsyncFileDialog,
     browsing_repository: bool,
     worktree_location: worktree_settings::LocationEditor,
+    git_client: git_client_settings::GitClientEditor,
     focus_repository_input: bool,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     repository_refresh: u64,
@@ -261,8 +265,10 @@ impl App {
                 .unwrap_or_default(),
             ..Default::default()
         };
+        let git_client = git_client_settings::GitClientEditor::new(&state.git_client);
         let mut app = Self {
             worktree_location,
+            git_client,
             store: std::sync::Arc::new(store),
             state,
             runtime: Some(runtime),
@@ -469,6 +475,7 @@ impl App {
                             self.notification_settings(ui);
                             ui.separator();
                             ui.menu_button("Worktree location", |ui| self.worktree_settings(ui));
+                            ui.menu_button("Git client", |ui| self.git_client_settings(ui));
                             ui.separator();
                             self.desktop_settings(ui);
                             ui.separator();
@@ -914,6 +921,10 @@ impl App {
                 Message::UpdateChecked(result) => {
                     self.update_check = about::UpdateCheck::Finished(result);
                 }
+                Message::GitClientChecked(generation, result) => {
+                    self.git_client_checked(generation, result)
+                }
+                Message::GitClientExecutable(path) => self.git_client_executable_selected(path),
                 Message::StorageMeasured(generation, result) => {
                     if let Some(work) = self.storage.finish(generation, result) {
                         self.dispatch_storage(work);

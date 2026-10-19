@@ -5,6 +5,7 @@ pub mod desktop;
 pub mod domain;
 pub mod export;
 pub mod git;
+pub mod git_client;
 pub mod history;
 pub mod notifications;
 pub mod persistence;
