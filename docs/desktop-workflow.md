@@ -94,6 +94,62 @@ close or Quit requests cannot duplicate cleanup or hide a pending confirmation.
 Stop Convoy/Stop All retain their existing behavior. Hiding/minimizing a window is
 not process termination; CodeConvoy does not execute jobs after application exit.
 
+## Update check
+
+The footer **About** dialog has **Check for updates** next to the version. There
+is no automatic, startup, background or scheduled check: CodeConvoy makes no
+network request until you click the button. Each click sends one HTTPS `GET` to
+`https://api.github.com/repos/ChrisLauinger77/code-convoy/releases/latest` with
+a `CodeConvoy/<version>` User-Agent and a 10-second timeout. Like any web request,
+it reveals your IP address to GitHub. No token, task, repository data or setting
+is sent, and the result is not saved.
+
+The button is disabled while **Checking…** and can be used again afterwards.
+
+| Result | Meaning |
+| --- | --- |
+| Up to date | The latest release is not newer than this build, including a local build ahead of it. The latest release version is shown. |
+| Version X.Y.Z available | **Open release page** opens the release on GitHub in your browser. |
+| Update check failed | Expand **Diagnostics** to read or copy the HTTP status, rate-limit headers, network error or invalid response. |
+
+One leading `v` is removed from the release tag, then versions are compared by
+semantic-version precedence: build metadata is ignored and a pre-release is
+older than its final release. A tag that is not a semantic version fails the check
+rather than being guessed. GitHub limits unauthenticated API requests per IP
+address; a rate-limit failure reports the limit headers but omits GitHub's message,
+which names your IP address.
+
+The check only informs. CodeConvoy never downloads, installs or replaces itself;
+update with the package or installer you used originally.
+
+Requests use rustls with the operating system's trusted root certificates. HTTP(S)
+proxies from the standard proxy environment variables are honoured, including
+`NO_PROXY`. A SOCKS proxy configured that way fails the check instead of being
+bypassed by a direct connection. On macOS, the application menu's
+**About CodeConvoy** is AppKit's static panel; use the footer **About** to check.
+
+### Homebrew and Scoop
+
+When a newer release is available and the running executable is inside this app's
+Homebrew Caskroom (`…/Caskroom/code-convoy/…`) or, on Windows, its Scoop app
+directory (`…\scoop\apps\code-convoy\…`), About also shows the matching command
+with **Copy update command**:
+
+```sh
+brew update && brew upgrade --cask ChrisLauinger77/cask/code-convoy
+```
+
+```powershell
+scoop update && scoop update code-convoy
+```
+
+Package definitions can lag a GitHub release until the tap or bucket updater has
+run, so the package manager may not offer the new version immediately. Detection
+only inspects the executable path and runs no package-manager command. Any other
+location shows only the release link. That includes the current cask, which moves
+`CodeConvoy.app` into `/Applications`, where it cannot be distinguished from a
+manually copied app, and Scoop installations under a root not named `scoop`.
+
 ## Platforms
 
 **Linux (Wayland and X11):** ksni speaks StatusNotifierItem/D-BusMenu to the session

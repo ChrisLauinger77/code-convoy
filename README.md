@@ -184,6 +184,8 @@ scoop update code-convoy
 Both methods use the existing release downloads. Package definitions can lag a
 new GitHub release until their repository updaters finish. Install Git and the
 agent CLIs separately; Homebrew and Scoop manage CodeConvoy updates externally.
+When About → **Check for updates** finds a newer release and clearly recognizes
+a Caskroom or Scoop location, it also shows the matching update command.
 
 ### Removing or upgrading CodeConvoy
 
@@ -558,7 +560,7 @@ for keyboard, scaling and platform coverage.
 
 **Select all / Select none** changes repository selection without hiding Git state or skipping launch review. Automatic CLI checks report Checking…, Available, Unavailable (executable not found), or Invalid configuration for each executable independently. **Check CLI** refreshes the selected agent. Detailed diagnostics can be expanded and copied. Availability confirms CLI compatibility, not authentication or model access; job settings are validated during launch review.
 
-**Task & settings** shows friendly option labels, repository paths, the original per-convoy limit, and UTC timestamps. The live global limit is not part of a historical snapshot. **About**, in the footer, shows version, build-time base Git commit when available, project link, and license without a network request. See the [second UX pass validation](docs/ui-ux-validation.md) for native checks and remaining platform limitations.
+**Task & settings** shows friendly option labels, repository paths, the original per-convoy limit, and UTC timestamps. The live global limit is not part of a historical snapshot. **About**, in the footer, shows version, build-time base Git commit when available, project link, and license; opening it makes no network request. A request to `api.github.com` happens only when you explicitly click **Check for updates** in About, which reveals your IP address to GitHub. The result only informs: CodeConvoy still has no updater and never downloads or installs anything. See [update check](docs/desktop-workflow.md#update-check). See the [second UX pass validation](docs/ui-ux-validation.md) for native checks and remaining platform limitations.
 
 ## Codex contract
 

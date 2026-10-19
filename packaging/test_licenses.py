@@ -38,6 +38,11 @@ class LicenseEvidence(unittest.TestCase):
             "\n[[package]]\n" + "".join(f"{key} = {json.dumps(p[key])}\n"
                                      for key in ("name", "version", "source", "checksum"))
             for p in self.catalog["crates"]))
+        # Likewise, ordinary PRs may change Cargo.toml dependency declarations
+        # before the next release refresh; bind the fixture to the copied manifest.
+        manifest = tomllib.loads((self.root / "Cargo.toml").read_text())
+        self.catalog["inputs"]["dependencies_sha256"] = licenses.digest(
+            json.dumps(licenses.dependency_inputs(manifest), sort_keys=True).encode())
 
     def check(self, *, release=False):
         (self.evidence / "catalog.json").write_text(json.dumps(self.catalog))

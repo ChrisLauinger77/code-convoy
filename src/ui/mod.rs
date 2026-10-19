@@ -92,6 +92,7 @@ enum Message {
     ExportDestination(Result<Option<crate::export::file::Destination>, String>),
     ExportSaved(Result<String, String>),
     StorageMeasured(u64, Result<Option<crate::storage::Snapshot>, String>),
+    UpdateChecked(Result<crate::updates::Outcome, crate::updates::Failure>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
@@ -130,6 +131,7 @@ pub struct App {
     cli_search: Option<cli_discovery::CliSearch>,
     next_cli_search: u64,
     about_open: bool,
+    update_check: about::UpdateCheck,
     shortcuts_open: bool,
     shortcuts: shortcuts::Dispatcher,
     focus_repository_filter: bool,
@@ -287,6 +289,7 @@ impl App {
             cli_search: None,
             next_cli_search: 0,
             about_open: false,
+            update_check: about::UpdateCheck::Idle,
             shortcuts_open: false,
             shortcuts: shortcuts::Dispatcher::default(),
             focus_repository_filter: false,
@@ -908,6 +911,9 @@ impl App {
                     }
                 }
                 Message::FoundCli(request, result) => self.cli_search_completed(request, result),
+                Message::UpdateChecked(result) => {
+                    self.update_check = about::UpdateCheck::Finished(result);
+                }
                 Message::StorageMeasured(generation, result) => {
                     if let Some(work) = self.storage.finish(generation, result) {
                         self.dispatch_storage(work);

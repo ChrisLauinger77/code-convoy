@@ -177,11 +177,11 @@ fn modal_tab_and_shift_tab_stay_inside_then_release_focus() {
             let label = focused_name(&keys).unwrap();
             assert!(matches!(
                 label.as_str(),
-                "Close About" | "Project on GitHub"
+                "Close About" | "Project on GitHub" | "Check for updates on GitHub"
             ));
             visited.insert(label);
         }
-        assert_eq!(visited.len(), 2);
+        assert_eq!(visited.len(), 3);
         keys.key(&mut app, Key::Escape);
         keys.key(&mut app, Key::Tab);
         assert_eq!(focused_name(&keys).as_deref(), Some("Background action"));
