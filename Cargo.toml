@@ -51,7 +51,7 @@ winit = { version = "0.30.13", default-features = false, features = ["wayland-cs
 # Direct async SNI: runs on our existing Tokio runtime; observes tray-host loss.
 ksni = "0.3.6"
 # Required for dual-runtime selection shared with accessibility/notifications.
-zbus = { version = "5.19", default-features = false, features = ["async-io"] }
+zbus = { version = "6.0", default-features = false, features = ["async-io"] }
 # StreamExt for zbus signal streams; already a transitive dependency of zbus.
 futures-lite = { version = "2.6", default-features = false }
 
