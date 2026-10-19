@@ -415,6 +415,58 @@ fn git_links_written_with_crlf_line_endings_are_accepted() {
 }
 
 #[test]
+fn an_emptied_or_damaged_git_directory_is_not_a_working_tree() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = repository(temp.path(), "source");
+    let job = direct(&repo);
+    let target = Target::job(&job).unwrap();
+    let dot_git = repo.path.join(".git");
+    // The recorded common directory still matches, but HEAD is damaged.
+    fs::write(dot_git.join("HEAD"), "not a reference\n").unwrap();
+    assert!(problem(verify(&target)).contains("HEAD is missing or invalid"));
+    fs::write(dot_git.join("HEAD"), "ref: refs/heads/main\r\n").unwrap();
+    assert_eq!(verify(&target), Ok(()));
+    fs::remove_dir_all(dot_git.join("objects")).unwrap();
+    assert!(problem(verify(&target)).contains("objects is missing"));
+    // The directory itself remains, emptied.
+    fs::remove_dir_all(&dot_git).unwrap();
+    fs::create_dir(&dot_git).unwrap();
+    assert!(problem(verify(&target)).contains("incomplete or damaged"));
+    assert!(problem(verify(&Target::repository(&repo))).contains("incomplete or damaged"));
+
+    // A linked worktree uses its own HEAD and the shared objects and refs.
+    let source = repository(temp.path(), "with worktree");
+    let tree = worktree(&source, &temp.path().join("tree"));
+    let target = Target::job(&isolated(&source, &tree, JobStatus::Succeeded)).unwrap();
+    let admin = common(&source).join("worktrees").join("tree");
+    fs::remove_file(admin.join("HEAD")).unwrap();
+    assert!(problem(verify(&target)).contains("HEAD is missing or invalid"));
+}
+
+#[test]
+fn head_references_follow_gits_rules() {
+    for valid in [
+        &b"ref: refs/heads/main\n"[..],
+        b"ref:refs/heads/main",
+        b"ref: refs/heads/.invalid\r\n",
+        b"0123456789abcdef0123456789abcdef01234567\n",
+        b"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    ] {
+        assert!(head_ref(valid), "{}", String::from_utf8_lossy(valid));
+    }
+    for invalid in [
+        &b""[..],
+        b"garbage\n",
+        b"ref: HEAD",
+        b"ref: heads/main",
+        b"0123456789abcdef",
+        b"0123456789abcdef0123456789abcdef0123456z",
+    ] {
+        assert!(!head_ref(invalid), "{}", String::from_utf8_lossy(invalid));
+    }
+}
+
+#[test]
 fn verification_changes_nothing_in_the_repository() {
     let temp = tempfile::tempdir().unwrap();
     let repo = repository(temp.path(), "source");

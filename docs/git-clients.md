@@ -34,9 +34,12 @@ run Git:
 - The recorded path still exists, is a directory and still resolves to itself.
   A path that now resolves elsewhere, for example through a symlink left after
   a move, is rejected.
-- The directory is still a Git working tree (`.git` is present). As in Git, a
-  repository's `.git` may be a symlink to its Git directory. An isolated
-  worktree must keep the regular `.git` link file that CodeConvoy created.
+- The directory is still a Git working tree, judged the way Git judges it.
+  `.git` must lead to a Git directory with a valid `HEAD`, and its common
+  directory must contain `objects` and `refs`; an emptied or damaged `.git` is
+  rejected. As in Git, a repository's `.git` may be a symlink to its Git
+  directory. An isolated worktree must keep the regular `.git` link file that
+  CodeConvoy created.
 - A worktree's `.git` link and Git's backlink still name each other, inside the
   recorded repository's `worktrees` administration.
 - When CodeConvoy recorded the Git common directory, the tree still belongs to

@@ -159,9 +159,11 @@ fn common_dir(tree: &Path, kind: Kind) -> Result<PathBuf, String> {
         if kind == Kind::Worktree {
             return Err("it is no longer a linked worktree: .git is a directory.".into());
         }
-        return dot_git
+        let git_dir = dot_git
             .canonicalize()
-            .map_err(|error| format!("its Git directory cannot be resolved: {error}."));
+            .map_err(|error| format!("its Git directory cannot be resolved: {error}."))?;
+        administration(&git_dir, &git_dir)?;
+        return Ok(git_dir);
     }
     if !metadata.is_file() {
         return Err("its .git entry is neither a file nor a directory.".into());
@@ -197,7 +199,42 @@ fn common_dir(tree: &Path, kind: Kind) -> Result<PathBuf, String> {
     if kind == Kind::Worktree && admin.parent() != Some(common.join("worktrees").as_path()) {
         return Err("its Git administration is outside the repository's worktrees.".into());
     }
+    administration(&admin, &common)?;
     Ok(common)
+}
+
+/// The checks Git itself uses to accept a Git directory: a valid `HEAD` in the
+/// tree's own administration, and `objects` and `refs` in the common one.
+/// Existence of a `.git` directory alone is not enough.
+fn administration(git_dir: &Path, common: &Path) -> Result<(), String> {
+    let damaged = |what: &str| format!("its Git directory is incomplete or damaged ({what}).");
+    for name in ["objects", "refs"] {
+        if !common.join(name).is_dir() {
+            return Err(damaged(&format!("{name} is missing")));
+        }
+    }
+    let head = git_dir.join("HEAD");
+    let valid = match fs::symlink_metadata(&head) {
+        // Very old repositories may keep HEAD as a symlink into refs/.
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            fs::read_link(&head).is_ok_and(|target| target.starts_with("refs"))
+        }
+        Ok(metadata) if metadata.is_file() => read(&head).is_ok_and(|bytes| head_ref(&bytes)),
+        _ => false,
+    };
+    if !valid {
+        return Err(damaged("HEAD is missing or invalid"));
+    }
+    Ok(())
+}
+
+/// A symbolic reference into refs/, or a full SHA-1 or SHA-256 object ID.
+fn head_ref(bytes: &[u8]) -> bool {
+    let head = line(bytes);
+    if let Some(reference) = head.strip_prefix(b"ref:") {
+        return reference.trim_ascii_start().starts_with(b"refs/");
+    }
+    matches!(head.len(), 40 | 64) && head.iter().all(u8::is_ascii_hexdigit)
 }
 
 /// Git trims trailing line breaks, LF or CRLF, from `.git`, `gitdir` and
