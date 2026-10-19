@@ -19,6 +19,12 @@ eframe = { version = "0.36.0", default-features = false, features = ["default_fo
 fs2 = "0.4"
 process-wrap = { version = "10.0", default-features = false, features = ["tokio1", "process-group", "job-object", "kill-on-drop", "creation-flags"] }
 rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal", "wayland"] }
+# Update check TLS: ring avoids aws-lc's CMake/NASM build inputs.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# Operating-system trust roots instead of a bundled, aging CA list.
+rustls-native-certs = "0.8"
+# Release version precedence; already a transitive dependency.
+semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11.0"
@@ -26,6 +32,8 @@ tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "sync", "time", "macros"] }
 # Full Unicode case folding for repository filtering, without a search engine.
 unicase = "2.10"
+# Blocking HTTPS for the explicit update check; no hyper, OpenSSL or webpki-roots.
+ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider"] }
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 # zbus 5.19 selects Tokio inside our runtime and async-io for desktop consumers

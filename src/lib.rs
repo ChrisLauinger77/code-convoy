@@ -13,6 +13,7 @@ pub mod review;
 pub mod runner;
 pub mod storage;
 pub mod ui;
+pub mod updates;
 pub mod validation;
 pub mod visibility;
 pub mod worktrees;

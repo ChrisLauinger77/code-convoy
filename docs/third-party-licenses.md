@@ -278,6 +278,26 @@ manifest fingerprint was updated for the explicit declarations. Under the
 current policy that fingerprint is checked only during release preparation;
 ordinary CI verifies current license declarations and the retained evidence.
 
+On 2026-10-19, the explicit About update check added `ureq` 3.4.2 (no default
+features, `rustls-no-provider`), `rustls` 0.23.46 (`ring` only),
+`rustls-native-certs` 0.8.5 and a direct declaration of the already locked
+`semver` 1.0.28. The lockfile gained 19 crates: `ureq`, `ureq-proto`, `http`,
+`httparse`, `utf8-zero`, `rustls`, `rustls-pki-types`, `rustls-webpki`, `ring`,
+`untrusted`, `subtle`, `zeroize`, `getrandom` 0.2.17, `rustls-native-certs`,
+`openssl-probe` (non-macOS Unix), `security-framework`/`-sys` and
+`core-foundation` 0.10.1 (macOS), and `schannel` (Windows). Their declarations
+are MIT/Apache-2.0/ISC/BSD-3-Clause choices; `ring` is **Apache-2.0 AND ISC**.
+`licenses.py check-dependencies` accepts all of them, so no catalog entry was
+edited under the ordinary-PR policy. `ring` statically compiles bundled C and
+assembly derived from BoringSSL and other upstreams; the next release refresh
+must collect its `LICENSE`, `LICENSE-BoringSSL`, `LICENSE-other-bits` and nested
+`third_party` notices with the other crate texts. No ELF/PE/Mach-O payload or
+Linux system library is added; macOS Security.framework and Windows certificate
+store APIs are operating-system components. ureq's default TLS features were
+avoided because they select `webpki-roots` (CDLA-Permissive-2.0), outside the
+notice-only policy; `rustls-platform-verifier` would similarly pull
+`webpki-root-certs` for wasm targets, which the all-target check reports.
+
 ## Earlier candidate verification record
 
 This records the candidate before the follow-up evidence and deterministic ZIP

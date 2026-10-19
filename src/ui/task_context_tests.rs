@@ -20,6 +20,8 @@ mod repository_groups;
 mod shortcuts;
 #[path = "storage_tests.rs"]
 mod storage_tests;
+#[path = "update_check_tests.rs"]
+mod update_check;
 #[path = "validation_presets_tests.rs"]
 mod validation_presets;
 
