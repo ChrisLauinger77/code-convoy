@@ -4,7 +4,7 @@
 //! runs Git and never creates, restores, repairs or substitutes a directory.
 use super::Error;
 use crate::domain::{ExecutionMode, Job, JobStatus, Repository, ResultAvailability};
-use crate::worktrees::recovery::{line, native};
+use crate::worktrees::recovery::native;
 use std::{
     fs,
     io::Read,
@@ -198,6 +198,16 @@ fn common_dir(tree: &Path, kind: Kind) -> Result<PathBuf, String> {
         return Err("its Git administration is outside the repository's worktrees.".into());
     }
     Ok(common)
+}
+
+/// Git trims trailing line breaks, LF or CRLF, from `.git`, `gitdir` and
+/// `commondir` on every platform; files written on Windows keep their CR.
+fn line(bytes: &[u8]) -> &[u8] {
+    let end = bytes
+        .iter()
+        .rposition(|byte| !matches!(byte, b'\n' | b'\r'))
+        .map_or(0, |index| index + 1);
+    &bytes[..end]
 }
 
 fn read(path: &Path) -> Result<Vec<u8>, String> {

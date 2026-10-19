@@ -4,12 +4,19 @@ use super::*;
 use crate::domain::{AppState, GitSummary, ResultResolution, Run, TaskConfig, WorktreeMetadata};
 use std::process::Command;
 
+/// Git for Windows cannot create directories from verbatim `\\?\` paths,
+/// which `canonicalize` returns there; pass the ordinary spelling instead.
+fn plain(path: &Path) -> String {
+    let text = path.to_str().unwrap();
+    text.strip_prefix(r"\\?\").unwrap_or(text).to_owned()
+}
+
 fn git(directory: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
         .args(["-c", "commit.gpgsign=false", "-c", "user.name=Fixture"])
         .args(["-c", "user.email=fixture@example.invalid"])
         .arg("-C")
-        .arg(directory)
+        .arg(plain(directory))
         .args(args)
         .output()
         .unwrap();
@@ -37,13 +44,7 @@ fn repository(root: &Path, name: &str) -> Repository {
 fn worktree(repository: &Repository, path: &Path) -> PathBuf {
     git(
         &repository.path,
-        &[
-            "worktree",
-            "add",
-            "--quiet",
-            "--detach",
-            path.to_str().unwrap(),
-        ],
+        &["worktree", "add", "--quiet", "--detach", &plain(path)],
     );
     path.canonicalize().unwrap()
 }
@@ -390,6 +391,30 @@ fn repositories_may_use_a_git_directory_symlink_but_worktrees_may_not() {
 }
 
 #[test]
+fn git_links_written_with_crlf_line_endings_are_accepted() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = repository(temp.path(), "source");
+    let tree = worktree(&repo, &temp.path().join("tree"));
+    let admin = common(&repo).join("worktrees").join("tree");
+    // Git accepts CRLF in all three files on every platform.
+    for file in [
+        tree.join(".git"),
+        admin.join("gitdir"),
+        admin.join("commondir"),
+    ] {
+        let text = fs::read_to_string(&file).unwrap();
+        fs::write(&file, format!("{}\r\n", text.trim_end())).unwrap();
+    }
+    git(&tree, &["status", "--porcelain"]);
+    let target = Target::job(&isolated(&repo, &tree, JobStatus::Succeeded)).unwrap();
+    assert_eq!(verify(&target), Ok(()));
+    assert_eq!(line(b"gitdir: /a b\r\n"), b"gitdir: /a b");
+    assert_eq!(line(b"x\n\r\n"), b"x");
+    assert_eq!(line(b"x"), b"x");
+    assert_eq!(line(b"\r\n"), b"");
+}
+
+#[test]
 fn verification_changes_nothing_in_the_repository() {
     let temp = tempfile::tempdir().unwrap();
     let repo = repository(temp.path(), "source");
@@ -415,18 +440,29 @@ fn verification_changes_nothing_in_the_repository() {
     assert_eq!(snapshot(), before);
 }
 
-/// Every path, size and modification time below a Git directory.
-fn listing(root: &Path) -> Vec<(PathBuf, u64, std::time::SystemTime)> {
+type Entry = (PathBuf, Option<(u64, std::time::SystemTime, Vec<u8>)>);
+
+/// Every path below a Git directory, with each file's size, modification time
+/// and content. Directory times are omitted: Windows reports them from a
+/// lazily updated cache, and added or removed entries show up as paths.
+fn listing(root: &Path) -> Vec<Entry> {
     let mut entries = Vec::new();
     let mut pending = vec![root.to_owned()];
     while let Some(directory) = pending.pop() {
         for entry in fs::read_dir(directory).unwrap() {
-            let entry = entry.unwrap();
-            let metadata = entry.metadata().unwrap();
-            if metadata.is_dir() {
-                pending.push(entry.path());
-            }
-            entries.push((entry.path(), metadata.len(), metadata.modified().unwrap()));
+            let path = entry.unwrap().path();
+            let metadata = fs::metadata(&path).unwrap();
+            let file = if metadata.is_dir() {
+                pending.push(path.clone());
+                None
+            } else {
+                Some((
+                    metadata.len(),
+                    metadata.modified().unwrap(),
+                    fs::read(&path).unwrap(),
+                ))
+            };
+            entries.push((path, file));
         }
     }
     entries.sort();

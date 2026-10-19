@@ -212,26 +212,29 @@ fn git(directory: &Path, args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
-/// Every path, size, modification time and content hash below `root`.
-fn snapshot(root: &Path) -> Vec<(PathBuf, u64, std::time::SystemTime, Vec<u8>)> {
+type Entry = (PathBuf, Option<(u64, std::time::SystemTime, Vec<u8>)>);
+
+/// Every path below `root`, with each file's size, modification time and
+/// content. Directory times are omitted: Windows reports them from a lazily
+/// updated cache, and added or removed entries show up as paths.
+fn snapshot(root: &Path) -> Vec<Entry> {
     let mut entries = Vec::new();
     let mut pending = vec![root.to_owned()];
     while let Some(directory) = pending.pop() {
         for entry in fs::read_dir(directory).unwrap() {
-            let entry = entry.unwrap();
-            let metadata = entry.metadata().unwrap();
-            let content = if metadata.is_dir() {
-                pending.push(entry.path());
-                Vec::new()
+            let path = entry.unwrap().path();
+            let metadata = fs::metadata(&path).unwrap();
+            let file = if metadata.is_dir() {
+                pending.push(path.clone());
+                None
             } else {
-                fs::read(entry.path()).unwrap()
+                Some((
+                    metadata.len(),
+                    metadata.modified().unwrap(),
+                    fs::read(&path).unwrap(),
+                ))
             };
-            entries.push((
-                entry.path(),
-                metadata.len(),
-                metadata.modified().unwrap(),
-                content,
-            ));
+            entries.push((path, file));
         }
     }
     entries.sort();
