@@ -6,7 +6,8 @@ repository, embed Git features or manage client accounts.
 
 ## Settings
 
-Open **Settings → Git client** and choose a client:
+Open **Settings → Git client…** and choose a client. Changes apply when you
+select **Save**; **Cancel** or Escape keeps the saved configuration.
 
 | Field | Presets | Custom |
 | --- | --- | --- |
@@ -19,8 +20,8 @@ Custom arguments must contain `{repo}`, so a client cannot silently show whateve
 it opened last. Blank lines are ignored; all other characters, including spaces
 and quotes, are passed unchanged. Arguments are never parsed by a shell.
 
-The setting shows **Ready** with the resolved command, or what is missing.
-Checks look at files only; they never start the client. On macOS, presets that
+The dialog shows **Ready** with the resolved command, or what is missing, for
+the values being edited. Checks look at files only; they never start the client. On macOS, presets that
 open an application accept its `.app` bundle; Sublime Merge also accepts its
 bundle and then uses the `smerge` tool inside it.
 

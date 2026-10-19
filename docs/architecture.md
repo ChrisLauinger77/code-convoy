@@ -1302,5 +1302,7 @@ environment minus `GIT_*` (and CodeConvoy's own AppImage variables), its own
 process group, and no kill-on-drop. It waits at most two seconds to report a
 failed hand-off, then leaves the client running; Tokio reaps it later. This is
 separate from `process`, whose children are supervised and cancelled with
-convoys. The settings UI (`ui/git_client_settings`) dispatches one check per
-preference change and ignores stale results. See [Git clients](git-clients.md).
+convoys. `ui/git_client_settings` edits a draft in a modal dialog (egui menus
+close on any click, so fields cannot live in a submenu), dispatches one check per
+draft change, ignores stale or closed-dialog results and saves synchronously on
+Save. See [Git clients](git-clients.md).

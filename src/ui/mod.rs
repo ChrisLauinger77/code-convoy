@@ -123,7 +123,8 @@ pub struct App {
     repository_dialog: rfd::AsyncFileDialog,
     browsing_repository: bool,
     worktree_location: worktree_settings::LocationEditor,
-    git_client: git_client_settings::GitClientEditor,
+    git_client_dialog: Option<git_client_settings::GitClientDialog>,
+    git_client_generation: u64,
     focus_repository_input: bool,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     repository_refresh: u64,
@@ -265,10 +266,10 @@ impl App {
                 .unwrap_or_default(),
             ..Default::default()
         };
-        let git_client = git_client_settings::GitClientEditor::new(&state.git_client);
         let mut app = Self {
             worktree_location,
-            git_client,
+            git_client_dialog: None,
+            git_client_generation: 0,
             store: std::sync::Arc::new(store),
             state,
             runtime: Some(runtime),
@@ -475,12 +476,20 @@ impl App {
                             self.notification_settings(ui);
                             ui.separator();
                             ui.menu_button("Worktree location", |ui| self.worktree_settings(ui));
-                            ui.menu_button("Git client", |ui| self.git_client_settings(ui));
+                            if ui.button("Git client…").clicked() {
+                                self.open_git_client_settings();
+                                ui.close();
+                            }
                             ui.separator();
                             self.desktop_settings(ui);
                             ui.separator();
                             if ui.button("Keyboard Shortcuts…").clicked() {
                                 self.shortcuts_open = true;
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui.button("Quit CodeConvoy").clicked() {
+                                self.explicit_quit = true;
                                 ui.close();
                             }
                             });
@@ -1210,6 +1219,7 @@ impl App {
             self.validation_assignment_window(ctx);
             self.shortcuts_window(ctx);
             self.history_settings_window(ctx);
+            self.git_client_settings_window(ctx);
             self.storage_window(ctx);
             self.worktree_cleanup_window(ctx);
         }
