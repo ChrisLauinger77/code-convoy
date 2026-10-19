@@ -144,6 +144,17 @@ fn common_dir(tree: &Path, kind: Kind) -> Result<PathBuf, String> {
         }
         Err(error) => return Err(format!("its Git metadata cannot be read: {error}.")),
     };
+    let metadata = if metadata.file_type().is_symlink() {
+        // CodeConvoy creates isolated worktrees with a regular .git link file.
+        if kind == Kind::Worktree {
+            return Err("it is no longer a linked worktree: .git is a symlink.".into());
+        }
+        // Git follows a .git symlink in an ordinary repository; so does this,
+        // and the resolved common directory is still compared below.
+        fs::metadata(&dot_git).map_err(|_| "its .git symlink points to nothing.".to_owned())?
+    } else {
+        metadata
+    };
     if metadata.is_dir() {
         if kind == Kind::Worktree {
             return Err("it is no longer a linked worktree: .git is a directory.".into());

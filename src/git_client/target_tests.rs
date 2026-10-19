@@ -351,6 +351,44 @@ fn symlinks_never_redirect_to_another_location() {
     assert!(problem(verify(&Target::job(&job).unwrap())).contains("now resolves to"));
 }
 
+#[cfg(unix)]
+#[test]
+fn repositories_may_use_a_git_directory_symlink_but_worktrees_may_not() {
+    use std::os::unix::fs::symlink;
+    let temp = tempfile::tempdir().unwrap();
+    let repo = repository(temp.path(), "linked .git");
+    let store = temp.path().canonicalize().unwrap().join("store/real.git");
+    fs::create_dir_all(store.parent().unwrap()).unwrap();
+    fs::rename(repo.path.join(".git"), &store).unwrap();
+    symlink(&store, repo.path.join(".git")).unwrap();
+    // Git accepts this layout; CodeConvoy records the resolved directory.
+    git(&repo.path, &["status", "--porcelain"]);
+    let mut job = direct(&repo);
+    job.before.as_mut().unwrap().common_dir = Some(store.canonicalize().unwrap());
+    assert_eq!(verify(&Target::job(&job).unwrap()), Ok(()));
+    assert_eq!(verify(&Target::repository(&repo)), Ok(()));
+
+    // The symlink is followed, never trusted: its target is still compared.
+    let other = repository(temp.path(), "other");
+    fs::remove_file(repo.path.join(".git")).unwrap();
+    symlink(other.path.join(".git"), repo.path.join(".git")).unwrap();
+    assert!(problem(verify(&Target::job(&job).unwrap())).contains("different Git repository"));
+    fs::remove_file(repo.path.join(".git")).unwrap();
+    symlink(temp.path().join("missing.git"), repo.path.join(".git")).unwrap();
+    assert!(problem(verify(&Target::repository(&repo))).contains("points to nothing"));
+
+    // CodeConvoy creates isolated worktrees with a regular .git link file.
+    let source = repository(temp.path(), "source");
+    let tree = worktree(&source, &temp.path().join("tree"));
+    let link = fs::read(tree.join(".git")).unwrap();
+    let moved = temp.path().join("moved link");
+    fs::write(&moved, link).unwrap();
+    fs::remove_file(tree.join(".git")).unwrap();
+    symlink(&moved, tree.join(".git")).unwrap();
+    let target = Target::job(&isolated(&source, &tree, JobStatus::Succeeded)).unwrap();
+    assert!(problem(verify(&target)).contains(".git is a symlink"));
+}
+
 #[test]
 fn verification_changes_nothing_in_the_repository() {
     let temp = tempfile::tempdir().unwrap();
