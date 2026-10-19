@@ -23,4 +23,5 @@ class FontAttribution(unittest.TestCase):
             (fonts / "egui-icons.ttf").write_bytes(b"font bytes")
             (fonts / "README.txt").write_text("Build instructions\n")
             (root / "LICENSE.rs").write_text("// source code\n")
-            self.assertEqual(dict(notice_files(root)), expected)
+            self.assertEqual(dict(notice_files(root)),
+                             {str(Path(name)): text for name, text in expected.items()})

@@ -29,8 +29,8 @@ blocks. When a crate omits a license file, the evidence refers to its exact
 branch. Notice text is decoded as UTF-8 (removing a BOM where present); source
 archives retain their original bytes.
 
-The inventory also identifies **53 assets, runtimes, packaging and supplemental
-Rust library components**,
+The inventory also contains **48 component records** for embedded assets,
+runtimes, packaging and supplemental Rust libraries,
 with unresolved versions expressly marked. Rust's separate standard-library
 report covers **141 out-of-tree entries** plus in-tree exceptions; its complete
 upstream HTML is included, with those component/version/license entries indexed
