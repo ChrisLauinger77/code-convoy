@@ -91,6 +91,10 @@ fn available_release_opens_its_page_and_shows_only_detected_package_hints() {
             Some(crate::updates::HOMEBREW_COMMAND),
         ),
         (InstallSource::Scoop, Some(crate::updates::SCOOP_COMMAND)),
+        (
+            InstallSource::ScoopGlobal,
+            Some(crate::updates::SCOOP_GLOBAL_COMMAND),
+        ),
         (InstallSource::Unknown, None),
     ] {
         let (_temp, mut app) = app();
@@ -109,9 +113,15 @@ fn available_release_opens_its_page_and_shows_only_detected_package_hints() {
         for known in [
             crate::updates::HOMEBREW_COMMAND,
             crate::updates::SCOOP_COMMAND,
+            crate::updates::SCOOP_GLOBAL_COMMAND,
         ] {
             assert_eq!(node(&keys, known).is_some(), command == Some(known));
         }
+        let administrator = "Installed globally with Scoop. Update from an administrator terminal:";
+        assert_eq!(
+            node(&keys, administrator).is_some(),
+            source == InstallSource::ScoopGlobal
+        );
 
         keys.activate(&mut app, "Open release page");
         assert!(keys.commands.iter().any(|command| matches!(

@@ -11,7 +11,11 @@ pub const LATEST_RELEASE_API: &str =
     "https://api.github.com/repos/ChrisLauinger77/code-convoy/releases/latest";
 pub const HOMEBREW_COMMAND: &str =
     "brew update && brew upgrade --cask ChrisLauinger77/cask/code-convoy";
-pub const SCOOP_COMMAND: &str = "scoop update && scoop update code-convoy";
+/// One command per line: Windows PowerShell 5.1, which Scoop supports, cannot
+/// parse `&&` pipeline chains.
+pub const SCOOP_COMMAND: &str = "scoop update\nscoop update code-convoy";
+/// Scoop updates global apps only with `--global` and administrator rights.
+pub const SCOOP_GLOBAL_COMMAND: &str = "scoop update\nscoop update code-convoy --global";
 /// Covers name resolution, connection, TLS, redirects and the response body.
 const TIMEOUT: Duration = Duration::from_secs(10);
 /// Release JSON carries notes and asset lists; real responses are far smaller.
@@ -42,6 +46,8 @@ pub enum Outcome {
 pub enum InstallSource {
     Homebrew,
     Scoop,
+    /// Scoop's default global root, `%ProgramData%\scoop`.
+    ScoopGlobal,
     Unknown,
 }
 
@@ -51,6 +57,7 @@ impl InstallSource {
         match self {
             Self::Homebrew => Some(("Homebrew", HOMEBREW_COMMAND)),
             Self::Scoop => Some(("Scoop", SCOOP_COMMAND)),
+            Self::ScoopGlobal => Some(("Scoop", SCOOP_GLOBAL_COMMAND)),
             Self::Unknown => None,
         }
     }
@@ -310,7 +317,9 @@ pub fn compare(current: &str, release: Release, source: InstallSource) -> Result
 
 /// Recognizes only this application's Homebrew Caskroom (macOS/Linux) or Scoop
 /// app directory (Windows). Anything else, including a cask-installed app moved
-/// to `/Applications`, is Unknown so only the release link is shown.
+/// to `/Applications`, is Unknown so only the release link is shown. Scoop apps
+/// under `ProgramData\scoop` are global; other `scoop` roots are per-user. A
+/// custom global root named `scoop` makes Scoop itself ask for `--global`.
 pub fn install_source(executable: &Path, windows: bool) -> InstallSource {
     let path = executable.to_string_lossy();
     let separators: &[char] = if windows { &['/', '\\'] } else { &['/'] };
@@ -324,6 +333,9 @@ pub fn install_source(executable: &Path, windows: bool) -> InstallSource {
         })
     };
     if windows {
+        if contains(&["ProgramData", "scoop", "apps", PACKAGE]) {
+            return InstallSource::ScoopGlobal;
+        }
         if contains(&["scoop", "apps", PACKAGE]) {
             return InstallSource::Scoop;
         }
@@ -630,6 +642,21 @@ mod tests {
             (
                 r"C:\ProgramData\scoop\apps\code-convoy\1.2.0\CodeConvoy.exe",
                 true,
+                InstallSource::ScoopGlobal,
+            ),
+            (
+                r"\\?\C:\programdata\Scoop\apps\code-convoy\current\CodeConvoy.exe",
+                true,
+                InstallSource::ScoopGlobal,
+            ),
+            (
+                r"D:\scoop\apps\code-convoy\current\CodeConvoy.exe",
+                true,
+                InstallSource::Scoop,
+            ),
+            (
+                r"C:\ProgramData\Tools\scoop\apps\code-convoy\current\CodeConvoy.exe",
+                true,
                 InstallSource::Scoop,
             ),
             (
@@ -704,6 +731,19 @@ mod tests {
             InstallSource::Scoop.update(),
             Some(("Scoop", SCOOP_COMMAND))
         );
+        assert_eq!(
+            InstallSource::ScoopGlobal.update(),
+            Some(("Scoop", SCOOP_GLOBAL_COMMAND))
+        );
         assert_eq!(InstallSource::Unknown.update(), None);
+        // Windows PowerShell 5.1 rejects `&&`; each Scoop command has its own line.
+        for command in [SCOOP_COMMAND, SCOOP_GLOBAL_COMMAND] {
+            assert!(!command.contains("&&"), "{command}");
+            assert_eq!(command.lines().next(), Some("scoop update"));
+        }
+        assert_eq!(
+            SCOOP_GLOBAL_COMMAND.lines().last(),
+            Some("scoop update code-convoy --global")
+        );
     }
 }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::updates::{Failure, FailureKind, Outcome};
+use crate::updates::{Failure, FailureKind, InstallSource, Outcome};
 
 pub(super) const APPLICATION_NAME: &str = "CodeConvoy";
 pub(super) const REPOSITORY_URL: &str = env!("CARGO_PKG_REPOSITORY");
@@ -132,7 +132,13 @@ fn update_result(ui: &mut egui::Ui, check: &UpdateCheck) {
                 ui.ctx().open_url(egui::OpenUrl::new_tab(&release.url));
             }
             if let Some((manager, command)) = source.update() {
-                ui.small(format!("Installed with {manager}. Update from a terminal:"));
+                ui.small(match source {
+                    InstallSource::ScoopGlobal => {
+                        "Installed globally with Scoop. Update from an administrator terminal:"
+                            .to_owned()
+                    }
+                    _ => format!("Installed with {manager}. Update from a terminal:"),
+                });
                 ui.add(
                     egui::Label::new(egui::RichText::new(command).monospace())
                         .wrap()

@@ -140,8 +140,23 @@ brew update && brew upgrade --cask ChrisLauinger77/cask/code-convoy
 ```
 
 ```powershell
-scoop update && scoop update code-convoy
+scoop update
+scoop update code-convoy
 ```
+
+Scoop commands are shown one per line because Windows PowerShell 5.1, which Scoop
+supports, cannot parse `&&`. An executable under Scoop's default global root,
+`%ProgramData%\scoop`, is a global installation; Scoop updates it only with
+`--global` from a terminal running as administrator:
+
+```powershell
+scoop update
+scoop update code-convoy --global
+```
+
+Other `scoop` roots are treated as per-user. If a custom global root is also
+named `scoop`, Scoop itself reports that the app is installed globally and asks
+for `--global`.
 
 Package definitions can lag a GitHub release until the tap or bucket updater has
 run, so the package manager may not offer the new version immediately. Detection
