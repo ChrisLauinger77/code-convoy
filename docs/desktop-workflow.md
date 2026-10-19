@@ -206,11 +206,13 @@ handling. Neither is needed by this application.
 
 [ksni 0.3.6](https://docs.rs/ksni/0.3.6/ksni/) directly provides asynchronous SNI,
 host detection and watcher-offline callbacks. Using its Tokio mode reuses the
-application runtime without another UI loop or application thread. zbus >=5.19
-is constrained explicitly because its dual-backend runtime selection preserves
-async-io desktop consumers while tray/notification tasks run on Tokio. AppIndicator
-was evaluated but rejected because it would introduce GTK system dependencies and
-additional event-loop integration. The [StatusNotifierWatcher specification](https://specifications.freedesktop.org/status-notifier-item/latest/status-notifier-watcher.html)
+application runtime without another UI loop or application thread. The lockfile
+retains zbus 5.19 for tray, notification and accessibility dependencies: its
+dual-backend runtime selection preserves async-io desktop consumers while
+tray/notification tasks run on Tokio. Direct portal appearance calls use zbus 6
+with its Tokio and proxy features; no fallback runtime is needed for those calls.
+AppIndicator was evaluated but rejected because it would introduce GTK system
+dependencies and additional event-loop integration. The [StatusNotifierWatcher specification](https://specifications.freedesktop.org/status-notifier-item/latest/status-notifier-watcher.html)
 describes why a watcher alone is insufficient without a registered host.
 
 ## Validation

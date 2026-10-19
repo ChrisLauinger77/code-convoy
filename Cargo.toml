@@ -36,8 +36,8 @@ unicase = "2.10"
 ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider"] }
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
-# zbus 5.19 selects Tokio inside our runtime and async-io for desktop consumers
-# outside it. Both transports share the existing application runtime safely.
+# Legacy desktop consumers retain zbus 5.19 in Cargo.lock: Tokio inside our
+# runtime and async-io outside it, including desktop accessibility.
 notify-rust = "4.18.2"
 
 [target.'cfg(unix)'.dependencies]
@@ -50,9 +50,9 @@ libc = "0.2"
 winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
 # Direct async SNI: runs on our existing Tokio runtime; observes tray-host loss.
 ksni = "0.3.6"
-# Required for dual-runtime selection shared with accessibility/notifications.
-zbus = { version = "6.0", default-features = false, features = ["async-io"] }
-# StreamExt for zbus signal streams; already a transitive dependency of zbus.
+# Portal appearance reads/signals use Tokio; proxy enables the D-Bus test client.
+zbus = { version = "6.0", default-features = false, features = ["tokio", "proxy"] }
+# StreamExt for portal signal streams; already a transitive desktop dependency.
 futures-lite = { version = "2.6", default-features = false }
 
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
