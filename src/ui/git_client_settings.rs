@@ -8,9 +8,11 @@ pub(super) struct GitClientDialog {
     pub draft: Preferences,
     /// Custom arguments, one per line, mirrored into the draft.
     pub arguments: String,
-    pub browsing: bool,
-    /// Draft snapshot of the latest dispatched check.
+    /// The open file picker's request and the client it was opened for.
+    pub browsing: Option<(u64, Client)>,
+    /// Draft snapshot and request of the latest dispatched check.
     pub checked: Option<Preferences>,
+    pub checking: Option<u64>,
     pub status: Option<Result<String, String>>,
     pub error: String,
 }
@@ -19,8 +21,9 @@ impl GitClientDialog {
         Self {
             draft: preferences.clone(),
             arguments: preferences.arguments.join("\n"),
-            browsing: false,
+            browsing: None,
             checked: None,
+            checking: None,
             status: None,
             error: String::new(),
         }
@@ -60,25 +63,31 @@ impl App {
             ui.heading("Git client");
             let current = dialog.draft.client;
             let mut selected = current;
-            egui::ComboBox::from_label("Client")
-                .selected_text(current.map_or("Not configured", Client::label))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut selected, None, "Not configured");
-                    for client in Client::ALL {
-                        match client.availability(Platform::current()) {
-                            Ok(()) => {
-                                ui.selectable_value(&mut selected, Some(client), client.label());
-                            }
-                            Err(reason) => {
-                                ui.add_enabled(
-                                    false,
-                                    egui::Button::selectable(false, client.label()),
-                                )
-                                .on_disabled_hover_text(reason);
+            ui.add_enabled_ui(dialog.browsing.is_none(), |ui| {
+                egui::ComboBox::from_label("Client")
+                    .selected_text(current.map_or("Not configured", Client::label))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut selected, None, "Not configured");
+                        for client in Client::ALL {
+                            match client.availability(Platform::current()) {
+                                Ok(()) => {
+                                    ui.selectable_value(
+                                        &mut selected,
+                                        Some(client),
+                                        client.label(),
+                                    );
+                                }
+                                Err(reason) => {
+                                    ui.add_enabled(
+                                        false,
+                                        egui::Button::selectable(false, client.label()),
+                                    )
+                                    .on_disabled_hover_text(reason);
+                                }
                             }
                         }
-                    }
-                });
+                    });
+            });
             if selected != current {
                 chosen = Some(selected);
             }
@@ -99,7 +108,7 @@ impl App {
                 }
                 cancel = button.clicked();
                 save = ui
-                    .add_enabled(!dialog.browsing, egui::Button::new("Save"))
+                    .add_enabled(dialog.browsing.is_none(), egui::Button::new("Save"))
                     .clicked();
             });
         });
@@ -138,7 +147,9 @@ impl App {
         let Some(client) = dialog.draft.client else {
             return;
         };
-        dialog.browsing = true;
+        self.git_client_requests += 1;
+        let request = self.git_client_requests;
+        dialog.browsing = Some((request, client));
         let name = if client.opens_application(Platform::current()) {
             "application"
         } else {
@@ -150,11 +161,12 @@ impl App {
             .set_title(format!("Choose {} {name}", client.label()))
             .pick_file();
         self.dispatch(async move {
-            Message::GitClientExecutable(selection.await.map(|f| f.path().to_owned()))
+            Message::GitClientExecutable(request, selection.await.map(|f| f.path().to_owned()))
         });
     }
 
-    /// One filesystem-only check per draft change; stale results are ignored.
+    /// One filesystem-only check per draft change. Results carry their request,
+    /// so a stale check or one from a closed dialog is ignored.
     fn check_git_client(&mut self) {
         let Some(dialog) = self.git_client_dialog.as_mut() else {
             return;
@@ -163,10 +175,11 @@ impl App {
             return;
         }
         let preferences = dialog.draft.clone();
+        self.git_client_requests += 1;
+        let request = self.git_client_requests;
         dialog.checked = Some(preferences.clone());
+        dialog.checking = Some(request);
         dialog.status = None;
-        self.git_client_generation += 1;
-        let generation = self.git_client_generation;
         self.dispatch(async move {
             let result = tokio::task::spawn_blocking(move || {
                 crate::git_client::resolve(&preferences)
@@ -175,27 +188,35 @@ impl App {
             })
             .await
             .unwrap_or_else(|error| Err(error.to_string()));
-            Message::GitClientChecked(generation, result)
+            Message::GitClientChecked(request, result)
         });
     }
 
-    pub(super) fn git_client_checked(&mut self, generation: u64, result: Result<String, String>) {
-        if generation == self.git_client_generation
-            && let Some(dialog) = &mut self.git_client_dialog
+    pub(super) fn git_client_checked(&mut self, request: u64, result: Result<String, String>) {
+        if let Some(dialog) = self
+            .git_client_dialog
+            .as_mut()
+            .filter(|dialog| dialog.checking == Some(request))
         {
             dialog.status = Some(result);
         }
     }
 
-    pub(super) fn git_client_executable_selected(&mut self, path: Option<PathBuf>) {
-        let Some(dialog) = self.git_client_dialog.as_mut() else {
+    /// A picker result applies only to the dialog and client that opened it.
+    /// A dialog cancelled and reopened meanwhile never receives it.
+    pub(super) fn git_client_executable_selected(&mut self, request: u64, path: Option<PathBuf>) {
+        let Some(dialog) = self
+            .git_client_dialog
+            .as_mut()
+            .filter(|dialog| dialog.browsing.is_some_and(|(open, _)| open == request))
+        else {
             return;
         };
-        dialog.browsing = false;
+        let opened_for = dialog.browsing.take().map(|(_, client)| client);
         let Some(path) = path else {
             return;
         };
-        if dialog.draft.client.is_none() {
+        if dialog.draft.client != opened_for {
             return;
         }
         match path.to_str() {
@@ -241,7 +262,7 @@ fn git_client_fields(ui: &mut egui::Ui, dialog: &mut GitClientDialog, client: Cl
     };
     let label = ui.label(name);
     let browse = ui
-        .add_enabled_ui(!dialog.browsing, |ui| {
+        .add_enabled_ui(dialog.browsing.is_none(), |ui| {
             ui.horizontal(|ui| {
                 let width = ui.available_width() - 76.0;
                 ui.add(

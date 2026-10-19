@@ -95,7 +95,7 @@ enum Message {
     StorageMeasured(u64, Result<Option<crate::storage::Snapshot>, String>),
     UpdateChecked(Result<crate::updates::Outcome, crate::updates::Failure>),
     GitClientChecked(u64, Result<String, String>),
-    GitClientExecutable(Option<PathBuf>),
+    GitClientExecutable(u64, Option<PathBuf>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
@@ -124,7 +124,8 @@ pub struct App {
     browsing_repository: bool,
     worktree_location: worktree_settings::LocationEditor,
     git_client_dialog: Option<git_client_settings::GitClientDialog>,
-    git_client_generation: u64,
+    /// Request IDs for Git client checks and pickers, unique per session.
+    git_client_requests: u64,
     focus_repository_input: bool,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     repository_refresh: u64,
@@ -269,7 +270,7 @@ impl App {
         let mut app = Self {
             worktree_location,
             git_client_dialog: None,
-            git_client_generation: 0,
+            git_client_requests: 0,
             store: std::sync::Arc::new(store),
             state,
             runtime: Some(runtime),
@@ -933,7 +934,9 @@ impl App {
                 Message::GitClientChecked(generation, result) => {
                     self.git_client_checked(generation, result)
                 }
-                Message::GitClientExecutable(path) => self.git_client_executable_selected(path),
+                Message::GitClientExecutable(request, path) => {
+                    self.git_client_executable_selected(request, path)
+                }
                 Message::StorageMeasured(generation, result) => {
                     if let Some(work) = self.storage.finish(generation, result) {
                         self.dispatch_storage(work);

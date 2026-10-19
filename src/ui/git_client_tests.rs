@@ -166,9 +166,9 @@ fn checks_run_off_the_ui_thread_once_per_change_and_ignore_stale_results() {
     let missing = temp.path().join("missing client");
     app.git_client_dialog.as_mut().unwrap().draft.executable = missing.display().to_string();
     keys.frame(&mut app, vec![]);
-    let generation = app.git_client_generation;
+    let first = dialog(&app).checking.unwrap();
     keys.frame(&mut app, vec![]);
-    assert_eq!(app.git_client_generation, generation, "no check per frame");
+    assert_eq!(dialog(&app).checking, Some(first), "no check per frame");
     let error = settle(&mut app).unwrap_err();
     assert!(error.contains(&missing.display().to_string()), "{error}");
     assert!(error.contains("does not exist."), "{error}");
@@ -176,37 +176,54 @@ fn checks_run_off_the_ui_thread_once_per_change_and_ignore_stale_results() {
     let found = launcher(&temp.path().join("Client tools"));
     app.git_client_dialog.as_mut().unwrap().draft.executable = found.display().to_string();
     keys.frame(&mut app, vec![]);
-    assert_eq!(app.git_client_generation, generation + 1);
-    app.git_client_checked(generation, Err("stale".into()));
+    let second = dialog(&app).checking.unwrap();
+    assert_ne!(second, first);
+    app.git_client_checked(first, Err("stale".into()));
     assert!(dialog(&app).status.is_none(), "stale result ignored");
     let ready = settle(&mut app).unwrap();
     assert!(ready.contains(&found.display().to_string()) && ready.contains(PLACEHOLDER));
     assert!(app.state.git_client.is_default(), "checks never save");
 
-    // A result for a closed dialog is dropped, not shown in a later one.
-    app.git_client_generation += 1;
-    let late = app.git_client_generation;
+    // A check from a cancelled dialog is not shown in a reopened one.
+    app.git_client_dialog
+        .as_mut()
+        .unwrap()
+        .draft
+        .executable
+        .push('x');
+    keys.frame(&mut app, vec![]);
+    let cancelled = dialog(&app).checking.unwrap();
     app.git_client_dialog = None;
-    app.git_client_checked(late, Ok("late".into()));
     app.open_git_client_settings();
+    app.git_client_checked(cancelled, Ok("late".into()));
     assert!(dialog(&app).status.is_none());
+}
+
+/// Marks a native picker as open without showing one.
+fn picking(app: &mut App) -> u64 {
+    app.git_client_requests += 1;
+    let request = app.git_client_requests;
+    let dialog = app.git_client_dialog.as_mut().unwrap();
+    dialog.browsing = Some((request, dialog.draft.client.unwrap()));
+    request
 }
 
 #[test]
 fn browsed_executables_are_kept_exactly_and_cancellation_changes_nothing() {
     let (_temp, mut app) = app();
     let chosen = PathBuf::from("/Applications/Sublime Merge ü.app ");
-    app.git_client_executable_selected(Some(chosen.clone()));
+    app.git_client_executable_selected(1, Some(chosen.clone()));
     assert!(app.git_client_dialog.is_none(), "no dialog, nothing stored");
 
     app.open_git_client_settings();
     app.select_git_client(Some(Client::SublimeMerge));
-    app.git_client_dialog.as_mut().unwrap().browsing = true;
-    app.git_client_executable_selected(None);
-    assert!(!dialog(&app).browsing);
+    let request = picking(&mut app);
+    app.git_client_executable_selected(request, None);
+    assert!(dialog(&app).browsing.is_none());
     assert!(dialog(&app).draft.executable.is_empty());
 
-    app.git_client_executable_selected(Some(chosen.clone()));
+    let request = picking(&mut app);
+    app.git_client_executable_selected(request, Some(chosen.clone()));
     assert_eq!(
         dialog(&app).draft.executable,
         chosen.to_str().unwrap(),
@@ -217,14 +234,48 @@ fn browsed_executables_are_kept_exactly_and_cancellation_changes_nothing() {
     {
         use std::os::unix::ffi::OsStringExt;
         app.select_git_client(Some(Client::Custom));
+        let request = picking(&mut app);
         let invalid = PathBuf::from(std::ffi::OsString::from_vec(b"/opt/\xff".to_vec()));
-        app.git_client_executable_selected(Some(invalid));
+        app.git_client_executable_selected(request, Some(invalid));
         assert!(dialog(&app).draft.executable.is_empty());
         assert_eq!(
             dialog(&app).error,
             "Choose an executable with a Unicode path."
         );
     }
+}
+
+#[test]
+fn a_late_picker_result_never_reaches_another_dialog_or_client() {
+    let (_temp, mut app) = app();
+    let chosen = PathBuf::from("/opt/picked for the first dialog");
+    app.open_git_client_settings();
+    app.select_git_client(Some(Client::SublimeMerge));
+    let first = picking(&mut app);
+    // Cancelled and reopened while the (non-modal) picker stays open.
+    app.git_client_dialog = None;
+    app.open_git_client_settings();
+    app.select_git_client(Some(Client::SublimeMerge));
+    app.git_client_executable_selected(first, Some(chosen.clone()));
+    assert!(dialog(&app).draft.executable.is_empty());
+
+    // A picker opened for one client cannot fill in another client.
+    let second = picking(&mut app);
+    app.select_git_client(Some(Client::Custom));
+    app.git_client_executable_selected(second, Some(chosen.clone()));
+    assert!(dialog(&app).draft.executable.is_empty());
+    assert!(dialog(&app).browsing.is_none(), "the picker closed");
+
+    // While a picker is open, the client choice and Save are disabled.
+    picking(&mut app);
+    let mut keys = Keyboard::new(window);
+    keys.frame(&mut app, vec![]);
+    let disabled = |label: &str| {
+        keys.nodes
+            .values()
+            .any(|node| keys.label(node) == label && node.is_disabled())
+    };
+    assert!(disabled("Client") && disabled("Save"));
 }
 
 #[test]
