@@ -494,6 +494,8 @@ pub struct AppState {
     pub history_retention: crate::history::RetentionPolicy,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worktree_base: Option<PathBuf>,
+    #[serde(skip_serializing_if = "crate::git_client::Preferences::is_default")]
+    pub git_client: crate::git_client::Preferences,
 }
 impl Default for AppState {
     fn default() -> Self {
@@ -514,6 +516,7 @@ impl Default for AppState {
             desktop: crate::desktop::Preferences::default(),
             history_retention: crate::history::RetentionPolicy::default(),
             worktree_base: None,
+            git_client: crate::git_client::Preferences::default(),
         }
     }
 }
@@ -548,6 +551,7 @@ impl AppState {
             desktop: self.desktop,
             history_retention: self.history_retention.clone(),
             worktree_base: self.worktree_base.clone(),
+            git_client: self.git_client.clone(),
         }
     }
     pub fn save_validation(

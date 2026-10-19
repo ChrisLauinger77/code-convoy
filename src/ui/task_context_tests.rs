@@ -12,6 +12,8 @@ mod copy_results;
 mod cursor;
 #[path = "export_tests.rs"]
 mod export_tests;
+#[path = "git_client_tests.rs"]
+mod git_client;
 #[path = "history_tests.rs"]
 mod history;
 #[path = "repository_groups_tests.rs"]

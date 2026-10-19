@@ -13,6 +13,7 @@ mod dialog;
 mod editor;
 mod export;
 mod format;
+mod git_client_settings;
 mod history;
 mod library;
 mod messages;
@@ -93,6 +94,8 @@ enum Message {
     ExportSaved(Result<String, String>),
     StorageMeasured(u64, Result<Option<crate::storage::Snapshot>, String>),
     UpdateChecked(Result<crate::updates::Outcome, crate::updates::Failure>),
+    GitClientChecked(u64, Result<String, String>),
+    GitClientExecutable(u64, Option<PathBuf>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
@@ -120,6 +123,9 @@ pub struct App {
     repository_dialog: rfd::AsyncFileDialog,
     browsing_repository: bool,
     worktree_location: worktree_settings::LocationEditor,
+    git_client_dialog: Option<git_client_settings::GitClientDialog>,
+    /// Request IDs for Git client checks and pickers, unique per session.
+    git_client_requests: u64,
     focus_repository_input: bool,
     repository_states: HashMap<PathBuf, Result<WorkingTree, String>>,
     repository_refresh: u64,
@@ -263,6 +269,8 @@ impl App {
         };
         let mut app = Self {
             worktree_location,
+            git_client_dialog: None,
+            git_client_requests: 0,
             store: std::sync::Arc::new(store),
             state,
             runtime: Some(runtime),
@@ -469,11 +477,20 @@ impl App {
                             self.notification_settings(ui);
                             ui.separator();
                             ui.menu_button("Worktree location", |ui| self.worktree_settings(ui));
+                            if ui.button("Git client…").clicked() {
+                                self.open_git_client_settings();
+                                ui.close();
+                            }
                             ui.separator();
                             self.desktop_settings(ui);
                             ui.separator();
                             if ui.button("Keyboard Shortcuts…").clicked() {
                                 self.shortcuts_open = true;
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui.button("Quit CodeConvoy").clicked() {
+                                self.explicit_quit = true;
                                 ui.close();
                             }
                             });
@@ -914,6 +931,12 @@ impl App {
                 Message::UpdateChecked(result) => {
                     self.update_check = about::UpdateCheck::Finished(result);
                 }
+                Message::GitClientChecked(generation, result) => {
+                    self.git_client_checked(generation, result)
+                }
+                Message::GitClientExecutable(request, path) => {
+                    self.git_client_executable_selected(request, path)
+                }
                 Message::StorageMeasured(generation, result) => {
                     if let Some(work) = self.storage.finish(generation, result) {
                         self.dispatch_storage(work);
@@ -1199,6 +1222,7 @@ impl App {
             self.validation_assignment_window(ctx);
             self.shortcuts_window(ctx);
             self.history_settings_window(ctx);
+            self.git_client_settings_window(ctx);
             self.storage_window(ctx);
             self.worktree_cleanup_window(ctx);
         }

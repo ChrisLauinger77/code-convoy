@@ -110,7 +110,7 @@ fn directories(agent: AgentId) -> Vec<PathBuf> {
     directories
 }
 
-fn search(name: &str, configured: &str, directories: Vec<PathBuf>) -> Vec<PathBuf> {
+pub(crate) fn search(name: &str, configured: &str, directories: Vec<PathBuf>) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     let configured = Path::new(configured);
     if configured.is_absolute() {
@@ -155,7 +155,7 @@ fn search(name: &str, configured: &str, directories: Vec<PathBuf>) -> Vec<PathBu
     candidates
 }
 
-fn is_executable(path: &Path) -> bool {
+pub(crate) fn is_executable(path: &Path) -> bool {
     let Ok(metadata) = path.metadata() else {
         return false;
     };

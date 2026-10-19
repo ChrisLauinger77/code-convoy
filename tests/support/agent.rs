@@ -9,6 +9,9 @@ mod cursor;
 mod workflow;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    if let Some(result) = git_client_probe(&args) {
+        return result;
+    }
     if args.get(1).is_some_and(|a| a.starts_with("validation-")) {
         return validation_fixture(&args);
     }
@@ -547,4 +550,32 @@ fn validation_fixture(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
         std::process::exit(7);
     }
     Ok(())
+}
+
+/// Stands in for an external Git client: records how it was started next to
+/// itself. The file name selects the outcome, because the launcher, not the
+/// test, chooses the arguments.
+fn git_client_probe(args: &[String]) -> Option<Result<(), Box<dyn std::error::Error>>> {
+    let executable = std::env::current_exe().ok()?;
+    let stem = executable.file_stem()?.to_str()?.to_owned();
+    let behavior = stem.strip_prefix("git-client-probe")?.to_owned();
+    Some((|| {
+        let record = serde_json::json!({
+            "arguments": &args[1..],
+            "directory": std::env::current_dir()?,
+        });
+        std::fs::write(
+            executable.with_file_name(format!("{stem}.json")),
+            serde_json::to_vec(&record)?,
+        )?;
+        match behavior.as_str() {
+            "-fail" => std::process::exit(3),
+            "-wait" => {
+                std::thread::sleep(Duration::from_secs(4));
+                std::fs::write(executable.with_file_name(format!("{stem}.done")), "")?;
+            }
+            _ => {}
+        }
+        Ok(())
+    })())
 }

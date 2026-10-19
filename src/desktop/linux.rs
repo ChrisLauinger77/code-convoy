@@ -2,6 +2,7 @@
 use super::{Action, Backend, Event, Events, MenuState};
 use ksni::TrayMethods;
 use std::{
+    num::NonZeroUsize,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -236,15 +237,12 @@ impl Appearance {
                 let rule = zbus::MatchRule::builder()
                     .msg_type(zbus::message::Type::Signal)
                     .interface(SETTINGS)
-                    .ok()?
                     .member("SettingChanged")
-                    .ok()?
                     .arg(0, APPEARANCE)
-                    .ok()?
                     .arg(1, COLOR_SCHEME)
-                    .ok()?
-                    .build();
-                zbus::MessageStream::for_match_rule(rule, &connection, Some(4))
+                    .build()
+                    .ok()?;
+                zbus::MessageStream::for_match_rule(rule, &connection, NonZeroUsize::new(4))
                     .await
                     .ok()
             }
@@ -260,7 +258,7 @@ impl Appearance {
                     )
                     .await
                     .ok()?;
-                let value: zbus::zvariant::OwnedValue = reply.body().deserialize().ok()?;
+                let value: zbus::OwnedVariant = reply.body().deserialize().ok()?;
                 u32::try_from(value).ok()
             }
             .await;
@@ -287,10 +285,9 @@ impl Appearance {
         while let Some(changes) = &mut self.changes {
             match changes.next().await {
                 Some(Ok(message)) => {
-                    if let Ok((_, _, value)) =
-                        message
-                            .body()
-                            .deserialize::<(String, String, zbus::zvariant::OwnedValue)>()
+                    if let Ok((_, _, value)) = message
+                        .body()
+                        .deserialize::<(String, String, zbus::OwnedVariant)>()
                         && let Ok(value) = u32::try_from(value)
                     {
                         return value;

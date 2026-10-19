@@ -106,10 +106,12 @@ once means one eligible submission attempt, not guaranteed OS presentation.
 ## Library decision and sources
 
 The maintained [notify-rust](https://github.com/hoodie/notify-rust) family provides
-all three native transports. Linux uses its asynchronous API. With desktop integration in 0.6, zbus 5.19 or
-newer selects Tokio for connections created inside the application runtime and
-retains async-io for consumers outside it, including desktop accessibility. On macOS and Windows
-we call its underlying libraries directly because the common response API blocks:
+all three native transports. Linux uses its asynchronous API. Its transitive
+zbus 5.19 dependency remains locked separately from the direct zbus 6 portal
+client. zbus 5.19 selects Tokio for connections created inside the application
+runtime and retains async-io for consumers outside it, including desktop
+accessibility. On macOS and Windows we call its underlying libraries directly
+because the common response API blocks:
 [mac-usernotifications](https://github.com/hoodie/mac-usernotifications) exposes a
 cancellable response future and
 [winrt-notification](https://github.com/tauri-apps/winrt-notification) exposes native
