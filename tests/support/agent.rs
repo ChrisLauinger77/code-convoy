@@ -6,6 +6,7 @@ use std::{
 };
 mod antigravity;
 mod cursor;
+mod standalone;
 mod workflow;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
@@ -14,6 +15,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.get(1).is_some_and(|a| a.starts_with("validation-")) {
         return validation_fixture(&args);
+    }
+    if args.get(1).is_some_and(|a| a == "opencode2-server") {
+        return standalone::serve(&args);
     }
     if args.get(1).is_some_and(|a| a == "passthrough") {
         std::io::copy(&mut std::io::stdin(), &mut std::io::stdout())?;
@@ -142,6 +146,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if opencode {
         opencode_arguments(&args[2..], opencode2);
     }
+    // Stops a started standalone server on every return; exits use
+    // standalone::exit.
+    let _server = standalone::Guard;
+    if opencode && opencode2 && args.iter().any(|a| a == "--standalone") {
+        standalone::start()?;
+    }
     if args.iter().any(|a| a == "--help") {
         println!("Codex fixture: --no-daemon --ask-for-approval exec");
         if workflow::marker().is_some() {
@@ -189,6 +199,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(json) = input.strip_prefix("codeconvoy-fixture-gate\n") {
         return gate(json, &input, &args, copilot, opencode);
+    }
+    if input == "opencode2-wait" {
+        // Runs until stopped; OpenCode 2's SIGTERM path stops the server first.
+        println!("{{\"type\":\"step_start\",\"part\":{{\"type\":\"step-start\"}}}}");
+        std::io::stdout().flush()?;
+        std::fs::write("opencode2-ready", "ready")?;
+        loop {
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
     if input == "spawn-child"
         || (input == "cancel-test"
@@ -261,7 +280,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             println!("{{\"type\":\"turn.failed\",\"error\":\"fixture failure\"}}");
         }
-        std::process::exit(7);
+        standalone::exit(7);
     }
     if claude {
         claude_result(false);
@@ -387,7 +406,7 @@ fn gate(
         } else if !copilot {
             println!("{{\"type\":\"turn.failed\",\"error\":\"controlled failure\"}}");
         }
-        std::process::exit(7);
+        standalone::exit(7);
     }
     if config["edit"].as_bool() == Some(true) {
         std::fs::write("fixture-change.txt", "controlled repository edit")?;

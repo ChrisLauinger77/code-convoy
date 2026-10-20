@@ -1,8 +1,11 @@
 //! The unreaped direct child reserves the PGID until the last destructive signal.
 //! After reaping starts we ONLY probe with signal 0, including on cancellation,
 //! timeout and Drop. A reused ID can delay/refuse cleanup, never receive a kill.
+//! Process groups that descendants detach into are never signalled at all: they
+//! are only recorded and probed (see `Containment::DetachedGroups`).
 use std::{io, time::Duration};
 use tokio::time::Instant;
+mod detached;
 
 const POLL: Duration = Duration::from_millis(5);
 const CLEANUP: Duration = Duration::from_secs(5);
@@ -35,6 +38,7 @@ enum Phase {
 pub(super) struct Group {
     pid: libc::pid_t,
     phase: Phase,
+    detached: Option<detached::Groups>,
 }
 
 impl Group {
@@ -51,7 +55,16 @@ impl Group {
         Ok(Self {
             pid,
             phase: Phase::Anchored,
+            detached: None,
         })
+    }
+
+    /// Also records the process groups that descendants move into while the
+    /// child runs in `directory`; `after_detached` then requires all of them
+    /// to be gone.
+    pub fn track_detached(mut self, directory: &std::path::Path) -> Self {
+        self.detached = Some(detached::Groups::new(directory));
+        self
     }
 
     fn exited(&mut self) -> io::Result<bool> {
@@ -82,6 +95,33 @@ impl Group {
         }
     }
 
+    /// Asks the child's group to stop itself with SIGTERM. Like `terminate`, it
+    /// signals only while the unreaped child still reserves the group ID.
+    pub fn interrupt(&mut self) -> io::Result<()> {
+        match self.phase {
+            Phase::Draining(_) => return Ok(()),
+            Phase::Uncertain => {
+                return Err(io::Error::other(
+                    "Process identity is unconfirmed; refusing to signal its old group ID.",
+                ));
+            }
+            Phase::Anchored => {}
+        }
+        if self.exited()? {
+            return Ok(());
+        }
+        // SAFETY: as in terminate, no wait has reaped the child, so its PID and
+        // group ID cannot have been recycled.
+        if unsafe { libc::kill(-self.pid, libc::SIGTERM) } == 0 {
+            return Ok(());
+        }
+        let error = io::Error::last_os_error();
+        match error.raw_os_error() {
+            Some(libc::ESRCH) => Ok(()),
+            _ => Err(error),
+        }
+    }
+
     pub fn terminate(&mut self) -> io::Result<()> {
         match self.phase {
             Phase::Draining(_) => return Ok(()), // permanently disarmed
@@ -94,7 +134,7 @@ impl Group {
         }
         let exited = self.exited()?;
         // SAFETY: no wait has reaped the child. Its PID cannot be recycled while
-        // it is alive or a zombie. This is the only destructive Unix signal site.
+        // it is alive or a zombie. This and interrupt are the only signal sites.
         if unsafe { libc::kill(-self.pid, libc::SIGKILL) } == 0 {
             return Ok(());
         }
@@ -120,10 +160,17 @@ impl Group {
         }
         let mut poll = POLL;
         while !self.exited()? {
+            if let Some(detached) = &mut self.detached {
+                detached.sample(self.pid);
+            }
             tokio::time::sleep(poll).await;
             // Short commands finish promptly; long jobs need at most ~13 idle
             // probes/second. Cancellation drops this sleep and signals directly.
             poll = (poll * 2).min(Duration::from_millis(80));
+        }
+        // The exit just orphaned whatever the last sample could not see yet.
+        if let Some(detached) = &mut self.detached {
+            detached.sweep(self.pid);
         }
         // A completed CLI must not leave background writers behind, regardless
         // of exit code or inherited pipe state. Preserve the CLI's exit status.
@@ -153,6 +200,30 @@ impl Group {
             // infer absence from pipes, parent status, permission errors or time.
             tokio::time::sleep(POLL).await;
         }
+    }
+
+    /// Waits until every recorded detached group is gone, probing with signal 0
+    /// only. A reused group ID can delay release, never receive a signal. An
+    /// incomplete record keeps the repository protected.
+    pub async fn after_detached(&self) -> io::Result<()> {
+        let Some(detached) = &self.detached else {
+            return Ok(());
+        };
+        for &group in detached.recorded()? {
+            loop {
+                // SAFETY: signal zero never sends a signal, even if the ID is reused.
+                if unsafe { libc::kill(-group, 0) } != 0 {
+                    let error = io::Error::last_os_error();
+                    match error.raw_os_error() {
+                        Some(libc::ESRCH) => break,
+                        Some(libc::EPERM) | Some(libc::EINTR) => {}
+                        _ => return Err(error),
+                    }
+                }
+                tokio::time::sleep(POLL).await;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -299,6 +370,7 @@ mod tests {
         let mut group = Group {
             pid: peer.id() as libc::pid_t,
             phase: Phase::Draining(deadline),
+            detached: None,
         };
         assert!(group.terminate().is_ok());
         assert_eq!(group.before_reap().await.unwrap(), deadline);

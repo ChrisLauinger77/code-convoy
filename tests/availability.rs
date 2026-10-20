@@ -740,21 +740,12 @@ async fn check_cli_accepts_the_opencode_version_the_executable_offers() {
             .result(AgentId::OpenCode, Some(&executable))
             .unwrap()
             .as_ref();
-        match (name, cfg!(windows)) {
-            ("opencode1", _) => {
-                assert!(result.unwrap().detail.contains("CLI compatibility checked"));
-            }
-            (_, true) => {
-                let detail = &result.unwrap().detail;
-                assert!(detail.starts_with("opencode v2.0.32"), "{detail}");
-            }
-            (_, false) => {
-                let error = result.unwrap_err();
-                assert!(
-                    error.detail.contains("not supported on macOS and Linux"),
-                    "{error:?}"
-                );
-            }
-        }
+        let detail = &result.unwrap().detail;
+        let expected = if name == "opencode2" {
+            "opencode v2.0.32"
+        } else {
+            "1.18.34"
+        };
+        assert!(detail.starts_with(expected), "{detail}");
     }
 }

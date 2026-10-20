@@ -391,7 +391,6 @@ fn opencode2_fixture() -> (tempfile::TempDir, String) {
     (directory, path)
 }
 
-#[cfg(windows)]
 async fn prepare_opencode2(
     root: &Path,
     names: &[&str],
@@ -428,7 +427,6 @@ fn outcomes(events: &[Event]) -> std::collections::BTreeMap<usize, JobStatus> {
 }
 
 #[tokio::test]
-#[cfg(windows)]
 async fn opencode_2_jobs_run_standalone_in_each_repository_and_isolate_failure() {
     use codeconvoy::agents::opencode::OpenCode;
     let (_fixture, executable) = opencode2_fixture();
@@ -460,7 +458,6 @@ async fn opencode_2_jobs_run_standalone_in_each_repository_and_isolate_failure()
 }
 
 #[tokio::test]
-#[cfg(windows)]
 async fn opencode_2_cancellation_kills_descendants_and_leaves_other_jobs_running() {
     use codeconvoy::agents::opencode::OpenCode;
     let (_fixture, executable) = opencode2_fixture();
@@ -481,8 +478,54 @@ async fn opencode_2_cancellation_kills_descendants_and_leaves_other_jobs_running
     let outcomes = outcomes(&finish(&mut rx, 2).await);
     assert_eq!(outcomes[&0], JobStatus::Cancelled);
     assert_eq!(outcomes[&1], JobStatus::Succeeded);
+    // The standalone server ran in its own process group; release waited for it.
+    #[cfg(unix)]
+    for name in ["tree", "other"] {
+        assert!(!alive(standalone_server(&dir.path().join(name))), "{name}");
+    }
     tokio::time::sleep(Duration::from_millis(1400)).await;
     assert!(!dir.path().join("tree/orphan-survived").exists());
+}
+
+#[cfg(unix)]
+fn standalone_server(repository: &Path) -> libc::pid_t {
+    std::fs::read_to_string(repository.join("opencode2-server.pid"))
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+#[cfg(unix)]
+fn alive(pid: libc::pid_t) -> bool {
+    // SAFETY: signal zero only probes.
+    let probed = unsafe { libc::kill(pid, 0) };
+    probed == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+#[tokio::test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+async fn an_opencode_2_server_that_outlives_run_keeps_the_repository_reserved() {
+    use codeconvoy::agents::opencode::OpenCode;
+    let (_fixture, executable) = opencode2_fixture();
+    let dir = tempfile::tempdir().unwrap();
+    // In a directory named orphan, the stand-in leaves a server that ignores
+    // stops running, as if run had been killed before its finalizer.
+    let prepared = prepare_opencode2(dir.path(), &["orphan"], 1, &executable).await;
+    let (tx, mut rx) = mpsc::channel(256);
+    let mut manager = runner::RunManager::new(1, tx);
+    manager.start(300, prepared, Arc::new(OpenCode)).unwrap();
+    let events = finish(&mut rx, 1).await;
+    assert_eq!(outcomes(&events)[&0], JobStatus::Failed);
+    assert!(
+        events.iter().any(
+            |e| matches!(e, Event::Finished {detail,..} if detail.contains("remain reserved"))
+        )
+    );
+    let server = standalone_server(&dir.path().join("orphan"));
+    assert!(alive(server));
+    // SAFETY: the stubborn stand-in ignores SIGTERM for 30 s, so the PID still
+    // belongs to this test's own stray server.
+    unsafe { libc::kill(server, libc::SIGKILL) };
 }
 
 #[tokio::test]
@@ -491,16 +534,10 @@ async fn an_opencode_binary_replaced_after_check_cli_fails_before_reading_the_ta
     let (_fixture, opencode2) = opencode2_fixture();
     let opencode1 = env!("CARGO_BIN_EXE_codeconvoy-test-agent");
     // Settings for one major version, executed by the other: each CLI rejects
-    // the other's distinguishing argument, and nothing is retried. On macOS and
-    // Linux, OpenCode 2 settings are refused before any process starts.
-    let refused = if cfg!(windows) {
-        "Unknown argument: standalone"
-    } else {
-        "not supported on macOS and Linux"
-    };
+    // the other's distinguishing argument, and nothing is retried.
     for (version, executable, rejection) in [
         ("1", opencode2.as_str(), "Unrecognized flag: --dir"),
-        ("2", opencode1, refused),
+        ("2", opencode1, "Unknown argument: standalone"),
     ] {
         let dir = tempfile::tempdir().unwrap();
         let mut prepared = prepare(dir.path(), &["repo"], 1).await;
@@ -531,15 +568,10 @@ async fn opencode_never_starts_outside_a_missing_or_invalid_execution_directory(
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("not a directory ü");
     std::fs::write(&file, "file").unwrap();
-    let cases = [
+    for (version, executable) in [
         ("1", env!("CARGO_BIN_EXE_codeconvoy-test-agent")),
         ("2", opencode2.as_str()),
-    ];
-    // OpenCode 2 is refused on macOS and Linux before a command is built.
-    for (version, executable) in cases
-        .into_iter()
-        .filter(|(v, _)| cfg!(windows) || *v == "1")
-    {
+    ] {
         for path in [dir.path().join("missing repository"), file.clone()] {
             let task = TaskConfig {
                 agent: AgentId::OpenCode,
@@ -577,37 +609,6 @@ async fn opencode_never_starts_outside_a_missing_or_invalid_execution_directory(
     manager.start(300, prepared, Arc::new(OpenCode)).unwrap();
     assert_eq!(outcomes(&finish(&mut rx, 1).await)[&0], JobStatus::Failed);
     assert!(!Path::new("agent-input").exists());
-}
-
-#[tokio::test]
-#[cfg(unix)]
-async fn opencode_2_preflight_is_refused_on_macos_and_linux_without_launching() {
-    let (_fixture, executable) = opencode2_fixture();
-    let dir = tempfile::tempdir().unwrap();
-    let mut prepared = prepare(dir.path(), &["repo"], 1).await;
-    prepared.task.agent = AgentId::OpenCode;
-    prepared.task.options = [
-        ("executable".into(), executable),
-        ("version".into(), "2".into()),
-    ]
-    .into();
-    let error = runner::prepare(
-        prepared.task,
-        prepared
-            .repositories
-            .into_iter()
-            .map(|r| r.repository)
-            .collect(),
-    )
-    .await
-    .err()
-    .unwrap()
-    .to_string();
-    assert!(
-        error.contains("not supported on macOS and Linux"),
-        "{error}"
-    );
-    assert!(!dir.path().join("repo/agent-input").exists());
 }
 
 #[tokio::test]

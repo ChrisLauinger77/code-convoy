@@ -29,6 +29,20 @@ pub(crate) fn git_environment_override(key: &str, windows: bool) -> bool {
     }
 }
 
+/// How CodeConvoy confirms that an agent's processes have stopped.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Containment {
+    /// The Unix process group or the Windows Job Object holds every process.
+    #[default]
+    Group,
+    /// On macOS and Linux the CLI moves helpers into their own process groups
+    /// and stops them itself on SIGTERM. Stopping sends SIGTERM and waits up to
+    /// `grace` before the process group is killed. The repository is released
+    /// only once every process group recorded under the CLI is gone. The
+    /// Windows Job Object already holds such helpers.
+    DetachedGroups { grace: Duration },
+}
+
 #[derive(Debug, Clone)]
 pub struct CommandSpec {
     pub program: OsString,
@@ -37,6 +51,7 @@ pub struct CommandSpec {
     pub input: Option<Vec<u8>>,
     pub remove_env: Vec<String>,
     pub env: Vec<(String, String)>,
+    pub containment: Containment,
 }
 impl CommandSpec {
     pub fn new(program: impl Into<OsString>, directory: impl Into<PathBuf>) -> Self {
@@ -47,6 +62,7 @@ impl CommandSpec {
             input: None,
             remove_env: Vec::new(),
             env: Vec::new(),
+            containment: Containment::Group,
         }
     }
     pub fn args(mut self, args: &[&str]) -> Self {
@@ -82,6 +98,9 @@ pub struct ManagedChild {
     child: Box<dyn ChildWrapper>,
     #[cfg(unix)]
     group: std::io::Result<unix::Group>,
+    /// SIGTERM grace period for `Containment::DetachedGroups`.
+    #[cfg(unix)]
+    grace: Option<Duration>,
     #[cfg(windows)]
     job: std::sync::Arc<windows::Job>,
     #[cfg(not(unix))]
@@ -104,6 +123,25 @@ impl Drop for ManagedChild {
     }
 }
 impl ManagedChild {
+    /// Asks the CLI to stop itself before its process group is killed.
+    #[cfg(unix)]
+    fn interrupt(&mut self) -> std::io::Result<()> {
+        self.group
+            .as_mut()
+            .map_err(|error| std::io::Error::new(error.kind(), error.to_string()))?
+            .interrupt()
+    }
+    /// Resolves once the CLI has exited and the rest of its group was killed,
+    /// without reaping it.
+    #[cfg(unix)]
+    async fn exited(&mut self) -> std::io::Result<()> {
+        self.group
+            .as_mut()
+            .map_err(|error| std::io::Error::new(error.kind(), error.to_string()))?
+            .before_reap()
+            .await
+            .map(|_| ())
+    }
     async fn wait(&mut self) -> Result<ExitStatus> {
         #[cfg(unix)]
         {
@@ -123,6 +161,7 @@ impl ManagedChild {
                 // child. Our identity guard owns the group lifecycle instead.
                 let status = self.child.inner_mut().wait().await?;
                 group.after_reap().await?;
+                group.after_detached().await?;
                 Ok(status)
             })
             .await
@@ -198,12 +237,25 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
             spec.directory.display()
         )
     })?;
+    #[cfg(unix)]
+    let grace = match spec.containment {
+        Containment::Group => None,
+        Containment::DetachedGroups { grace } => Some(grace),
+    };
     Ok(ManagedChild {
         // Retain any identity error in the child: returning a spawn error after
         // launch would bypass the caller's unsafe-until-supervised protection.
         // wait/cancel report it and Drop cannot signal an unconfirmed identity.
         #[cfg(unix)]
-        group: unix::Group::new(child.id()),
+        group: unix::Group::new(child.id()).map(|group| {
+            if grace.is_some() {
+                group.track_detached(&spec.directory)
+            } else {
+                group
+            }
+        }),
+        #[cfg(unix)]
+        grace,
         #[cfg(windows)]
         job,
         child,
@@ -306,6 +358,16 @@ pub async fn execute_until(
             })
         }
         None => {
+            // A CLI that stops its own detached helpers gets a bounded chance to
+            // do so. Process-group termination and confirmation follow either way.
+            // Its output pipes are already closed: a write during shutdown fails
+            // with EPIPE instead of blocking.
+            #[cfg(unix)]
+            if let Some(grace) = child.grace
+                && child.interrupt().is_ok()
+            {
+                let _ = tokio::time::timeout(grace, child.exited()).await;
+            }
             cancel_process(&mut child).context("Could not terminate the agent process tree.")?;
             let status = tokio::time::timeout(Duration::from_secs(5), child.wait())
                 .await
