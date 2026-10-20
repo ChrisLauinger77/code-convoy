@@ -123,16 +123,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let opencode = args.get(1).is_some_and(|a| a == "run");
-    // A link named opencode2 (OpenCode 2's alternative bin name) stands in for
-    // OpenCode 2; every other name keeps the OpenCode 1 interface.
-    let opencode2 = std::env::current_exe()?
-        .file_stem()
-        .is_some_and(|stem| stem.to_string_lossy().starts_with("opencode2"));
+    let opencode2 = is_opencode2();
     if opencode && args.iter().any(|a| a == "--help") {
+        // As captured: OpenCode 2 prints run help to stdout, OpenCode 1 to stderr.
         if opencode2 {
-            print!("{}", include_str!("../fixtures/opencode-2-run-help.txt"));
+            print!(
+                "{}",
+                include_str!("../fixtures/opencode-2.0.32-run-help.txt")
+            );
         } else {
-            print!("{}", include_str!("../fixtures/opencode-run-help.txt"));
+            eprint!(
+                "{}",
+                include_str!("../fixtures/opencode-1.19.3-run-help.txt")
+            );
         }
         return Ok(());
     }
@@ -504,15 +507,28 @@ fn opencode_arguments(args: &[String], opencode2: bool) {
     }
 }
 
+/// A link named opencode2 (OpenCode 2's alternative bin name) stands in for
+/// OpenCode 2; every other name keeps the OpenCode 1 interface.
+fn is_opencode2() -> bool {
+    std::env::current_exe().is_ok_and(|executable| {
+        executable
+            .file_stem()
+            .is_some_and(|stem| stem.to_string_lossy().starts_with("opencode2"))
+    })
+}
+
 fn opencode_complete() {
     println!(
         "{}",
         serde_json::json!({"type":"text", "part":{"type":"text", "text":"done"}})
     );
-    println!(
-        "{}",
-        serde_json::json!({"type":"step_finish", "part":{"type":"step-finish", "reason":"stop", "tokens":{}, "cost":0}})
-    );
+    // As captured, OpenCode 2 closes its stream before reporting the final step.
+    if !is_opencode2() {
+        println!(
+            "{}",
+            serde_json::json!({"type":"step_finish", "part":{"type":"step-finish", "reason":"stop", "tokens":{}, "cost":0}})
+        );
+    }
 }
 
 fn claude_result(failed: bool) {

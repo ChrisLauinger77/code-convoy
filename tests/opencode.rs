@@ -215,8 +215,8 @@ fn both_versions_use_the_exact_absolute_directory_with_spaces_and_unicode() {
 #[test]
 #[cfg(windows)]
 fn help_detection_verifies_the_selected_major_version_and_rejects_unknown_clis() {
-    let v1 = include_str!("fixtures/opencode-run-help.txt");
-    let v2 = include_str!("fixtures/opencode-2-run-help.txt");
+    let v1 = include_str!("fixtures/opencode-1.19.3-run-help.txt");
+    let v2 = include_str!("fixtures/opencode-2.0.32-run-help.txt");
     // Launch preflight materializes the version setting.
     let one = [("version".into(), "1".into())].into();
     let two = opencode2(TaskConfig::default()).options;
@@ -288,8 +288,8 @@ fn help_detection_verifies_the_selected_major_version_and_rejects_unknown_clis()
 fn opencode_2_is_refused_on_macos_and_linux_before_any_command_runs() {
     // Its standalone server would run outside process-group cancellation.
     const REFUSED: &str = "not supported on macOS and Linux";
-    let v1 = include_str!("fixtures/opencode-run-help.txt");
-    let v2 = include_str!("fixtures/opencode-2-run-help.txt");
+    let v1 = include_str!("fixtures/opencode-1.19.3-run-help.txt");
+    let v2 = include_str!("fixtures/opencode-2.0.32-run-help.txt");
     // Launch preflight materializes the version setting.
     let one = [("version".into(), "1".into())].into();
     let two = opencode2(TaskConfig::default()).options;
@@ -336,8 +336,8 @@ fn opencode_2_is_refused_on_macos_and_linux_before_any_command_runs() {
 
 #[test]
 fn check_cli_without_a_version_accepts_either_supported_interface() {
-    let v1 = include_str!("fixtures/opencode-run-help.txt");
-    let v2 = include_str!("fixtures/opencode-2-run-help.txt");
+    let v1 = include_str!("fixtures/opencode-1.19.3-run-help.txt");
+    let v2 = include_str!("fixtures/opencode-2.0.32-run-help.txt");
     // Availability checks pass only the executable, never job settings.
     let probe = [("executable".into(), "opencode".into())].into();
     OpenCode.check_detection_for(&probe, v1).unwrap();
@@ -382,12 +382,36 @@ fn check_cli_without_a_version_accepts_either_supported_interface() {
     );
 }
 
+fn decode(options: &codeconvoy::domain::AgentOptions, data: &str) -> Box<dyn agents::AgentOutput> {
+    let mut output = OpenCode.output_with_options(options);
+    output.push(Stream::Stdout, data.as_bytes());
+    output.finish();
+    output
+}
+
 #[test]
-fn opencode_2_events_keep_the_fail_closed_completion_contract() {
-    let events = include_str!("fixtures/opencode-2-events.jsonl");
-    let mut output = OpenCode.output_with_options(&opencode2(task()).options);
-    let decoded = output.push(Stream::Stdout, events.as_bytes()) + &output.finish();
-    assert!(decoded.contains("Grüße from OpenCode 2 🌍"));
+fn captured_runs_complete_under_each_versions_own_rule() {
+    // Real `run --format json` output from a read-tool task in a disposable
+    // repository (unauthenticated sandbox, OpenCode's free default model).
+    let v1 = include_str!("fixtures/opencode-1.19.3-run.jsonl");
+    let v2 = include_str!("fixtures/opencode-2.0.32-run.jsonl");
+    let one = task().options;
+    let two = opencode2(task()).options;
+    // OpenCode 1 ends with step_finish reason=stop.
+    let mut output = OpenCode.output_with_options(&one);
+    let decoded = output.push(Stream::Stdout, v1.as_bytes()) + &output.finish();
+    assert!(decoded.contains("smoke"));
+    let activity = output.take_activity().unwrap();
+    assert!(
+        activity.contains("Tool (completed): read · /private/tmp/"),
+        "{activity}"
+    );
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+    // OpenCode 2 never reports its final step: its last event is the text.
+    assert!(v2.lines().last().unwrap().contains(r#""type":"text""#));
+    let mut output = OpenCode.output_with_options(&two);
+    let decoded = output.push(Stream::Stdout, v2.as_bytes()) + &output.finish();
+    assert!(decoded.contains("smoke"));
     let activity = output.take_activity().unwrap();
     assert!(
         activity.contains("Tool (completed): read · README.md"),
@@ -395,27 +419,48 @@ fn opencode_2_events_keep_the_fail_closed_completion_contract() {
     );
     assert!(activity.contains("OpenCode step finished: tool-calls"));
     assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
-    // OpenCode 2 also exits 130 after an interrupt and 1 after reported errors.
+    // OpenCode 2 exits 1 after reported errors and 130 after an interrupt.
     for code in [1, 130] {
         assert_eq!(output.interpret(status(code)).0, JobStatus::Failed);
     }
-    let lines: Vec<&str> = events.lines().collect();
+    // The OpenCode 1 rule still needs the final stop that OpenCode 2 omits.
+    assert_eq!(decode(&one, v2).interpret(status(0)).0, JobStatus::Failed);
+}
+
+#[test]
+fn opencode_2_success_still_needs_a_started_answered_step_and_no_errors() {
+    let v2 = include_str!("fixtures/opencode-2.0.32-run.jsonl");
+    let two = opencode2(task()).options;
+    let lines: Vec<&str> = v2.lines().collect();
     let error = r#"{"type":"error","timestamp":1,"sessionID":"","error":{"type":"unknown","message":"Failed to change directory to /missing"}}"#;
+    let stop = r#"{"type":"step_finish","part":{"type":"step-finish","reason":"stop"}}"#;
+    let length = r#"{"type":"step_finish","part":{"type":"step-finish","reason":"length"}}"#;
+    // A final step_finish, when one does arrive, must be a stop.
+    assert_eq!(
+        decode(&two, &format!("{v2}{stop}\n"))
+            .interpret(status(0))
+            .0,
+        JobStatus::Succeeded
+    );
     for data in [
-        // Exit 0 alone, or a run that ends before the final stop, is not success.
+        // Exit 0 alone, or no step that started and answered, is not success.
         String::new(),
-        lines[..5].join("\n") + "\n",
+        lines[0].to_owned() + "\n",
+        r#"{"type":"text","part":{"type":"text","text":"no step"}}"#.to_owned() + "\n",
+        // A last step that finished for tool calls was never continued.
         lines[..3].join("\n") + "\n",
-        // A reported error or a malformed record overrides a stop.
-        format!("{error}\n{events}"),
-        format!("{events}{error}\n"),
-        format!("{events}{{\"type\":\"text\",\"part\":\n"),
-        format!("{}\n{{broken", lines[..6].join("\n")),
+        format!("{v2}{length}\n"),
+        // A reported error or a malformed or incomplete record overrides it.
+        format!("{error}\n{v2}"),
+        format!("{v2}{error}\n"),
+        format!("{v2}{{\"type\":\"text\",\"part\":\n"),
+        format!("{}\n{{broken", lines.join("\n")),
     ] {
-        let mut output = OpenCode.output();
-        output.push(Stream::Stdout, data.as_bytes());
-        output.finish();
-        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed, "{data}");
+        assert_eq!(
+            decode(&two, &data).interpret(status(0)).0,
+            JobStatus::Failed,
+            "{data}"
+        );
     }
 }
 
@@ -500,8 +545,26 @@ fn help_detection_checks_complete_flags_and_uses_the_selected_executable_for_ver
     assert_eq!(detection.args, ["run", "--help"]);
     assert_eq!(version.args, ["--version"]);
     assert!(detection.input.is_none() && version.input.is_none());
-    let help = include_str!("fixtures/opencode-run-help.txt");
+    let help = include_str!("fixtures/opencode-1.19.3-run-help.txt");
     OpenCode.check_detection(help).unwrap();
+    // OpenCode 1 prints this help to stderr, OpenCode 2 to stdout.
+    let text = OpenCode.help_text(b"", help.as_bytes());
+    OpenCode
+        .check_detection_for(&Default::default(), &text)
+        .unwrap();
+    let v2 = include_str!("fixtures/opencode-2.0.32-run-help.txt");
+    let text = OpenCode.help_text(v2.as_bytes(), b"");
+    let result = OpenCode.check_detection_for(&Default::default(), &text);
+    if cfg!(windows) {
+        result.unwrap();
+    } else {
+        // Recognized as OpenCode 2, which this platform still refuses.
+        let error = result.unwrap_err().to_string();
+        assert!(
+            error.contains("offers the OpenCode 2 run interface"),
+            "{error}"
+        );
+    }
     for flag in [
         "--format",
         "--dir",
@@ -850,7 +913,10 @@ async fn installed_opencode_accepts_generated_arguments() {
         );
         assert!(!captured.truncated);
         OpenCode
-            .check_detection_for(&task.options, &String::from_utf8_lossy(&captured.stdout))
+            .check_detection_for(
+                &task.options,
+                &OpenCode.help_text(&captured.stdout, &captured.stderr),
+            )
             .unwrap();
     }
 }

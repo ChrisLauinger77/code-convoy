@@ -1,8 +1,3 @@
-Synthetic compatibility fixture, NOT captured installed CLI output.
-Based on official v2.0.32 packages/cli/src/commands/commands.ts (run) as
-rendered by the effect 4.0.1 CLI help formatter; global flags abbreviated.
-See docs/opencode-validation.md for provenance and validation limits.
-
 DESCRIPTION
   Run OpenCode with a message
 
@@ -27,6 +22,9 @@ FLAGS
   --auto                  Auto-approve permissions that are not explicitly denied
 
 GLOBAL FLAGS
-  --help, -h       Show help information
-  --version, -v    Show version information
-  --print-logs     Print logs to stderr (server logs require --standalone)
+  --help, -h                                                          Show help information
+  --version, -v                                                       Show version information
+  --wizard                                                            Start wizard mode for a command
+  --completions <bash|zsh|fish|sh>                                    Print shell completion script (choices: bash, zsh, fish, sh)
+  --log-level <all|trace|debug|info|warn|warning|error|fatal|none>    Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)
+  --print-logs                                                        Print logs to stderr (server logs require --standalone)

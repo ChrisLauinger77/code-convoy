@@ -57,6 +57,16 @@ pub trait AgentBackend: Send + Sync {
     fn help_stream(&self) -> Stream {
         Stream::Stdout
     }
+    /// Help text from the detection command's output, read from
+    /// `help_stream`. A backend whose CLI versions print help to different
+    /// streams overrides this.
+    fn help_text(&self, stdout: &[u8], stderr: &[u8]) -> String {
+        String::from_utf8_lossy(match self.help_stream() {
+            Stream::Stdout => stdout,
+            Stream::Stderr => stderr,
+        })
+        .into_owned()
+    }
     /// Optional version contract. `None` means the version command failed or
     /// was truncated; the default keeps the version informational.
     fn check_version(&self, _version: Option<&str>) -> Result<()> {
@@ -185,10 +195,7 @@ pub async fn detect_cancellable(
         !result.truncated,
         "CLI help output was truncated; compatibility cannot be checked."
     );
-    let help = String::from_utf8_lossy(match backend.help_stream() {
-        Stream::Stdout => &result.stdout,
-        Stream::Stderr => &result.stderr,
-    });
+    let help = backend.help_text(&result.stdout, &result.stderr);
     backend.check_detection_for(options, &help)?;
     let version = if let Some(command) = backend.version_command(options, directory)? {
         let reported = match process::capture_cancellable(command, 8192, cancellation).await {
@@ -244,7 +251,8 @@ pub(crate) async fn check_attachment_interface(
     let cancellation = process::Cancellation::default();
     let _probe = probe_lock(backend.id(), &cancellation).await?;
     let result = process::capture_cancellable(command, 128 * 1024, &cancellation).await?;
-    let supported = String::from_utf8_lossy(&result.stdout)
+    let supported = backend
+        .help_text(&result.stdout, &result.stderr)
         .split_whitespace()
         .any(|word| {
             word.strip_prefix(flag)
