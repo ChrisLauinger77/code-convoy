@@ -198,3 +198,104 @@ async fn missing_targets_and_executables_start_nothing() {
         Err(Error::NotConfigured)
     );
 }
+
+fn git(directory: &Path, args: &[&str]) -> String {
+    let output = std::process::Command::new("git")
+        .args(["-c", "commit.gpgsign=false", "-c", "user.name=Fixture"])
+        .args(["-c", "user.email=fixture@example.invalid"])
+        .arg("-C")
+        .arg(directory)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{args:?}");
+    String::from_utf8(output.stdout).unwrap()
+}
+
+type Entry = (PathBuf, Option<(u64, std::time::SystemTime, Vec<u8>)>);
+
+/// Every path below `root`, with each file's size, modification time and
+/// content. Directory times are omitted: Windows reports them from a lazily
+/// updated cache, and added or removed entries show up as paths.
+fn snapshot(root: &Path) -> Vec<Entry> {
+    let mut entries = Vec::new();
+    let mut pending = vec![root.to_owned()];
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(directory).unwrap() {
+            let path = entry.unwrap().path();
+            let metadata = fs::metadata(&path).unwrap();
+            let file = if metadata.is_dir() {
+                pending.push(path.clone());
+                None
+            } else {
+                Some((
+                    metadata.len(),
+                    metadata.modified().unwrap(),
+                    fs::read(&path).unwrap(),
+                ))
+            };
+            entries.push((path, file));
+        }
+    }
+    entries.sort();
+    entries
+}
+
+#[tokio::test]
+async fn opening_a_repository_or_worktree_modifies_no_git_state() {
+    let temp = executable::directory();
+    let source = temp.path().join("source ü");
+    fs::create_dir(&source).unwrap();
+    git(&source, &["init", "--quiet"]);
+    git(
+        &source,
+        &["commit", "--quiet", "--allow-empty", "-m", "base"],
+    );
+    fs::write(source.join("dirty.txt"), "uncommitted\n").unwrap();
+    let tree = temp.path().join("worktree ü");
+    git(
+        &source,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            tree.to_str().unwrap(),
+        ],
+    );
+    let source = source.canonicalize().unwrap();
+    let tree = tree.canonicalize().unwrap();
+    let common = source.join(".git");
+    let status = git(
+        &source,
+        &["status", "--porcelain=v1", "--untracked-files=all"],
+    );
+    let before = (snapshot(&common), snapshot(&tree));
+    let probe = probe(temp.path(), "");
+    for target in [
+        git_client::Target {
+            kind: git_client::Kind::Repository,
+            path: source.clone(),
+            common_dir: Some(common.clone()),
+        },
+        git_client::Target {
+            kind: git_client::Kind::Worktree,
+            path: tree.clone(),
+            common_dir: Some(common.clone()),
+        },
+    ] {
+        let expected = target.path.to_str().unwrap().to_owned();
+        git_client::open_target(preferences(Client::Custom, &probe, &["{repo}"]), target)
+            .await
+            .unwrap();
+        assert_eq!(arguments(&record(&probe).unwrap()), [expected]);
+    }
+    assert_eq!((snapshot(&common), snapshot(&tree)), before);
+    assert_eq!(
+        git(
+            &source,
+            &["status", "--porcelain=v1", "--untracked-files=all"]
+        ),
+        status
+    );
+}

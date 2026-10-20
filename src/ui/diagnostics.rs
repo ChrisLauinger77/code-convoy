@@ -20,7 +20,10 @@ impl CliError {
 }
 
 pub(super) fn summary(detail: &str) -> &str {
-    if detail.starts_with("Retry blocked") {
+    if detail.contains("Git client") {
+        // The reason follows the path; never cut it off at the first colon.
+        detail.lines().next().unwrap_or(detail)
+    } else if detail.starts_with("Retry blocked") {
         if detail.contains("Cannot locate attachment")
             || detail.contains("Attachment is missing or unavailable")
         {

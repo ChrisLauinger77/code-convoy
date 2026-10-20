@@ -16,6 +16,8 @@ mod export_tests;
 mod git_client;
 #[path = "history_tests.rs"]
 mod history;
+#[path = "open_in_git_client_tests.rs"]
+mod open_in_git_client_tests;
 #[path = "repository_groups_tests.rs"]
 mod repository_groups;
 #[path = "shortcut_tests.rs"]

@@ -18,6 +18,7 @@ mod history;
 mod library;
 mod messages;
 mod notifications;
+mod open_in_git_client;
 mod persistence;
 mod quit;
 #[cfg(target_os = "macos")]
@@ -96,6 +97,7 @@ enum Message {
     UpdateChecked(Result<crate::updates::Outcome, crate::updates::Failure>),
     GitClientChecked(u64, Result<String, String>),
     GitClientExecutable(u64, Option<PathBuf>),
+    GitClientOpened(Result<String, String>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
@@ -937,6 +939,7 @@ impl App {
                 Message::GitClientExecutable(request, path) => {
                     self.git_client_executable_selected(request, path)
                 }
+                Message::GitClientOpened(result) => self.git_client_opened(result),
                 Message::StorageMeasured(generation, result) => {
                     if let Some(work) = self.storage.finish(generation, result) {
                         self.dispatch_storage(work);

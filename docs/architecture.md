@@ -1302,7 +1302,26 @@ environment minus `GIT_*` (and CodeConvoy's own AppImage variables), its own
 process group, and no kill-on-drop. It waits at most two seconds to report a
 failed hand-off, then leaves the client running; Tokio reaps it later. This is
 separate from `process`, whose children are supervised and cancelled with
-convoys. `ui/git_client_settings` edits a draft in a modal dialog (egui menus
+convoys.
+
+`git_client::Target` decides what to open from recorded context only.
+Registrations open their path. Direct jobs open their snapshot repository path
+with the common directory captured at review. Isolated jobs open their
+`WorktreeMetadata` path and common directory, never their source repository. A
+missing worktree, Preparing status or Cleaned availability is an error, not a
+fallback. `open_target` first verifies on a blocking worker, reading only Git's
+metadata files with no Git subprocess:
+
+- the canonical path is unchanged;
+- `.git` is present;
+- for worktrees, the `.git` link and the `<common>/worktrees/<id>/gitdir`
+  backlink agree;
+- the derived common directory matches the recorded one.
+
+`ui/open_in_git_client` renders one action for repository rows, the Review
+location line and the other result tabs' header. It computes targets per frame from in-memory state only, disables them
+during result operations on that worktree, and reports outcomes as notices. It
+takes no lease and never touches the manager. `ui/git_client_settings` edits a draft in a modal dialog (egui menus
 close on any click, so fields cannot live in a submenu), dispatches one check per
 draft change, ignores stale or closed-dialog results and saves synchronously on
 Save. See [Git clients](git-clients.md).

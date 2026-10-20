@@ -336,6 +336,8 @@ impl App {
     fn repository_row(&mut self, ui: &mut egui::Ui, index: usize, in_use: bool) -> bool {
         let p = theme::Palette::of(ui);
         let mut remove = false;
+        let mut open = false;
+        let client = self.state.git_client.client;
         let repository = &self.state.repositories[index];
         ui.push_id(&repository.path, |ui| {
             ui.separator();
@@ -407,6 +409,12 @@ impl App {
                         self.state.repository_validation.get(&repository.path),
                     ));
                 }
+                // Repository management always opens the registered original.
+                open = open_in_git_client::button(
+                    ui,
+                    client,
+                    &Ok(crate::git_client::Target::repository(repository)),
+                );
             });
             if in_use {
                 ui.weak("Unknown · active work; refresh after completion");
@@ -469,6 +477,11 @@ impl App {
                 }
             }
         });
+        if open {
+            self.open_in_git_client(crate::git_client::Target::repository(
+                &self.state.repositories[index],
+            ));
+        }
         remove
     }
 }

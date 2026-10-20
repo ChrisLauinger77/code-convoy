@@ -109,7 +109,9 @@ impl App {
         let mut visible = 0;
         egui::ScrollArea::vertical()
             .id_salt(("convoy_review", id))
-            .max_height((bottom - ui.cursor().top() - 210.0).max(130.0))
+            // Room for the selected repository's details below, including the
+            // row that shows where it ran next to Open in Git Client.
+            .max_height((bottom - ui.cursor().top() - 236.0).max(130.0))
             .show(ui, |ui| {
                 for (index, job) in run
                     .jobs
@@ -195,7 +197,16 @@ impl App {
                 ui.strong(&job.repository.name);
                 copy_results::repository(ui, run, self.selected_job);
             });
-            ui.label(result_label(job));
+            // Beside where the job ran, which is also what the action opens.
+            let target = self.job_git_client_target(id, self.selected_job, job);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(result_label(job));
+                if open_in_git_client::button(ui, self.state.git_client.client, &target)
+                    && let Ok(target) = target.clone()
+                {
+                    self.open_in_git_client(target);
+                }
+            });
             if !self.comparison_filter.matches(job) {
                 ui.small("Selected repository is outside the comparison filter.");
             }

@@ -201,10 +201,16 @@ impl App {
             ui.weak("Select a repository job to inspect output, diff and settings.");
             return;
         };
+        let target = self.job_git_client_target(run.id, self.selected_job, job);
         ui.horizontal_wrapped(|ui| {
             ui.strong(&job.repository.name);
             theme::job_status(ui, job);
             copy_results::repository(ui, run, self.selected_job);
+            if open_in_git_client::button(ui, self.state.git_client.client, &target)
+                && let Ok(target) = target.clone()
+            {
+                self.open_in_git_client(target);
+            }
         });
         ui.add(
             egui::Label::new(
