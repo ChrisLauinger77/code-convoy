@@ -701,6 +701,74 @@ async fn all_backends_preserve_invocations_attachments_and_failed_cancelled_resu
 }
 
 #[tokio::test]
+#[cfg(windows)]
+async fn opencode_2_runs_in_the_exact_isolated_worktree_or_direct_repository() {
+    // The fixture agent linked as opencode2 emulates OpenCode 2, which has no
+    // --dir: the process directory alone selects its workspace.
+    let fixture = executable::directory();
+    let link = fixture
+        .path()
+        .join(format!("opencode2{}", std::env::consts::EXE_SUFFIX));
+    executable::install(&link);
+    for (run, mode) in [
+        (1, ExecutionMode::IsolatedWorktree),
+        (2, ExecutionMode::Direct),
+    ] {
+        let mut h = Harness::new(1);
+        let repo = repository(h.root.path(), "source ü with spaces").await;
+        let before = git::diff(&repo.path).await.unwrap();
+        let mut task = h.task(run, AgentId::OpenCode, true, false);
+        task.execution_mode = mode;
+        task.options
+            .insert("executable".into(), link.to_str().unwrap().into());
+        task.options.insert("version".into(), "2".into());
+        h.start(run, task.clone(), vec![repo.clone()]).await;
+        h.until(|e| Harness::ready(e, run)).await;
+        let directory = match mode {
+            ExecutionMode::IsolatedWorktree => h.metadata(run).path,
+            ExecutionMode::Direct => repo.path.clone(),
+        };
+        let name = directory
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let control = h.root.path().join("control");
+        let args: Vec<String> =
+            serde_json::from_slice(&fs::read(control.join(format!("{run}-{name}.args"))).unwrap())
+                .unwrap();
+        assert_eq!(&args[1..], ["run", "--standalone", "--format", "json"]);
+        let execution = Repository {
+            path: directory.clone(),
+            name: repo.name.clone(),
+        };
+        let spec = agents::backend(AgentId::OpenCode)
+            .unwrap()
+            .build(&task, &execution)
+            .unwrap();
+        assert_eq!(spec.directory, directory);
+        assert_eq!(
+            Path::new(&fs::read_to_string(control.join(format!("{run}-{name}.cwd"))).unwrap())
+                .canonicalize()
+                .unwrap(),
+            directory.canonicalize().unwrap()
+        );
+        h.release(run, &name);
+        h.until(|e| Harness::finished(e, run, JobStatus::Succeeded))
+            .await;
+        assert_eq!(
+            fs::read_to_string(directory.join("tracked.txt")).unwrap(),
+            run.to_string()
+        );
+        if mode == ExecutionMode::IsolatedWorktree {
+            // The isolated job never wrote into the registered repository.
+            assert_eq!(git::diff(&repo.path).await.unwrap(), before);
+        }
+        h.close().await;
+    }
+}
+
+#[tokio::test]
 async fn preparation_failure_has_no_direct_fallback_and_other_jobs_continue() {
     let mut h = Harness::new(2);
     let bad = repository(h.root.path(), "bad").await;

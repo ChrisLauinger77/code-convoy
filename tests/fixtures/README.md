@@ -1,5 +1,10 @@
 # Saved-state fixtures
 
+`opencode-run-help.txt` (OpenCode 1), `opencode-2-run-help.txt` and
+`opencode-2-events.jsonl` (OpenCode 2 v2.0.32) are synthetic source-derived
+fixtures, not captured CLI output. The test agent behaves as OpenCode 2 when it is
+hard-linked as `opencode2`. See [OpenCode validation](../../docs/opencode-validation.md#opencode-2-compatibility).
+
 Cursor's `cursor-help-contract.txt`, `cursor-success.jsonl` and
 `cursor-activity.jsonl` are synthetic documentation-derived fixtures, not
 authenticated CLI output. Runtime fixture processes emit additional synthetic

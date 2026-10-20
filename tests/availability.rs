@@ -723,3 +723,38 @@ async fn antigravity_version_gate_rejects_old_or_unreadable_releases_and_recheck
     );
     assert!(!fixture.marker("agent-input").exists());
 }
+
+#[tokio::test]
+async fn check_cli_accepts_the_opencode_version_the_executable_offers() {
+    // Check CLI passes only the executable; the version setting is verified at
+    // launch. The fixture linked as opencode2 offers the OpenCode 2 interface.
+    let mut fixture = Fixture::new();
+    for name in ["opencode1", "opencode2"] {
+        let executable = fixture.executable(name);
+        fixture
+            .checks
+            .ensure(AgentId::OpenCode, Some(executable.clone()));
+        fixture.complete().await;
+        let result = fixture
+            .checks
+            .result(AgentId::OpenCode, Some(&executable))
+            .unwrap()
+            .as_ref();
+        match (name, cfg!(windows)) {
+            ("opencode1", _) => {
+                assert!(result.unwrap().detail.contains("CLI compatibility checked"));
+            }
+            (_, true) => {
+                let detail = &result.unwrap().detail;
+                assert!(detail.starts_with("opencode v2.0.32"), "{detail}");
+            }
+            (_, false) => {
+                let error = result.unwrap_err();
+                assert!(
+                    error.detail.contains("not supported on macOS and Linux"),
+                    "{error:?}"
+                );
+            }
+        }
+    }
+}

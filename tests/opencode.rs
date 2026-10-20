@@ -1,4 +1,8 @@
 #![allow(clippy::unwrap_used)]
+#[cfg(feature = "test-support")]
+#[path = "support/executable.rs"]
+mod executable;
+
 use codeconvoy::{
     agents::{self, AgentBackend, OptionKind, opencode::OpenCode},
     domain::{AgentId, AppState, JobStatus, Repository, TaskConfig},
@@ -70,6 +74,349 @@ fn default_command_uses_exact_stdin_native_repository_path_and_existing_rules() 
         }
     }
     assert!(agents::backend(AgentId::Claude).is_ok());
+}
+
+fn opencode2(mut task: TaskConfig) -> TaskConfig {
+    task.options.insert("version".into(), "2".into());
+    task
+}
+
+#[test]
+#[cfg(windows)]
+fn opencode_2_runs_standalone_in_the_job_directory_without_dir() {
+    let task = opencode2(task());
+    let repo = repo();
+    let spec = OpenCode.build(&task, &repo).unwrap();
+    assert_eq!(spec.program, "opencode");
+    // The process directory is OpenCode 2's only workspace signal; --standalone
+    // gives this job a private server instead of the shared background service.
+    assert_eq!(spec.directory, repo.path);
+    assert_eq!(spec.args, ["run", "--standalone", "--format", "json"]);
+    assert!(
+        !spec
+            .args
+            .iter()
+            .any(|a| a == "--dir" || a == repo.path.as_os_str())
+    );
+    assert_eq!(spec.input.as_deref(), Some(task.prompt.as_bytes()));
+    assert!(spec.remove_env.iter().any(|key| key == "PWD"));
+    assert_eq!(
+        spec.remove_env,
+        OpenCode.build(&self::task(), &repo).unwrap().remove_env
+    );
+    assert!(spec.env.is_empty());
+    assert!(
+        OpenCode
+            .execution_summary(&task.options)
+            .contains("private standalone server")
+    );
+    assert!(
+        !OpenCode
+            .execution_summary(&self::task().options)
+            .contains("standalone")
+    );
+}
+
+#[test]
+#[cfg(windows)]
+fn opencode_2_joins_variant_to_the_model_and_rejects_unrepresentable_variants() {
+    for mode in ["existing", "auto"] {
+        let mut task = opencode2(task());
+        for (key, value) in [
+            ("model", "provider/model/submodel"),
+            ("agent", "--literal agent;$(no shell)"),
+            ("variant", "custom-high"),
+            ("permissions", mode),
+        ] {
+            task.options.insert(key.into(), value.into());
+        }
+        let spec = OpenCode.build(&task, &repo()).unwrap();
+        let mut expected = vec![
+            "run",
+            "--standalone",
+            "--format",
+            "json",
+            "--model=provider/model/submodel#custom-high",
+            "--agent=--literal agent;$(no shell)",
+        ];
+        if mode == "auto" {
+            expected.push("--auto");
+        }
+        assert_eq!(spec.args, expected);
+        assert!(
+            !spec
+                .args
+                .iter()
+                .any(|a| a.to_string_lossy().starts_with("--variant"))
+        );
+    }
+    let mut model_only = opencode2(task());
+    model_only
+        .options
+        .insert("model".into(), "provider/model".into());
+    assert_eq!(
+        OpenCode.build(&model_only, &repo()).unwrap().args[4],
+        "--model=provider/model"
+    );
+    for (model, variant, message) in [
+        ("", "high", "Enter a model or clear Variant"),
+        ("provider/model#low", "high", "provider/model#variant"),
+        ("provider/model", "hi#gh", "provider/model#variant"),
+        ("provider/model", "very high", "provider/model#variant"),
+    ] {
+        let mut task = opencode2(task());
+        task.options.insert("model".into(), model.into());
+        task.options.insert("variant".into(), variant.into());
+        let error = OpenCode.build(&task, &repo()).unwrap_err().to_string();
+        assert!(error.contains(message), "{model} {variant}: {error}");
+        assert!(OpenCode.detection(&task.options, Path::new(".")).is_err());
+        // OpenCode 1 keeps its own --variant semantics for the same settings.
+        task.options.remove("version");
+        assert!(OpenCode.build(&task, &repo()).is_ok());
+    }
+    let mut unsupported = task();
+    unsupported.options.insert("version".into(), "3".into());
+    assert!(OpenCode.build(&unsupported, &repo()).is_err());
+}
+
+#[test]
+fn both_versions_use_the_exact_absolute_directory_with_spaces_and_unicode() {
+    let repo = Repository {
+        name: "unicode".into(),
+        path: std::env::temp_dir()
+            .join("Grüße repo 日本 🌍")
+            .join("with spaces"),
+    };
+    let v1 = OpenCode.build(&task(), &repo).unwrap();
+    assert_eq!(v1.directory, repo.path);
+    assert_eq!(v1.args[3], "--dir");
+    assert_eq!(v1.args[4], repo.path.as_os_str());
+    #[cfg(windows)]
+    {
+        let v2 = OpenCode.build(&opencode2(task()), &repo).unwrap();
+        assert_eq!(v2.directory, repo.path);
+        assert_eq!(v2.args.len(), 4);
+    }
+    for task in [task(), opencode2(task())] {
+        // A relative directory would resolve against CodeConvoy's own cwd.
+        let error = OpenCode
+            .build(
+                &task,
+                &Repository {
+                    name: "relative".into(),
+                    path: "relative/repo".into(),
+                },
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("absolute"), "{error}");
+    }
+}
+
+#[test]
+#[cfg(windows)]
+fn help_detection_verifies_the_selected_major_version_and_rejects_unknown_clis() {
+    let v1 = include_str!("fixtures/opencode-run-help.txt");
+    let v2 = include_str!("fixtures/opencode-2-run-help.txt");
+    // Launch preflight materializes the version setting.
+    let one = [("version".into(), "1".into())].into();
+    let two = opencode2(TaskConfig::default()).options;
+    OpenCode.check_detection_for(&one, v1).unwrap();
+    OpenCode.check_detection_for(&two, v2).unwrap();
+    // The option-free contract is OpenCode 1, the default selection.
+    OpenCode.check_detection(v1).unwrap();
+    for (options, help, detected, selected) in [
+        (&one, v2, "OpenCode 2", "OpenCode 1"),
+        (&two, v1, "OpenCode 1", "OpenCode 2"),
+    ] {
+        let error = OpenCode
+            .check_detection_for(options, help)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!("offers the {detected} run interface"))
+                && error.contains(&format!("{selected} is selected"))
+                && error.contains("OpenCode version"),
+            "{error}"
+        );
+    }
+    for flag in ["--standalone", "--format", "--model", "--agent", "--auto"] {
+        let error = OpenCode
+            .check_detection_for(&two, &v2.replace(flag, &format!("{flag}-unrelated")))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!("OpenCode 2 run is missing {flag}")),
+            "{error}"
+        );
+    }
+    // --standalone in another flag's description is not the flag itself.
+    let without_flag: String = v2
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("--standalone"))
+        .map(|line| format!("{line}\n"))
+        .collect();
+    assert!(without_flag.contains("require --standalone"));
+    assert!(
+        OpenCode
+            .check_detection_for(&two, &without_flag)
+            .unwrap_err()
+            .to_string()
+            .contains("missing --standalone")
+    );
+    for help in [
+        "",
+        "codex exec --json",
+        "unrelated executable",
+        &v2.replace("run [flags]", "run [options]"),
+        &v2.replace("json", "text"),
+    ] {
+        for options in [&one, &two] {
+            let error = OpenCode
+                .check_detection_for(options, help)
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("Expected OpenCode") || error.contains("is missing"),
+                "{error}"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn opencode_2_is_refused_on_macos_and_linux_before_any_command_runs() {
+    // Its standalone server would run outside process-group cancellation.
+    const REFUSED: &str = "not supported on macOS and Linux";
+    let v1 = include_str!("fixtures/opencode-run-help.txt");
+    let v2 = include_str!("fixtures/opencode-2-run-help.txt");
+    // Launch preflight materializes the version setting.
+    let one = [("version".into(), "1".into())].into();
+    let two = opencode2(TaskConfig::default()).options;
+    OpenCode.check_detection_for(&one, v1).unwrap();
+    OpenCode.check_detection(v1).unwrap();
+    for error in [
+        OpenCode.check_detection_for(&two, v2).unwrap_err(),
+        OpenCode.check_detection_for(&two, v1).unwrap_err(),
+        OpenCode.detection(&two, Path::new(".")).unwrap_err(),
+        OpenCode.version_command(&two, Path::new(".")).unwrap_err(),
+        OpenCode.build(&opencode2(task()), &repo()).unwrap_err(),
+    ] {
+        assert!(error.to_string().contains(REFUSED), "{error}");
+    }
+    // An OpenCode 2 executable is named, without advice to select OpenCode 2.
+    let error = OpenCode
+        .check_detection_for(&one, v2)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("offers the OpenCode 2 run interface")
+            && error.contains(REFUSED)
+            && !error.contains("Choose OpenCode 2"),
+        "{error}"
+    );
+    for help in [
+        "",
+        "codex exec --json",
+        &v1.replace("--dir", "--dir-unrelated"),
+    ] {
+        let error = OpenCode
+            .check_detection_for(&one, help)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("Expected OpenCode 1") || error.contains("OpenCode 1 run is missing"),
+            "{error}"
+        );
+    }
+    let version = &OpenCode.options()[1];
+    assert_eq!(version.key, "version");
+    assert!(version.help.contains("only on Windows"));
+}
+
+#[test]
+fn check_cli_without_a_version_accepts_either_supported_interface() {
+    let v1 = include_str!("fixtures/opencode-run-help.txt");
+    let v2 = include_str!("fixtures/opencode-2-run-help.txt");
+    // Availability checks pass only the executable, never job settings.
+    let probe = [("executable".into(), "opencode".into())].into();
+    OpenCode.check_detection_for(&probe, v1).unwrap();
+    let broken = v2.replace("--auto", "--auto-unrelated");
+    if cfg!(windows) {
+        OpenCode.check_detection_for(&probe, v2).unwrap();
+        let error = OpenCode
+            .check_detection_for(&probe, &broken)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("OpenCode 2 run is missing --auto"),
+            "{error}"
+        );
+    } else {
+        for help in [v2, broken.as_str()] {
+            let error = OpenCode
+                .check_detection_for(&probe, help)
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("offers the OpenCode 2 run interface")
+                    && error.contains("not supported on macOS and Linux"),
+                "{error}"
+            );
+        }
+    }
+    let error = OpenCode
+        .check_detection_for(&probe, &v1.replace("--dir", "--dir-unrelated"))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("OpenCode 1 run is missing --dir"), "{error}");
+    // Launch passes the materialized setting, which must match the executable.
+    let one = [("version".into(), "1".into())].into();
+    let error = OpenCode
+        .check_detection_for(&one, v2)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("offers the OpenCode 2 run interface"),
+        "{error}"
+    );
+}
+
+#[test]
+fn opencode_2_events_keep_the_fail_closed_completion_contract() {
+    let events = include_str!("fixtures/opencode-2-events.jsonl");
+    let mut output = OpenCode.output_with_options(&opencode2(task()).options);
+    let decoded = output.push(Stream::Stdout, events.as_bytes()) + &output.finish();
+    assert!(decoded.contains("Grüße from OpenCode 2 🌍"));
+    let activity = output.take_activity().unwrap();
+    assert!(
+        activity.contains("Tool (completed): read · README.md"),
+        "{activity}"
+    );
+    assert!(activity.contains("OpenCode step finished: tool-calls"));
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+    // OpenCode 2 also exits 130 after an interrupt and 1 after reported errors.
+    for code in [1, 130] {
+        assert_eq!(output.interpret(status(code)).0, JobStatus::Failed);
+    }
+    let lines: Vec<&str> = events.lines().collect();
+    let error = r#"{"type":"error","timestamp":1,"sessionID":"","error":{"type":"unknown","message":"Failed to change directory to /missing"}}"#;
+    for data in [
+        // Exit 0 alone, or a run that ends before the final stop, is not success.
+        String::new(),
+        lines[..5].join("\n") + "\n",
+        lines[..3].join("\n") + "\n",
+        // A reported error or a malformed record overrides a stop.
+        format!("{error}\n{events}"),
+        format!("{events}{error}\n"),
+        format!("{events}{{\"type\":\"text\",\"part\":\n"),
+        format!("{}\n{{broken", lines[..6].join("\n")),
+    ] {
+        let mut output = OpenCode.output();
+        output.push(Stream::Stdout, data.as_bytes());
+        output.finish();
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed, "{data}");
+    }
 }
 
 #[test]
@@ -327,19 +674,25 @@ fn version_one_state_roundtrips_opencode_drafts_preferences_and_history() {
 #[tokio::test]
 async fn missing_executable_is_actionable_and_other_backends_still_exist() {
     let dir = tempfile::tempdir().unwrap();
-    let options = [(
-        "executable".into(),
-        dir.path().join("missing-opencode").to_str().unwrap().into(),
-    )]
-    .into();
-    let error = agents::detect(&OpenCode, &options, dir.path())
-        .await
-        .unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("Check the executable path and installation")
-    );
+    let versions: &[&str] = if cfg!(windows) { &["1", "2"] } else { &["1"] };
+    for version in versions {
+        let options = [
+            (
+                "executable".into(),
+                dir.path().join("missing-opencode").to_str().unwrap().into(),
+            ),
+            ("version".into(), (*version).into()),
+        ]
+        .into();
+        let error = agents::detect(&OpenCode, &options, dir.path())
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Check the executable path and installation")
+        );
+    }
     for agent in [AgentId::Codex, AgentId::Copilot] {
         assert!(agents::backend(agent).is_ok());
     }
@@ -362,18 +715,116 @@ async fn detects_fixture_help_and_displays_version_without_parsing_a_release_num
 }
 
 #[tokio::test]
+#[cfg(all(feature = "test-support", unix))]
+async fn an_opencode_2_executable_is_refused_on_macos_and_linux_without_running_it() {
+    let dir = executable::directory();
+    // Probe tracking records every help/version invocation of the fixture.
+    std::fs::write(dir.path().join("probe-tracking"), "track").unwrap();
+    let link = dir
+        .path()
+        .join(format!("opencode2{}", std::env::consts::EXE_SUFFIX));
+    executable::install(&link);
+    let mut options: codeconvoy::domain::AgentOptions = [
+        ("executable".into(), link.to_str().unwrap().into()),
+        ("version".into(), "2".into()),
+    ]
+    .into();
+    let error = agents::detect(&OpenCode, &options, dir.path())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("not supported on macOS and Linux"),
+        "{error}"
+    );
+    assert!(!dir.path().join("opencode2.probes").exists());
+    // With OpenCode 1 selected, the help check identifies OpenCode 2.
+    options.insert("version".into(), "1".into());
+    let error = agents::detect(&OpenCode, &options, dir.path())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("offers the OpenCode 2 run interface")
+            && error.contains("not supported on macOS and Linux"),
+        "{error}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("opencode2.probes")).unwrap(),
+        "help\n"
+    );
+}
+
+#[tokio::test]
+#[cfg(all(feature = "test-support", windows))]
+async fn detects_opencode_2_fixture_and_refuses_a_mismatched_version_setting() {
+    let dir = executable::directory();
+    let link = dir
+        .path()
+        .join(format!("opencode2{}", std::env::consts::EXE_SUFFIX));
+    executable::install(&link);
+    let path = link.to_str().unwrap();
+    let mut options: codeconvoy::domain::AgentOptions = [
+        ("executable".into(), path.into()),
+        ("version".into(), "2".into()),
+    ]
+    .into();
+    let report = agents::detect(&OpenCode, &options, dir.path())
+        .await
+        .unwrap();
+    assert!(
+        report.starts_with("opencode v2.0.32 (CodeConvoy fixture) detected."),
+        "{report}"
+    );
+    options.insert("version".into(), "1".into());
+    let error = agents::detect(&OpenCode, &options, dir.path())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("Choose OpenCode 2 under OpenCode version"),
+        "{error}"
+    );
+    // The OpenCode 1 fixture is refused when OpenCode 2 is selected.
+    let error = agents::detect(
+        &OpenCode,
+        &[
+            (
+                "executable".into(),
+                env!("CARGO_BIN_EXE_codeconvoy-test-agent").into(),
+            ),
+            ("version".into(), "2".into()),
+        ]
+        .into(),
+        dir.path(),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains("Choose OpenCode 1 under OpenCode version"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
 #[ignore = "Requires installed OpenCode; help/version only, no authenticated task"]
 async fn installed_opencode_accepts_generated_arguments() {
     let dir = tempfile::tempdir().unwrap();
-    println!(
-        "{}",
-        agents::detect(&OpenCode, &Default::default(), dir.path())
-            .await
-            .unwrap()
-    );
+    // Select the major version whose help contract the installed CLI satisfies.
+    let mut version = None;
+    for candidate in ["1", "2"] {
+        let options = [("version".into(), candidate.into())].into();
+        if let Ok(report) = agents::detect(&OpenCode, &options, dir.path()).await {
+            println!("OpenCode {candidate}: {report}");
+            version = Some(candidate);
+        }
+    }
+    let version = version.expect("installed OpenCode matches neither help contract");
     for mode in ["existing", "auto"] {
         let mut task = task();
         task.options = [
+            ("version".into(), version.into()),
             ("model".into(), "provider/model".into()),
             ("agent".into(), "build".into()),
             ("variant".into(), "high".into()),
@@ -399,7 +850,7 @@ async fn installed_opencode_accepts_generated_arguments() {
         );
         assert!(!captured.truncated);
         OpenCode
-            .check_detection(&String::from_utf8_lossy(&captured.stdout))
+            .check_detection_for(&task.options, &String::from_utf8_lossy(&captured.stdout))
             .unwrap();
     }
 }
