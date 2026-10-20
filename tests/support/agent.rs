@@ -5,11 +5,15 @@ use std::{
     time::Duration,
 };
 mod antigravity;
+mod copilot_trust;
 mod cursor;
 mod standalone;
 mod workflow;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    if copilot_trust::selected() {
+        return copilot_trust::run(&args);
+    }
     if let Some(result) = git_client_probe(&args) {
         return result;
     }

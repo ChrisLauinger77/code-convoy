@@ -5,7 +5,7 @@ use crate::{
     process::{CommandSpec, Stream},
 };
 use anyhow::Result;
-use std::{path::Path, process::ExitStatus};
+use std::{path::Path, process::ExitStatus, time::Duration};
 
 pub struct Copilot;
 static OPTIONS: &[OptionSpec] = &[
@@ -61,6 +61,13 @@ static OPTIONS: &[OptionSpec] = &[
             ("disallow", "Disallow temp directory"),
         ]),
     },
+    OptionSpec {
+        key: "timeout_seconds",
+        label: "Execution time limit (seconds)",
+        default: "3600",
+        help: "CodeConvoy execution time limit, 1–86400 seconds; blank uses 3600. Bounds unexpected interactive waits too. Queueing and worktree preparation are excluded. Expiry stops the owned process tree and retains edits/results. No Copilot permissions or CLI flags change.",
+        kind: OptionKind::Text { hint: "3600" },
+    },
 ];
 // All of these were checked against the installed bundled CLI 1.0.65.
 const REQUIRED_FLAGS: &[&str] = &[
@@ -89,6 +96,7 @@ impl AgentBackend for Copilot {
     }
     fn detection(&self, options: &AgentOptions, directory: &Path) -> Result<CommandSpec> {
         self.validate(options)?;
+        self.execution_timeout(options)?;
         let executable = value(options, &OPTIONS[0]);
         let path = Path::new(executable);
         anyhow::ensure!(
@@ -163,6 +171,8 @@ impl AgentBackend for Copilot {
         }
         // Copilot documents piped stdin as non-interactive prompt mode. Do not
         // pass -p "-": Copilot would treat that as a literal prompt and ignore stdin.
+        // --trust-folder is not needed for this mode. It additionally trusts
+        // repository hooks/MCP/plugin configuration, independently of tool grants.
         for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
             let mut argument = std::ffi::OsString::from("--attachment=");
             argument.push(&attachment.path);
@@ -183,6 +193,22 @@ impl AgentBackend for Copilot {
     }
     fn output(&self) -> Box<dyn AgentOutput> {
         Box::<CopilotOutput>::default()
+    }
+    fn execution_timeout(&self, options: &AgentOptions) -> Result<Option<Duration>> {
+        let configured = value(options, &OPTIONS[5]).trim();
+        let timeout = if configured.is_empty() {
+            OPTIONS[5].default
+        } else {
+            configured
+        };
+        let seconds = timeout.parse::<u32>().ok().filter(|seconds| {
+            timeout.bytes().all(|byte| byte.is_ascii_digit()) && (1..=86400).contains(seconds)
+        });
+        anyhow::ensure!(
+            seconds.is_some(),
+            "Copilot time limit must be a whole number from 1 to 86400 seconds, or blank for the 3600-second default."
+        );
+        Ok(seconds.map(|seconds| Duration::from_secs(u64::from(seconds))))
     }
     fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
         crate::attachments::validate_limits(&task.attachments)
@@ -214,8 +240,15 @@ impl AgentBackend for Copilot {
         } else {
             "CLI default temp directory access"
         };
+        let timeout = match self.execution_timeout(options) {
+            Ok(Some(timeout)) => format!(
+                "CodeConvoy time limit: {} seconds after spawn; expiry stops the process tree and retains edits/results.",
+                timeout.as_secs()
+            ),
+            _ => "Invalid Copilot time limit; review will reject it.".into(),
+        };
         format!(
-            "{tools}; {temp}. Copilot path checks and configured permissions apply. This is not an OS sandbox. Existing Copilot authentication is used; user questions are disabled."
+            "{tools}; {temp}. Copilot path checks and configured permissions apply; CodeConvoy does not grant workspace configuration trust. This is not an OS sandbox. Existing Copilot authentication is used; user questions are disabled. {timeout}"
         )
     }
 }
@@ -280,7 +313,7 @@ impl AgentOutput for CopilotOutput {
             (
                 JobStatus::Failed,
                 format!(
-                    "Copilot failed ({status}). Inspect output for authentication, model, tool/path permission, or CLI errors. Configure authentication using the Copilot CLI outside CodeConvoy if needed."
+                    "Copilot failed ({status}). Inspect Raw output for authentication, model, tool/path permission, workspace trust, or CLI errors. If interactive trust confirmation is required, review the job's exact working directory with Copilot outside CodeConvoy; CodeConvoy cannot answer that confirmation. Configure authentication using the Copilot CLI outside CodeConvoy if needed."
                 ),
             )
         }

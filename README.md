@@ -599,7 +599,7 @@ See the official [Codex noninteractive documentation](https://learn.chatgpt.com/
 
 Copilot has been user-verified end-to-end on Linux and macOS. Linux testing used two real repositories running concurrently. Its installed help/version output and generated CLI flags have also been checked locally.
 
-This installation has two versions: the normal launcher reports **1.0.91**, while `copilot --no-auto-update --version` reports the bundled **1.0.65**. CodeConvoy passes `--no-auto-update` to both detection and execution, so they consistently use the bundled executable and do not initiate CLI updates. **Check CLI** reports that effective version. If your bundled CLI is too old, it reports the missing capability; updating Copilot is a separate user action.
+A previously verified installation had two versions: the normal launcher reported **1.0.91**, while `copilot --no-auto-update --version` reported the bundled **1.0.65**. CodeConvoy passes `--no-auto-update` to both detection and execution, so they consistently use the bundled executable and do not initiate CLI updates. **Check CLI** reports that effective version. If your bundled CLI is too old, it reports the missing capability; updating Copilot is a separate user action.
 
 The default command shape is:
 
@@ -622,12 +622,83 @@ Available controls:
 | Existing CLI approvals             | No tool-approval override; unapproved actions may fail in unattended mode                                                 |
 | Allow all tools, including shell   | `--allow-all-tools`; this is an explicit permission to run shell tools automatically                                      |
 | Temporary directory                | CLI default access, or `--disallow-temp-dir`                                                                              |
+| Execution time limit               | CodeConvoy deadline after spawn, **3600 seconds by default**; 1–86400 seconds, blank restores the default. Stops the owned process tree and retains edits/results. |
 
 Copilot path checks and its existing configured permissions apply. CodeConvoy never enables `--allow-all-paths`, `--allow-all-urls`, or `--yolo`. It removes an inherited `COPILOT_ALLOW_ALL` blanket grant from the child environment so it does not bypass the UI choice. Authentication variables, `COPILOT_HOME`, and the user's configuration/authentication files are not changed by CodeConvoy. Existing MCP servers, instructions, hooks, and other CLI settings remain the CLI's responsibility. Tool approvals are **not an OS sandbox**; file-edit mode can edit files, and all-tools mode can run shell commands with the user's permissions.
 
 Copilot streams plain stdout and labelled stderr directly to the job log, including partial lines. CodeConvoy does not normalize or pretty-print Copilot events. Exit zero means the CLI succeeded; any nonzero or signal exit is a failure, and a CodeConvoy-requested stop is cancelled. This does not prove the agent fulfilled the task: review its response and diff, particularly when permissions denied an action. Codex continues to use its existing JSONL completion criteria. Copilot may keep its own session history/logs; no ephemeral flag was exposed by the inspected CLI. CodeConvoy itself still persists only task/run metadata and preferences.
 
 References: [GitHub's programmatic execution guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/run-cli-programmatically) and the installed `copilot --no-auto-update --help` / `copilot --no-auto-update help permissions`. The captured help used by tests is in `tests/fixtures/copilot-1.0.65-help.txt`.
+
+### Workspace trust and unattended execution
+
+The [1.0.99-1 prerelease](https://github.com/github/copilot-cli/releases/tag/v1.0.99-1)
+introduced `--trust-folder` for a fresh prompt-mode session, including piped stdin.
+GitHub's [programmatic reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-programmatic-reference)
+documents this as session-only trust of repository hooks, workspace MCP servers
+and repository plugin settings. It does not persist trusted folders or grant
+tool, path or URL permissions. Trust covers the resolved working directory,
+not its parents or siblings; the flag cannot accompany `--resume`, `--continue`
+or `--session-id`. Managed policy still applies. These repository
+integrations can execute code independently of the agent's selected tool grants;
+registering a repository or granting file edits is not approval to enable them.
+
+CodeConvoy therefore does **not** add `--trust-folder`, even in all-tools mode.
+Ordinary stdin prompt mode does not require this flag. Untrusted repository
+integrations remain subject to Copilot's headless trust gates; saved trust and
+explicit user-configured environment opt-ins remain the CLI's responsibility.
+No new CLI minimum is imposed: the saved 1.0.65 help without this flag and the
+captured 1.0.99-1 help both pass the existing capability checks. Detection and
+execution continue to use the same executable with auto-update disabled.
+
+`--no-ask-user` disables the agent's question tool; it is not a guarantee against
+every CLI startup or permission prompt. stdin is a pipe containing only the task
+and context, and CodeConvoy closes it after writing. No terminal or confirmation
+answer is supplied. Rejections retain stdout/stderr in Raw and fail on a nonzero
+exit. For workspace-trust errors, inspect Raw and review the **exact job working
+directory** and repository configuration with Copilot outside CodeConvoy. An
+isolated retry creates a fresh directory; trust of an earlier attempt does not
+imply trust of its replacement. CodeConvoy never edits the CLI's trust settings.
+
+Copilot execution previously had no deadline. To bound a CLI that still waits
+after EOF or otherwise stops responding, Copilot now uses CodeConvoy's existing
+execution-deadline and process-tree cleanup mechanism. The one-hour default also
+applies to existing settings with no time limit field. Increase it before launch
+for longer tasks, up to 24 hours; blank uses the default, never unlimited.
+Queueing and worktree preparation are excluded. Expiry fails only the affected
+job after cleanup, retains its worktree and partial edits, and releases capacity
+only after confirmed process cleanup. **Stop** remains available sooner. Cleanup
+uncertainty retains the existing repository protections. Other backends are unchanged.
+
+Audit evidence (2026-10-20, macOS arm64): no installed Copilot was found on PATH
+or in the normal discovery locations. A temporary official 1.0.99-1 release binary
+was downloaded and verified against the release asset's SHA-256
+`cf858d11e5cde9f3c0334a731c29dfa7639dbc7870fdfe218aeb95140996c0cc`.
+Its help/version commands succeeded; the unmodified help is saved in
+`tests/fixtures/copilot-1.0.99-1-help.txt`. Fresh detached-worktree invocations
+with the exact adapter arguments and stdin, both without and with `--trust-folder`,
+exited 1 with `No authentication information found`, without a trust prompt or
+timeout. Configuration and package caches were confined to temporary directories;
+no login, credentials, global settings or real user repository were changed.
+This establishes syntax/startup through the authentication gate, **not authenticated
+worktree execution or native trust/permission enforcement**.
+
+`tests/copilot.rs` and `tests/copilot/execution.rs` cover both help contracts,
+exact stdin/EOF and worktree selection, retained source state, synthetic trust
+rejection/confirmation, completion status, deadlines and cancellation of a blocked
+parent/child tree with subsequent scheduler admission. The trust-failure fixtures
+are deliberately synthetic; their messages are not claimed as native CLI output.
+Optional real CLI tests can select an absolute executable using
+`CODECONVOY_COPILOT_EXECUTABLE`; the fresh-worktree smoke test uses empty temporary
+Copilot/GitHub CLI configuration and removes authentication environment variables.
+Authenticated E2E for 1.0.99-1 and Linux/Windows trust behavior remain unverified.
+
+Validation on the audit host passed `cargo fmt --check`,
+`cargo clippy --all-targets --all-features -- -D warnings`,
+`cargo test --all-features` and `cargo build --release`. The full suite required
+native local permissions for an existing Unix-socket fixture. The Copilot test
+target passed 13 regular tests; both optional real-CLI tests were also run
+explicitly and passed against the temporary 1.0.99-1 binary.
 
 ### Safe manual Copilot E2E test
 
@@ -857,10 +928,10 @@ Renovate maintains dependencies and CI/release tooling. See
 [CI and Renovate policy](docs/releasing.md#ci-and-renovate) for the inherited
 preset, approval rules, and release compatibility checks.
 
-The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous backend fixture convoys, including Cursor lifecycle scenarios, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover all six backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. An optional installed-CLI check runs only help/version commands:
+The `test-support` feature builds a deterministic local test executable. It is never used as an application backend and requires no account or network. Integration tests use temporary Git repositories and handshake-controlled fixture processes to check simultaneous backend fixture convoys, including Cursor lifecycle scenarios, both concurrency limits, draft snapshots, repository leases and release, cancellation/failure isolation, shutdown, process descendants, output capture, and Git rechecks. Pure scheduler tests check round-robin fairness without timing dependencies. Core tests cover all six backends' command arguments, output handling, exit interpretation, backend preferences and old-state compatibility, persistence, history recovery, and Git inspection. Copilot integration tests use its real backend with a local fixture executable, not a provider. Optional real-CLI checks cover help/version and stdin startup in a fresh worktree through the authentication gate, using empty temporary authentication configuration for the startup test:
 
 ```sh
-cargo test --all-features --test copilot installed_copilot_accepts_the_exact_command_flags -- --ignored --nocapture
+cargo test --all-features --test copilot -- --ignored --nocapture
 ```
 
 The same help/version-only check exists for an installed Antigravity CLI. Two

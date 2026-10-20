@@ -101,6 +101,7 @@ fn each_approval_mode_and_optional_capability_maps_without_codex_translation() {
             mode == "file-edits"
         );
         for forbidden in [
+            "--trust-folder",
             "--allow-all",
             "--allow-all-paths",
             "--allow-all-urls",
@@ -184,6 +185,10 @@ fn detection_uses_same_executable_and_version_policy_and_rejects_incompatible_he
     assert!(help.input.is_none());
     let actual_help = include_str!("fixtures/copilot-1.0.65-help.txt");
     assert!(Copilot.check_detection(actual_help).is_ok());
+    let newer_help = include_str!("fixtures/copilot-1.0.99-1-help.txt");
+    assert!(!actual_help.contains("--trust-folder"));
+    assert!(newer_help.contains("--trust-folder"));
+    assert!(Copilot.check_detection(newer_help).is_ok());
     // A longer flag must not satisfy a missing shorter one.
     let missing_remote = actual_help.replace("--no-remote ", "--unsupported ");
     assert!(missing_remote.contains("--no-remote-export"));
@@ -198,6 +203,57 @@ fn detection_uses_same_executable_and_version_policy_and_rejects_incompatible_he
             .check_detection("gh copilot suggest --help")
             .is_err()
     );
+}
+
+#[test]
+fn execution_deadline_is_finite_for_old_settings_and_does_not_change_cli_permissions() {
+    use std::time::Duration;
+    for (setting, expected) in [
+        (None, 3600),
+        (Some(""), 3600),
+        (Some("  "), 3600),
+        (Some("1"), 1),
+        (Some("86400"), 86400),
+    ] {
+        let mut task = task();
+        if let Some(setting) = setting {
+            task.options
+                .insert("timeout_seconds".into(), setting.into());
+        }
+        assert_eq!(
+            Copilot.execution_timeout(&task.options).unwrap(),
+            Some(Duration::from_secs(expected))
+        );
+        assert!(
+            Copilot
+                .execution_summary(&task.options)
+                .contains(&format!("{expected} seconds after spawn"))
+        );
+        assert_eq!(
+            Copilot.build(&task, &repository()).unwrap().args,
+            Copilot.build(&self::task(), &repository()).unwrap().args
+        );
+    }
+    for invalid in [
+        "0",
+        "86401",
+        "-1",
+        "+1",
+        "1.5",
+        "forever",
+        "999999999999999999999",
+    ] {
+        let mut task = task();
+        task.options
+            .insert("timeout_seconds".into(), invalid.into());
+        assert!(
+            Copilot
+                .build(&task, &repository())
+                .unwrap_err()
+                .to_string()
+                .contains("Copilot time limit")
+        );
+    }
 }
 #[test]
 fn copilot_streams_raw_partial_lines_and_split_unicode_without_codex_events() {
@@ -228,7 +284,9 @@ fn invalid_utf8_and_exit_failures_are_handled_without_success_markers() {
     assert_eq!(output.finish(), "�");
     assert!(output.finish().is_empty());
     for code in [1, 2, 7, 130] {
-        assert_eq!(output.interpret(status(code)).0, JobStatus::Failed);
+        let (outcome, detail) = output.interpret(status(code));
+        assert_eq!(outcome, JobStatus::Failed);
+        assert!(detail.contains("workspace trust") && detail.contains("exact working directory"));
     }
     #[cfg(unix)]
     {
@@ -239,6 +297,10 @@ fn invalid_utf8_and_exit_failures_are_handled_without_success_markers() {
         );
     }
 }
+
+#[cfg(feature = "test-support")]
+#[path = "copilot/execution.rs"]
+mod execution;
 #[test]
 fn old_state_and_per_agent_preferences_survive_switching_reuse_and_restart() {
     let mut state: AppState = serde_json::from_str(r#"{"version":1,"draft":{"prompt":"existing task","agent":"codex","options":{"sandbox":"workspace-write","model":"original"}},"runs":[]}"#).unwrap();
@@ -296,7 +358,11 @@ async fn missing_executable_produces_an_actionable_error_without_disabling_codex
 #[ignore = "Requires locally installed Copilot; executes only --help/--version, never an agent task"]
 async fn installed_copilot_accepts_the_exact_command_flags() {
     let dir = tempfile::tempdir().unwrap();
-    let detection = agents::detect(&Copilot, &Default::default(), dir.path())
+    let options: codeconvoy::domain::AgentOptions = std::env::var("CODECONVOY_COPILOT_EXECUTABLE")
+        .ok()
+        .map(|executable| [("executable".into(), executable)].into())
+        .unwrap_or_default();
+    let detection = agents::detect(&Copilot, &options, dir.path())
         .await
         .unwrap();
     assert!(detection.contains("GitHub Copilot CLI"));
@@ -310,6 +376,7 @@ async fn installed_copilot_accepts_the_exact_command_flags() {
             ("reasoning_effort".into(), "max".into()),
         ]
         .into();
+        task.options.extend(options.clone());
         let repo = Repository {
             name: "help only".into(),
             path: dir.path().to_owned(),

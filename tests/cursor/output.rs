@@ -317,12 +317,14 @@ fn application_timeout_is_validated_without_changing_verified_cursor_arguments()
         assert!(Cursor.build(&task, &repository()).is_err(), "{value}");
     }
     for agent in AgentId::ALL {
-        assert!(
-            agents::backend(agent)
-                .unwrap()
-                .execution_timeout(&Default::default())
-                .unwrap()
-                .is_none()
-        );
+        let timeout = agents::backend(agent)
+            .unwrap()
+            .execution_timeout(&Default::default())
+            .unwrap();
+        if agent == AgentId::Copilot {
+            assert_eq!(timeout, Some(std::time::Duration::from_secs(3600)));
+        } else {
+            assert!(timeout.is_none());
+        }
     }
 }
