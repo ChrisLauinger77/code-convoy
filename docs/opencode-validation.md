@@ -24,10 +24,10 @@ Decisions:
 - A new OpenCode setting, **OpenCode version** (`version`: `1` default, `2`), selects the invocation. It is part of the immutable launch snapshot, so retries and reuse keep it, and existing saved state still means OpenCode 1. `AgentBackend::build` cannot observe detection results, and recording the detected version automatically would need new preflight plumbing into the snapshot. Instead, a default trait method `check_detection_for(options, help)` lets launch preflight verify the selected version against `run --help`. When the help matches the other version, the message names it and the setting. **Check CLI** and startup checks stay keyed by the executable, as before, and pass no version: they accept whichever supported interface the executable offers (review finding on #95). Other backends keep the default.
 - The OpenCode 2 help contract is the effect usage line `run [flags]`, JSON format, and `--standalone`, `--format`, `--model`, `--agent` and `--auto` as flag tokens. Text in a description, such as `--print-logs`' mention of `--standalone`, does not count. The version string stays informational.
 - OpenCode 2 runs `run --standalone --format json` with the process working directory set to the exact repository or isolated worktree. The backend requires an absolute path and removes `PWD` and `GIT_*` overrides as before. A Variant is sent as `--model=provider/model#variant`. A variant without a model, or a `#` in either value, is rejected because OpenCode 2 cannot express it.
-- The JSON decoder and its fail-closed completion rules are unchanged, because the event shapes and finish reasons are the same.
+- The event shapes and finish reasons are the same. The real-CLI smoke test below showed that OpenCode 2 never prints the final step's `step_finish`, so its completion rule differs (see that section).
 - **Cancellation (review finding on #95):** OpenCode's spawner starts the standalone server detached into its own process group on macOS and Linux. `run` terminates and awaits that server only when it exits through its own lifecycle; CodeConvoy's cancellation, timeout and quit SIGKILL the `run` process group, which orphans the server until it notices its stdin lease closing. CodeConvoy could then release the repository while the server or its tools still write, which AGENTS.md forbids. OpenCode 2 is therefore refused on macOS and Linux in `detection` and in the help check, before any process starts, with an explicit message; with OpenCode 1 selected, an OpenCode 2 executable is named as such. Windows remains supported: CodeConvoy's Job Object (`KILL_ON_JOB_CLOSE`, no breakaway) contains the server and its tools, and cleanup waits until the job has no active process. Supporting macOS and Linux needs confirmed containment of those detached groups and is left to a follow-up.
 
-Fixtures: `tests/fixtures/opencode-2-run-help.txt` and `tests/fixtures/opencode-2-events.jsonl` are **synthetic source-derived** fixtures, not captured CLI output. The test agent behaves as OpenCode 2 when it is hard-linked under the name `opencode2`, which is also OpenCode 2's alternative bin name. In that mode it prints the v2 help and `opencode v2.0.32` and rejects flags outside the v2 `run` set, such as `--dir`. As OpenCode 1 it rejects `--standalone`.
+Fixtures: `tests/fixtures/opencode-1.19.3-run-help.txt`, `opencode-2.0.32-run-help.txt`, `opencode-1.19.3-run.jsonl` and `opencode-2.0.32-run.jsonl` are **unmodified captures** from the real-CLI smoke test below. The test agent behaves as OpenCode 2 when it is hard-linked under the name `opencode2`, which is also OpenCode 2's alternative bin name. In that mode it prints the captured v2 help to stdout and `opencode v2.0.32`, rejects flags outside the v2 `run` set, such as `--dir`, and, like the real CLI, prints no final `step_finish`. As OpenCode 1 it prints the captured help to stderr and rejects `--standalone`.
 
 Checks on macOS (Darwin), Homebrew Rust/Cargo 1.99.1:
 
@@ -41,6 +41,24 @@ Checks on macOS (Darwin), Homebrew Rust/Cargo 1.99.1:
 | Installed OpenCode 1 or 2 help/version probe | Not performed: OpenCode absent |
 | Authenticated OpenCode 1 or 2 E2E | **Unverified** |
 | Linux and Windows | Not run locally; left to the hosted CI matrix |
+
+### Real-CLI smoke test (2026-10-20)
+
+Official npm platform packages `opencode-darwin-arm64@1.19.3` and `@opencode/cli-darwin-arm64@2.0.32`, verified against their npm `sha512` integrity (Developer ID team `5NZ4Q7NXJ4`), ran from a disposable `/tmp` sandbox on macOS arm64. `HOME` and `XDG_*` pointed into the sandbox, and auto-update, LSP downloads and the models fetch were disabled. There was no sign-in, no credential and no provider key. OpenCode's free default model answered anyway, so these were real, unauthenticated model runs with a harmless prompt. The repository was disposable and its path contained spaces and Unicode. The two versions need separate data directories: OpenCode 1 rejected OpenCode 2's database ("Database is not empty and has no session table").
+
+| Check | OpenCode 1.19.3 | OpenCode 2.0.32 |
+| --- | --- | --- |
+| `--version` | `1.19.3` | `opencode v2.0.32` |
+| `run --help` | Matches the contract, on **stderr** (stdout empty) | Matches the source-derived fixture, on stdout |
+| Check CLI and launch preflight | Failed before this fix (help read from stdout); pass now | Pass (Windows; refused on macOS/Linux until #97) |
+| Generated arguments + `--help` (`installed_opencode_accepts_generated_arguments`) | Pass after this fix | Pass, including `--model=provider/model#high` |
+| Other version's argument | `--standalone`: exit 1 | `--dir`: exit 1, `Unrecognized flag: --dir` |
+| Read-tool task, JSON events | `step_start, tool_use, step_finish:tool-calls, step_start, text, step_finish:stop`, exit 0 | `step_start, tool_use, step_finish:tool-calls, step_start, text`, exit 0, **no final `step_finish`** (three runs) |
+| Job through CodeConvoy's runner | Succeeded after this fix (Activity shows the tool path) | Reported Failed before this fix |
+| Tool input key | `filePath` (absolute) | `path` (relative), now shown in Activity |
+| Standalone server (observed with `ps`) | n/a | `serve --stdio` in its **own process group**; SIGTERM to `run` exited with 130 after 50 ms, server and its `git` children gone |
+
+The OpenCode 2 source explains the missing event. After submitting the prompt, `run` waits for the session to become idle, reconciles the final messages and closes its event stream without reading the last `session.step.ended`. Every failure path sets exit 1 (failed step or execution, interrupt not caused by the user, cancelled question, unpromoted prompt, message error), and a user interrupt exits with 130. So OpenCode 2's completion rule is: exit 0, a final step that started and produced its own response (`text` or `tool_use`; earlier steps' answers do not count), no `error` event, valid bounded JSON, and no final step that ended unfinished or with a non-stop reason. A token-limit stop on the final step cannot be detected because OpenCode 2 does not report it. OpenCode 1 keeps its rule (final `step_finish` reason `stop`). Detection now reads OpenCode's help from both streams, and so does the image-attachment check.
 
 Other OpenCode 2 changes, reported but not in this fix's scope: a new plugin API, server API and client contracts; TUI configuration moved to `cli.json`; and `external_directory` allowed by default in OpenCode 2 (OpenCode 1 asks). In non-interactive runs, permission asks and questions are rejected or cancelled with feedback instead of interrupting the session. Session continuation (`--continue`/`--session`) is unused by CodeConvoy.
 
@@ -101,7 +119,7 @@ The temporary UI launcher and app wrapper are not shipped. No production app sta
 
 Coverage includes missing and incompatible executables, help capabilities and displayed version, default/optional arguments, literal stdin and actual repository cwd, permission mapping, invalid settings, split UTF-8, tool/error/unknown events, final-stop requirements, malformed/oversized records, nonzero and signal exits, descendant cancellation and unaffected peers, stale Git baselines, version-1 round trips, backend preferences, snapshotting, draft clearing, reuse, mixed-backend concurrency, multiple OpenCode convoys and canonical repository-lock release after success/failure/cancellation. Existing Codex/Copilot command regression assertions remain in place.
 
-`tests/fixtures/opencode-run-help.txt` is explicitly a **synthetic source-derived compatibility fixture**, not real captured help. The executable in `tests/support/agent.rs` is a deterministic test process using disposable repositories and handshake gates. Its success and error events match the documented source protocol but are not evidence of provider execution.
+The help fixtures used by this original record were synthetic; captured help from OpenCode 1.19.3 and 2.0.32 replaced them on 2026-10-20. The executable in `tests/support/agent.rs` is a deterministic test process using disposable repositories and handshake gates. Its success and error events match the documented source protocol but are not evidence of provider execution.
 
 ## Limitations and follow-up verification
 

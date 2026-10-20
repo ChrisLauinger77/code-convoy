@@ -223,6 +223,14 @@ impl AgentBackend for OpenCode {
     fn check_detection(&self, help: &str) -> Result<()> {
         self.check_detection_for(&AgentOptions::default(), help)
     }
+    /// OpenCode 1 prints run help to stderr, OpenCode 2 to stdout.
+    fn help_text(&self, stdout: &[u8], stderr: &[u8]) -> String {
+        format!(
+            "{}\n{}",
+            String::from_utf8_lossy(stdout),
+            String::from_utf8_lossy(stderr)
+        )
+    }
     fn check_detection_for(&self, options: &AgentOptions, help: &str) -> Result<()> {
         // Check CLI and startup checks belong to the executable and pass no
         // version: they accept whichever supported interface it offers. Launch
@@ -340,6 +348,12 @@ impl AgentBackend for OpenCode {
     fn output(&self) -> Box<dyn AgentOutput> {
         Box::<OpenCodeOutput>::default()
     }
+    fn output_with_options(&self, options: &AgentOptions) -> Box<dyn AgentOutput> {
+        Box::new(OpenCodeOutput {
+            v2: Cli::selected(options) == Cli::V2,
+            ..Default::default()
+        })
+    }
     fn validate_attachments(&self, task: &TaskConfig) -> Result<()> {
         crate::attachments::validate_limits(&task.attachments)
     }
@@ -384,6 +398,14 @@ struct OpenCodeOutput {
     protocol_error: bool,
     stopped: bool,
     activity: String,
+    /// OpenCode 2 closes its event stream once the session is idle, so it never
+    /// prints the final step's step_finish. Its run exits nonzero on every
+    /// error path, so completion rests on the exit status plus a final step
+    /// that responded and did not end unfinished or for a non-stop reason.
+    v2: bool,
+    started: bool,
+    responded: bool,
+    last_finish: Option<String>,
 }
 impl OpenCodeOutput {
     fn line(&mut self, stream: Stream, bytes: &[u8]) -> String {
@@ -430,6 +452,7 @@ impl OpenCodeOutput {
                 let input = &part["state"]["input"];
                 let detail = input["filePath"]
                     .as_str()
+                    .or_else(|| input["path"].as_str())
                     .or_else(|| input["command"].as_str())
                     .unwrap_or("details in Raw output");
                 self.activity.push_str(&format!(
@@ -447,10 +470,27 @@ impl OpenCodeOutput {
         }
         match event["type"].as_str().unwrap_or("") {
             "error" => self.failed = true,
-            "step_start" => self.stopped = false,
-            "step_finish" => self.stopped = event["part"]["reason"].as_str() == Some("stop"),
+            "step_start" => {
+                // Completion is about the latest step: it must answer itself.
+                self.stopped = false;
+                self.started = true;
+                self.responded = false;
+                self.last_finish = None;
+            }
+            "step_finish" => {
+                let reason = event["part"]["reason"].as_str();
+                self.stopped = reason == Some("stop");
+                self.last_finish = Some(reason.unwrap_or("unknown").to_owned());
+            }
+            // Only a structurally complete answer counts as a response.
+            "tool_use" => {
+                self.responded |= event["part"]["tool"]
+                    .as_str()
+                    .is_some_and(|tool| !tool.is_empty());
+            }
             "text" => {
                 if let Some(text) = event["part"]["text"].as_str() {
+                    self.responded |= !text.trim().is_empty();
                     return format!("{text}\n");
                 }
             }
@@ -507,8 +547,25 @@ impl AgentOutput for OpenCodeOutput {
         text
     }
     fn interpret(&self, status: ExitStatus) -> (JobStatus, String) {
-        if status.success() && self.stopped && !self.failed && !self.protocol_error {
+        let completed = if self.v2 {
+            self.started
+                && self.responded
+                && self
+                    .last_finish
+                    .as_deref()
+                    .is_none_or(|reason| reason == "stop")
+        } else {
+            self.stopped
+        };
+        if status.success() && completed && !self.failed && !self.protocol_error {
             (JobStatus::Succeeded, "OpenCode completed. Review its response and working-tree diff; denied tools do not prove the task was fulfilled.".into())
+        } else if self.v2 {
+            (
+                JobStatus::Failed,
+                format!(
+                    "OpenCode completion was not confirmed ({status}). OpenCode 2 does not report its final step, so success requires exit 0, a final step with its own response that did not end unfinished or for a non-stop reason, no error events, and valid bounded JSON. Inspect output for provider, model, permission or CLI errors."
+                ),
+            )
         } else {
             (
                 JobStatus::Failed,
