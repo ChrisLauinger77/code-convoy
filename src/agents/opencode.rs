@@ -17,6 +17,13 @@ static OPTIONS: &[OptionSpec] = &[
         kind: OptionKind::Text { hint: "opencode" },
     },
     OptionSpec {
+        key: "version",
+        label: "OpenCode version",
+        default: "1",
+        help: "Major version of the selected executable; Check CLI verifies it against opencode run --help. OpenCode 1 runs with --dir. OpenCode 2 has no --dir: it runs in the job's directory with a private --standalone server instead of the shared background service.",
+        kind: OptionKind::Choice(&[("1", "OpenCode 1"), ("2", "OpenCode 2")]),
+    },
+    OptionSpec {
         key: "model",
         label: "Model",
         default: "",
@@ -29,7 +36,7 @@ static OPTIONS: &[OptionSpec] = &[
         key: "agent",
         label: "Agent",
         default: "",
-        help: "Blank uses OpenCode's default agent. Use a primary agent from opencode agent list (for example build or plan). OpenCode may fall back to its default for an unknown name or a subagent; review output.",
+        help: "Blank uses OpenCode's default agent. Use a primary agent (for example build or plan; OpenCode 1 lists them with opencode agent list). OpenCode may fall back to its default for an unknown name or a subagent; review output.",
         kind: OptionKind::Text {
             hint: "OpenCode default",
         },
@@ -38,7 +45,7 @@ static OPTIONS: &[OptionSpec] = &[
         key: "variant",
         label: "Variant",
         default: "",
-        help: "Optional OpenCode model variant, including provider-specific reasoning effort. Names and support depend on your model/configuration. This does not request thinking output.",
+        help: "Optional OpenCode model variant, including provider-specific reasoning effort. Names and support depend on your model/configuration. This does not request thinking output. OpenCode 2 requires a model and receives provider/model#variant.",
         kind: OptionKind::Text {
             hint: "OpenCode default",
         },
@@ -54,14 +61,75 @@ static OPTIONS: &[OptionSpec] = &[
         ]),
     },
 ];
-const REQUIRED_FLAGS: &[&str] = &[
-    "--format",
-    "--dir",
-    "--model",
-    "--agent",
-    "--variant",
-    "--auto",
-];
+/// OpenCode's two incompatible `run` interfaces. Each CLI rejects the other's
+/// distinguishing argument (`--dir` / `--standalone`), so a binary replaced
+/// after Check CLI fails before a session starts instead of running elsewhere.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Cli {
+    V1,
+    V2,
+}
+impl Cli {
+    fn selected(options: &AgentOptions) -> Self {
+        if value(options, &OPTIONS[1]) == "2" {
+            Self::V2
+        } else {
+            Self::V1
+        }
+    }
+    fn other(self) -> Self {
+        match self {
+            Self::V1 => Self::V2,
+            Self::V2 => Self::V1,
+        }
+    }
+    fn label(self) -> &'static str {
+        match self {
+            Self::V1 => "OpenCode 1",
+            Self::V2 => "OpenCode 2",
+        }
+    }
+    /// Release sources the help contract was derived from.
+    fn checked(self) -> &'static str {
+        match self {
+            Self::V1 => "v1.18.34 and v1.19.3",
+            Self::V2 => "v2.0.32",
+        }
+    }
+    /// Usage text and options the generated command needs from `run --help`.
+    fn contract(self) -> (&'static str, &'static [&'static str]) {
+        match self {
+            Self::V1 => (
+                "run [message..]",
+                &[
+                    "--format",
+                    "--dir",
+                    "--model",
+                    "--agent",
+                    "--variant",
+                    "--auto",
+                ],
+            ),
+            Self::V2 => (
+                "run [flags]",
+                &["--standalone", "--format", "--model", "--agent", "--auto"],
+            ),
+        }
+    }
+    /// The first part of this interface absent from `help`.
+    fn missing(self, help: &str) -> Option<&'static str> {
+        let (usage, flags) = self.contract();
+        if !help.contains(usage) || !help.contains("json") {
+            return Some(usage);
+        }
+        flags.iter().copied().find(|flag| {
+            !help.split_whitespace().any(|word| {
+                word.strip_prefix(flag)
+                    .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['[', '=', ',']))
+            })
+        })
+    }
+}
 
 impl AgentBackend for OpenCode {
     fn id(&self) -> AgentId {
@@ -82,7 +150,7 @@ impl AgentBackend for OpenCode {
             path.is_absolute() || path.components().count() == 1,
             "Use an absolute OpenCode executable path or a name on PATH, not a relative path."
         );
-        let model = value(options, &OPTIONS[1]).trim();
+        let model = value(options, &OPTIONS[2]).trim();
         anyhow::ensure!(
             model.is_empty()
                 || model
@@ -93,6 +161,20 @@ impl AgentBackend for OpenCode {
                         && !provider.chars().any(char::is_whitespace)),
             "OpenCode model must use provider/model format, or be blank for OpenCode default."
         );
+        let variant = value(options, &OPTIONS[4]).trim();
+        if Cli::selected(options) == Cli::V2 && !variant.is_empty() {
+            // OpenCode 2 has no --variant; it parses provider/model#variant.
+            anyhow::ensure!(
+                !model.is_empty(),
+                "OpenCode 2 selects a variant together with a model (provider/model#variant). Enter a model or clear Variant."
+            );
+            anyhow::ensure!(
+                !model.contains('#')
+                    && !variant.contains('#')
+                    && !variant.chars().any(char::is_whitespace),
+                "OpenCode 2 combines Model and Variant as provider/model#variant. Neither may contain #, and Variant may not contain spaces."
+            );
+        }
         Ok(CommandSpec::new(executable, directory).args(&["run", "--help"]))
     }
     fn version_command(
@@ -105,21 +187,32 @@ impl AgentBackend for OpenCode {
         Ok(Some(spec.args(&["--version"])))
     }
     fn check_detection(&self, help: &str) -> Result<()> {
+        self.check_detection_for(&AgentOptions::default(), help)
+    }
+    fn check_detection_for(&self, options: &AgentOptions, help: &str) -> Result<()> {
+        let selected = Cli::selected(options);
+        let Some(missing) = selected.missing(help) else {
+            return Ok(());
+        };
+        let other = selected.other();
         anyhow::ensure!(
-            help.contains("run [message..]") && help.contains("json"),
-            "Expected OpenCode run help with JSON output. Choose the OpenCode CLI from opencode.ai (source contract checked against v1.18.34)."
+            other.missing(help).is_some(),
+            "This OpenCode executable offers the {} run interface, but {} is selected. Choose {} under OpenCode version, then Check CLI again.",
+            other.label(),
+            selected.label(),
+            other.label()
         );
-        for flag in REQUIRED_FLAGS {
-            anyhow::ensure!(
-                help.split_whitespace().any(|word| {
-                    word.strip_prefix(flag).is_some_and(|suffix| {
-                        suffix.is_empty() || suffix.starts_with(['[', '=', ','])
-                    })
-                }),
-                "OpenCode run is missing {flag}. Install a compatible OpenCode version (source contract checked against v1.18.34), then Check CLI again."
-            );
-        }
-        Ok(())
+        anyhow::ensure!(
+            missing.starts_with("--"),
+            "Expected {} run help with JSON output. Choose the OpenCode CLI from opencode.ai (source contract checked against {}).",
+            selected.label(),
+            selected.checked()
+        );
+        anyhow::bail!(
+            "{} run is missing {missing}. Install a compatible OpenCode version (source contract checked against {}), then Check CLI again.",
+            selected.label(),
+            selected.checked()
+        )
     }
     fn build(&self, task: &TaskConfig, repository: &Repository) -> Result<CommandSpec> {
         anyhow::ensure!(
@@ -128,18 +221,46 @@ impl AgentBackend for OpenCode {
         );
         task.validate(std::slice::from_ref(repository))?;
         self.validate_attachments(task)?;
+        // The process directory is the only workspace signal for OpenCode 2.
+        // A relative path would resolve against CodeConvoy's own directory.
+        anyhow::ensure!(
+            repository.path.is_absolute(),
+            "OpenCode needs an absolute repository or worktree path; {} is relative.",
+            repository.path.display()
+        );
+        let cli = Cli::selected(&task.options);
         let mut spec = self.detection(&task.options, &repository.path)?;
         spec.args.clear();
-        spec = spec.args(&["run", "--format", "json", "--dir"]);
-        spec.args.push(repository.path.as_os_str().to_owned());
-        for (option, flag) in [(1, "--model"), (2, "--agent"), (3, "--variant")] {
-            let selected = value(&task.options, &OPTIONS[option]).trim();
+        match cli {
+            Cli::V1 => {
+                spec = spec.args(&["run", "--format", "json", "--dir"]);
+                spec.args.push(repository.path.as_os_str().to_owned());
+            }
+            // OpenCode 2 resolves its directory from PWD or the process cwd; PWD
+            // is removed below. --standalone starts a private server with this
+            // job's directory and environment instead of the shared background
+            // service, which would outlive cancellation.
+            Cli::V2 => spec = spec.args(&["run", "--standalone", "--format", "json"]),
+        }
+        let model = value(&task.options, &OPTIONS[2]).trim();
+        let variant = value(&task.options, &OPTIONS[4]).trim();
+        let model = match cli {
+            Cli::V2 if !variant.is_empty() => format!("{model}#{variant}"),
+            _ => model.to_owned(),
+        };
+        let agent = value(&task.options, &OPTIONS[3]).trim();
+        let variant = if cli == Cli::V1 { variant } else { "" };
+        for (flag, selected) in [
+            ("--model", model.as_str()),
+            ("--agent", agent),
+            ("--variant", variant),
+        ] {
             if !selected.is_empty() {
                 // A single --key=value argument also keeps leading dashes literal.
                 spec.args.push(format!("{flag}={selected}").into());
             }
         }
-        if value(&task.options, &OPTIONS[4]) == "auto" {
+        if value(&task.options, &OPTIONS[5]) == "auto" {
             spec = spec.args(&["--auto"]);
         }
         for attachment in task.attachments.iter().filter(|a| a.kind.is_image()) {
@@ -180,13 +301,19 @@ impl AgentBackend for OpenCode {
         "Text context via stdin; images via OpenCode's --file flag and local file reader. The selected provider/model must accept images."
     }
     fn execution_summary(&self, options: &AgentOptions) -> String {
-        let permission = if value(options, &OPTIONS[4]) == "auto" {
+        let permission = if value(options, &OPTIONS[5]) == "auto" {
             "Auto-approve requests; explicit OpenCode denies still apply."
         } else {
             "Existing OpenCode rules; requests needing approval are rejected."
         };
+        let server = match Cli::selected(options) {
+            Cli::V1 => "",
+            Cli::V2 => {
+                " OpenCode 2 starts a private standalone server for each job instead of using the shared background service."
+            }
+        };
         format!(
-            "{permission} Configured rules may allow shell and file access; this is not an OS sandbox. Existing OpenCode authentication, providers, agents and configuration are used. OpenCode may retain sessions or auto-share them if configured. Review output and diff."
+            "{permission}{server} Configured rules may allow shell and file access; this is not an OS sandbox. Existing OpenCode authentication, providers, agents and configuration are used. OpenCode may retain sessions or auto-share them if configured. Review output and diff."
         )
     }
 }

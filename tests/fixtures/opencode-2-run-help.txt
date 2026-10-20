@@ -1,0 +1,32 @@
+Synthetic compatibility fixture, NOT captured installed CLI output.
+Based on official v2.0.32 packages/cli/src/commands/commands.ts (run) as
+rendered by the effect 4.0.1 CLI help formatter; global flags abbreviated.
+See docs/opencode-validation.md for provenance and validation limits.
+
+DESCRIPTION
+  Run OpenCode with a message
+
+USAGE
+  opencode run [flags] [<message...>]
+
+ARGUMENTS
+  message... string    Message to send (optional)
+
+FLAGS
+  --standalone            Run with a private server instead of the background service
+  --server string         Connect to a server URL instead of the background service
+  --continue, -c          Continue the last session
+  --session, -s string    Session ID to continue, or to create if it does not exist
+  --fork                  Fork the session before continuing
+  --model, -m string      Model to use in the format provider/model#variant
+  --agent string          Agent to use
+  --format choice         Output format (choices: default, json)
+  --file, -f string       File to attach to the message
+  --title string          Session title
+  --thinking              Show thinking blocks
+  --auto                  Auto-approve permissions that are not explicitly denied
+
+GLOBAL FLAGS
+  --help, -h       Show help information
+  --version, -v    Show version information
+  --print-logs     Print logs to stderr (server logs require --standalone)

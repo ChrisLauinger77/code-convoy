@@ -447,8 +447,9 @@ mod tests {
             assert!(status.success());
             return;
         }
+        // Registered repositories are absolute; OpenCode refuses a relative path.
         let repository = crate::domain::Repository {
-            path: Path::new(".").to_owned(),
+            path: std::env::current_dir().expect("test directory"),
             name: "selected".into(),
         };
         let mut specs = vec![("Git".to_owned(), command(&repository.path, &["status"]))];

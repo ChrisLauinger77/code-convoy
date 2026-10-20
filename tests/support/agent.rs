@@ -123,9 +123,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let opencode = args.get(1).is_some_and(|a| a == "run");
+    // A link named opencode2 (OpenCode 2's alternative bin name) stands in for
+    // OpenCode 2; every other name keeps the OpenCode 1 interface.
+    let opencode2 = std::env::current_exe()?
+        .file_stem()
+        .is_some_and(|stem| stem.to_string_lossy().starts_with("opencode2"));
     if opencode && args.iter().any(|a| a == "--help") {
-        print!("{}", include_str!("../fixtures/opencode-run-help.txt"));
+        if opencode2 {
+            print!("{}", include_str!("../fixtures/opencode-2-run-help.txt"));
+        } else {
+            print!("{}", include_str!("../fixtures/opencode-run-help.txt"));
+        }
         return Ok(());
+    }
+    if opencode {
+        opencode_arguments(&args[2..], opencode2);
     }
     if args.iter().any(|a| a == "--help") {
         println!("Codex fixture: --no-daemon --ask-for-approval exec");
@@ -146,6 +158,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.iter().any(|a| a == "--version") {
         if args.iter().any(|a| a == "--no-auto-update") {
             println!("GitHub Copilot CLI fixture 1.0.65");
+        } else if opencode2 {
+            println!("opencode v2.0.32 (CodeConvoy fixture)");
         } else {
             println!("1.18.34 (CodeConvoy fixture)");
         }
@@ -188,14 +202,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if opencode {
         assert!(args.windows(2).any(|a| a == ["--format", "json"]));
-        let dir = args
-            .windows(2)
-            .find(|a| a[0] == "--dir")
-            .expect("missing --dir");
-        assert_eq!(
-            std::path::Path::new(&dir[1]).canonicalize()?,
-            std::env::current_dir()?.canonicalize()?
-        );
+        if opencode2 {
+            // OpenCode 2 runs where it starts; never via the shared service.
+            assert!(args.iter().any(|a| a == "--standalone"));
+        } else {
+            let dir = args
+                .windows(2)
+                .find(|a| a[0] == "--dir")
+                .expect("missing --dir");
+            assert_eq!(
+                std::path::Path::new(&dir[1]).canonicalize()?,
+                std::env::current_dir()?.canonicalize()?
+            );
+        }
         assert!(std::env::var_os("PWD").is_none());
     }
     if claude {
@@ -448,6 +467,41 @@ fn is_antigravity(args: &[String]) -> bool {
     args.windows(2)
         .any(|pair| pair == ["--input-format", "stream-json"])
         && !args.iter().any(|arg| arg == "--print")
+}
+
+/// Emulates each OpenCode CLI's strict parser before the prompt is read:
+/// OpenCode 1 (strict yargs) has no --standalone, and OpenCode 2 (effect/cli)
+/// rejects unknown flags such as --dir and --variant. Both exit 1.
+fn opencode_arguments(args: &[String], opencode2: bool) {
+    const V1: &[&str] = &[
+        "format", "dir", "model", "agent", "variant", "auto", "file", "continue", "session",
+        "fork", "title", "attach", "port", "thinking",
+    ];
+    const V2: &[&str] = &[
+        "standalone",
+        "server",
+        "format",
+        "model",
+        "agent",
+        "auto",
+        "file",
+        "continue",
+        "session",
+        "fork",
+        "title",
+        "thinking",
+    ];
+    for name in args.iter().filter_map(|arg| arg.strip_prefix("--")) {
+        let name = name.split_once('=').map_or(name, |(name, _)| name);
+        if opencode2 && !V2.contains(&name) {
+            eprintln!("\nERROR\n  Unrecognized flag: --{name} in command opencode run");
+            std::process::exit(1);
+        }
+        if !opencode2 && !V1.contains(&name) {
+            eprintln!("Unknown argument: {name}");
+            std::process::exit(1);
+        }
+    }
 }
 
 fn opencode_complete() {

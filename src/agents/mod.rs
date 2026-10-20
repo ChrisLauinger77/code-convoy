@@ -47,6 +47,11 @@ pub trait AgentBackend: Send + Sync {
         Ok(None)
     }
     fn check_detection(&self, help: &str) -> Result<()>;
+    /// Help contract for the selected settings. A backend whose required CLI
+    /// interface depends on a setting overrides this; the default ignores them.
+    fn check_detection_for(&self, _options: &AgentOptions, help: &str) -> Result<()> {
+        self.check_detection(help)
+    }
     /// Stream that carries the detection command's help text. Most CLIs print
     /// help to stdout; a backend whose CLI prints it to stderr overrides this.
     fn help_stream(&self) -> Stream {
@@ -184,7 +189,7 @@ pub async fn detect_cancellable(
         Stream::Stdout => &result.stdout,
         Stream::Stderr => &result.stderr,
     });
-    backend.check_detection(&help)?;
+    backend.check_detection_for(options, &help)?;
     let version = if let Some(command) = backend.version_command(options, directory)? {
         let reported = match process::capture_cancellable(command, 8192, cancellation).await {
             Ok(result) if result.status.success() && !result.truncated => Some(

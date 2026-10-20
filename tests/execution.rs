@@ -1,5 +1,8 @@
 #![cfg(feature = "test-support")]
 #![allow(clippy::unwrap_used)]
+#[path = "support/executable.rs"]
+mod executable;
+
 use codeconvoy::{
     agents::{AgentBackend, AgentOutput, OptionSpec, codex::Codex},
     domain::{AgentId, AgentOptions, JobStatus, Repository, TaskConfig},
@@ -375,6 +378,191 @@ async fn prepare_opencode(root: &Path, names: &[&str], concurrency: usize) -> Pr
     )
     .await
     .unwrap()
+}
+
+/// The fixture agent linked as `opencode2` emulates the OpenCode 2 interface.
+fn opencode2_fixture() -> (tempfile::TempDir, String) {
+    let directory = executable::directory();
+    let link = directory
+        .path()
+        .join(format!("opencode2{}", std::env::consts::EXE_SUFFIX));
+    executable::install(&link);
+    let path = link.to_str().unwrap().to_owned();
+    (directory, path)
+}
+
+async fn prepare_opencode2(
+    root: &Path,
+    names: &[&str],
+    concurrency: usize,
+    executable: &str,
+) -> PreparedRun {
+    let mut prepared = prepare(root, names, concurrency).await;
+    prepared.task.agent = AgentId::OpenCode;
+    prepared.task.options = [
+        ("executable".into(), executable.into()),
+        ("version".into(), "2".into()),
+    ]
+    .into();
+    runner::prepare(
+        prepared.task,
+        prepared
+            .repositories
+            .into_iter()
+            .map(|r| r.repository)
+            .collect(),
+    )
+    .await
+    .unwrap()
+}
+
+fn outcomes(events: &[Event]) -> std::collections::BTreeMap<usize, JobStatus> {
+    events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Finished { job, status, .. } => Some((*job, *status)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn opencode_2_jobs_run_standalone_in_each_repository_and_isolate_failure() {
+    use codeconvoy::agents::opencode::OpenCode;
+    let (_fixture, executable) = opencode2_fixture();
+    let dir = tempfile::tempdir().unwrap();
+    let names = ["Grüße repo 日本 with spaces", "fail", "changed"];
+    let prepared = prepare_opencode2(dir.path(), &names, 1, &executable).await;
+    assert_eq!(prepared.task.options["version"], "2");
+    let prompt = prepared.task.prompt.clone();
+    std::fs::write(dir.path().join("changed/unreviewed"), "new change").unwrap();
+    let (tx, mut rx) = mpsc::channel(256);
+    let mut manager = runner::RunManager::new(1, tx);
+    manager.start(300, prepared, Arc::new(OpenCode)).unwrap();
+    let events = finish(&mut rx, 3).await;
+    let outcomes = outcomes(&events);
+    // The fixture rejects --dir and requires --standalone, PWD removal and
+    // `run --format json`; it writes agent-input in its working directory.
+    assert_eq!(outcomes[&0], JobStatus::Succeeded);
+    assert_eq!(outcomes[&1], JobStatus::Failed);
+    assert_eq!(outcomes[&2], JobStatus::Failed);
+    for name in &names[..2] {
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join(name).join("agent-input")).unwrap(),
+            prompt
+        );
+    }
+    assert!(!dir.path().join("changed/agent-input").exists());
+    assert!(events.iter().any(|e| matches!(e, Event::Finished {job:2,detail,..} if detail.contains("changed after preflight"))));
+    assert!(events.iter().any(|e| matches!(e, Event::Finished {job:1,detail,..} if detail.contains("completion was not confirmed"))));
+}
+
+#[tokio::test]
+async fn opencode_2_cancellation_kills_descendants_and_leaves_other_jobs_running() {
+    use codeconvoy::agents::opencode::OpenCode;
+    let (_fixture, executable) = opencode2_fixture();
+    let dir = tempfile::tempdir().unwrap();
+    let mut prepared = prepare_opencode2(dir.path(), &["tree", "other"], 2, &executable).await;
+    prepared.task.prompt = "cancel-test".into();
+    let (tx, mut rx) = mpsc::channel(256);
+    let mut manager = runner::RunManager::new(2, tx);
+    manager.start(300, prepared, Arc::new(OpenCode)).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !dir.path().join("tree/descendant-ready").exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    manager.cancel(300, 0);
+    let outcomes = outcomes(&finish(&mut rx, 2).await);
+    assert_eq!(outcomes[&0], JobStatus::Cancelled);
+    assert_eq!(outcomes[&1], JobStatus::Succeeded);
+    tokio::time::sleep(Duration::from_millis(1400)).await;
+    assert!(!dir.path().join("tree/orphan-survived").exists());
+}
+
+#[tokio::test]
+async fn an_opencode_binary_replaced_after_check_cli_fails_before_reading_the_task() {
+    use codeconvoy::agents::opencode::OpenCode;
+    let (_fixture, opencode2) = opencode2_fixture();
+    let opencode1 = env!("CARGO_BIN_EXE_codeconvoy-test-agent");
+    // Settings for one major version, executed by the other: each CLI rejects
+    // the other's distinguishing argument, and nothing is retried.
+    for (version, executable, rejection) in [
+        ("1", opencode2.as_str(), "Unrecognized flag: --dir"),
+        ("2", opencode1, "Unknown argument: standalone"),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut prepared = prepare(dir.path(), &["repo"], 1).await;
+        prepared.task.agent = AgentId::OpenCode;
+        prepared.task.options = [
+            ("executable".into(), executable.into()),
+            ("version".into(), version.into()),
+        ]
+        .into();
+        let (tx, mut rx) = mpsc::channel(256);
+        let mut manager = runner::RunManager::new(1, tx);
+        manager.start(300, prepared, Arc::new(OpenCode)).unwrap();
+        let events = finish(&mut rx, 1).await;
+        assert_eq!(outcomes(&events)[&0], JobStatus::Failed);
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::Output {text,..} if text.contains(rejection)))
+        );
+        assert!(!dir.path().join("repo/agent-input").exists());
+    }
+}
+
+#[tokio::test]
+async fn opencode_never_starts_outside_a_missing_or_invalid_execution_directory() {
+    use codeconvoy::agents::opencode::OpenCode;
+    let (_fixture, opencode2) = opencode2_fixture();
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("not a directory ü");
+    std::fs::write(&file, "file").unwrap();
+    for (version, executable) in [
+        ("1", env!("CARGO_BIN_EXE_codeconvoy-test-agent")),
+        ("2", opencode2.as_str()),
+    ] {
+        for path in [dir.path().join("missing repository"), file.clone()] {
+            let task = TaskConfig {
+                agent: AgentId::OpenCode,
+                prompt: "must not run".into(),
+                options: [
+                    ("executable".into(), executable.into()),
+                    ("version".into(), version.into()),
+                ]
+                .into(),
+                ..Default::default()
+            };
+            let spec = OpenCode
+                .build(
+                    &task,
+                    &Repository {
+                        name: "invalid".into(),
+                        path: path.clone(),
+                    },
+                )
+                .unwrap();
+            assert_eq!(spec.directory, path);
+            let error = process::spawn(&spec).err().unwrap().to_string();
+            assert!(error.contains("Cannot start"), "{error}");
+        }
+    }
+    // Neither the test's nor CodeConvoy's own directory received the task.
+    assert!(!Path::new("agent-input").exists());
+    assert!(!dir.path().join("agent-input").exists());
+    // A repository removed after preflight fails its job; nothing falls back.
+    let mut prepared = prepare_opencode2(dir.path(), &["removed"], 1, &opencode2).await;
+    prepared.task.prompt = "must not run".into();
+    std::fs::remove_dir_all(dir.path().join("removed")).unwrap();
+    let (tx, mut rx) = mpsc::channel(256);
+    let mut manager = runner::RunManager::new(1, tx);
+    manager.start(300, prepared, Arc::new(OpenCode)).unwrap();
+    assert_eq!(outcomes(&finish(&mut rx, 1).await)[&0], JobStatus::Failed);
+    assert!(!Path::new("agent-input").exists());
 }
 
 #[tokio::test]
