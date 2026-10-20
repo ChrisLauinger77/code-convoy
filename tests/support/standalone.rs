@@ -2,7 +2,8 @@
 //! own process group on Unix like OpenCode's spawner places it, that the run
 //! process stops before exiting and on SIGTERM (OpenCode's scope finalizer).
 //! The working directory's name selects a failure mode: `orphan` leaves a server
-//! that ignores stops running, and `stubborn` also ignores SIGTERM in the run.
+//! that ignores stops running, `fast-orphan` does so and exits at once, before
+//! any sample can list it, and `stubborn` also ignores SIGTERM in the run.
 use std::{
     error::Error,
     io::Read,
@@ -29,7 +30,7 @@ fn mode() -> String {
 }
 
 fn stubborn() -> bool {
-    matches!(mode().as_str(), "orphan" | "stubborn")
+    matches!(mode().as_str(), "orphan" | "fast-orphan" | "stubborn")
 }
 
 /// Starts the server and records its PID in `opencode2-server.pid`.
@@ -52,6 +53,9 @@ pub fn start() -> Result<(), Box<dyn Error>> {
     std::fs::write("opencode2-server.pid", child.id().to_string())?;
     SERVER_PID.store(i32::try_from(child.id())?, Ordering::SeqCst);
     *SERVER.lock().map_err(|_| "server lock poisoned")? = Some(child);
+    if mode() == "fast-orphan" {
+        std::process::exit(0);
+    }
     #[cfg(unix)]
     {
         let handler = if mode() == "stubborn" {

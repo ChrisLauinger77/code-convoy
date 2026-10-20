@@ -60,9 +60,10 @@ impl Group {
     }
 
     /// Also records the process groups that descendants move into while the
-    /// child runs; `after_detached` then requires all of them to be gone.
-    pub fn track_detached(mut self) -> Self {
-        self.detached = Some(detached::Groups::default());
+    /// child runs in `directory`; `after_detached` then requires all of them
+    /// to be gone.
+    pub fn track_detached(mut self, directory: &std::path::Path) -> Self {
+        self.detached = Some(detached::Groups::new(directory));
         self
     }
 
@@ -166,6 +167,10 @@ impl Group {
             // Short commands finish promptly; long jobs need at most ~13 idle
             // probes/second. Cancellation drops this sleep and signals directly.
             poll = (poll * 2).min(Duration::from_millis(80));
+        }
+        // The exit just orphaned whatever the last sample could not see yet.
+        if let Some(detached) = &mut self.detached {
+            detached.sweep(self.pid);
         }
         // A completed CLI must not leave background writers behind, regardless
         // of exit code or inherited pipe state. Preserve the CLI's exit status.

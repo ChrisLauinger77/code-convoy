@@ -249,7 +249,7 @@ pub fn spawn(spec: &CommandSpec) -> Result<ManagedChild> {
         #[cfg(unix)]
         group: unix::Group::new(child.id()).map(|group| {
             if grace.is_some() {
-                group.track_detached()
+                group.track_detached(&spec.directory)
             } else {
                 group
             }

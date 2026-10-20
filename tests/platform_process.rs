@@ -470,6 +470,23 @@ mod detached_groups {
     }
 
     #[tokio::test]
+    async fn a_server_orphaned_before_any_sample_is_still_found_at_exit() {
+        // The CLI starts its server and exits at once; only the exit sweep can
+        // still attribute the reparented server, by its working directory.
+        let run = run(
+            "fast-orphan",
+            "fixture task",
+            Containment::DetachedGroups { grace: GRACE },
+        );
+        let task = start(run.spec.clone(), &Cancellation::default());
+        let server = server(&run.directory).await;
+        let error = task.await.unwrap().unwrap_err();
+        assert!(format!("{error:#}").contains("timed out"), "{error:#}");
+        assert!(alive(server));
+        stop_stray(server);
+    }
+
+    #[tokio::test]
     async fn group_containment_does_not_track_detached_groups() {
         // The default for every other command is unchanged.
         let run = run("orphan", "fixture task", Containment::Group);
