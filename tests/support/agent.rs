@@ -351,6 +351,8 @@ fn gate(
             serde_json::json!({"type":"assistant", "message":{"content":[{"type":"text","text":format!("fixture gate ready {marker}")}]}})
         );
     } else if opencode {
+        // Like the ungated path and the real CLIs, a step starts first.
+        println!("{{\"type\":\"step_start\",\"part\":{{\"type\":\"step-start\"}}}}");
         println!(
             "{}",
             serde_json::json!({"type":"text", "part":{"text":format!("fixture gate ready {marker}")}})

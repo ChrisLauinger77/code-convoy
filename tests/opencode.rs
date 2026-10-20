@@ -446,6 +446,13 @@ fn opencode_2_success_still_needs_an_answered_final_step_and_no_errors() {
         // Exit 0 alone, or no step that started and answered, is not success.
         String::new(),
         lines[0].to_owned() + "\n",
+        // Incomplete or empty answers are not responses.
+        format!("{}\n{{\"type\":\"text\",\"part\":{{}}}}\n", lines[0]),
+        format!(
+            "{}\n{{\"type\":\"text\",\"part\":{{\"text\":\" \"}}}}\n",
+            lines[0]
+        ),
+        format!("{}\n{{\"type\":\"tool_use\",\"part\":{{}}}}\n", lines[0]),
         r#"{"type":"text","part":{"type":"text","text":"no step"}}"#.to_owned() + "\n",
         // A last step that finished for tool calls was never continued, and a
         // final step without its own response does not count earlier answers.

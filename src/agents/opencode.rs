@@ -482,10 +482,15 @@ impl OpenCodeOutput {
                 self.stopped = reason == Some("stop");
                 self.last_finish = Some(reason.unwrap_or("unknown").to_owned());
             }
-            "tool_use" => self.responded = true,
+            // Only a structurally complete answer counts as a response.
+            "tool_use" => {
+                self.responded |= event["part"]["tool"]
+                    .as_str()
+                    .is_some_and(|tool| !tool.is_empty());
+            }
             "text" => {
-                self.responded = true;
                 if let Some(text) = event["part"]["text"].as_str() {
+                    self.responded |= !text.trim().is_empty();
                     return format!("{text}\n");
                 }
             }
