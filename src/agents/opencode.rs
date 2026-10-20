@@ -400,8 +400,8 @@ struct OpenCodeOutput {
     activity: String,
     /// OpenCode 2 closes its event stream once the session is idle, so it never
     /// prints the final step's step_finish. Its run exits nonzero on every
-    /// error path, so completion rests on the exit status plus a started step
-    /// with a response and no unfinished or non-stop final step.
+    /// error path, so completion rests on the exit status plus a final step
+    /// that responded and did not end unfinished or for a non-stop reason.
     v2: bool,
     started: bool,
     responded: bool,
@@ -471,8 +471,10 @@ impl OpenCodeOutput {
         match event["type"].as_str().unwrap_or("") {
             "error" => self.failed = true,
             "step_start" => {
+                // Completion is about the latest step: it must answer itself.
                 self.stopped = false;
                 self.started = true;
+                self.responded = false;
                 self.last_finish = None;
             }
             "step_finish" => {
@@ -556,7 +558,7 @@ impl AgentOutput for OpenCodeOutput {
             (
                 JobStatus::Failed,
                 format!(
-                    "OpenCode completion was not confirmed ({status}). OpenCode 2 does not report its final step, so success requires exit 0, a started step with a response, no unfinished or non-stop final step, no error events, and valid bounded JSON. Inspect output for provider, model, permission or CLI errors."
+                    "OpenCode completion was not confirmed ({status}). OpenCode 2 does not report its final step, so success requires exit 0, a final step with its own response that did not end unfinished or for a non-stop reason, no error events, and valid bounded JSON. Inspect output for provider, model, permission or CLI errors."
                 ),
             )
         } else {

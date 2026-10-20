@@ -428,7 +428,7 @@ fn captured_runs_complete_under_each_versions_own_rule() {
 }
 
 #[test]
-fn opencode_2_success_still_needs_a_started_answered_step_and_no_errors() {
+fn opencode_2_success_still_needs_an_answered_final_step_and_no_errors() {
     let v2 = include_str!("fixtures/opencode-2.0.32-run.jsonl");
     let two = opencode2(task()).options;
     let lines: Vec<&str> = v2.lines().collect();
@@ -447,8 +447,10 @@ fn opencode_2_success_still_needs_a_started_answered_step_and_no_errors() {
         String::new(),
         lines[0].to_owned() + "\n",
         r#"{"type":"text","part":{"type":"text","text":"no step"}}"#.to_owned() + "\n",
-        // A last step that finished for tool calls was never continued.
+        // A last step that finished for tool calls was never continued, and a
+        // final step without its own response does not count earlier answers.
         lines[..3].join("\n") + "\n",
+        lines[..4].join("\n") + "\n",
         format!("{v2}{length}\n"),
         // A reported error or a malformed or incomplete record overrides it.
         format!("{error}\n{v2}"),
