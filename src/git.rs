@@ -11,6 +11,18 @@ pub struct WorkingTree {
     pub summary: GitSummary,
     pub entries: Vec<String>,
 }
+/// Registration checks plus the unresolved common directory from one Git
+/// process. Callers compare `repository.path` before resolving the common
+/// directory, so error precedence matches separate inspections.
+pub(crate) struct Identity {
+    pub repository: Repository,
+    common_dir: Vec<u8>,
+}
+impl Identity {
+    pub(crate) fn common_dir(&self) -> Result<std::path::PathBuf> {
+        resolve_common_dir(&self.repository.path, self.common_dir.clone())
+    }
+}
 
 /// Spell a native path for Git's command-line parser without changing the
 /// canonical identity stored by CodeConvoy. Git for Windows rejects the verbatim
@@ -192,21 +204,44 @@ impl Inspection<'_> {
         Ok(output.stdout)
     }
     pub(crate) async fn register(&self, path: &Path) -> Result<Repository> {
+        Ok(self.identity(path).await?.repository)
+    }
+    /// One `rev-parse` instead of one process per question: each Git start is
+    /// expensive on Windows and identity checks run for every inspection.
+    pub(crate) async fn identity(&self, path: &Path) -> Result<Identity> {
         let path = path
             .canonicalize()
             .with_context(|| format!("Repository path does not exist: {}", path.display()))?;
         anyhow::ensure!(path.is_dir(), "Choose a repository directory.");
-        let inside = self
-            .checked(&path, &["rev-parse", "--is-inside-work-tree"])
+        // Git prints one line per flag, in order. Inside a working tree
+        // --show-cdup emits only "../" segments, so unlike --show-prefix (a
+        // directory name may contain a line break) it cannot shift the common
+        // directory, which stays last and may itself contain line breaks.
+        // Like --show-prefix, the root check never decodes an absolute
+        // top-level path emitted by Git (notably on Windows).
+        let output = self
+            .checked(
+                &path,
+                &[
+                    "rev-parse",
+                    "--is-inside-work-tree",
+                    "--show-cdup",
+                    "--git-common-dir",
+                ],
+            )
             .await?;
+        let mut lines = output.splitn(3, |b| *b == b'\n');
         anyhow::ensure!(
-            inside.starts_with(b"true"),
+            lines
+                .next()
+                .is_some_and(|inside| inside.starts_with(b"true")),
             "Select a Git working tree; bare repositories cannot run tasks."
         );
-        // --show-prefix avoids decoding an absolute path emitted by Git (notably on Windows).
-        let prefix = self.checked(&path, &["rev-parse", "--show-prefix"]).await?;
+        let (Some(cdup), Some(common_dir)) = (lines.next(), lines.next()) else {
+            anyhow::bail!("Unexpected Git repository identity output.");
+        };
         anyhow::ensure!(
-            prefix == b"\n" || prefix == b"\r\n",
+            cdup.is_empty() || cdup == b"\r",
             "Select the repository root, not a subdirectory: {}",
             path.display()
         );
@@ -215,12 +250,15 @@ impl Inspection<'_> {
             .unwrap_or(path.as_os_str())
             .to_string_lossy()
             .into_owned();
-        Ok(Repository { name, path })
+        Ok(Identity {
+            repository: Repository { name, path },
+            common_dir: common_dir.to_vec(),
+        })
     }
     pub(crate) async fn status(&self, path: &Path) -> Result<WorkingTree> {
-        let repo = self.register(path).await?;
+        let identity = self.identity(path).await?;
         anyhow::ensure!(
-            repo.path == path,
+            identity.repository.path == path,
             "Repository path now resolves to a different location; register it again."
         );
         let bytes = self
@@ -261,7 +299,7 @@ impl Inspection<'_> {
             .then(|| String::from_utf8_lossy(&head.stdout).trim().to_owned());
         Ok(WorkingTree {
             summary: GitSummary {
-                common_dir: Some(self.common_dir(path).await?),
+                common_dir: Some(identity.common_dir()?),
                 branch,
                 head,
                 changed: entries.len(),
@@ -270,31 +308,35 @@ impl Inspection<'_> {
         })
     }
     pub(crate) async fn common_dir(&self, path: &Path) -> Result<std::path::PathBuf> {
-        let mut bytes = self
+        let bytes = self
             .checked(path, &["rev-parse", "--git-common-dir"])
             .await?;
-        if bytes.last() == Some(&b'\n') {
-            bytes.pop();
-        }
-        #[cfg(windows)]
-        if bytes.last() == Some(&b'\r') {
-            bytes.pop();
-        }
-        #[cfg(unix)]
-        let value = {
-            use std::os::unix::ffi::OsStringExt;
-            std::ffi::OsString::from_vec(bytes)
-        };
-        #[cfg(not(unix))]
-        let value = std::ffi::OsString::from(
-            String::from_utf8(bytes).context("Git returned an invalid repository path.")?,
-        );
-        // Git may return a relative path for the main checkout and an absolute
-        // path for a linked worktree. Resolve either without requiring newer flags.
-        path.join(value)
-            .canonicalize()
-            .context("Cannot resolve Git common directory; register the repository again.")
+        resolve_common_dir(path, bytes)
     }
+}
+/// Resolve `--git-common-dir` output printed by Git running in `path`.
+fn resolve_common_dir(path: &Path, mut bytes: Vec<u8>) -> Result<std::path::PathBuf> {
+    if bytes.last() == Some(&b'\n') {
+        bytes.pop();
+    }
+    #[cfg(windows)]
+    if bytes.last() == Some(&b'\r') {
+        bytes.pop();
+    }
+    #[cfg(unix)]
+    let value = {
+        use std::os::unix::ffi::OsStringExt;
+        std::ffi::OsString::from_vec(bytes)
+    };
+    #[cfg(not(unix))]
+    let value = std::ffi::OsString::from(
+        String::from_utf8(bytes).context("Git returned an invalid repository path.")?,
+    );
+    // Git may return a relative path for the main checkout and an absolute
+    // path for a linked worktree. Resolve either without requiring newer flags.
+    path.join(value)
+        .canonicalize()
+        .context("Cannot resolve Git common directory; register the repository again.")
 }
 pub async fn register(path: &Path) -> Result<Repository> {
     Inspection {
@@ -538,7 +580,7 @@ mod tests {
 mod completion_tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
-    fn git(path: &Path, args: &[&str]) -> String {
+    pub(super) fn git(path: &Path, args: &[&str]) -> String {
         let out = std::process::Command::new("git")
             .arg("-C")
             .arg(path)
@@ -642,7 +684,7 @@ mod completion_tests {
                 .is_err()
         );
     }
-    fn commit(path: &Path, message: &str) {
+    pub(super) fn commit(path: &Path, message: &str) {
         git(
             path,
             &[
@@ -728,5 +770,105 @@ mod completion_tests {
         assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
         assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
         assert!(!path.join(".git/index.lock").exists());
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    #![allow(clippy::unwrap_used)]
+    use super::{
+        Inspection,
+        completion_tests::{commit, git},
+    };
+    use std::path::Path;
+
+    /// A checkout with one commit, so linked worktrees can be added.
+    fn committed_repository(path: &Path) {
+        std::fs::create_dir_all(path).unwrap();
+        git(path, &["init", "--quiet"]);
+        std::fs::write(path.join("tracked.txt"), "base\n").unwrap();
+        git(path, &["add", "tracked.txt"]);
+        commit(path, "base");
+    }
+    fn add_worktree(source: &Path, destination: &Path) {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(source)
+            .args(["worktree", "add", "--quiet", "--detach"])
+            .arg(destination)
+            .arg("HEAD")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[tokio::test]
+    async fn identity_matches_separate_registration_and_common_dir_inspections() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let main = root.join("main");
+        committed_repository(&main);
+        let linked = root.join("linked");
+        add_worktree(&main, &linked);
+        git(&root, &["init", "--quiet", "--bare", "bare.git"]);
+        let subdirectory = main.join("sub").join("deep");
+        std::fs::create_dir_all(&subdirectory).unwrap();
+        let cancellation = crate::process::Cancellation::default();
+        let safe = std::sync::atomic::AtomicBool::new(true);
+        let inspection = Inspection {
+            cancellation: &cancellation,
+            safe: &safe,
+        };
+        for checkout in [&main, &linked] {
+            let identity = inspection.identity(checkout).await.unwrap();
+            assert_eq!(&identity.repository.path, checkout);
+            let common = identity.common_dir().unwrap();
+            assert_eq!(common, inspection.common_dir(checkout).await.unwrap());
+            assert_eq!(common, main.join(".git"));
+            let status = inspection.status(checkout).await.unwrap();
+            assert_eq!(status.summary.common_dir, Some(common));
+        }
+        for (path, message) in [
+            (subdirectory, "not a subdirectory"),
+            (root.join("bare.git"), "bare repositories cannot run tasks"),
+            (main.join(".git"), "bare repositories cannot run tasks"),
+        ] {
+            let error = inspection.register(&path).await.unwrap_err().to_string();
+            assert!(error.contains(message), "{}: {error}", path.display());
+        }
+        assert!(inspection.register(&root).await.is_err());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn identity_keeps_line_breaks_in_subdirectories_and_common_dirs_unambiguous() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let main = root.join("line\nbreak");
+        committed_repository(&main);
+        let linked = root.join("linked");
+        add_worktree(&main, &linked);
+        // --show-prefix would print an empty first line here, like the root.
+        let nested = main.join("\nnested");
+        std::fs::create_dir(&nested).unwrap();
+        let cancellation = crate::process::Cancellation::default();
+        let safe = std::sync::atomic::AtomicBool::new(true);
+        let inspection = Inspection {
+            cancellation: &cancellation,
+            safe: &safe,
+        };
+        let error = inspection.register(&nested).await.unwrap_err().to_string();
+        assert!(error.contains("not a subdirectory"), "{error}");
+        // The main checkout prints a relative common directory; a linked
+        // worktree prints the absolute one, including the line break.
+        for checkout in [&main, &linked] {
+            let identity = inspection.identity(checkout).await.unwrap();
+            assert_eq!(&identity.repository.path, checkout);
+            assert_eq!(identity.common_dir().unwrap(), main.join(".git"));
+        }
     }
 }

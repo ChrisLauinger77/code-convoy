@@ -188,8 +188,9 @@ impl LifecycleClient {
                 recovery::verify_available(&permit.root, m, &i).await
                     .context("Original retained worktree is unavailable; no alternative directory will be used.")?;
             }
+            let identity = i.identity(path).await?;
             anyhow::ensure!(
-                i.register(path).await?.path == path && i.common_dir(path).await? == common,
+                identity.repository.path == path && identity.common_dir()? == common,
                 "Original working directory identity changed; validation is unavailable."
             );
         }

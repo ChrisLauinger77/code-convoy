@@ -201,12 +201,13 @@ fn verify_manifest(metadata: &WorktreeMetadata) -> Result<()> {
 async fn verify(metadata: &WorktreeMetadata, inspection: &git::Inspection<'_>) -> Result<()> {
     let m = metadata.clone();
     tokio::task::spawn_blocking(move || verify_manifest(&m)).await??;
+    let identity = inspection.identity(&metadata.path).await?;
     anyhow::ensure!(
-        inspection.register(&metadata.path).await?.path == metadata.path,
+        identity.repository.path == metadata.path,
         "Worktree path now resolves elsewhere; inspect it before proceeding."
     );
     anyhow::ensure!(
-        inspection.common_dir(&metadata.path).await? == metadata.common_dir,
+        identity.common_dir()? == metadata.common_dir,
         "Worktree belongs to a different Git repository; inspect it before proceeding."
     );
     Ok(())
@@ -236,12 +237,13 @@ pub async fn create(
             "Worktree destination already exists or cannot be inspected: {}. Start a fresh convoy; the existing path is retained.", m.path.display());
         Ok(())
     }).await??;
+    let identity = inspection.identity(&metadata.repository.path).await?;
     anyhow::ensure!(
-        inspection.register(&metadata.repository.path).await?.path == metadata.repository.path,
+        identity.repository.path == metadata.repository.path,
         "Registered repository now resolves elsewhere; register it again."
     );
     anyhow::ensure!(
-        inspection.common_dir(&metadata.repository.path).await? == metadata.common_dir,
+        identity.common_dir()? == metadata.common_dir,
         "Repository identity changed after preflight; start a fresh convoy."
     );
     let base = inspection
