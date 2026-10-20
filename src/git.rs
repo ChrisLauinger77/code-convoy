@@ -779,6 +779,7 @@ mod identity_tests {
     use super::{
         Inspection,
         completion_tests::{commit, git},
+        path_argument,
     };
     use std::path::Path;
 
@@ -795,7 +796,8 @@ mod identity_tests {
             .arg("-C")
             .arg(source)
             .args(["worktree", "add", "--quiet", "--detach"])
-            .arg(destination)
+            // Git for Windows rejects canonicalize's verbatim prefix here.
+            .arg(path_argument(destination))
             .arg("HEAD")
             .output()
             .unwrap();
