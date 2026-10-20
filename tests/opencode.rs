@@ -217,7 +217,8 @@ fn both_versions_use_the_exact_absolute_directory_with_spaces_and_unicode() {
 fn help_detection_verifies_the_selected_major_version_and_rejects_unknown_clis() {
     let v1 = include_str!("fixtures/opencode-run-help.txt");
     let v2 = include_str!("fixtures/opencode-2-run-help.txt");
-    let one = TaskConfig::default().options;
+    // Launch preflight materializes the version setting.
+    let one = [("version".into(), "1".into())].into();
     let two = opencode2(TaskConfig::default()).options;
     OpenCode.check_detection_for(&one, v1).unwrap();
     OpenCode.check_detection_for(&two, v2).unwrap();
@@ -289,7 +290,8 @@ fn opencode_2_is_refused_on_macos_and_linux_before_any_command_runs() {
     const REFUSED: &str = "not supported on macOS and Linux";
     let v1 = include_str!("fixtures/opencode-run-help.txt");
     let v2 = include_str!("fixtures/opencode-2-run-help.txt");
-    let one = TaskConfig::default().options;
+    // Launch preflight materializes the version setting.
+    let one = [("version".into(), "1".into())].into();
     let two = opencode2(TaskConfig::default()).options;
     OpenCode.check_detection_for(&one, v1).unwrap();
     OpenCode.check_detection(v1).unwrap();
@@ -330,6 +332,54 @@ fn opencode_2_is_refused_on_macos_and_linux_before_any_command_runs() {
     let version = &OpenCode.options()[1];
     assert_eq!(version.key, "version");
     assert!(version.help.contains("only on Windows"));
+}
+
+#[test]
+fn check_cli_without_a_version_accepts_either_supported_interface() {
+    let v1 = include_str!("fixtures/opencode-run-help.txt");
+    let v2 = include_str!("fixtures/opencode-2-run-help.txt");
+    // Availability checks pass only the executable, never job settings.
+    let probe = [("executable".into(), "opencode".into())].into();
+    OpenCode.check_detection_for(&probe, v1).unwrap();
+    let broken = v2.replace("--auto", "--auto-unrelated");
+    if cfg!(windows) {
+        OpenCode.check_detection_for(&probe, v2).unwrap();
+        let error = OpenCode
+            .check_detection_for(&probe, &broken)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("OpenCode 2 run is missing --auto"),
+            "{error}"
+        );
+    } else {
+        for help in [v2, broken.as_str()] {
+            let error = OpenCode
+                .check_detection_for(&probe, help)
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("offers the OpenCode 2 run interface")
+                    && error.contains("not supported on macOS and Linux"),
+                "{error}"
+            );
+        }
+    }
+    let error = OpenCode
+        .check_detection_for(&probe, &v1.replace("--dir", "--dir-unrelated"))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("OpenCode 1 run is missing --dir"), "{error}");
+    // Launch passes the materialized setting, which must match the executable.
+    let one = [("version".into(), "1".into())].into();
+    let error = OpenCode
+        .check_detection_for(&one, v2)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("offers the OpenCode 2 run interface"),
+        "{error}"
+    );
 }
 
 #[test]

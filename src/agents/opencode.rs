@@ -21,9 +21,9 @@ static OPTIONS: &[OptionSpec] = &[
         label: "OpenCode version",
         default: "1",
         help: if OPENCODE_2_SUPPORTED {
-            "Major version of the selected executable; Check CLI verifies it against opencode run --help. OpenCode 1 runs with --dir. OpenCode 2 has no --dir: it runs in the job's directory with a private --standalone server instead of the shared background service."
+            "Major version of the selected executable; launch verifies it against opencode run --help. OpenCode 1 runs with --dir. OpenCode 2 has no --dir: it runs in the job's directory with a private --standalone server instead of the shared background service."
         } else {
-            "Major version of the selected executable; Check CLI verifies it against opencode run --help. OpenCode 2 is supported only on Windows for now: on macOS and Linux its private server runs outside CodeConvoy's cancellation."
+            "Major version of the selected executable; launch verifies it against opencode run --help. OpenCode 2 is supported only on Windows for now: on macOS and Linux its private server runs outside CodeConvoy's cancellation."
         },
         kind: OptionKind::Choice(&[
             ("1", "OpenCode 1"),
@@ -94,6 +94,14 @@ enum Cli {
 impl Cli {
     fn selected(options: &AgentOptions) -> Self {
         if value(options, &OPTIONS[1]) == "2" {
+            Self::V2
+        } else {
+            Self::V1
+        }
+    }
+    /// The interface whose usage line `help` shows; OpenCode 1 otherwise.
+    fn offered(help: &str) -> Self {
+        if help.contains(Self::V2.contract().0) {
             Self::V2
         } else {
             Self::V1
@@ -216,10 +224,24 @@ impl AgentBackend for OpenCode {
         self.check_detection_for(&AgentOptions::default(), help)
     }
     fn check_detection_for(&self, options: &AgentOptions, help: &str) -> Result<()> {
-        let selected = Cli::selected(options);
+        // Check CLI and startup checks belong to the executable and pass no
+        // version: they accept whichever supported interface it offers. Launch
+        // preflight passes the materialized setting, which must then match.
+        let chosen = options.contains_key(OPTIONS[1].key);
+        let selected = if chosen {
+            Cli::selected(options)
+        } else {
+            Cli::offered(help)
+        };
         anyhow::ensure!(
             OPENCODE_2_SUPPORTED || selected == Cli::V1,
-            OPENCODE_2_UNSUPPORTED
+            if chosen {
+                OPENCODE_2_UNSUPPORTED.to_owned()
+            } else {
+                format!(
+                    "This OpenCode executable offers the OpenCode 2 run interface. {OPENCODE_2_UNSUPPORTED}"
+                )
+            }
         );
         let Some(missing) = selected.missing(help) else {
             return Ok(());
@@ -231,7 +253,7 @@ impl AgentBackend for OpenCode {
         );
         anyhow::ensure!(
             other.missing(help).is_some(),
-            "This OpenCode executable offers the {} run interface, but {} is selected. Choose {} under OpenCode version, then Check CLI again.",
+            "This OpenCode executable offers the {} run interface, but {} is selected. Choose {} under OpenCode version, then start the convoy again.",
             other.label(),
             selected.label(),
             other.label()
