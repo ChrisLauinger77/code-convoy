@@ -4,7 +4,8 @@
 (stdout), `opencode-1.19.3-run.jsonl` and `opencode-2.0.32-run.jsonl` are unmodified
 captures from a sandboxed, unauthenticated run of the official macOS arm64 builds:
 `run --help` and a read-tool task in a disposable repository. The test agent behaves
-as OpenCode 2 when it is hard-linked as `opencode2`. See [OpenCode validation](../../docs/opencode-validation.md#opencode-2-compatibility).
+as OpenCode 2 when it is hard-linked as `opencode2`; `tests/support/standalone.rs` then
+models its private server in a separate process group. See [OpenCode validation](../../docs/opencode-validation.md#opencode-2-compatibility).
 
 Cursor's `cursor-help-contract.txt`, `cursor-success.jsonl` and
 `cursor-activity.jsonl` are synthetic documentation-derived fixtures, not

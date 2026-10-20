@@ -339,3 +339,159 @@ async fn parent_exit_cannot_complete_while_closed_stream_descendant_holds_a_lock
         assert_eq!(result.unwrap().status.code(), Some(code));
     }
 }
+
+/// `Containment::DetachedGroups` with the OpenCode 2 stand-in: its server runs
+/// in its own process group, outside the one CodeConvoy signals.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod detached_groups {
+    use super::*;
+    use process::{Containment, ManagedChild, ProcessResult};
+
+    const GRACE: Duration = Duration::from_secs(5);
+
+    struct Run {
+        _temp: tempfile::TempDir,
+        directory: std::path::PathBuf,
+        spec: CommandSpec,
+    }
+
+    /// The working directory's name selects the stand-in's behavior.
+    fn run(mode: &str, input: &str, containment: Containment) -> Run {
+        let temp = executable::directory();
+        let link = temp.path().join("opencode2");
+        executable::install(&link);
+        let directory = temp.path().join(mode);
+        fs::create_dir(&directory).unwrap();
+        let mut spec =
+            CommandSpec::new(&link, &directory).args(&["run", "--standalone", "--format", "json"]);
+        spec.input = Some(input.as_bytes().to_vec());
+        spec.remove_env.push("PWD".into());
+        spec.containment = containment;
+        Run {
+            _temp: temp,
+            directory,
+            spec,
+        }
+    }
+
+    fn start(
+        spec: CommandSpec,
+        cancellation: &Cancellation,
+    ) -> tokio::task::JoinHandle<anyhow::Result<ProcessResult>> {
+        let child: ManagedChild = process::spawn(&spec).unwrap();
+        let token = cancellation.clone();
+        tokio::spawn(async move {
+            process::execute(child, spec.input, &token, process::cancel, |_, _| {}).await
+        })
+    }
+
+    async fn wait_file(path: &Path) {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !path.exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    async fn server(directory: &Path) -> libc::pid_t {
+        let file = directory.join("opencode2-server.pid");
+        wait_file(&file).await;
+        fs::read_to_string(file).unwrap().parse().unwrap()
+    }
+
+    fn alive(pid: libc::pid_t) -> bool {
+        // SAFETY: signal zero only probes.
+        let probed = unsafe { libc::kill(pid, 0) };
+        probed == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+
+    /// Test cleanup for a deliberately stubborn server this test started.
+    fn stop_stray(pid: libc::pid_t) {
+        // SAFETY: the stubborn server ignores SIGTERM for 30 s, so the PID still
+        // belongs to it; SIGKILL ends the stray test process.
+        unsafe { libc::kill(pid, libc::SIGKILL) };
+    }
+
+    #[tokio::test]
+    async fn cancellation_lets_the_cli_stop_its_detached_server_and_confirms_it() {
+        let run = run(
+            "cooperative",
+            "opencode2-wait",
+            Containment::DetachedGroups { grace: GRACE },
+        );
+        let cancellation = Cancellation::default();
+        let task = start(run.spec.clone(), &cancellation);
+        wait_file(&run.directory.join("opencode2-ready")).await;
+        let server = server(&run.directory).await;
+        assert!(alive(server));
+        cancellation.cancel();
+        let result = task.await.unwrap().unwrap();
+        assert!(result.cancelled);
+        // The CLI exited through SIGTERM, which stops the server first.
+        assert!(!alive(server));
+    }
+
+    #[tokio::test]
+    async fn a_detached_server_that_outlives_cancellation_keeps_cleanup_unconfirmed() {
+        // Both the CLI and its server ignore SIGTERM.
+        let run = run(
+            "stubborn",
+            "opencode2-wait",
+            Containment::DetachedGroups {
+                grace: Duration::from_millis(200),
+            },
+        );
+        let cancellation = Cancellation::default();
+        let task = start(run.spec.clone(), &cancellation);
+        wait_file(&run.directory.join("opencode2-ready")).await;
+        let server = server(&run.directory).await;
+        cancellation.cancel();
+        let error = task.await.unwrap().unwrap_err();
+        assert!(format!("{error:#}").contains("timed out"), "{error:#}");
+        assert!(alive(server));
+        stop_stray(server);
+    }
+
+    #[tokio::test]
+    async fn a_normal_exit_leaving_a_detached_server_is_not_confirmed() {
+        let run = run(
+            "orphan",
+            "fixture task",
+            Containment::DetachedGroups { grace: GRACE },
+        );
+        let task = start(run.spec.clone(), &Cancellation::default());
+        let server = server(&run.directory).await;
+        let error = task.await.unwrap().unwrap_err();
+        assert!(format!("{error:#}").contains("timed out"), "{error:#}");
+        assert!(alive(server));
+        stop_stray(server);
+    }
+
+    #[tokio::test]
+    async fn group_containment_does_not_track_detached_groups() {
+        // The default for every other command is unchanged.
+        let run = run("orphan", "fixture task", Containment::Group);
+        let task = start(run.spec.clone(), &Cancellation::default());
+        let server = server(&run.directory).await;
+        let result = task.await.unwrap().unwrap();
+        assert!(result.status.unwrap().success());
+        assert!(alive(server));
+        stop_stray(server);
+    }
+
+    #[tokio::test]
+    async fn a_cli_that_stops_its_server_before_exiting_completes_normally() {
+        let run = run(
+            "cooperative",
+            "fixture task",
+            Containment::DetachedGroups { grace: GRACE },
+        );
+        let task = start(run.spec.clone(), &Cancellation::default());
+        let server = server(&run.directory).await;
+        let result = task.await.unwrap().unwrap();
+        assert!(result.status.unwrap().success() && !result.cancelled);
+        assert!(!alive(server));
+    }
+}

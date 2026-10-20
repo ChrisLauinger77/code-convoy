@@ -2,7 +2,7 @@
 use super::{AgentBackend, AgentOutput, OptionKind, OptionSpec, value};
 use crate::{
     domain::{AgentId, AgentOptions, JobStatus, Repository, TaskConfig},
-    process::{CommandSpec, Stream},
+    process::{CommandSpec, Containment, Stream},
 };
 use anyhow::Result;
 use std::{path::Path, process::ExitStatus};
@@ -23,7 +23,7 @@ static OPTIONS: &[OptionSpec] = &[
         help: if OPENCODE_2_SUPPORTED {
             "Major version of the selected executable; launch verifies it against opencode run --help. OpenCode 1 runs with --dir. OpenCode 2 has no --dir: it runs in the job's directory with a private --standalone server instead of the shared background service."
         } else {
-            "Major version of the selected executable; launch verifies it against opencode run --help. OpenCode 2 is supported only on Windows for now: on macOS and Linux its private server runs outside CodeConvoy's cancellation."
+            "Major version of the selected executable; launch verifies it against opencode run --help. OpenCode 2 is supported only on macOS, Linux and Windows."
         },
         kind: OptionKind::Choice(&[
             ("1", "OpenCode 1"),
@@ -32,7 +32,7 @@ static OPTIONS: &[OptionSpec] = &[
                 if OPENCODE_2_SUPPORTED {
                     "OpenCode 2"
                 } else {
-                    "OpenCode 2 (Windows only)"
+                    "OpenCode 2 (unsupported here)"
                 },
             ),
         ]),
@@ -76,12 +76,14 @@ static OPTIONS: &[OptionSpec] = &[
     },
 ];
 /// OpenCode 2 starts its `--standalone` server through a spawner that detaches it
-/// into its own process group on macOS and Linux. Group cancellation would then
-/// release the repository while that server or its tools could still write, so
-/// OpenCode 2 is refused there. A Windows Job Object contains the server, and
-/// cleanup waits until the job has no active process.
-const OPENCODE_2_SUPPORTED: bool = cfg!(windows);
-const OPENCODE_2_UNSUPPORTED: &str = "OpenCode 2 is not supported on macOS and Linux yet: it runs its private server in a separate process group, so CodeConvoy cannot confirm that a cancelled job has stopped before releasing the repository. Use an OpenCode 1 executable on this platform.";
+/// into its own process group on macOS and Linux, and its `run` stops that
+/// server only on its way out (SIGTERM or completion). `Containment` asks it to
+/// stop and confirms the recorded groups are gone; that tracking exists only on
+/// macOS and Linux. A Windows Job Object contains the server and its tools.
+const OPENCODE_2_SUPPORTED: bool = cfg!(any(windows, target_os = "macos", target_os = "linux"));
+const OPENCODE_2_UNSUPPORTED: &str = "OpenCode 2 is not supported on this platform: CodeConvoy can confirm that its detached server has stopped only on macOS, Linux and Windows. Use an OpenCode 1 executable.";
+/// `run` gives its server 3 seconds after SIGTERM before killing it.
+const OPENCODE_2_STOP: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// OpenCode's two incompatible `run` interfaces. Each CLI rejects the other's
 /// distinguishing argument (`--dir` / `--standalone`), so a binary replaced
@@ -304,7 +306,12 @@ impl AgentBackend for OpenCode {
             // is removed below. --standalone starts a private server with this
             // job's directory and environment instead of the shared background
             // service, which would outlive cancellation.
-            Cli::V2 => spec = spec.args(&["run", "--standalone", "--format", "json"]),
+            Cli::V2 => {
+                spec = spec.args(&["run", "--standalone", "--format", "json"]);
+                spec.containment = Containment::DetachedGroups {
+                    grace: OPENCODE_2_STOP,
+                };
+            }
         }
         let model = value(&task.options, &OPTIONS[2]).trim();
         let variant = value(&task.options, &OPTIONS[4]).trim();
