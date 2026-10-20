@@ -256,9 +256,9 @@ impl Inspection<'_> {
         })
     }
     pub(crate) async fn status(&self, path: &Path) -> Result<WorkingTree> {
-        let identity = self.identity(path).await?;
+        let repo = self.register(path).await?;
         anyhow::ensure!(
-            identity.repository.path == path,
+            repo.path == path,
             "Repository path now resolves to a different location; register it again."
         );
         let bytes = self
@@ -297,9 +297,14 @@ impl Inspection<'_> {
             .status
             .success()
             .then(|| String::from_utf8_lossy(&head.stdout).trim().to_owned());
+        // Observe the common directory after the entries, branch and HEAD. A
+        // checkout repointed to another repository meanwhile then fails the
+        // caller's identity comparison instead of passing with stale identity.
+        // Do not reuse the common directory from the registration check above.
+        let common_dir = self.common_dir(path).await?;
         Ok(WorkingTree {
             summary: GitSummary {
-                common_dir: Some(identity.common_dir()?),
+                common_dir: Some(common_dir),
                 branch,
                 head,
                 changed: entries.len(),
