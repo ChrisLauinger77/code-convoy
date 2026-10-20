@@ -28,7 +28,7 @@ pub(super) fn button(
         ),
     };
     let response = ui.add_enabled(enabled, theme::quiet(&format!("{ICON} {NAME}")).small());
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, NAME));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, NAME));
     let response = if enabled {
         response.on_hover_text(hint)
     } else {
