@@ -82,6 +82,7 @@ fn opencode2(mut task: TaskConfig) -> TaskConfig {
 }
 
 #[test]
+#[cfg(windows)]
 fn opencode_2_runs_standalone_in_the_job_directory_without_dir() {
     let task = opencode2(task());
     let repo = repo();
@@ -117,6 +118,7 @@ fn opencode_2_runs_standalone_in_the_job_directory_without_dir() {
 }
 
 #[test]
+#[cfg(windows)]
 fn opencode_2_joins_variant_to_the_model_and_rejects_unrepresentable_variants() {
     for mode in ["existing", "auto"] {
         let mut task = opencode2(task());
@@ -189,9 +191,12 @@ fn both_versions_use_the_exact_absolute_directory_with_spaces_and_unicode() {
     assert_eq!(v1.directory, repo.path);
     assert_eq!(v1.args[3], "--dir");
     assert_eq!(v1.args[4], repo.path.as_os_str());
-    let v2 = OpenCode.build(&opencode2(task()), &repo).unwrap();
-    assert_eq!(v2.directory, repo.path);
-    assert_eq!(v2.args.len(), 4);
+    #[cfg(windows)]
+    {
+        let v2 = OpenCode.build(&opencode2(task()), &repo).unwrap();
+        assert_eq!(v2.directory, repo.path);
+        assert_eq!(v2.args.len(), 4);
+    }
     for task in [task(), opencode2(task())] {
         // A relative directory would resolve against CodeConvoy's own cwd.
         let error = OpenCode
@@ -208,6 +213,7 @@ fn both_versions_use_the_exact_absolute_directory_with_spaces_and_unicode() {
 }
 
 #[test]
+#[cfg(windows)]
 fn help_detection_verifies_the_selected_major_version_and_rejects_unknown_clis() {
     let v1 = include_str!("fixtures/opencode-run-help.txt");
     let v2 = include_str!("fixtures/opencode-2-run-help.txt");
@@ -274,6 +280,56 @@ fn help_detection_verifies_the_selected_major_version_and_rejects_unknown_clis()
             );
         }
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn opencode_2_is_refused_on_macos_and_linux_before_any_command_runs() {
+    // Its standalone server would run outside process-group cancellation.
+    const REFUSED: &str = "not supported on macOS and Linux";
+    let v1 = include_str!("fixtures/opencode-run-help.txt");
+    let v2 = include_str!("fixtures/opencode-2-run-help.txt");
+    let one = TaskConfig::default().options;
+    let two = opencode2(TaskConfig::default()).options;
+    OpenCode.check_detection_for(&one, v1).unwrap();
+    OpenCode.check_detection(v1).unwrap();
+    for error in [
+        OpenCode.check_detection_for(&two, v2).unwrap_err(),
+        OpenCode.check_detection_for(&two, v1).unwrap_err(),
+        OpenCode.detection(&two, Path::new(".")).unwrap_err(),
+        OpenCode.version_command(&two, Path::new(".")).unwrap_err(),
+        OpenCode.build(&opencode2(task()), &repo()).unwrap_err(),
+    ] {
+        assert!(error.to_string().contains(REFUSED), "{error}");
+    }
+    // An OpenCode 2 executable is named, without advice to select OpenCode 2.
+    let error = OpenCode
+        .check_detection_for(&one, v2)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("offers the OpenCode 2 run interface")
+            && error.contains(REFUSED)
+            && !error.contains("Choose OpenCode 2"),
+        "{error}"
+    );
+    for help in [
+        "",
+        "codex exec --json",
+        &v1.replace("--dir", "--dir-unrelated"),
+    ] {
+        let error = OpenCode
+            .check_detection_for(&one, help)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("Expected OpenCode 1") || error.contains("OpenCode 1 run is missing"),
+            "{error}"
+        );
+    }
+    let version = &OpenCode.options()[1];
+    assert_eq!(version.key, "version");
+    assert!(version.help.contains("only on Windows"));
 }
 
 #[test]
@@ -568,13 +624,14 @@ fn version_one_state_roundtrips_opencode_drafts_preferences_and_history() {
 #[tokio::test]
 async fn missing_executable_is_actionable_and_other_backends_still_exist() {
     let dir = tempfile::tempdir().unwrap();
-    for version in ["1", "2"] {
+    let versions: &[&str] = if cfg!(windows) { &["1", "2"] } else { &["1"] };
+    for version in versions {
         let options = [
             (
                 "executable".into(),
                 dir.path().join("missing-opencode").to_str().unwrap().into(),
             ),
-            ("version".into(), version.into()),
+            ("version".into(), (*version).into()),
         ]
         .into();
         let error = agents::detect(&OpenCode, &options, dir.path())
@@ -608,7 +665,48 @@ async fn detects_fixture_help_and_displays_version_without_parsing_a_release_num
 }
 
 #[tokio::test]
-#[cfg(feature = "test-support")]
+#[cfg(all(feature = "test-support", unix))]
+async fn an_opencode_2_executable_is_refused_on_macos_and_linux_without_running_it() {
+    let dir = executable::directory();
+    // Probe tracking records every help/version invocation of the fixture.
+    std::fs::write(dir.path().join("probe-tracking"), "track").unwrap();
+    let link = dir
+        .path()
+        .join(format!("opencode2{}", std::env::consts::EXE_SUFFIX));
+    executable::install(&link);
+    let mut options: codeconvoy::domain::AgentOptions = [
+        ("executable".into(), link.to_str().unwrap().into()),
+        ("version".into(), "2".into()),
+    ]
+    .into();
+    let error = agents::detect(&OpenCode, &options, dir.path())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("not supported on macOS and Linux"),
+        "{error}"
+    );
+    assert!(!dir.path().join("opencode2.probes").exists());
+    // With OpenCode 1 selected, the help check identifies OpenCode 2.
+    options.insert("version".into(), "1".into());
+    let error = agents::detect(&OpenCode, &options, dir.path())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("offers the OpenCode 2 run interface")
+            && error.contains("not supported on macOS and Linux"),
+        "{error}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("opencode2.probes")).unwrap(),
+        "help\n"
+    );
+}
+
+#[tokio::test]
+#[cfg(all(feature = "test-support", windows))]
 async fn detects_opencode_2_fixture_and_refuses_a_mismatched_version_setting() {
     let dir = executable::directory();
     let link = dir

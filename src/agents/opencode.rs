@@ -20,8 +20,22 @@ static OPTIONS: &[OptionSpec] = &[
         key: "version",
         label: "OpenCode version",
         default: "1",
-        help: "Major version of the selected executable; Check CLI verifies it against opencode run --help. OpenCode 1 runs with --dir. OpenCode 2 has no --dir: it runs in the job's directory with a private --standalone server instead of the shared background service.",
-        kind: OptionKind::Choice(&[("1", "OpenCode 1"), ("2", "OpenCode 2")]),
+        help: if OPENCODE_2_SUPPORTED {
+            "Major version of the selected executable; Check CLI verifies it against opencode run --help. OpenCode 1 runs with --dir. OpenCode 2 has no --dir: it runs in the job's directory with a private --standalone server instead of the shared background service."
+        } else {
+            "Major version of the selected executable; Check CLI verifies it against opencode run --help. OpenCode 2 is supported only on Windows for now: on macOS and Linux its private server runs outside CodeConvoy's cancellation."
+        },
+        kind: OptionKind::Choice(&[
+            ("1", "OpenCode 1"),
+            (
+                "2",
+                if OPENCODE_2_SUPPORTED {
+                    "OpenCode 2"
+                } else {
+                    "OpenCode 2 (Windows only)"
+                },
+            ),
+        ]),
     },
     OptionSpec {
         key: "model",
@@ -61,6 +75,14 @@ static OPTIONS: &[OptionSpec] = &[
         ]),
     },
 ];
+/// OpenCode 2 starts its `--standalone` server through a spawner that detaches it
+/// into its own process group on macOS and Linux. Group cancellation would then
+/// release the repository while that server or its tools could still write, so
+/// OpenCode 2 is refused there. A Windows Job Object contains the server, and
+/// cleanup waits until the job has no active process.
+const OPENCODE_2_SUPPORTED: bool = cfg!(windows);
+const OPENCODE_2_UNSUPPORTED: &str = "OpenCode 2 is not supported on macOS and Linux yet: it runs its private server in a separate process group, so CodeConvoy cannot confirm that a cancelled job has stopped before releasing the repository. Use an OpenCode 1 executable on this platform.";
+
 /// OpenCode's two incompatible `run` interfaces. Each CLI rejects the other's
 /// distinguishing argument (`--dir` / `--standalone`), so a binary replaced
 /// after Check CLI fails before a session starts instead of running elsewhere.
@@ -161,6 +183,10 @@ impl AgentBackend for OpenCode {
                         && !provider.chars().any(char::is_whitespace)),
             "OpenCode model must use provider/model format, or be blank for OpenCode default."
         );
+        anyhow::ensure!(
+            OPENCODE_2_SUPPORTED || Cli::selected(options) == Cli::V1,
+            OPENCODE_2_UNSUPPORTED
+        );
         let variant = value(options, &OPTIONS[4]).trim();
         if Cli::selected(options) == Cli::V2 && !variant.is_empty() {
             // OpenCode 2 has no --variant; it parses provider/model#variant.
@@ -191,10 +217,18 @@ impl AgentBackend for OpenCode {
     }
     fn check_detection_for(&self, options: &AgentOptions, help: &str) -> Result<()> {
         let selected = Cli::selected(options);
+        anyhow::ensure!(
+            OPENCODE_2_SUPPORTED || selected == Cli::V1,
+            OPENCODE_2_UNSUPPORTED
+        );
         let Some(missing) = selected.missing(help) else {
             return Ok(());
         };
         let other = selected.other();
+        anyhow::ensure!(
+            OPENCODE_2_SUPPORTED || other.missing(help).is_some(),
+            "This OpenCode executable offers the OpenCode 2 run interface. {OPENCODE_2_UNSUPPORTED}"
+        );
         anyhow::ensure!(
             other.missing(help).is_some(),
             "This OpenCode executable offers the {} run interface, but {} is selected. Choose {} under OpenCode version, then Check CLI again.",

@@ -701,6 +701,7 @@ async fn all_backends_preserve_invocations_attachments_and_failed_cancelled_resu
 }
 
 #[tokio::test]
+#[cfg(windows)]
 async fn opencode_2_runs_in_the_exact_isolated_worktree_or_direct_repository() {
     // The fixture agent linked as opencode2 emulates OpenCode 2, which has no
     // --dir: the process directory alone selects its workspace.
