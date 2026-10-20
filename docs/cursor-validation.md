@@ -5,6 +5,10 @@ structured Activity, completion validation and supervised lifecycle coverage.
 PR 3 adds [user guidance](cursor.md), native-widget regressions and a separate
 [readiness record](cursor-readiness.md). Cargo remains at 1.0.0.
 
+The [2026-10-20 permission audit](cursor-permission-audit.md) supplements this
+historical evidence. Cursor execution now has a finite 3600-second default;
+blank/missing saved values no longer mean unlimited execution.
+
 ## Evidence and limits
 
 The maintainer accepted an isolated **Linux x86_64 syntax smoke test with Cursor
@@ -198,8 +202,9 @@ attached descendants. Stop and shutdown take precedence over decoding; they
 await cleanup before releasing scheduler capacity or repository leases. Existing
 Unix escaped-descendant/crash limitations still apply (see architecture).
 
-Cursor adds an optional **CodeConvoy** time limit of 1–86400 seconds; blank is
-unlimited. It starts after spawn, excluding queueing and worktree preparation,
+Cursor uses a **CodeConvoy** time limit of 1–86400 seconds; blank or missing
+values use 3600 seconds after the permission audit. It starts after spawn,
+excluding queueing and worktree preparation,
 and changes no CLI arguments. Supervision starts concurrently with Started/Running
 publication: blocked delivery cannot postpone pipe draining/reaping or relabel an
 already completed process as a timeout. Output delivery preserves Started ordering
@@ -211,7 +216,7 @@ Started receiver signals job cancellation; a non-fail-fast join awaits execution
 and owned cleanup before returning the publication error. Cleanup uncertainty
 takes precedence over that error. A cleanup error preserves the existing quarantined lease,
 capacity and history protection; later observations do not retroactively declare
-cleanup safe. Existing backends retain unlimited execution by default.
+cleanup safe. Timeout defaults belong to each backend.
 The cause selected by execution remains authoritative through cleanup and result
 inspection: Stop/shutdown arriving after timeout expiry cannot turn that timeout
 into Cancelled, in either Direct or isolated mode.

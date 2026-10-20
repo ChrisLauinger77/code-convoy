@@ -125,3 +125,17 @@ pub fn complete() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+
+/// Synthetic native function envelope. The command is output data only: this
+/// fixture never executes deletion commands or emulates Cursor's classifier.
+pub fn shell_call(state: &str, command: &str, rejection: Option<&str>) {
+    let mut event = serde_json::json!({"type":"tool_call", "subtype":state,
+        "call_id":"delete", "session_id":"cursor-fixture",
+        "tool_call":{"function":{"name":"shell", "arguments":serde_json::json!({"command":command}).to_string()}}});
+    if let Some(code) = rejection {
+        event["tool_call"]["function"]["result"] = serde_json::json!({
+            "error":{"code":code, "message":"Approval required for risky delete"}
+        });
+    }
+    println!("{event}");
+}

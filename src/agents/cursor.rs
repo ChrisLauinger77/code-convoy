@@ -56,11 +56,9 @@ static OPTIONS: &[OptionSpec] = &[
     OptionSpec {
         key: "timeout_seconds",
         label: "Time limit (seconds)",
-        default: "",
-        help: "Optional CodeConvoy execution time limit, 1–86400 seconds. Blank means no time limit. Queueing and worktree preparation are excluded. Expiry stops the owned process tree, fails this job and retains edits/results. This does not change Cursor CLI flags or permissions.",
-        kind: OptionKind::Text {
-            hint: "No time limit",
-        },
+        default: "3600",
+        help: "CodeConvoy execution time limit, 1–86400 seconds; blank uses 3600 seconds. Bounds unattended waits, including unresolved approval. Queueing and worktree preparation are excluded. Expiry stops the owned process tree, fails this job and retains edits/results. This does not change Cursor CLI flags or permissions.",
+        kind: OptionKind::Text { hint: "3600" },
     },
 ];
 
@@ -199,16 +197,20 @@ impl AgentBackend for Cursor {
         Box::new(output::CursorOutput::for_workspace(directory))
     }
     fn execution_timeout(&self, options: &AgentOptions) -> Result<Option<Duration>> {
-        let timeout = value(options, &OPTIONS[4]).trim();
-        if timeout.is_empty() {
-            return Ok(None);
-        }
+        // Older saved drafts may omit this option or contain a blank value.
+        // Keep unattended approval/network waits bounded for those jobs too.
+        let configured = value(options, &OPTIONS[4]).trim();
+        let timeout = if configured.is_empty() {
+            OPTIONS[4].default
+        } else {
+            configured
+        };
         let seconds = timeout.parse::<u32>().ok().filter(|seconds| {
             timeout.bytes().all(|byte| byte.is_ascii_digit()) && (1..=86400).contains(seconds)
         });
         anyhow::ensure!(
             seconds.is_some(),
-            "Cursor time limit must be a whole number from 1 to 86400 seconds, or blank for no time limit."
+            "Cursor time limit must be a whole number from 1 to 86400 seconds, or blank for the 3600-second default."
         );
         Ok(seconds.map(|seconds| Duration::from_secs(u64::from(seconds))))
     }
