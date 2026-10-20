@@ -149,7 +149,7 @@ Repository browsing uses `rfd::AsyncFileDialog`, parented to eframe's root windo
 
 ## Backend extension
 
-`AgentBackend` owns executable/help/version detection, supported options, invocation construction, and the execution summary shown in the editor/preflight UI. Its `output_with_options()` factory receives the immutable job options and defaults to the existing `output()` factory. Claude uses those options to scope Auto diagnostics to jobs that requested Auto. `output_for()` additionally receives the assigned checkout and defaults to `output_with_options()`; Cursor uses it to validate its reported workspace. Each independent `AgentOutput` owns byte framing, stream handling, and exit interpretation. The optional `execution_timeout()` defaults to unlimited; Cursor alone exposes a configurable application time limit. The backend exposes overridable spawn/cancel methods and delegates ordinary subprocess handling to `process`. Async pipe I/O and scheduling remain shared, rather than being copied into every backend.
+`AgentBackend` owns executable/help/version detection, supported options, invocation construction, and the execution summary shown in the editor/preflight UI. Its `output_with_options()` factory receives the immutable job options and defaults to the existing `output()` factory. Claude uses those options to scope Auto diagnostics to jobs that requested Auto. `output_for()` additionally receives the assigned checkout and defaults to `output_with_options()`; Cursor uses it to validate its reported workspace. Each independent `AgentOutput` owns byte framing, stream handling, and exit interpretation. The optional `execution_timeout()` defaults to unlimited at the trait level; Cursor and Copilot use a configurable finite application time limit. The backend exposes overridable spawn/cancel methods and delegates ordinary subprocess handling to `process`. Async pipe I/O and scheduling remain shared, rather than being copied into every backend.
 
 `OptionSpec` provides rendering metadata (text fields or backend-specific choice values). Persisted option keys belong to the selected backend. There is no cross-agent reasoning, model, or permission translation. Backends validate keys and values before invocation. The generic renderer only renders that backend's descriptions. Adding Copilot exposed two concrete Codex assumptions: shared line-based output with `turn.completed` observation fields, and hardcoded Codex approval/sandbox UI text. Both now live in the Codex backend. The runner only sends bytes and an exit status to an opaque per-job output handler. This permits Copilot to stream partial text immediately and interpret its own exit status, without inventing a common event schema. Codex's formatter and success criteria are unchanged. No plugin system or hypothetical capability layer was added.
 
@@ -222,8 +222,9 @@ keeps stderr separate and fails closed on malformed/incomplete/conflicting
 evidence or explicit tool/permission errors, retaining bounded backend Raw output.
 These structured fixtures are documentation-derived, not authenticated recordings.
 
-An optional Cursor execution time limit starts after spawn. Supervision runs
-concurrently with Started/Running publication, so UI backpressure cannot postpone
+A configurable Cursor execution time limit starts after spawn; blank or missing
+settings use 3600 seconds to bound unattended waits, including unresolved approval.
+Supervision runs concurrently with Started/Running publication, so UI backpressure cannot postpone
 pipe draining/reaping or change an already completed process into a timeout.
 Output delivery preserves Started ordering with bounded omission accounting;
 decoding continues even before Started can be delivered. `process::execute_until`
@@ -236,7 +237,8 @@ Confirmed expiry fails the job, retains edits/worktrees and releases leases only
 after cleanup. The chosen execution cause is stable: Stop/shutdown during timeout
 cleanup cannot relabel the timeout as Cancelled, including in isolated execution.
 Unconfirmed cleanup retains the existing quarantine and history
-protection. Other backend timeout defaults remain unlimited. Native permission
+protection. Other backend timeout defaults are unchanged by the Cursor audit.
+Native permission
 enforcement and full authenticated protocol compatibility remain unverified.
 See [Cursor evidence, tests and limitations](cursor-validation.md).
 

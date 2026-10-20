@@ -361,6 +361,15 @@ fn gate(
         antigravity::text(&format!("fixture gate ready {marker}"));
     } else if cursor {
         cursor::init()?;
+        if let Some(command) = config["cursor_pending_command"].as_str() {
+            // Stdin is closed by CodeConvoy. Simulate a CLI/helper that still
+            // waits instead of resolving the approval; never run the command.
+            let mut input = String::new();
+            std::io::stdin().read_to_string(&mut input)?;
+            assert!(input.is_empty());
+            cursor::shell_call("started", command, None);
+            eprintln!("Approval required: pending confirmation for risky delete");
+        }
         println!(
             "{}",
             serde_json::json!({"type":"assistant", "session_id":"cursor-fixture", "message":{"role":"assistant", "content":[{"type":"text","text":format!("fixture gate ready {marker}")}]}})
@@ -469,6 +478,19 @@ fn gate(
             Some("incomplete") => return Ok(()),
             Some("permission") => {
                 eprintln!("Permission denied: approval required for writeToolCall")
+            }
+            Some("recursive_permission") | Some("ambiguous_permission") => {
+                let command = if config["cursor_outcome"] == "recursive_permission" {
+                    "rm -rf -- ./scratch"
+                } else {
+                    "rm -rf -- \"$UNSET_TARGET\"/*"
+                };
+                cursor::shell_call("started", command, None);
+                cursor::shell_call("completed", command, Some("approval_required"));
+            }
+            Some("permission_exit") => {
+                eprintln!("Permission denied: risky delete requires approval");
+                std::process::exit(1);
             }
             Some("wrong_session") => {
                 println!(

@@ -175,6 +175,9 @@ async fn terminal_failures_keep_results_and_release_slots_in_both_execution_mode
             ("incomplete", JobStatus::Failed, "incomplete"),
             ("interrupted", JobStatus::Failed, "process failed"),
             ("permission", JobStatus::Failed, "permission"),
+            ("recursive_permission", JobStatus::Failed, "permission"),
+            ("ambiguous_permission", JobStatus::Failed, "permission"),
+            ("permission_exit", JobStatus::Failed, "permission"),
             (
                 "wrong_session",
                 JobStatus::Failed,
@@ -456,6 +459,124 @@ async fn cursor_timeout_stops_descendants_and_releases_repository_after_confirme
     h.until(|events| Harness::finished(events, 2, JobStatus::Succeeded))
         .await;
     h.close().await;
+}
+
+#[tokio::test]
+async fn pending_delete_confirmation_times_out_or_cancels_before_releasing_owned_processes() {
+    for mode in [ExecutionMode::Direct, ExecutionMode::IsolatedWorktree] {
+        for cancel in [false, true] {
+            let mut h = Harness::new(1, 512);
+            let repo = h.repository("source").await;
+            let mut task = h.task(
+                1,
+                mode,
+                json!({
+                    "spawn_child":true, "edit_before":true,
+                    "cursor_pending_command":"rm -rf -- \"$UNSET_TARGET\"/*"
+                }),
+            );
+            task.options.insert(
+                "timeout_seconds".into(),
+                if cancel { "60" } else { "3" }.into(),
+            );
+            h.start(1, task, &repo).await;
+            h.until(|events| {
+                Harness::ready(events, 1)
+                    && events
+                        .iter()
+                        .filter_map(|event| match event {
+                            Event::Output { run: 1, raw, .. } => Some(raw.as_str()),
+                            _ => None,
+                        })
+                        .collect::<String>()
+                        .contains("pending confirmation for risky delete")
+            })
+            .await;
+            file_ready(&h.root.path().join("control/child.ready")).await;
+            let lock = child_lock(h.root.path());
+            assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+
+            // A direct successor needs both capacity and the source lease,
+            // including while the first attempt runs in an isolated checkout.
+            h.start(2, h.task(2, ExecutionMode::Direct, json!({})), &repo)
+                .await;
+            assert!(
+                !h.events
+                    .iter()
+                    .any(|event| matches!(event, Event::Started { run: 2, .. }))
+            );
+            if cancel {
+                h.manager.cancel_run(1);
+            }
+            let expected = if cancel {
+                JobStatus::Cancelled
+            } else {
+                JobStatus::Failed
+            };
+            h.until(|events| Harness::finished(events, 1, expected) && Harness::ready(events, 2))
+                .await;
+            assert!(fs2::FileExt::try_lock_exclusive(&lock).is_ok());
+            let finished = h
+                .events
+                .iter()
+                .position(|event| matches!(event, Event::Finished { run: 1, .. }))
+                .unwrap();
+            let admitted = h
+                .events
+                .iter()
+                .position(|event| matches!(event, Event::Started { run: 2, .. }))
+                .unwrap();
+            assert!(finished < admitted);
+            if !cancel {
+                assert!(h.events.iter().any(|event| matches!(event, Event::Finished {run:1, detail,..}
+                    if detail.contains("timed out after 3 seconds") && detail.contains("cleanup was confirmed"))));
+            }
+            let raw: String = h
+                .events
+                .iter()
+                .filter_map(|event| match event {
+                    Event::Output { run: 1, raw, .. } => Some(raw.as_str()),
+                    _ => None,
+                })
+                .collect();
+            assert!(raw.contains("pending confirmation for risky delete"));
+            assert!(raw.contains("UNSET_TARGET"));
+            assert!(!raw.contains("\"type\":\"result\""));
+
+            if mode == ExecutionMode::IsolatedWorktree {
+                let retained = h.metadata(1);
+                assert_eq!(
+                    fs::read_to_string(retained.path.join("tracked.txt")).unwrap(),
+                    "1"
+                );
+                assert_eq!(
+                    worktrees::inspect(&retained).await.unwrap().changed,
+                    Some(true)
+                );
+                assert!(retained.path.parent().unwrap().join("owner.json").is_file());
+                assert_eq!(
+                    fs::read_to_string(repo.path.join("tracked.txt")).unwrap(),
+                    "base\n"
+                );
+            } else {
+                assert_eq!(
+                    fs::read_to_string(repo.path.join("tracked.txt")).unwrap(),
+                    "1"
+                );
+            }
+            h.release(2, "source");
+            h.until(|events| Harness::finished(events, 2, JobStatus::Succeeded))
+                .await;
+            assert_eq!(
+                h.events
+                    .iter()
+                    .filter(|event| matches!(event, Event::Finished { run: 1, .. }))
+                    .count(),
+                1
+            );
+            h.close().await;
+        }
+    }
 }
 
 /// Only the test's event-queue setup and cancellation response differ. Cursor's

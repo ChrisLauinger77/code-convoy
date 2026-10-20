@@ -834,7 +834,7 @@ checks help/version, without checking sign-in or making model calls.
 | Model | Blank keeps Cursor's default; an optional identifier is passed to `--model`, without a built-in catalog |
 | Permissions | **Cursor configuration** omits `--force`; **Force allow unless denied** explicitly enables it |
 | Workspace trust | **Cursor configuration** preserves saved trust; **Trust assigned workspace** explicitly enables `--trust` |
-| Time limit (seconds) | Blank is unlimited; 1–86400 limits execution after spawn, excluding queueing/preparation |
+| Time limit (seconds) | 1–86400 seconds; blank or missing uses 3600, excluding queueing/preparation |
 
 The accepted invocation remains `agent agent --print --output-format stream-json
 --workspace=CHECKOUT [--model=ID] [--force] [--trust] -- PROMPT`, with each argument
@@ -851,7 +851,8 @@ presets use the shared lifecycle.
 The isolated Linux smoke test with CLI **2026.10.16-e3cb207** verified syntax
 through the authentication gate only. Authenticated execution, model access,
 permission enforcement and full protocol compatibility remain unverified on
-every platform. See [setup and troubleshooting](docs/cursor.md) and the exact
+every platform. See [setup and troubleshooting](docs/cursor.md), the
+[permission audit](docs/cursor-permission-audit.md), and the exact
 [commands, exit codes and evidence](docs/cursor-validation.md).
 
 ## Antigravity CLI contract

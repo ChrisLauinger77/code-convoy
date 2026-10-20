@@ -300,12 +300,123 @@ fn permission_and_tool_errors_cannot_be_hidden_by_a_successful_terminal_result()
     assert!(detail.contains("permission denial or approval requirement"));
 }
 
+// Synthetic rejection payloads in the existing supported envelopes, not
+// recordings of the Auto-review classifier or its version-specific wording.
+#[test]
+fn risky_delete_rejections_remain_permission_failures_across_stream_boundaries() {
+    for (command, code) in [
+        ("rm -rf -- ./scratch", "approval_required"),
+        ("rm -rf -- \"$UNSET_TARGET\"/*", "permission_denied"),
+        ("rm -rf -- ./scratch / old", "approval_required"),
+        ("rsync --delete ./empty/ ./scratch/", "permission_denied"),
+    ] {
+        let started = json!({"type":"tool_call", "subtype":"started",
+            "call_id":"delete", "session_id":"fixture",
+            "tool_call":{"function":{"name":"shell", "arguments":json!({"command":command}).to_string()}}});
+        let mut completed = started.clone();
+        completed["subtype"] = json!("completed");
+        completed["tool_call"]["function"]["result"] =
+            json!({"error":{"code":code, "message":"Approval required for risky delete"}});
+        let stream = [init(), started, completed, success()]
+            .iter()
+            .map(|event| format!("{event}\n"))
+            .collect::<String>();
+        for size in [1, 7, stream.len()] {
+            let mut decoder = Cursor.output();
+            let mut activity = String::new();
+            for chunk in stream.as_bytes().chunks(size) {
+                activity.push_str(&decoder.push(Stream::Stdout, chunk));
+            }
+            activity.push_str(&decoder.finish());
+            assert!(activity.contains("tool completed: shell"));
+            assert!(!activity.contains(command));
+            for exit in [0, 1, 130] {
+                let (outcome, detail) = decoder.interpret(status(exit));
+                assert_eq!(outcome, JobStatus::Failed);
+                assert!(
+                    detail.contains("permission denial or approval requirement"),
+                    "{detail}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn stderr_only_rejection_is_permission_failure_without_a_terminal_result() {
+    for text in [
+        "Permission denied: recursive delete",
+        "Approval required: ambiguous delete",
+    ] {
+        let mut decoder = Cursor.output();
+        for byte in text.as_bytes() {
+            decoder.push(Stream::Stderr, &[*byte]);
+        }
+        assert!(decoder.finish().contains("without a terminal result"));
+        for exit in [0, 1] {
+            let (outcome, detail) = decoder.interpret(status(exit));
+            assert_eq!(outcome, JobStatus::Failed);
+            assert!(detail.contains("permission denial or approval requirement"));
+        }
+    }
+}
+
+#[test]
+fn successful_headless_inspection_does_not_treat_quoted_permission_text_as_denial() {
+    let mut started = tool("started", "one");
+    started["tool_call"] = json!({"function":{"name":"shell",
+        "arguments":"printf 'Permission denied; approval required'"}});
+    let mut completed = started.clone();
+    completed["subtype"] = json!("completed");
+    completed["tool_call"]["function"]["result"] =
+        json!({"success":{"stdout":"Permission denied; approval required"}});
+    let mut result = success();
+    result["result"] = json!("Documented the strings Permission denied and approval required.");
+    let (decoder, _) = decode(&[init(), started, completed, result]);
+    assert_eq!(decoder.interpret(status(0)).0, JobStatus::Succeeded);
+}
+
+#[test]
+fn unresolved_or_unknown_permission_events_cannot_confirm_completion() {
+    // No permission RPC schema is documented for direct print mode. Unknown
+    // events must fail conservatively rather than being answered or approved.
+    for event in [
+        json!({"type":"tool_call", "subtype":"started", "call_id":"pending",
+            "session_id":"fixture", "tool_call":{"function":{"name":"shell", "arguments":"rm -rf -- ./scratch"}}}),
+        json!({"type":"permission_request", "session_id":"fixture"}),
+    ] {
+        for terminal in [false, true] {
+            let mut events = vec![init(), event.clone()];
+            if terminal {
+                events.push(success());
+            }
+            let (decoder, _) = decode(&events);
+            assert_eq!(decoder.interpret(status(0)).0, JobStatus::Failed);
+        }
+    }
+}
+
 #[test]
 fn application_timeout_is_validated_without_changing_verified_cursor_arguments() {
     let original = Cursor.build(&task(), &repository()).unwrap();
-    for value in ["1", "60", "86400", "", " "] {
+    for (value, seconds) in [
+        ("1", 1),
+        ("60", 60),
+        ("86400", 86400),
+        ("", 3600),
+        (" ", 3600),
+    ] {
         let mut task = task();
         task.options.insert("timeout_seconds".into(), value.into());
+        assert_eq!(
+            Cursor.execution_timeout(&task.options).unwrap(),
+            Some(std::time::Duration::from_secs(seconds))
+        );
+        assert!(
+            Cursor
+                .execution_summary(&task.options)
+                .contains(&format!("{seconds} seconds after spawn"))
+        );
         assert_eq!(
             Cursor.build(&task, &repository()).unwrap().args,
             original.args
@@ -321,7 +432,7 @@ fn application_timeout_is_validated_without_changing_verified_cursor_arguments()
             .unwrap()
             .execution_timeout(&Default::default())
             .unwrap();
-        if agent == AgentId::Copilot {
+        if matches!(agent, AgentId::Copilot | AgentId::Cursor) {
             assert_eq!(timeout, Some(std::time::Duration::from_secs(3600)));
         } else {
             assert!(timeout.is_none());

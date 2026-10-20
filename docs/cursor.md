@@ -57,11 +57,18 @@ no saved trust decision. CodeConvoy never broadens permissions or trust on retry
 Neither setting, nor `--workspace`, provides an OS sandbox. Existing user and
 organization configuration remains Cursor's responsibility.
 
-**Time limit (seconds)** is optional: blank is unlimited, otherwise use a whole
-number from 1 to 86400. The application starts this timer after process spawn;
+**Time limit (seconds)** accepts a whole number from 1 to 86400. Blank or missing
+saved values use 3600 seconds, including older drafts that previously ran without
+a limit. This bounds unresolved confirmation and other unattended waits without
+granting permission. The application starts this timer after process spawn;
 queueing and isolated-worktree preparation are excluded. Expiry fails the job,
 stops its owned process tree and retains edits. Stop cancels the job with the
 same cleanup guarantees. Neither operation rolls changes back.
+
+Cursor's v2026.10.08 Auto-review change can affect risky deletion requests when
+that native policy is active. A new print-mode incompatibility or confirmation
+hang has not been reproduced. See the [permission audit](cursor-permission-audit.md)
+for verified behavior, mocked failure coverage and remaining limitations.
 
 ## Repository rules
 
