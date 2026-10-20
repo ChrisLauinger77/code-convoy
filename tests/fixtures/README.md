@@ -1,5 +1,16 @@
 # Saved-state fixtures
 
+`copilot-1.0.99-1-help.txt` is the unmodified stdout of
+`copilot --no-auto-update --help` from the official macOS arm64 1.0.99-1 release
+binary, checked on 2026-10-20 in temporary configuration/cache directories.
+It includes the optional session-only `--trust-folder` contract. The older
+`copilot-1.0.65-help.txt` has no such flag and remains a supported help fixture.
+`tests/support/copilot_trust.rs` models trust failures, interactive confirmation
+after stdin EOF and a deliberately blocked process tree. Those scenarios are
+synthetic, not authenticated provider evidence. See the
+[workspace trust audit](../../README.md#workspace-trust-and-unattended-execution)
+for binary provenance, real startup evidence and limitations.
+
 `opencode-1.19.3-run-help.txt` (printed to stderr), `opencode-2.0.32-run-help.txt`
 (stdout), `opencode-1.19.3-run.jsonl` and `opencode-2.0.32-run.jsonl` are unmodified
 captures from a sandboxed, unauthenticated run of the official macOS arm64 builds:
