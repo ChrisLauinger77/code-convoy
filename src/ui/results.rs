@@ -454,11 +454,7 @@ impl App {
                 .desired_width(f32::INFINITY),
         );
         search.widget_info(|| {
-            egui::WidgetInfo::labeled(
-                egui::WidgetType::TextEdit,
-                search.enabled(),
-                "Search history",
-            )
+            egui::WidgetInfo::labeled(egui::Role::TextInput, search.enabled(), "Search history")
         });
         ui.horizontal_wrapped(|ui| {
             let filter = egui::ComboBox::from_id_salt("history_filter")
@@ -474,11 +470,7 @@ impl App {
                 })
                 .response;
             filter.widget_info(|| {
-                egui::WidgetInfo::labeled(
-                    egui::WidgetType::ComboBox,
-                    filter.enabled(),
-                    "History filter",
-                )
+                egui::WidgetInfo::labeled(egui::Role::ComboBox, filter.enabled(), "History filter")
             });
             if ui
                 .add_enabled(
@@ -588,7 +580,7 @@ impl App {
                                 );
                                 response.widget_info(|| {
                                     egui::WidgetInfo::selected(
-                                        egui::WidgetType::Button,
+                                        egui::Role::Button,
                                         response.enabled(),
                                         selected == Some(run.id),
                                         format!(
@@ -685,7 +677,7 @@ impl App {
             }
             // Keep the launcher identity when Discard convoy disappears after
             // resolution, so dialog focus cannot move to a neighboring action.
-            ui.scope_builder(egui::UiBuilder::new().id(egui::Id::new("history_cleanup_menu")), |ui| {
+            ui.scope_builder(egui::UiBuilder::new().scope_id(egui::Id::unique("history_cleanup_menu")), |ui| {
                 ui.menu_button("History cleanup", |ui| {
                     if ui.add_enabled(discard_enabled && self.state.runs.iter().any(|r| !r.active() && r.unresolved_results()),
                         egui::Button::new("Discard all unresolved results…"))

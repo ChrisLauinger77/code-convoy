@@ -32,7 +32,7 @@ fn history_preview_is_cancel_safe_and_keyboard_confirmation_is_explicit() {
     assert_eq!((p.stored, p.retained(), p.remove.len()), (4, 2, 2));
     assert_eq!(p.remove, [1, 2].into());
     let mut keys = keyboard();
-    keys.frame(&mut app, vec![]);
+    keys.settle_new_area(&mut app);
     let focus = keys.ctx.memory(|m| m.focused()).unwrap();
     assert_eq!(keys.nodes[&focus.accesskit_id()].label(), Some("Cancel"));
     keys.key(&mut app, egui::Key::Escape);
@@ -259,7 +259,7 @@ fn history_cleanup_handles_empty_history_and_unlimited_policy_without_writes() {
         assert!(preview.remove.is_empty());
         assert_eq!(preview.stored, app.state.runs.len());
         let mut keys = keyboard();
-        keys.frame(&mut app, vec![]);
+        keys.settle_new_area(&mut app);
         assert!(
             keys.nodes
                 .values()

@@ -77,6 +77,13 @@ impl Keyboard {
         }
     }
 
+    /// egui 0.37 excludes a new area's invisible sizing pass from AccessKit.
+    /// Inspect its first visible frame, without replaying any input events.
+    fn settle_new_area(&mut self, app: &mut App) {
+        self.frame(app, vec![]);
+        self.frame(app, vec![]);
+    }
+
     fn frame(&mut self, app: &mut App, events: Vec<egui::Event>) {
         self.input(
             app,

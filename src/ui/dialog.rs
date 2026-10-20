@@ -85,7 +85,7 @@ pub(super) fn show<R>(
     contents: impl FnOnce(&mut egui::Ui, bool) -> R,
 ) -> egui::ModalResponse<R> {
     install(ctx);
-    let id = egui::Id::new(id);
+    let id = egui::Id::unique(id);
     let focused = ctx
         .memory(|m| m.focused())
         .and_then(|id| ctx.read_response(id));

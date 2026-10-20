@@ -3389,7 +3389,7 @@
     },
     {
       "name": "epaint_default_fonts",
-      "version": "0.36.2",
+      "version": "0.37.0",
       "license": "(MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0",
       "repository": "https://github.com/emilk/egui/tree/main/crates/epaint_default_fonts",
       "authors": [
@@ -3398,11 +3398,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "49682f8baa058bf49e011035cfbd6e825f88a5ef"
+          "sha1": "7c0b40402271e8d40cda69f87cf3c2617c2e4382"
         },
         "path_in_vcs": "crates/epaint_default_fonts"
       },
-      "checksum": "773fa9c96dd0dbef887e39d0ed6177f141cce4d68e6041df77570aa3702dfa13",
+      "checksum": "cfc1cc505827f4c23eedc297975a0fd038268d41293f389dd8ff3b574aefab19",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -3418,19 +3418,23 @@
       "notices": [
         {
           "text": "47c0cccbeec7e8614548cc485588b28149e7874188df5f41b36efebcee285c87",
-          "origin": "https://crates.io/api/v1/crates/epaint_default_fonts/0.36.2/download :: fonts/Hack-Regular.txt"
+          "origin": "https://crates.io/api/v1/crates/epaint_default_fonts/0.37.0/download :: fonts/Hack-Regular.txt"
         },
         {
           "text": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
-          "origin": "https://crates.io/api/v1/crates/epaint_default_fonts/0.36.2/download :: fonts/OFL.txt"
+          "origin": "https://crates.io/api/v1/crates/epaint_default_fonts/0.37.0/download :: fonts/OFL.txt"
         },
         {
           "text": "2f0015108d68627bd788d313f529c21ff4da2c2c42a5e1f3883acc83480f9002",
-          "origin": "https://crates.io/api/v1/crates/epaint_default_fonts/0.36.2/download :: fonts/UFL.txt"
+          "origin": "https://crates.io/api/v1/crates/epaint_default_fonts/0.37.0/download :: fonts/UFL.txt"
         },
         {
           "text": "b9d2c1d909aa149996fd4c91dcb92b2362a04431640c1d200959da94caf8cde1",
-          "origin": "https://crates.io/api/v1/crates/epaint_default_fonts/0.36.2/download :: fonts/emoji-icon-font-mit-license.txt"
+          "origin": "https://crates.io/api/v1/crates/epaint_default_fonts/0.37.0/download :: fonts/emoji-icon-font-mit-license.txt"
+        },
+        {
+          "text": "36dbbfd79d73974f864116879c17dd11559e1340277385f1ac52d8d29a5f5c79",
+          "origin": "https://crates.io/api/v1/crates/epaint_default_fonts/0.37.0/download :: fonts/egui-icons.txt"
         }
       ]
     },
@@ -15422,55 +15426,72 @@
     },
     {
       "name": "Hack-Regular.ttf",
-      "version": "embedded asset from epaint_default_fonts 0.36.2",
+      "version": "embedded asset from epaint_default_fonts 0.37.0",
       "license": "MIT AND Bitstream-Vera",
       "scope": "embedded in application",
       "notices": [
         {
           "text": "47c0cccbeec7e8614548cc485588b28149e7874188df5f41b36efebcee285c87",
-          "origin": "epaint_default_fonts 0.36.2 :: fonts/Hack-Regular.txt"
+          "origin": "epaint_default_fonts 0.37.0 :: fonts/Hack-Regular.txt"
         }
       ],
       "sha256": "15f55cc0c85a2988d2b4b3a8cdb5d77fdfbaf319e1bb5309d725db9818fb7125"
     },
     {
       "name": "NotoEmoji-Regular.ttf",
-      "version": "embedded asset from epaint_default_fonts 0.36.2",
+      "version": "embedded asset from epaint_default_fonts 0.37.0",
       "license": "OFL-1.1",
       "scope": "embedded in application",
       "notices": [
         {
           "text": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
-          "origin": "epaint_default_fonts 0.36.2 :: fonts/OFL.txt"
+          "origin": "epaint_default_fonts 0.37.0 :: fonts/OFL.txt"
         }
       ],
       "sha256": "415dc6290378574135b64c808dc640c1df7531973290c4970c51fdeb849cb0c5"
     },
     {
       "name": "Ubuntu-Light.ttf",
-      "version": "embedded asset from epaint_default_fonts 0.36.2",
+      "version": "embedded asset from epaint_default_fonts 0.37.0",
       "license": "Ubuntu-font-1.0",
       "scope": "embedded in application",
       "notices": [
         {
           "text": "2f0015108d68627bd788d313f529c21ff4da2c2c42a5e1f3883acc83480f9002",
-          "origin": "epaint_default_fonts 0.36.2 :: fonts/UFL.txt"
+          "origin": "epaint_default_fonts 0.37.0 :: fonts/UFL.txt"
         }
       ],
       "sha256": "80307b8da7649aa4ee4d484b232140e3ce1ec0ca093073d3c53c8f5a5ced7a70"
     },
     {
       "name": "emoji-icon-font.ttf",
-      "version": "embedded asset from epaint_default_fonts 0.36.2",
+      "version": "embedded asset from epaint_default_fonts 0.37.0",
       "license": "MIT",
       "scope": "embedded in application",
       "notices": [
         {
           "text": "b9d2c1d909aa149996fd4c91dcb92b2362a04431640c1d200959da94caf8cde1",
-          "origin": "epaint_default_fonts 0.36.2 :: fonts/emoji-icon-font-mit-license.txt"
+          "origin": "epaint_default_fonts 0.37.0 :: fonts/emoji-icon-font-mit-license.txt"
         }
       ],
       "sha256": "f426bec371f484646d002717e2c555a95cd5145e635d83a48bbef83f3abf18ca"
+    },
+    {
+      "name": "egui-icons.ttf",
+      "version": "embedded asset from epaint_default_fonts 0.37.0",
+      "license": "MIT",
+      "scope": "embedded in application",
+      "notices": [
+        {
+          "text": "36dbbfd79d73974f864116879c17dd11559e1340277385f1ac52d8d29a5f5c79",
+          "origin": "epaint_default_fonts 0.37.0 :: fonts/egui-icons.txt"
+        },
+        {
+          "text": "b9d2c1d909aa149996fd4c91dcb92b2362a04431640c1d200959da94caf8cde1",
+          "origin": "epaint_default_fonts 0.37.0 :: fonts/emoji-icon-font-mit-license.txt"
+        }
+      ],
+      "sha256": "122806555c73df7cef55aa1d945289ae27fbc4dbbd31abbb4204ee0cda829cc8"
     },
     {
       "name": "linuxdeploy",

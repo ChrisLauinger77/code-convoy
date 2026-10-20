@@ -19,7 +19,7 @@ def notice_files(root):
         if not path.is_file() or path.suffix in (".rs", ".toml"):
             continue
         # Retain nested notices conservatively, including font and protocol data.
-        if names.match(path.name) or path.name in ("Hack-Regular.txt", "emoji-icon-font-mit-license.txt"):
+        if names.match(path.name) or path.name in ("Hack-Regular.txt", "egui-icons.txt", "emoji-icon-font-mit-license.txt"):
             yield str(path.relative_to(root)), path.read_text(encoding="utf-8-sig")
         elif path.suffix == ".xml":
             try:

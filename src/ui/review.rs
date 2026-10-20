@@ -129,7 +129,7 @@ impl App {
                                 .on_hover_text("Select for follow-up");
                             checkbox.widget_info(|| {
                                 egui::WidgetInfo::selected(
-                                    egui::WidgetType::Checkbox,
+                                    egui::Role::CheckBox,
                                     checkbox.enabled(),
                                     included,
                                     format!("Select {} for follow-up", job.repository.name),

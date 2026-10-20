@@ -269,7 +269,7 @@ fn a_late_picker_result_never_reaches_another_dialog_or_client() {
     // While a picker is open, the client choice and Save are disabled.
     picking(&mut app);
     let mut keys = Keyboard::new(window);
-    keys.frame(&mut app, vec![]);
+    keys.settle_new_area(&mut app);
     let disabled = |label: &str| {
         keys.nodes
             .values()

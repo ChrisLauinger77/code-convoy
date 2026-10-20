@@ -257,7 +257,7 @@ impl App {
                     );
                     response.widget_info(|| {
                         egui::WidgetInfo::labeled(
-                            egui::WidgetType::Button,
+                            egui::Role::Button,
                             response.enabled(),
                             format!("Remove attachment {}", attachment.filename),
                         )

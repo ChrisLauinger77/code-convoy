@@ -28,7 +28,7 @@ impl App {
             );
             input.widget_info(|| {
                 egui::WidgetInfo::labeled(
-                    egui::WidgetType::TextEdit,
+                    egui::Role::TextInput,
                     input.enabled(),
                     "Worktree base directory",
                 )

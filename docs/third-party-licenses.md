@@ -21,7 +21,7 @@ linking, or that every listed crate is in every package. The
 [lock-file maintenance review](lockfile-maintenance-license-validation.md)
 records the 27 updated versions and refreshed target coverage.
 
-The collection contains **371 distinct notice texts**, deduplicated by
+The collection contains **372 distinct notice texts**, deduplicated by
 their content hashes in [texts.json](../third-party/texts.json). It retains
 upstream copyright statements, notices, font licenses and protocol XML copyright
 blocks. When a crate omits a license file, the evidence refers to its exact
@@ -29,8 +29,8 @@ blocks. When a crate omits a license file, the evidence refers to its exact
 branch. Notice text is decoded as UTF-8 (removing a BOM where present); source
 archives retain their original bytes.
 
-The inventory also identifies **52 assets, runtimes, packaging and supplemental
-Rust library components**,
+The inventory also contains **48 component records** for embedded assets,
+runtimes, packaging and supplemental Rust libraries,
 with unresolved versions expressly marked. Rust's separate standard-library
 report covers **141 out-of-tree entries** plus in-tree exceptions; its complete
 upstream HTML is included, with those component/version/license entries indexed
@@ -53,7 +53,7 @@ or exhaustive inventory. The library lockfile is included in the source ZIP.
 | Component group | Distribution and conditions addressed |
 | --- | --- |
 | Rust crates, mostly MIT/Apache/BSD/ISC/Zlib/BSL/Unlicense | Preserve actual license/copyright/NOTICE texts. Retain OR alternatives; `self_cell` uses Apache rather than its GPL alternative. AND clauses are cumulative. |
-| `epaint_default_fonts` 0.36.2 | Unmodified embedded Hack, Noto Emoji, Ubuntu Light and emoji-icon-font bytes; all four font notices included. Hack includes Bitstream-derived terms; OFL and Ubuntu font naming/reserved-name conditions remain applicable. |
+| `epaint_default_fonts` 0.37.0 | Unmodified Hack, Noto Emoji, Ubuntu Light and emoji-icon-font bytes, plus the new egui icon subset; font notices and the subset attribution are included. Hack includes Bitstream-derived terms; OFL and Ubuntu font naming/reserved-name conditions remain applicable. |
 | Unicode | Unicode-3.0 texts for 18 Unicode-licensed crates, the combined `unicode-ident` expression, and Rust standard-library Unicode exceptions. |
 | `option-ext` 0.2.0 | MPL-2.0 notice and exact unmodified `.crate` source archive; checksum must equal Cargo.lock. |
 | Official AppImage runtime 20251108 | Checksum-pinned upstream MIT launcher at `dd6cebedcbddde9c82f89b011e8e1d40b6e43868`; sources, applicable patches/notices and upstream recipient build/relink instructions are distributed. See the [verification record](appimage-upstream-runtime-validation.md). |
@@ -297,6 +297,25 @@ store APIs are operating-system components. ureq's default TLS features were
 avoided because they select `webpki-roots` (CDLA-Permissive-2.0), outside the
 notice-only policy; `rustls-platform-verifier` would similarly pull
 `webpki-root-certs` for wasm targets, which the all-target check reports.
+
+On 2026-10-19, eframe PR #92 upgrades the font package from 0.36.2 to
+0.37.0. Its registry archive SHA-256 is
+`cfc1cc505827f4c23eedc297975a0fd038268d41293f389dd8ff3b574aefab19`,
+verified against Cargo.lock; its recorded upstream revision is
+`7c0b40402271e8d40cda69f87cf3c2617c2e4382`. The four existing TTF files
+and their four notice files are byte-identical to 0.36.2. The added
+`egui-icons.ttf` is an upstream five-glyph subset of emoji-icon-font under
+its existing MIT terms; its SHA-256 is
+`122806555c73df7cef55aa1d945289ae27fbc4dbbd31abbb4204ee0cda829cc8`.
+The exact `fonts/egui-icons.txt` attribution/regeneration note and original
+MIT notice are retained for that asset. The focused catalog update changes
+only this crate and its font components, and adds one content-addressed text;
+other crate records remain the reviewed release snapshot. The notice collector
+now retains the subset's attribution file. The direct egui declaration enables
+`monochrome_emoji_fonts` to preserve the previous embedded-font coverage with
+eframe defaults disabled; the native clipboard feature is also explicit.
+Release-wide inventory refresh and final-package verification remain required
+under the existing release policy.
 
 ## Earlier candidate verification record
 

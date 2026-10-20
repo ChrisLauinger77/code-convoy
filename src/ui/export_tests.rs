@@ -119,7 +119,7 @@ fn overwrite_confirmation_is_cancel_safe_and_keyboard_accessible() {
         app.handle_shortcuts(ctx);
         app.export_window(ctx);
     });
-    keys.frame(&mut app, vec![]);
+    keys.settle_new_area(&mut app);
     let focus = keys.ctx.memory(|m| m.focused()).unwrap();
     assert_eq!(keys.nodes[&focus.accesskit_id()].label(), Some("Cancel"));
     keys.key(&mut app, egui::Key::Escape);

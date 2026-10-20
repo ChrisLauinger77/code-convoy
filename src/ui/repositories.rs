@@ -60,11 +60,7 @@ impl App {
                 .desired_width(f32::INFINITY),
         );
         path.widget_info(|| {
-            egui::WidgetInfo::labeled(
-                egui::WidgetType::TextEdit,
-                path.enabled(),
-                "Repository path",
-            )
+            egui::WidgetInfo::labeled(egui::Role::TextInput, path.enabled(), "Repository path")
         });
         if path.changed() {
             self.picked_repository_path = None;
@@ -168,7 +164,7 @@ impl App {
                 );
                 search.widget_info(|| {
                     egui::WidgetInfo::labeled(
-                        egui::WidgetType::TextEdit,
+                        egui::Role::TextInput,
                         search.enabled(),
                         "Filter repositories",
                     )
@@ -283,7 +279,7 @@ impl App {
                     let (arrow, _, _) = header.body(body);
                     arrow.widget_info(|| {
                         egui::WidgetInfo::labeled(
-                            egui::WidgetType::CollapsingHeader,
+                            egui::Role::DisclosureTriangle,
                             arrow.enabled(),
                             format!("Toggle {}", section.name),
                         )
@@ -534,11 +530,7 @@ fn group_header_controls(
         )
         .on_hover_text(&title);
     response.widget_info(|| {
-        egui::WidgetInfo::labeled(
-            egui::WidgetType::CollapsingHeader,
-            response.enabled(),
-            &title,
-        )
+        egui::WidgetInfo::labeled(egui::Role::DisclosureTriangle, response.enabled(), &title)
     });
     if response.has_focus() {
         response.scroll_to_me(None);
@@ -552,7 +544,7 @@ fn group_header_controls(
     let toggle = response.clicked() || count_response.clicked();
     count_response.widget_info(|| {
         egui::WidgetInfo::labeled(
-            egui::WidgetType::CollapsingHeader,
+            egui::Role::DisclosureTriangle,
             count_response.enabled(),
             &title,
         )
@@ -568,7 +560,7 @@ fn group_header_controls(
     ).on_hover_text("Select adds all available members, including those hidden by the filter. Deselect removes every current member, including individual and overlapping-group selections.");
     response.widget_info(|| {
         egui::WidgetInfo::selected(
-            egui::WidgetType::Checkbox,
+            egui::Role::CheckBox,
             response.enabled(),
             selected,
             format!("Select group {}", section.name),

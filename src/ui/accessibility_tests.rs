@@ -54,7 +54,7 @@ fn review_starts_on_back_and_held_activation_cannot_launch() {
             }],
         );
         prepare(&mut app, AgentId::Codex);
-        keys.frame(&mut app, vec![]);
+        keys.settle_new_area(&mut app);
         assert_eq!(focused_name(&keys).as_deref(), Some("Back to task"));
         keys.focus(&mut app, "Start convoy");
         keys.frame(
@@ -260,7 +260,7 @@ fn held_or_modified_activation_cannot_discard_a_result() {
         );
         app.discard_confirmation = Some((42, 0, crate::persistence::results::Action::Discard));
         app.focus_discard_cancel = true;
-        keys.frame(&mut app, vec![]);
+        keys.settle_new_area(&mut app);
         assert_eq!(focused_name(&keys).as_deref(), Some("Cancel"));
         keys.focus(&mut app, "Discard result");
         keys.frame(
