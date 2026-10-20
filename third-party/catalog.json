@@ -2,7 +2,7 @@
   "schema": 1,
   "scope": "Conservative Cargo release-target closure, including build/proc-macro inputs; not a claim that every object survives linking. All locked crates are inventoried; entries with no targets are excluded from these release targets. Native unresolved entries are release blockers.",
   "inputs": {
-    "dependencies_sha256": "519a81bb00f1cc8862baa63f70f94fbb5b4f4221f70bd24497eb1ec2497e89f1",
+    "dependencies_sha256": "f053f259a47021f6c42642dcc91b114e8b75d6eb6a6f15e499297349eb228d78",
     "appimage_tools_sha256": "4a389f02b39708dbeaa113a67d22168b506bb35bcea639001b577f0551fe5cec",
     "rust": "1.99.1",
     "packager": "0.11.8"
@@ -68,7 +68,7 @@
     },
     {
       "name": "accesskit",
-      "version": "0.24.1",
+      "version": "0.25.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
       "authors": [
@@ -77,11 +77,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969"
+          "sha1": "ce8164ba92995cfa86005b6259115e08c8244253"
         },
-        "path_in_vcs": "common"
+        "path_in_vcs": "accesskit"
       },
-      "checksum": "d3b7f7f85a7e5f68090000ed7622545829afd484d210358702ae4cb97dd0c320",
+      "checksum": "ad442f58ee04714aaa0ba0a2768c1ea1935b29507bb22ddece8cbbc76db02932",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -97,17 +97,21 @@
       "notices": [
         {
           "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-MIT"
         },
         {
           "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-APACHE"
+        },
+        {
+          "text": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE.chromium"
         }
       ]
     },
     {
       "name": "accesskit_atspi_common",
-      "version": "0.18.1",
+      "version": "0.21.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
       "authors": [
@@ -116,11 +120,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "f40dfc01a0c0e76de535969f82fb35e19513737d"
+          "sha1": "ce8164ba92995cfa86005b6259115e08c8244253"
         },
-        "path_in_vcs": "platforms/atspi-common"
+        "path_in_vcs": "adapters/atspi-common"
       },
-      "checksum": "1e8c61bee90b42a772d39d06a740207dc71a4e780004ace1db8d99fb1baaa954",
+      "checksum": "52c182f9c282ac9c5638d876d551d15e5f7d397ec263349a0c6a2b61595dd5e4",
       "targets": [
         "x86_64-unknown-linux-gnu"
       ],
@@ -130,17 +134,21 @@
       "notices": [
         {
           "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/f40dfc01a0c0e76de535969f82fb35e19513737d/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-MIT"
         },
         {
           "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/f40dfc01a0c0e76de535969f82fb35e19513737d/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-APACHE"
+        },
+        {
+          "text": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE.chromium"
         }
       ]
     },
     {
       "name": "accesskit_consumer",
-      "version": "0.35.0",
+      "version": "0.39.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
       "authors": [
@@ -149,99 +157,61 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1bbcf100942bac96c2c3a4a91cb67b0b20201a24"
+          "sha1": "ce8164ba92995cfa86005b6259115e08c8244253"
         },
-        "path_in_vcs": "consumer"
+        "path_in_vcs": "accesskit_consumer"
       },
-      "checksum": "53cf47daed85312e763fbf85ceca136e0d7abc68e0a7e12abe11f48172bc3b10",
-      "targets": [
-        "x86_64-pc-windows-msvc"
-      ],
-      "application_targets": [
-        "x86_64-pc-windows-msvc"
-      ],
-      "notices": [
-        {
-          "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/1bbcf100942bac96c2c3a4a91cb67b0b20201a24/LICENSE-MIT"
-        },
-        {
-          "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/1bbcf100942bac96c2c3a4a91cb67b0b20201a24/LICENSE-APACHE"
-        }
-      ]
-    },
-    {
-      "name": "accesskit_consumer",
-      "version": "0.36.0",
-      "license": "MIT OR Apache-2.0",
-      "repository": "https://github.com/AccessKit/accesskit",
-      "authors": [
-        "The AccessKit contributors"
-      ],
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "vcs": {
-        "git": {
-          "sha1": "f40dfc01a0c0e76de535969f82fb35e19513737d"
-        },
-        "path_in_vcs": "consumer"
-      },
-      "checksum": "25e0d7e25d06f4dc21d1774d67146e9e80d6789216cbd4d1e88185b0095dba60",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ],
-      "application_targets": [
-        "x86_64-unknown-linux-gnu"
-      ],
-      "notices": [
-        {
-          "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/f40dfc01a0c0e76de535969f82fb35e19513737d/LICENSE-MIT"
-        },
-        {
-          "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/f40dfc01a0c0e76de535969f82fb35e19513737d/LICENSE-APACHE"
-        }
-      ]
-    },
-    {
-      "name": "accesskit_consumer",
-      "version": "0.38.0",
-      "license": "MIT OR Apache-2.0",
-      "repository": "https://github.com/AccessKit/accesskit",
-      "authors": [
-        "The AccessKit contributors"
-      ],
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "vcs": {
-        "git": {
-          "sha1": "c88605b96d04431f9c3c792464a0f2f253480e94"
-        },
-        "path_in_vcs": "consumer"
-      },
-      "checksum": "5d10a236f96f87d70732e44520046785431ef01d5bcd6b041317bfadd2f88245",
+      "checksum": "8a45e2bb300bea6d5f33a82c3e051c3ddc6f41c209750f68a0acbe991a284344",
       "targets": [
         "aarch64-apple-darwin",
-        "x86_64-apple-darwin"
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "application_targets": [
         "aarch64-apple-darwin",
-        "x86_64-apple-darwin"
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "notices": [
         {
           "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/c88605b96d04431f9c3c792464a0f2f253480e94/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-MIT"
         },
         {
           "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/c88605b96d04431f9c3c792464a0f2f253480e94/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-APACHE"
+        },
+        {
+          "text": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE.chromium"
         }
       ]
+    },
+    {
+      "name": "accesskit_ios",
+      "version": "0.2.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/AccessKit/accesskit",
+      "authors": [
+        "The AccessKit contributors"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "ce8164ba92995cfa86005b6259115e08c8244253"
+        },
+        "path_in_vcs": "adapters/ios"
+      },
+      "checksum": "28e539d64b27fd4c14de8f78ada8f7c944c092f52f7e49fb63316507a57f6937",
+      "targets": [],
+      "application_targets": [],
+      "notices": []
     },
     {
       "name": "accesskit_macos",
-      "version": "0.26.3",
+      "version": "0.27.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
       "authors": [
@@ -250,11 +220,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "c88605b96d04431f9c3c792464a0f2f253480e94"
+          "sha1": "ce8164ba92995cfa86005b6259115e08c8244253"
         },
-        "path_in_vcs": "platforms/macos"
+        "path_in_vcs": "adapters/macos"
       },
-      "checksum": "ce02dc63b43f0c9296af9ac946312a2dc8814427d7a64d2d600971dac55b6076",
+      "checksum": "5701624bf6a11efb6d4c8e922bf44126ed96250e5faa9a7a0468c979635839a4",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin"
@@ -266,17 +236,21 @@
       "notices": [
         {
           "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/c88605b96d04431f9c3c792464a0f2f253480e94/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-MIT"
         },
         {
           "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/c88605b96d04431f9c3c792464a0f2f253480e94/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-APACHE"
+        },
+        {
+          "text": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE.chromium"
         }
       ]
     },
     {
       "name": "accesskit_unix",
-      "version": "0.21.1",
+      "version": "0.24.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
       "authors": [
@@ -285,11 +259,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "f40dfc01a0c0e76de535969f82fb35e19513737d"
+          "sha1": "ce8164ba92995cfa86005b6259115e08c8244253"
         },
-        "path_in_vcs": "platforms/unix"
+        "path_in_vcs": "adapters/unix"
       },
-      "checksum": "b016ca8db0ea0ea2ceff29a9d6240391492d960716aa471967c00e8cc8cb197c",
+      "checksum": "202f24df034a7476d07b7f74284de84f6d62aabd858dbe7ee9cad3b7ad6f8f9d",
       "targets": [
         "x86_64-unknown-linux-gnu"
       ],
@@ -299,17 +273,17 @@
       "notices": [
         {
           "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/f40dfc01a0c0e76de535969f82fb35e19513737d/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-MIT"
         },
         {
           "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/f40dfc01a0c0e76de535969f82fb35e19513737d/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-APACHE"
         }
       ]
     },
     {
       "name": "accesskit_windows",
-      "version": "0.32.1",
+      "version": "0.35.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
       "authors": [
@@ -318,11 +292,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1bbcf100942bac96c2c3a4a91cb67b0b20201a24"
+          "sha1": "ce8164ba92995cfa86005b6259115e08c8244253"
         },
-        "path_in_vcs": "platforms/windows"
+        "path_in_vcs": "adapters/windows"
       },
-      "checksum": "eff7009f1a532e917d66970a1e80c965140c6cfbbabbdde3d64e5431e6c78e21",
+      "checksum": "ce63f35d6bdcf59f26b76b3379063f738e6412cef46999cc772d46aa3de35adb",
       "targets": [
         "x86_64-pc-windows-msvc"
       ],
@@ -332,17 +306,21 @@
       "notices": [
         {
           "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/1bbcf100942bac96c2c3a4a91cb67b0b20201a24/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-MIT"
         },
         {
           "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/1bbcf100942bac96c2c3a4a91cb67b0b20201a24/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-APACHE"
+        },
+        {
+          "text": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE.chromium"
         }
       ]
     },
     {
       "name": "accesskit_winit",
-      "version": "0.32.2",
+      "version": "0.34.1",
       "license": "Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
       "authors": [
@@ -351,11 +329,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1bbcf100942bac96c2c3a4a91cb67b0b20201a24"
+          "sha1": "ce8164ba92995cfa86005b6259115e08c8244253"
         },
-        "path_in_vcs": "platforms/winit"
+        "path_in_vcs": "adapters/winit"
       },
-      "checksum": "1fe9a94394896352cc4660ca2288bd4ef883d83238853c038b44070c8f134313",
+      "checksum": "ee96dd150375c05912d8a473f98c2fb155fb3234fac88292d396548a2460fa77",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -371,11 +349,11 @@
       "notices": [
         {
           "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/1bbcf100942bac96c2c3a4a91cb67b0b20201a24/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-MIT"
         },
         {
           "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/1bbcf100942bac96c2c3a4a91cb67b0b20201a24/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/AccessKit/accesskit/ce8164ba92995cfa86005b6259115e08c8244253/LICENSE-APACHE"
         }
       ]
     },
@@ -1841,6 +1819,9 @@
       },
       "checksum": "6651c9ed80effdc7db0ff72512157f901af5e3549e341e24b1dd4887d836d838",
       "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
         "x86_64-unknown-linux-gnu"
       ],
       "application_targets": [],
@@ -2160,6 +2141,41 @@
         {
           "text": "73b9dc2e79c7308998dd30296e073aefaefb944a68fb89aa412c23c0edcabcaa",
           "origin": "https://crates.io/api/v1/crates/const-oid/0.10.2/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "core-foundation",
+      "version": "0.10.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/servo/core-foundation-rs",
+      "authors": [
+        "The Servo Project Developers"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "548b65cd3046bb46fc5cebb9f39e7bfd56eaeaa2"
+        },
+        "path_in_vcs": "core-foundation"
+      },
+      "checksum": "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/core-foundation/0.10.1/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3",
+          "origin": "https://crates.io/api/v1/crates/core-foundation/0.10.1/download :: LICENSE-MIT"
         }
       ]
     },
@@ -2942,7 +2958,7 @@
     },
     {
       "name": "ecolor",
-      "version": "0.36.2",
+      "version": "0.37.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui",
       "authors": [
@@ -2952,11 +2968,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "49682f8baa058bf49e011035cfbd6e825f88a5ef"
+          "sha1": "7c0b40402271e8d40cda69f87cf3c2617c2e4382"
         },
         "path_in_vcs": "crates/ecolor"
       },
-      "checksum": "0656a7530b9e2841ee7a5f983965bdd9840c32f4012f759cfd44b912cced6b34",
+      "checksum": "31bcbef0d4263a63eb32c4834e5d711613035ce1333468e107d928923e21e6e2",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -2972,17 +2988,17 @@
       "notices": [
         {
           "text": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-MIT"
         },
         {
           "text": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-APACHE"
         }
       ]
     },
     {
       "name": "eframe",
-      "version": "0.36.2",
+      "version": "0.37.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/main/crates/eframe",
       "authors": [
@@ -2991,11 +3007,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "49682f8baa058bf49e011035cfbd6e825f88a5ef"
+          "sha1": "3c6eb8261c3293ad9c7ea1ed58487e038860ebef"
         },
         "path_in_vcs": "crates/eframe"
       },
-      "checksum": "55ad41fac6e3149abb4866e93df37dbd33baa95db525c3368c944584e95a5dc2",
+      "checksum": "9c5642501a65ca657d05f00c643a5c14ff2346cb3818032bfe23d58e1f8e5f84",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -3011,17 +3027,17 @@
       "notices": [
         {
           "text": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/3c6eb8261c3293ad9c7ea1ed58487e038860ebef/LICENSE-MIT"
         },
         {
           "text": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/3c6eb8261c3293ad9c7ea1ed58487e038860ebef/LICENSE-APACHE"
         }
       ]
     },
     {
       "name": "egui",
-      "version": "0.36.2",
+      "version": "0.37.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui",
       "authors": [
@@ -3030,11 +3046,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "49682f8baa058bf49e011035cfbd6e825f88a5ef"
+          "sha1": "7c0b40402271e8d40cda69f87cf3c2617c2e4382"
         },
         "path_in_vcs": "crates/egui"
       },
-      "checksum": "dc938cc27cd911415e1e4d151bc56ff9df063d8db081374e87aeb805ea74b2ba",
+      "checksum": "bec9144f49b7a28b5f395d3147e325b4fe3e77ba686eac11d1bdf0a7da3f375f",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -3050,17 +3066,17 @@
       "notices": [
         {
           "text": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-MIT"
         },
         {
           "text": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-APACHE"
         }
       ]
     },
     {
       "name": "egui-wgpu",
-      "version": "0.36.2",
+      "version": "0.37.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/main/crates/egui-wgpu",
       "authors": [
@@ -3071,11 +3087,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "49682f8baa058bf49e011035cfbd6e825f88a5ef"
+          "sha1": "7c0b40402271e8d40cda69f87cf3c2617c2e4382"
         },
         "path_in_vcs": "crates/egui-wgpu"
       },
-      "checksum": "5cef1f6d1bba40b09a4d0d62cb822b81030922cfbf65c5373398c3a3caafc5bd",
+      "checksum": "0309cbe1febed48af5b974e4bcc424b35e9664863a4d402697147b57a488c864",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -3091,17 +3107,17 @@
       "notices": [
         {
           "text": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-MIT"
         },
         {
           "text": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-APACHE"
         }
       ]
     },
     {
       "name": "egui-winit",
-      "version": "0.36.2",
+      "version": "0.37.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/main/crates/egui-winit",
       "authors": [
@@ -3110,11 +3126,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "49682f8baa058bf49e011035cfbd6e825f88a5ef"
+          "sha1": "7c0b40402271e8d40cda69f87cf3c2617c2e4382"
         },
         "path_in_vcs": "crates/egui-winit"
       },
-      "checksum": "98466000559d66ba4db786a30448b01483946add4188e7f10f522a27b4fb89cc",
+      "checksum": "e4e449f4c4a2a60c7ccb4ba7fa4078417bfe1f9ddc03b5e05ce75748e33a70de",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -3130,17 +3146,17 @@
       "notices": [
         {
           "text": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-MIT"
         },
         {
           "text": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-APACHE"
         }
       ]
     },
     {
       "name": "egui_glow",
-      "version": "0.36.2",
+      "version": "0.37.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/main/crates/egui_glow",
       "authors": [
@@ -3149,11 +3165,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "49682f8baa058bf49e011035cfbd6e825f88a5ef"
+          "sha1": "7c0b40402271e8d40cda69f87cf3c2617c2e4382"
         },
         "path_in_vcs": "crates/egui_glow"
       },
-      "checksum": "606ed4167daf341e5753d703285c4c1d562324b2c07aa8f405cd7d066fe58f3b",
+      "checksum": "9275ca5cc35a6b7c94e0e8cedf22542f66cb0cf45ed8ab2657c78ff49fec7268",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -3169,11 +3185,11 @@
       "notices": [
         {
           "text": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-MIT"
         },
         {
           "text": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-APACHE"
         }
       ]
     },
@@ -3216,7 +3232,7 @@
     },
     {
       "name": "emath",
-      "version": "0.36.2",
+      "version": "0.37.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/main/crates/emath",
       "authors": [
@@ -3225,11 +3241,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "49682f8baa058bf49e011035cfbd6e825f88a5ef"
+          "sha1": "7c0b40402271e8d40cda69f87cf3c2617c2e4382"
         },
         "path_in_vcs": "crates/emath"
       },
-      "checksum": "52c8d4141cf0f60fb2f7aefaf352d3ffa5171ef0ab09731c64391801e95e48f1",
+      "checksum": "e73ce90f54750be8672c02be0743fe47530e6f251e066f0ee2869b59eb297af5",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -3245,11 +3261,11 @@
       "notices": [
         {
           "text": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-MIT"
         },
         {
           "text": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-APACHE"
         }
       ]
     },
@@ -3350,7 +3366,7 @@
     },
     {
       "name": "epaint",
-      "version": "0.36.2",
+      "version": "0.37.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/main/crates/epaint",
       "authors": [
@@ -3359,11 +3375,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "49682f8baa058bf49e011035cfbd6e825f88a5ef"
+          "sha1": "7c0b40402271e8d40cda69f87cf3c2617c2e4382"
         },
         "path_in_vcs": "crates/epaint"
       },
-      "checksum": "a0ec0308dc23130fc1a7d4623a8534c2ed069c6dc84e258ee4f3de99615aa1a3",
+      "checksum": "97bac86ae3dde93fc3951e790951caea739ff39a6c89d909cdaf1d9278dbb1bd",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -3379,11 +3395,11 @@
       "notices": [
         {
           "text": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-MIT"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-MIT"
         },
         {
           "text": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
-          "origin": "https://raw.githubusercontent.com/emilk/egui/49682f8baa058bf49e011035cfbd6e825f88a5ef/LICENSE-APACHE"
+          "origin": "https://raw.githubusercontent.com/emilk/egui/841a328ba2dd8f6996beb7189ebb7fc00e668a2a/LICENSE-APACHE"
         }
       ]
     },
@@ -3819,6 +3835,9 @@
       },
       "checksum": "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484",
       "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
         "x86_64-unknown-linux-gnu"
       ],
       "application_targets": [],
@@ -3830,6 +3849,39 @@
         {
           "text": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
           "origin": "https://crates.io/api/v1/crates/find-msvc-tools/0.1.14/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "fixedbitset",
+      "version": "0.5.7",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/petgraph/fixedbitset",
+      "authors": [
+        "bluss"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "f1db5d17dabc4b8f3ba68c1228a3ee7601c7f33c"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/fixedbitset/0.5.7/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "ce592787ff2321feab698a4c612237f4378cc658ebb1d472913e5802cc47afb4",
+          "origin": "https://crates.io/api/v1/crates/fixedbitset/0.5.7/download :: LICENSE-MIT"
         }
       ]
     },
@@ -3870,6 +3922,35 @@
         {
           "text": "025436edff4cfcdde17a5811fdea78892d8482efd1abdec5a17872d07a4f2112",
           "origin": "https://crates.io/api/v1/crates/flate2/1.1.10/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "foldhash",
+      "version": "0.1.5",
+      "license": "Zlib",
+      "repository": "https://github.com/orlp/foldhash",
+      "authors": [
+        "Orson Peters <orsonpeters@gmail.com>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "42461756c3760f9165c90d9626a49e36980a1e47"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "b1181a40b2a7b25cf66fd01481713bc1005df082c53ef73e851e55071b102744",
+          "origin": "https://crates.io/api/v1/crates/foldhash/0.1.5/download :: LICENSE"
         }
       ]
     },
@@ -4556,6 +4637,45 @@
     },
     {
       "name": "getrandom",
+      "version": "0.2.17",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/rust-random/getrandom",
+      "authors": [
+        "The Rand Project Developers"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "b625985d852600a3eeb68556811e59e7c9a6a098"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "aaff376532ea30a0cd5330b9502ad4a4c8bf769c539c87ffe78819d188a18ebf",
+          "origin": "https://crates.io/api/v1/crates/getrandom/0.2.17/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "42fa16951ce7f24b5a467a40e5b449a1d41e662f97ca779864f053f39e097737",
+          "origin": "https://crates.io/api/v1/crates/getrandom/0.2.17/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "getrandom",
       "version": "0.3.4",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/rust-random/getrandom",
@@ -4663,18 +4783,18 @@
     },
     {
       "name": "glifo",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "license": "Apache-2.0 OR MIT",
       "repository": "https://github.com/linebender/vello",
       "authors": [],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1b63b04c03873d81109b25316a7a523bec17b5e6"
+          "sha1": "7073a85d61ee099d1d3595651ddf92302b074348"
         },
         "path_in_vcs": "glifo"
       },
-      "checksum": "ed4a1bb24121291d27230c1b1b44e07d6a9b28cefdb32fe1581dfb84e14f940a",
+      "checksum": "282a26c1e23de04bdab3e34a21b6f877a479b96737792516b9b8b8f69b6661be",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -4690,11 +4810,11 @@
       "notices": [
         {
           "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "origin": "https://crates.io/api/v1/crates/glifo/0.2.0/download :: LICENSE-APACHE"
+          "origin": "https://crates.io/api/v1/crates/glifo/0.3.0/download :: LICENSE-APACHE"
         },
         {
           "text": "3252fc481fda4d2bad9e1ae675065889abd35c8abb500499ac01e70aaffa02b9",
-          "origin": "https://crates.io/api/v1/crates/glifo/0.2.0/download :: LICENSE-MIT"
+          "origin": "https://crates.io/api/v1/crates/glifo/0.3.0/download :: LICENSE-MIT"
         }
       ]
     },
@@ -5053,6 +5173,39 @@
     },
     {
       "name": "hashbrown",
+      "version": "0.15.5",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/rust-lang/hashbrown",
+      "authors": [
+        "Amanieu d'Antras <amanieu@gmail.com>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "b751eef8e99ccf3652046ef4a9e1ec47c1bfb78d"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/hashbrown/0.15.5/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2",
+          "origin": "https://crates.io/api/v1/crates/hashbrown/0.15.5/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "hashbrown",
       "version": "0.16.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/rust-lang/hashbrown",
@@ -5174,6 +5327,87 @@
         {
           "text": "f7bdb3426d045cd50efd4953026e3eb5a83d0199f458a075602611b9344da5b9",
           "origin": "https://crates.io/api/v1/crates/hex/0.4.3/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "http",
+      "version": "1.5.0",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/hyperium/http",
+      "authors": [
+        "Alex Crichton <alex@alexcrichton.com>",
+        "Carl Lerche <me@carllerche.com>",
+        "Sean McArthur <sean@seanmonstar.com>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "e559023f67e3fad6ecc3ee91307be178e0f13626",
+          "dirty": true
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "8bb1b50b0e5c9399ae33bd35fab2769010fa6c14e8860c729a52295d84896b7a",
+          "origin": "https://crates.io/api/v1/crates/http/1.5.0/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "dc91f8200e4b2a1f9261035d4c18c33c246911a6c0f7b543d75347e61b249cff",
+          "origin": "https://crates.io/api/v1/crates/http/1.5.0/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "httparse",
+      "version": "1.10.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/seanmonstar/httparse",
+      "authors": [
+        "Sean McArthur <sean@seanmonstar.com>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "9f29e79f9832dbd0ae5220acb17c1866745bdecd"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/httparse/1.10.1/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "391a5396cec6230bfabd4ef4eb2350eb895bc5efce377a2218f5702ed020d3e3",
+          "origin": "https://crates.io/api/v1/crates/httparse/1.10.1/download :: LICENSE-MIT"
         }
       ]
     },
@@ -5810,6 +6044,9 @@
       },
       "checksum": "1c00acbd29eabad4a2392fa0e921c874934dbbf4194312ad20f04a0ed67a3cb3",
       "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
         "x86_64-unknown-linux-gnu"
       ],
       "application_targets": [],
@@ -6979,6 +7216,35 @@
       ]
     },
     {
+      "name": "nom",
+      "version": "8.0.0",
+      "license": "MIT",
+      "repository": "https://github.com/rust-bakery/nom",
+      "authors": [
+        "contact@geoffroycouprie.com"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "4dbda04344456f09a7a588140455413a9ac59b6b26a1ef7cdf9c800c012d87f0",
+          "origin": "https://crates.io/api/v1/crates/nom/8.0.0/download :: LICENSE"
+        }
+      ]
+    },
+    {
       "name": "notify-rust",
       "version": "4.18.2",
       "license": "MIT OR Apache-2.0",
@@ -7818,6 +8084,39 @@
       ]
     },
     {
+      "name": "openssl-probe",
+      "version": "0.2.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/rustls/openssl-probe",
+      "authors": [
+        "Alex Crichton <alex@alexcrichton.com>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "9181752ff5eab32339111dbdcc6cdc9f5a5eb06e"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/openssl-probe/0.2.1/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "origin": "https://crates.io/api/v1/crates/openssl-probe/0.2.1/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
       "name": "option-ext",
       "version": "0.2.0",
       "license": "MPL-2.0",
@@ -7939,6 +8238,35 @@
         {
           "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
           "origin": "https://crates.io/api/v1/crates/ordered-stream/0.2.0/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "os_pipe",
+      "version": "1.2.3",
+      "license": "MIT",
+      "repository": "https://github.com/oconnor663/os_pipe.rs",
+      "authors": [
+        "Jack O'Connor"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "228ee175117faf1bf0cce99942ce579244215da4"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "8f71659370c5268d9a1dc962a46232540e8fca63462586d8efaa95aab492a208",
+          "origin": "https://crates.io/api/v1/crates/os_pipe/1.2.3/download :: LICENSE"
         }
       ]
     },
@@ -8201,8 +8529,46 @@
       ]
     },
     {
+      "name": "petgraph",
+      "version": "0.8.3",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/petgraph/petgraph",
+      "authors": [
+        "bluss",
+        "mitchmindtree"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "162903562ce5b00cdba390a0d9c1bb80f1c75bf5"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/petgraph/0.8.3/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545",
+          "origin": "https://crates.io/api/v1/crates/petgraph/0.8.3/download :: LICENSE-MIT"
+        },
+        {
+          "text": "37ecdbc1c72e7651b5d06b51be11a3873ed7aed6d0a050dfd3c34fa99c56e3ef",
+          "origin": "https://crates.io/api/v1/crates/petgraph/0.8.3/download :: assets/images/LICENSE.md"
+        }
+      ]
+    },
+    {
       "name": "phf",
-      "version": "0.13.1",
+      "version": "0.14.0",
       "license": "MIT",
       "repository": "https://github.com/rust-phf/rust-phf",
       "authors": [
@@ -8211,11 +8577,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1e518a6e94a2444b8df7d89078cfc69859537971"
+          "sha1": "1620d169aad09b02ef02a97b272470152e100bd6"
         },
         "path_in_vcs": "phf"
       },
-      "checksum": "c1562dc717473dbaa4c1f85a36410e03c047b2e7df7f45ee938fbef64ae7fadf",
+      "checksum": "010378780309880b08997fae13be7834dba947d36393bd372f2b1556deb2a2f6",
       "targets": [
         "x86_64-unknown-linux-gnu"
       ],
@@ -8225,13 +8591,13 @@
       "notices": [
         {
           "text": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38",
-          "origin": "https://crates.io/api/v1/crates/phf/0.13.1/download :: LICENSE"
+          "origin": "https://crates.io/api/v1/crates/phf/0.14.0/download :: LICENSE"
         }
       ]
     },
     {
       "name": "phf_generator",
-      "version": "0.13.1",
+      "version": "0.14.0",
       "license": "MIT",
       "repository": "https://github.com/rust-phf/rust-phf",
       "authors": [
@@ -8240,11 +8606,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1e518a6e94a2444b8df7d89078cfc69859537971"
+          "sha1": "1620d169aad09b02ef02a97b272470152e100bd6"
         },
         "path_in_vcs": "phf_generator"
       },
-      "checksum": "135ace3a761e564ec88c03a77317a7c6b80bb7f7135ef2544dbe054243b89737",
+      "checksum": "aeb62e0959d5a1bebc965f4d15d9e2b7cea002b6b0f5ba8cde6cc26738467100",
       "targets": [
         "x86_64-unknown-linux-gnu"
       ],
@@ -8252,13 +8618,13 @@
       "notices": [
         {
           "text": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38",
-          "origin": "https://crates.io/api/v1/crates/phf_generator/0.13.1/download :: LICENSE"
+          "origin": "https://crates.io/api/v1/crates/phf_generator/0.14.0/download :: LICENSE"
         }
       ]
     },
     {
       "name": "phf_macros",
-      "version": "0.13.1",
+      "version": "0.14.0",
       "license": "MIT",
       "repository": "https://github.com/rust-phf/rust-phf",
       "authors": [
@@ -8267,11 +8633,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1e518a6e94a2444b8df7d89078cfc69859537971"
+          "sha1": "1620d169aad09b02ef02a97b272470152e100bd6"
         },
         "path_in_vcs": "phf_macros"
       },
-      "checksum": "812f032b54b1e759ccd5f8b6677695d5268c588701effba24601f6932f8269ef",
+      "checksum": "5fa8d0ca26d424d27630da600c6624696e7dec8bf7b3b492b383c5dc49e5e085",
       "targets": [
         "x86_64-unknown-linux-gnu"
       ],
@@ -8279,13 +8645,13 @@
       "notices": [
         {
           "text": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38",
-          "origin": "https://crates.io/api/v1/crates/phf_macros/0.13.1/download :: LICENSE"
+          "origin": "https://crates.io/api/v1/crates/phf_macros/0.14.0/download :: LICENSE"
         }
       ]
     },
     {
       "name": "phf_shared",
-      "version": "0.13.1",
+      "version": "0.14.0",
       "license": "MIT",
       "repository": "https://github.com/rust-phf/rust-phf",
       "authors": [
@@ -8294,11 +8660,11 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1e518a6e94a2444b8df7d89078cfc69859537971"
+          "sha1": "1620d169aad09b02ef02a97b272470152e100bd6"
         },
         "path_in_vcs": "phf_shared"
       },
-      "checksum": "e57fef6bc5981e38c2ce2d63bfa546861309f875b8a75f092d1d54ae2d64f266",
+      "checksum": "c6fd9027e2d9319be6349febd1db4e8d02aa544921200c9b777720ac34a3aa89",
       "targets": [
         "x86_64-unknown-linux-gnu"
       ],
@@ -8308,7 +8674,7 @@
       "notices": [
         {
           "text": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38",
-          "origin": "https://crates.io/api/v1/crates/phf_shared/0.13.1/download :: LICENSE"
+          "origin": "https://crates.io/api/v1/crates/phf_shared/0.14.0/download :: LICENSE"
         }
       ]
     },
@@ -9381,6 +9747,88 @@
       ]
     },
     {
+      "name": "ring",
+      "version": "0.17.14",
+      "license": "Apache-2.0 AND ISC",
+      "repository": "https://github.com/briansmith/ring",
+      "authors": [],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "2723abbca9e83347d82b056d5b239c6604f786df",
+          "dirty": true
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "b3d734001a94efff3579978d953391aa7115f877657d25eb54037a43875d078a",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: LICENSE"
+        },
+        {
+          "text": "005fc765ddc5115da796cca915baa9557abae13ff35e0a47c47affc56f6c414d",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: LICENSE-BoringSSL"
+        },
+        {
+          "text": "f025ccfb7dfb6bdfedc75ca0f67acc69e6fb4998143d834f7c2f38a29989680f",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: LICENSE-other-bits"
+        },
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: src/polyfill/once_cell/LICENSE-APACHE"
+        },
+        {
+          "text": "6ee2ed6c77710de911761acd5fc1ad1da00f476beb1a7ef27e78c2d1858deafc",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: src/polyfill/once_cell/LICENSE-MIT"
+        },
+        {
+          "text": "9eacbcb81be660840c714a560a9d65ba07913db98dd4baf969f78dd499fdd60f",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: third_party/fiat/LICENSE"
+        },
+        {
+          "text": "a17cb5362d8fb958f29dfa2d7e9764b75672523acca6421b57678400305d58d0",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: crypto/fipsmodule/ec/ecp_nistz384.inl#header"
+        },
+        {
+          "text": "a17cb5362d8fb958f29dfa2d7e9764b75672523acca6421b57678400305d58d0",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: crypto/fipsmodule/ec/ecp_nistz.c#header"
+        },
+        {
+          "text": "5dd6bae8b7ee15b1234a4ec7c01d9413e050cb1102e52e4ccae8de26ef63e2aa",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: crypto/fipsmodule/ec/ecp_nistz.h#header"
+        },
+        {
+          "text": "a17cb5362d8fb958f29dfa2d7e9764b75672523acca6421b57678400305d58d0",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: crypto/fipsmodule/ec/ecp_nistz384.h#header"
+        },
+        {
+          "text": "f7e8b07af5dbeb50435a8283b617a329028a042217132bde21658d8896bac6fd",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: crypto/fipsmodule/aes/aes_nohw.c#header"
+        },
+        {
+          "text": "b80997a7d3a33238042d837d63ea58e4dd868893d1e05598f6b7222ac23aaf0d",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: crypto/poly1305/poly1305_arm.c#header"
+        },
+        {
+          "text": "b80997a7d3a33238042d837d63ea58e4dd868893d1e05598f6b7222ac23aaf0d",
+          "origin": "https://crates.io/api/v1/crates/ring/0.17.14/download :: crypto/poly1305/poly1305.c#header"
+        }
+      ]
+    },
+    {
       "name": "rustc-hash",
       "version": "1.1.0",
       "license": "Apache-2.0/MIT",
@@ -9564,6 +10012,162 @@
       ]
     },
     {
+      "name": "rustls",
+      "version": "0.23.46",
+      "license": "Apache-2.0 OR ISC OR MIT",
+      "repository": "https://github.com/rustls/rustls",
+      "authors": [],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "f04804fa13341a9b1dc02b5d1dd8a746f2c4b7fb"
+        },
+        "path_in_vcs": "rustls"
+      },
+      "checksum": "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/rustls/0.23.46/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4",
+          "origin": "https://crates.io/api/v1/crates/rustls/0.23.46/download :: LICENSE-ISC"
+        },
+        {
+          "text": "709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c",
+          "origin": "https://crates.io/api/v1/crates/rustls/0.23.46/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "rustls-native-certs",
+      "version": "0.8.5",
+      "license": "Apache-2.0 OR ISC OR MIT",
+      "repository": "https://github.com/rustls/rustls-native-certs",
+      "authors": [],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "4bcc4bb91d0b0bdffa49a9b3c85bb0fc03d49899"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "4a073f5dc7469f984c52ad2752b63b0807745133b6de880b7b64c1ac4c48aec4",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "d75967ce788187f83c3bd3328210974acfc443d4dc44909f1d7e34f21623a0c6",
+          "origin": "https://crates.io/api/v1/crates/rustls-native-certs/0.8.5/download :: LICENSE"
+        },
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/rustls-native-certs/0.8.5/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4",
+          "origin": "https://crates.io/api/v1/crates/rustls-native-certs/0.8.5/download :: LICENSE-ISC"
+        },
+        {
+          "text": "709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c",
+          "origin": "https://crates.io/api/v1/crates/rustls-native-certs/0.8.5/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "rustls-pki-types",
+      "version": "1.15.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/rustls/pki-types",
+      "authors": [],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "e29ad15465126acc089b39611bcec85e27ce0817"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "2f4925028c7eb5d1fcdaf196971378ed9d2c1c4efc7dc5d011256f76c99c0a96",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "45fd05c4865e7c350b98ad7ac50e1b15462d49af4a91e9b0c9dd933dc9a69742",
+          "origin": "https://crates.io/api/v1/crates/rustls-pki-types/1.15.1/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "9117d922e667125508dde62b02c1f57ed22f5ad21eb536aa2e2d99e1c796e639",
+          "origin": "https://crates.io/api/v1/crates/rustls-pki-types/1.15.1/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "rustls-webpki",
+      "version": "0.103.15",
+      "license": "ISC",
+      "repository": "https://github.com/rustls/webpki",
+      "authors": [],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "c14836d8de33c0ad0ac7dcb28fe9aade20831a4d"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "5b698ca13897be3afdb7174256fa1574f8c6892b8bea1a66dd6469d3fe27885a",
+          "origin": "https://crates.io/api/v1/crates/rustls-webpki/0.103.15/download :: LICENSE"
+        }
+      ]
+    },
+    {
       "name": "rustversion",
       "version": "1.0.23",
       "license": "MIT OR Apache-2.0",
@@ -9601,6 +10205,36 @@
       "targets": [],
       "application_targets": [],
       "notices": []
+    },
+    {
+      "name": "schannel",
+      "version": "0.1.30",
+      "license": "MIT",
+      "repository": "https://github.com/steffengy/schannel-rs",
+      "authors": [
+        "Steven Fackler <sfackler@gmail.com>",
+        "Steffen Butzer <steffen.butzer@outlook.com>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "91c925d987e6b1180bfb21fb29959ab3677adc8a"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "9cb23c424d8ee841bb4d813677ca237e2a610067d594fec130f87d6093495ab5",
+      "targets": [
+        "x86_64-pc-windows-msvc"
+      ],
+      "application_targets": [
+        "x86_64-pc-windows-msvc"
+      ],
+      "notices": [
+        {
+          "text": "aa72991ac35b4de0034da0afe943e62b48c4092fc2ba13ae47806d8e9a4ad551",
+          "origin": "https://crates.io/api/v1/crates/schannel/0.1.30/download :: LICENSE.md"
+        }
+      ]
     },
     {
       "name": "scoped-tls",
@@ -9704,6 +10338,78 @@
       ]
     },
     {
+      "name": "security-framework",
+      "version": "3.7.0",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/kornelski/rust-security-framework",
+      "authors": [
+        "Steven Fackler <sfackler@gmail.com>",
+        "Kornel <kornel@geekhood.net>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "5f6e65114b77d5bc161d2b099cad09f2a67609d2"
+        },
+        "path_in_vcs": "security-framework"
+      },
+      "checksum": "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/security-framework/3.7.0/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "91e934255ba3b2f21103d68c5581c23ef34aa95c4628e4405b8c901935e11c69",
+          "origin": "https://crates.io/api/v1/crates/security-framework/3.7.0/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "security-framework-sys",
+      "version": "2.17.0",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/kornelski/rust-security-framework",
+      "authors": [
+        "Steven Fackler <sfackler@gmail.com>",
+        "Kornel <kornel@geekhood.net>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "5f6e65114b77d5bc161d2b099cad09f2a67609d2"
+        },
+        "path_in_vcs": "security-framework-sys"
+      },
+      "checksum": "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/security-framework-sys/2.17.0/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "91e934255ba3b2f21103d68c5581c23ef34aa95c4628e4405b8c901935e11c69",
+          "origin": "https://crates.io/api/v1/crates/security-framework-sys/2.17.0/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
       "name": "self_cell",
       "version": "1.3.0",
       "license": "Apache-2.0 OR GPL-2.0-only",
@@ -9757,9 +10463,56 @@
         "path_in_vcs": ""
       },
       "checksum": "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "origin": "https://crates.io/api/v1/crates/semver/1.0.28/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "origin": "https://crates.io/api/v1/crates/semver/1.0.28/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "send_wrapper",
+      "version": "0.6.0",
+      "license": "MIT/Apache-2.0",
+      "repository": "https://github.com/thk1/send_wrapper",
+      "authors": [
+        "Thomas Keh"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "1d005016d15a301af42e5a3fdc1369d9badb1f23"
+        }
+      },
+      "checksum": "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73",
       "targets": [],
       "application_targets": [],
-      "notices": []
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/send_wrapper/0.6.0/download :: LICENSE-APACHE.txt"
+        },
+        {
+          "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "origin": "https://crates.io/api/v1/crates/send_wrapper/0.6.0/download :: LICENSE-MIT.txt"
+        }
+      ]
     },
     {
       "name": "serde",
@@ -10034,6 +10787,9 @@
       },
       "checksum": "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba",
       "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
         "x86_64-unknown-linux-gnu"
       ],
       "application_targets": [],
@@ -10603,6 +11359,42 @@
         {
           "text": "3085885678bb161f6c472bbd331f66a2550b555eb76128f7f8247779128199c0",
           "origin": "https://crates.io/api/v1/crates/strict-num/0.1.1/download :: LICENSE"
+        }
+      ]
+    },
+    {
+      "name": "subtle",
+      "version": "2.6.1",
+      "license": "BSD-3-Clause",
+      "repository": "https://github.com/dalek-cryptography/subtle",
+      "authors": [
+        "Isis Lovecruft <isis@patternsinthevoid.net>",
+        "Henry de Valence <hdevalence@hdevalence.ca>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "5457b5448b021d1da101ababbb854e6657233943"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "d1fc1bc0d155df60b2e7705b6b2ae02a05c96f948e1cec6e2fb86360b09f346b",
+          "origin": "https://crates.io/api/v1/crates/subtle/2.6.1/download :: LICENSE"
         }
       ]
     },
@@ -11457,6 +12249,36 @@
       ]
     },
     {
+      "name": "tree_magic_mini",
+      "version": "3.2.2",
+      "license": "MIT",
+      "repository": "https://github.com/mbrubeck/tree_magic/",
+      "authors": [
+        "Matt Brubeck <mbrubeck@limpet.net>",
+        "Allison Hancock <aahancoc@umich.edu>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "75bf1b01dc81d5c0b3377a3202792fa83097872c"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "b8765b90061cba6c22b5831f675da109ae5561588290f9fa2317adab2714d5a6",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "a7cea8a5a56ba02950d098a7c56eed312fc745ceecd437e4aad2f7f8d38661b8",
+          "origin": "https://crates.io/api/v1/crates/tree_magic_mini/3.2.2/download :: LICENSE"
+        }
+      ]
+    },
+    {
       "name": "ttf-parser",
       "version": "0.25.1",
       "license": "MIT OR Apache-2.0",
@@ -11712,6 +12534,50 @@
       ]
     },
     {
+      "name": "unicode-properties",
+      "version": "0.1.4",
+      "license": "MIT/Apache-2.0",
+      "repository": "https://github.com/unicode-rs/unicode-properties",
+      "authors": [
+        "Charles Lew <crlf0710@gmail.com>",
+        "Manish Goregaokar <manishsmail@gmail.com>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "5397cff4305ae3783a0770ac71c2e160fb137082"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+          "origin": "https://crates.io/api/v1/crates/unicode-properties/0.1.4/download :: COPYRIGHT"
+        },
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/unicode-properties/0.1.4/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+          "origin": "https://crates.io/api/v1/crates/unicode-properties/0.1.4/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
       "name": "unicode-segmentation",
       "version": "1.13.3",
       "license": "MIT OR Apache-2.0",
@@ -11800,6 +12666,119 @@
       ]
     },
     {
+      "name": "untrusted",
+      "version": "0.9.0",
+      "license": "ISC",
+      "repository": "https://github.com/briansmith/untrusted",
+      "authors": [
+        "Brian Smith <brian@briansmith.org>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "89c8b8415f692d3803d183fc5fbf9ec08a6adcf4"
+        }
+      },
+      "checksum": "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "7abd9b6960dcf7d4d0a48606a5b71bfe37d472db68d70637f3a58a56785f1621",
+          "origin": "https://crates.io/api/v1/crates/untrusted/0.9.0/download :: LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "name": "ureq",
+      "version": "3.4.2",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/algesten/ureq",
+      "authors": [
+        "Martin Algesten <martin@algesten.se>",
+        "Jacob Hoffman-Andrews <ureq@hoffman-andrews.com>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "2e9ef24a80e1e7ecd0e6604f98ba49aceb7ec322"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "9a7ac20be9b7726e0bbdbf974c059676d9acb1cd414961f570a4e8231cacd7fc",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "origin": "https://crates.io/api/v1/crates/ureq/3.4.2/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "7e5886959f67f8c75063a9d55cd3cb08c5a8cbea9a944fa1df2d4ae038f53721",
+          "origin": "https://crates.io/api/v1/crates/ureq/3.4.2/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "ureq-proto",
+      "version": "0.6.5",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/algesten/ureq-proto",
+      "authors": [
+        "Martin Algesten <martin@algesten.se>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "9448eeaedfffacda03aa51cfef5e6659b7f69d93"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "841583fc36089d7d59419568ae157f43a5a03a2e5a81ba87c77d1596ef46e922",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "origin": "https://crates.io/api/v1/crates/ureq-proto/0.6.5/download :: LICENSE-APACHE.txt"
+        },
+        {
+          "text": "5b460f37be48ac4cf2181596181cc6cae432fc2caae05944873f380730829a4b",
+          "origin": "https://crates.io/api/v1/crates/ureq-proto/0.6.5/download :: LICENSE-MIT.txt"
+        }
+      ]
+    },
+    {
       "name": "url",
       "version": "2.5.8",
       "license": "MIT OR Apache-2.0",
@@ -11835,6 +12814,46 @@
         {
           "text": "b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5",
           "origin": "https://crates.io/api/v1/crates/url/2.5.8/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "utf8-zero",
+      "version": "0.8.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/algesten/utf8-zero",
+      "authors": [
+        "Simon Sapin <simon.sapin@exyr.org>",
+        "Martin Algesten <martin@algesten.se>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "b6967a15edb15bde05b587f23783109c92acc0bb"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "origin": "https://crates.io/api/v1/crates/utf8-zero/0.8.1/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "origin": "https://crates.io/api/v1/crates/utf8-zero/0.8.1/download :: LICENSE-MIT"
         }
       ]
     },
@@ -11924,18 +12943,18 @@
     },
     {
       "name": "vello_common",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "license": "Apache-2.0 OR MIT",
       "repository": "https://github.com/linebender/vello",
       "authors": [],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1b63b04c03873d81109b25316a7a523bec17b5e6"
+          "sha1": "7073a85d61ee099d1d3595651ddf92302b074348"
         },
         "path_in_vcs": "sparse_strips/vello_common"
       },
-      "checksum": "b2e9aed918117e8152c9eddfd8362d73c465c23f26c44786aa331707b8a64fa2",
+      "checksum": "bbb2141a2bca6e6d598e471fd4d1d7eed8e020aad6a28187edda07f091a325dd",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -11951,28 +12970,28 @@
       "notices": [
         {
           "text": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
-          "origin": "https://crates.io/api/v1/crates/vello_common/0.1.0/download :: LICENSE-APACHE"
+          "origin": "https://crates.io/api/v1/crates/vello_common/0.2.0/download :: LICENSE-APACHE"
         },
         {
           "text": "adf157330f722fe7cfd5964a2a6974eff851b718228c6735724a11706e6f4dec",
-          "origin": "https://crates.io/api/v1/crates/vello_common/0.1.0/download :: LICENSE-MIT"
+          "origin": "https://crates.io/api/v1/crates/vello_common/0.2.0/download :: LICENSE-MIT"
         }
       ]
     },
     {
       "name": "vello_cpu",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "license": "Apache-2.0 OR MIT",
       "repository": "https://github.com/linebender/vello",
       "authors": [],
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "vcs": {
         "git": {
-          "sha1": "1b63b04c03873d81109b25316a7a523bec17b5e6"
+          "sha1": "7073a85d61ee099d1d3595651ddf92302b074348"
         },
         "path_in_vcs": "sparse_strips/vello_cpu"
       },
-      "checksum": "ac7349e1f55f6b801c7c277958df4ea53e7f20f21e8014910ad888b2ecda93ea",
+      "checksum": "ace506ca414548966fcf3c283be94eb1cad8254de488791ee698bf438b0890a9",
       "targets": [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
@@ -11988,11 +13007,11 @@
       "notices": [
         {
           "text": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
-          "origin": "https://crates.io/api/v1/crates/vello_cpu/0.1.0/download :: LICENSE-APACHE"
+          "origin": "https://crates.io/api/v1/crates/vello_cpu/0.2.0/download :: LICENSE-APACHE"
         },
         {
           "text": "adf157330f722fe7cfd5964a2a6974eff851b718228c6735724a11706e6f4dec",
-          "origin": "https://crates.io/api/v1/crates/vello_cpu/0.1.0/download :: LICENSE-MIT"
+          "origin": "https://crates.io/api/v1/crates/vello_cpu/0.2.0/download :: LICENSE-MIT"
         }
       ]
     },
@@ -14268,6 +15287,39 @@
       "notices": []
     },
     {
+      "name": "wl-clipboard-rs",
+      "version": "0.9.4",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/YaLTeR/wl-clipboard-rs",
+      "authors": [
+        "Ivan Molodetskikh <yalterz@gmail.com>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "f74da839b368e6a7c6d2f63acfe48d3d42474001"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "4d7888ccd4896447b2d14d3a9350a85df2aeb6f181e2e7a31349d104ac46cac1",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "origin": "https://crates.io/api/v1/crates/wl-clipboard-rs/0.9.4/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "d0235d2a1f657b6fd18fd4ce98988348969a9284d94281b6d117830aa259a07a",
+          "origin": "https://crates.io/api/v1/crates/wl-clipboard-rs/0.9.4/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
       "name": "writeable",
       "version": "0.6.4",
       "license": "Unicode-3.0",
@@ -14621,6 +15673,35 @@
       ]
     },
     {
+      "name": "zbus",
+      "version": "6.0.0",
+      "license": "MIT",
+      "repository": "https://github.com/z-galaxy/zbus/",
+      "authors": [
+        "Zeeshan Ali Khan <zeeshanak@gnome.org>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "4cd1829b16d2e95e2903ddfb7b59cf85509459bd"
+        },
+        "path_in_vcs": "zbus"
+      },
+      "checksum": "266223222c9d81e5966455a9da0783e35d56a7ccab79a03c2366b2d98f8fc8a9",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
+          "origin": "https://crates.io/api/v1/crates/zbus/6.0.0/download :: LICENSE"
+        }
+      ]
+    },
+    {
       "name": "zbus-lockstep",
       "version": "0.5.2",
       "license": "MIT",
@@ -14706,6 +15787,34 @@
       ]
     },
     {
+      "name": "zbus_macros",
+      "version": "6.0.0",
+      "license": "MIT",
+      "repository": "https://github.com/z-galaxy/zbus/",
+      "authors": [
+        "Marc-André Lureau <marcandre.lureau@redhat.com>",
+        "Zeeshan Ali Khan <zeeshanak@gnome.org>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "4cd1829b16d2e95e2903ddfb7b59cf85509459bd"
+        },
+        "path_in_vcs": "zbus_macros"
+      },
+      "checksum": "69191782481ef4e0ac88ca487347c52e08bb85cceb2a163b79f7281fe5be0a3c",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [],
+      "notices": [
+        {
+          "text": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
+          "origin": "https://crates.io/api/v1/crates/zbus_macros/6.0.0/download :: LICENSE"
+        }
+      ]
+    },
+    {
       "name": "zbus_names",
       "version": "4.3.5",
       "license": "MIT",
@@ -14731,6 +15840,36 @@
         {
           "text": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
           "origin": "https://crates.io/api/v1/crates/zbus_names/4.3.5/download :: LICENSE"
+        }
+      ]
+    },
+    {
+      "name": "zbus_utils",
+      "version": "6.0.0",
+      "license": "MIT",
+      "repository": "https://github.com/z-galaxy/zbus/",
+      "authors": [
+        "Zeeshan Ali Khan <zeeshanak@gnome.org>",
+        "turbocooler <turbocooler@cocaine.ninja>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "4cd1829b16d2e95e2903ddfb7b59cf85509459bd"
+        },
+        "path_in_vcs": "zbus_utils"
+      },
+      "checksum": "c27a055b114bd9fc3686e90f62bd1fe612d523fc5f620bac3b1d2f42d3f6cab8",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
+          "origin": "https://crates.io/api/v1/crates/zbus_utils/6.0.0/download :: LICENSE"
         }
       ]
     },
@@ -14935,6 +16074,45 @@
       ]
     },
     {
+      "name": "zeroize",
+      "version": "1.9.1",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/RustCrypto/utils",
+      "authors": [
+        "The RustCrypto Project Developers"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "34a6ebcb9b920ec7ae5809e470fce94fe7c0cb55"
+        },
+        "path_in_vcs": "zeroize"
+      },
+      "checksum": "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "origin": "https://crates.io/api/v1/crates/zeroize/1.9.1/download :: LICENSE-APACHE"
+        },
+        {
+          "text": "8c7516d4b27b1e495be5e38b612298b63de48d05f49cdac94f70f3cd70f8864b",
+          "origin": "https://crates.io/api/v1/crates/zeroize/1.9.1/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
       "name": "zerotrie",
       "version": "0.2.5",
       "license": "Unicode-3.0",
@@ -15099,6 +16277,35 @@
         {
           "text": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
           "origin": "https://crates.io/api/v1/crates/zmij/1.0.23/download :: LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "name": "zruntime",
+      "version": "0.2.0",
+      "license": "MIT",
+      "repository": "https://github.com/z-galaxy/zruntime",
+      "authors": [
+        "Zeeshan Ali Khan <zeeshanak@gnome.org>"
+      ],
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "vcs": {
+        "git": {
+          "sha1": "cf3b321959f21428ae58e32e1a0bd1dd9edf4a9a"
+        },
+        "path_in_vcs": ""
+      },
+      "checksum": "467fd80a2014d186319f14b81aef027aa466712f355c90158a0e6b39de60726d",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "application_targets": [
+        "x86_64-unknown-linux-gnu"
+      ],
+      "notices": [
+        {
+          "text": "ec2e030f7cd75edbe3e981d10b458a100a90a6c6056334538ab933f8db71654e",
+          "origin": "https://crates.io/api/v1/crates/zruntime/0.2.0/download :: LICENSE"
         }
       ]
     },

@@ -10,18 +10,20 @@ and the two-stage release architecture are unchanged.
 
 [catalog.json](../third-party/catalog.json) is the reviewed release snapshot,
 not a lockstep dependency database for ordinary pull requests. The audit below
-records **457 third-party packages**, with exact versions, registry checksums, declared
+records **489 third-party packages**, with exact versions, registry checksums, declared
 license expressions, authors, source revisions and notice provenance. A
 conservative non-dev dependency traversal for Linux x86-64, Windows x86-64,
-macOS arm64 and macOS x86-64 reaches **382** crates, including build scripts and
+macOS arm64 and macOS x86-64 reaches **413** crates, including build scripts and
 procedural macros. `targets` records that closure; `application_targets`
-separately records normal dependency edges. The other 75 entries are explicit
+separately records normal dependency edges. The other 76 entries are explicit
 exclusions for these release targets. This does not imply every object survives
 linking, or that every listed crate is in every package. The
+[1.3.0 release refresh](release-1.3.0-license-validation.md) records the 56
+added and 24 removed crate versions and refreshed target coverage; the earlier
 [lock-file maintenance review](lockfile-maintenance-license-validation.md)
-records the 27 updated versions and refreshed target coverage.
+records the 1.2.0 refresh.
 
-The collection contains **372 distinct notice texts**, deduplicated by
+The collection contains **401 distinct notice texts**, deduplicated by
 their content hashes in [texts.json](../third-party/texts.json). It retains
 upstream copyright statements, notices, font licenses and protocol XML copyright
 blocks. When a crate omits a license file, the evidence refers to its exact
@@ -316,6 +318,14 @@ now retains the subset's attribution file. The direct egui declaration enables
 eframe defaults disabled; the native clipboard feature is also explicit.
 Release-wide inventory refresh and final-package verification remain required
 under the existing release policy.
+
+On 2026-10-20, the 1.3.0 release preparation refreshed the snapshot for these
+changes and zbus 6. `ring`'s license files, its nested once_cell and fiat
+notices, and the ISC header blocks of its Intel- and Google-copyrighted C files
+are retained. AccessKit's `LICENSE.chromium`, which its Chromium-derived files
+reference, is now retained as well. See the
+[1.3.0 release refresh](release-1.3.0-license-validation.md). Fresh candidate
+packaging and final-package verification remain required.
 
 ## Earlier candidate verification record
 
