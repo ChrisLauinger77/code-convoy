@@ -267,10 +267,9 @@ async fn verify_lock(
         ));
     }
     manifest(root, m).map_err(invalid)?;
-    let source = i.register(&m.repository.path).await.map_err(stale)?;
-    if source.path != m.repository.path
-        || i.common_dir(&source.path).await.map_err(stale)? != m.common_dir
-    {
+    let identity = i.identity(&m.repository.path).await.map_err(stale)?;
+    let source = &identity.repository;
+    if source.path != m.repository.path || identity.common_dir().map_err(stale)? != m.common_dir {
         return Err(invalid(anyhow::anyhow!(
             "Registered repository identity changed. Restore its original location; no cleanup was performed."
         )));
@@ -330,13 +329,15 @@ async fn verify_lock(
     if registered {
         verify_backlink(m, exists, locked).map_err(invalid)?;
     }
-    if exists
-        && (i.register(&m.path).await.map_err(stale)?.path != m.path
-            || i.common_dir(&m.path).await.map_err(stale)? != m.common_dir)
-    {
-        return Err(invalid(anyhow::anyhow!(
-            "Retained worktree identity does not match the registered repository."
-        )));
+    if exists {
+        let identity = i.identity(&m.path).await.map_err(stale)?;
+        if identity.repository.path != m.path
+            || identity.common_dir().map_err(stale)? != m.common_dir
+        {
+            return Err(invalid(anyhow::anyhow!(
+                "Retained worktree identity does not match the registered repository."
+            )));
+        }
     }
     Ok(Verified { exists, registered })
 }
