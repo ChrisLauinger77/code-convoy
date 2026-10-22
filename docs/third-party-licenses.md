@@ -10,20 +10,22 @@ and the two-stage release architecture are unchanged.
 
 [catalog.json](../third-party/catalog.json) is the reviewed release snapshot,
 not a lockstep dependency database for ordinary pull requests. The audit below
-records **489 third-party packages**, with exact versions, registry checksums, declared
+records **491 third-party packages**, with exact versions, registry checksums, declared
 license expressions, authors, source revisions and notice provenance. A
 conservative non-dev dependency traversal for Linux x86-64, Windows x86-64,
-macOS arm64 and macOS x86-64 reaches **413** crates, including build scripts and
+macOS arm64 and macOS x86-64 reaches **416** crates, including build scripts and
 procedural macros. `targets` records that closure; `application_targets`
-separately records normal dependency edges. The other 76 entries are explicit
+separately records normal dependency edges. The other 75 entries are explicit
 exclusions for these release targets. This does not imply every object survives
 linking, or that every listed crate is in every package. The
+[1.3.1 release refresh](release-1.3.1-license-validation.md) records the 10
+added and 8 removed crate versions since 1.3.0. The
 [1.3.0 release refresh](release-1.3.0-license-validation.md) records the 56
 added and 24 removed crate versions and refreshed target coverage; the earlier
 [lock-file maintenance review](lockfile-maintenance-license-validation.md)
 records the 1.2.0 refresh.
 
-The collection contains **401 distinct notice texts**, deduplicated by
+The collection contains **402 distinct notice texts**, deduplicated by
 their content hashes in [texts.json](../third-party/texts.json). It retains
 upstream copyright statements, notices, font licenses and protocol XML copyright
 blocks. When a crate omits a license file, the evidence refers to its exact
@@ -326,6 +328,12 @@ are retained. AccessKit's `LICENSE.chromium`, which its Chromium-derived files
 reference, is now retained as well. See the
 [1.3.0 release refresh](release-1.3.0-license-validation.md). Fresh candidate
 packaging and final-package verification remain required.
+
+On 2026-10-22, the 1.3.1 release preparation refreshed the snapshot for routine
+lock-file and dependency updates: tokio 1.54.1, ureq 3.5.0, ksni 0.3.7 and
+related crates. ksni now brings `arc-swap` and `crossbeam-queue` to Linux, and
+`rustversion` becomes a Linux build-only input. See the
+[1.3.1 release refresh](release-1.3.1-license-validation.md).
 
 ## Earlier candidate verification record
 

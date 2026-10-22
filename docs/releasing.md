@@ -4,13 +4,13 @@
 
 `Cargo.toml` is the version authority. About, Windows resources, package
 metadata, bundle versions and final filenames derive from it. For this release
-it is `1.3.0`, with the prospective tag `v1.3.0`, without a prerelease suffix.
+it is `1.3.1`, with the prospective tag `v1.3.1`, without a prerelease suffix.
 This metadata prepares a candidate; packaging, licensing and native platform
 checks remain required before the maintainer authorizes any tag or publication.
 The [1.0.0 readiness report](release-readiness.md) records historical evidence.
 The existing [component- and distribution-bound Windows licensing-risk
 decision](windows-licensing-decision.md#component-and-distribution-decision--2026-10-18)
-applies to 1.3.0. Reuse it for unchanged inputs; a version bump alone needs no
+applies to 1.3.1. Reuse it for unchanged inputs; a version bump alone needs no
 renewed acceptance or repeated audit. Material changes require targeted
 reassessment. Preserve the component terms, residual uncertainty and all checks.
 
@@ -319,7 +319,7 @@ do not resolve the remaining source and license obligations in the audit.
 python3 packaging/build.py
 python3 packaging/build.py --probe
 python3 packaging/release.py linux
-xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-1.3.0-x86_64.AppImage
+xvfb-run -a python3 packaging/smoke.py dist/CodeConvoy-1.3.1-x86_64.AppImage
 ```
 
 On Windows, from a development shell with Python, Rust MSVC and Windows SDK:
