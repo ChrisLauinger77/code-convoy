@@ -23,17 +23,20 @@ remain in Git history; preserve separate historical validation records.
    Confirm applicable normal CI checks are green; Markdown-only changes skip CI.
 2. Run **Release → Run workflow** on the reviewed branch. This
    builds and verifies packages and uploads the complete `release-assets`
-   workflow artifact, including checksums. It never publishes a release.
+   workflow artifact, including checksums. It then waits for approval and
+   creates no tag or release before it.
 3. Download those packages and complete the outstanding desktop checks in
    [quality-release-validation.md](quality-release-validation.md) and the native
    [platform checklist](platform-validation.md), particularly Linux and Windows.
    Also review [third-party licensing](third-party-licenses.md). Candidate
    packages carry the license audit evidence even while obligations are open;
    the publisher refuses to create a release while recorded blockers remain.
-4. When satisfied with the packages, copy the exact `git tag` and `git push`
-   commands from the candidate run's summary or **Print the exact commands to
-   publish this candidate** step. The annotated tag includes `Candidate-Run:`
-   and points to the exact tested commit. Tag creation is a maintainer action.
+4. When satisfied with the packages, open the waiting run's **Review
+   deployments**, select `release` and approve. The run summary names the tag,
+   commit and run ID that approval uses. `approve-and-tag` then creates the
+   annotated tag with `Candidate-Run:` on the exact tested commit, and `publish`
+   releases the same run's packages. Approval is the maintainer's tag action;
+   reject the deployment to abandon a candidate.
 
 Only manual runs build packages. They build Linux x86-64 on `ubuntu-24.04`,
 Windows x86-64 on `windows-2025`, and both macOS architectures using Apple's SDK on `macos-26`. Rust 1.99.1,
@@ -41,23 +44,39 @@ Python 3.15 and the committed lockfile are used. Each platform runs formatting,
 strict Clippy and all non-ignored tests; no authenticated agent tasks or provider
 credentials are used.
 
-A `v*` tag push runs only candidate verification, publication and package
-repository update requests; it never rebuilds packages. The publisher requires
-an annotated tag with exactly one `Candidate-Run: <run ID>` line and exact
-Cargo version/tag equality. That run must be a successful, completed manual
-run of `.github/workflows/release.yml` in this repository, with its source
-commit equal to the tagged commit. It downloads that run's complete
-`release-assets` artifact by its verified artifact ID. Missing, empty or expired
-artifacts fail publication; there is no rebuild fallback. The final artifact
-requests 30 days of retention, subject to repository limits.
+Approval of the `release` environment is the only path to a tag or release;
+nothing is rebuilt after approval. `approve-and-tag` checks out the version and
+commit recorded by `validate` and fails if the tag already exists locally or on
+`origin`. As `github-actions[bot]`, it creates the annotated `vX.Y.Z` tag with
+the message `CodeConvoy X.Y.Z` and exactly one `Candidate-Run: <this run ID>`
+line, then pushes only that tag. Tags pushed with `GITHUB_TOKEN` start no
+workflow, and the workflow has no tag-push trigger: a manually pushed tag
+publishes nothing. `publish` downloads this run's complete `release-assets`
+artifact and requires exact Cargo version/tag equality. Missing, empty or
+expired artifacts fail publication; there is no rebuild fallback. The final
+artifact requests 30 days of retention, subject to repository limits.
 
 Start a fresh manual run for each candidate instead of using **Re-run jobs**.
-Reruns can replace artifacts under the same run ID, so candidates with
-`run_attempt` greater than one are rejected. A manual run selected on a tag
-can build a candidate but still cannot publish.
+Reruns can replace artifacts under the same run ID, so the candidate summary
+fails for `run_attempt` greater than one and that run never reaches approval.
+If tagging or publication fails after approval, use **Re-run failed jobs**,
+which keeps the approved packages; never **Re-run all jobs**. A waiting run
+holds the workflow's concurrency group for its ref, so a newer run on the same
+ref queues behind it until the older deployment is approved or rejected.
 
-Only the final publishing job has `contents: write`; it also has `actions: read`
-to inspect and download the selected candidate. All six packages must be
+The `release` environment needs the maintainer as a required reviewer with
+**Prevent self-review** disabled. Restrict its deployment branches to `main`;
+otherwise an approved run from another branch can tag that branch's commit.
+GitHub creates a missing environment without protection rules, so the job would
+start without approval. Its first step therefore reads the environment through
+the REST API and fails before checkout or tagging unless a required-reviewer
+rule lists at least one reviewer. After adding a reviewer, **Re-run failed
+jobs** waits for approval with the same packages.
+
+Only `approve-and-tag` and the final publishing job have `contents: write`, and
+both run only after approval. `approve-and-tag` also has `actions: read`, which
+the environment API requires. The publisher downloads this run's artifact
+without it. All six packages must be
 nonempty and have exactly the expected final filenames before checksums are
 generated. The publisher requires exactly one original checksum for each of the
 six assets and verifies every digest before publication. A partial, duplicate or
@@ -71,8 +90,8 @@ public release. Existing releases are not overwritten. If publication fails afte
 draft creation, inspect/delete that draft before rerunning the publisher; do
 not move a published tag. A new release requires a new version/tag.
 
-Normal CI runs checks/builds only. A manual release workflow run cannot publish,
-even when its selected ref is a tag. The workflow never creates a Git tag.
+Normal CI runs checks/builds only. The release workflow creates a Git tag and
+publishes only after `release` approval; it never moves or overwrites a tag.
 
 ### Third-party package contents
 
@@ -167,10 +186,10 @@ unknown/custom terms and changed checksum-bound exceptions require review of
 the affected component. Packaging regressions still check retained notice/source
 integrity and relevant native tool pins. Markdown-only edits have no new CI run.
 
-[Release packaging](../.github/workflows/release.yml) has separate triggers:
-`v*` tag pushes publish a previously tested candidate; manual dispatch builds
-that candidate. It has no Markdown path filter and uses the explicit runners
-and Rust version listed above for candidate builds. The source-build minimum
+[Release packaging](../.github/workflows/release.yml) runs only on manual
+dispatch: it builds a candidate, then waits for `release` environment approval
+before tagging and publishing it. It has no Markdown path filter and uses the
+explicit runners and Rust version listed above for candidate builds. The source-build minimum
 remains Rust 1.95 as declared in `Cargo.toml`; the release compiler pin does not
 change that requirement.
 

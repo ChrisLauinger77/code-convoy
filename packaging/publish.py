@@ -1,4 +1,4 @@
-"""Final tag-only CI step. A partial upload can leave a draft, never a public release."""
+"""Final CI step after release approval. A partial upload can leave a draft, never a public release."""
 import json
 import os
 import subprocess

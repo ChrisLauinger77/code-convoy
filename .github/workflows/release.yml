@@ -1,7 +1,5 @@
 name: Release
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -18,8 +16,10 @@ env:
 
 jobs:
   validate:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-26.04
+    outputs:
+      version: ${{ steps.source.outputs.version }}
+      sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -28,9 +28,14 @@ jobs:
         with:
           python-version: "3.15"
       - name: Validate Cargo version and release gates
+        id: source
         run: |
-          python packaging/release.py version
+          version="$(python packaging/release.py version)"
+          sha="$(git rev-parse HEAD)"
+          echo "CodeConvoy $version at $sha"
           python -m unittest discover -s packaging -p 'test_*.py'
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
   linux:
     needs: validate
@@ -181,15 +186,86 @@ jobs:
           path: dist/*
           if-no-files-found: error
           retention-days: 30
-      - name: Print the exact commands to publish this candidate
-        run: python packaging/candidate.py commands
+      - name: Describe the release approval for this candidate
+        run: python packaging/candidate.py
+
+  # Waits for a required reviewer of the release environment. Tags pushed with
+  # GITHUB_TOKEN start no workflow, so approval publishes from this run only.
+  approve-and-tag:
+    needs: [validate, aggregate]
+    runs-on: ubuntu-26.04
+    environment: release
+    permissions:
+      contents: write
+      # Reads the release environment's protection rules.
+      actions: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      SOURCE_SHA: ${{ needs.validate.outputs.sha }}
+      CANDIDATE_RUN: ${{ github.run_id }}
+      RELEASE_TAG: v${{ needs.validate.outputs.version }}
+    steps:
+      # GitHub creates a missing environment without protection rules, and this
+      # job then starts without approval. Refuse to tag unless reviewers gate it.
+      - name: Require reviewers for the release environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          reviewers="$(gh api "repos/$GH_REPO/environments/release" \
+            --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length')" || {
+            echo "::error::Cannot read the release environment's protection rules; nothing was tagged."
+            exit 1
+          }
+          if [ "$reviewers" -ge 1 ] 2> /dev/null; then
+            echo "Release environment required reviewers: $reviewers"
+          else
+            echo "::error::The release environment has no required reviewers; nothing was tagged. Add one under Settings > Environments > release, then re-run failed jobs."
+            exit 1
+          fi
+      # Keeps the checkout credentials: this job pushes the release tag.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+      - name: Configure the release tagger
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+      - name: Require a new tag for the validated commit
+        run: |
+          if [ -z "$VERSION" ] || [ "$(git rev-parse HEAD)" != "$SOURCE_SHA" ]; then
+            echo "::error::Checkout does not match the validated version and commit."
+            exit 1
+          fi
+          if git rev-parse --quiet --verify "refs/tags/$RELEASE_TAG" > /dev/null; then
+            echo "::error::Tag $RELEASE_TAG already exists locally. Existing release tags are never moved; prepare a new version."
+            exit 1
+          fi
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" > /dev/null || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "::error::Tag $RELEASE_TAG already exists on origin. Existing release tags are never moved; prepare a new version."
+            exit 1
+          elif [ "$status" -ne 2 ]; then
+            echo "::error::Cannot check origin for tag $RELEASE_TAG (git ls-remote exited with $status)."
+            exit 1
+          fi
+      - name: Create and push the annotated release tag
+        id: tag
+        run: |
+          git tag -a "$RELEASE_TAG" "$SOURCE_SHA" -m "CodeConvoy $VERSION" -m "Candidate-Run: $CANDIDATE_RUN"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          git push origin "refs/tags/$RELEASE_TAG"
+          echo "Created annotated tag \`$RELEASE_TAG\` on \`$SOURCE_SHA\` with \`Candidate-Run: $CANDIDATE_RUN\`." >> "$GITHUB_STEP_SUMMARY"
 
   publish:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: approve-and-tag
     runs-on: ubuntu-26.04
     permissions:
       contents: write
-      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -197,30 +273,22 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.15"
-      - name: Verify annotated tag and candidate run
-        id: candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: python packaging/candidate.py resolve
+      # The approved packages from this run; publication never rebuilds them.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          artifact-ids: ${{ steps.candidate.outputs.artifact_id }}
-          run-id: ${{ steps.candidate.outputs.run_id }}
-          github-token: ${{ github.token }}
+          name: release-assets
           path: dist
       - name: Publish the complete release once
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.approve-and-tag.outputs.tag }}
         run: python packaging/publish.py
 
   update-package-repositories:
     name: Request package repository updates
     if: ${{ !cancelled() && needs.publish.result == 'success' }}
-    needs: publish
+    needs: [approve-and-tag, publish]
     runs-on: ubuntu-26.04
     env:
       GH_TOKEN: ${{ secrets.PACKAGE_REPOSITORIES_TOKEN }}
