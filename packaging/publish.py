@@ -7,9 +7,8 @@ from licenses import require_release_ready
 
 from release import DIST, ROOT, artifact_names, check_tag, checksum, run, verify_checksums, version
 
-def main():
-    tag = os.environ["RELEASE_TAG"]
-    repository = os.environ["GH_REPO"]
+def preflight(tag):
+    """Check the downloaded candidate before tagging and again before publishing."""
     check_tag(tag)
     # Require all six recorded digests. Never repair or regenerate a downloaded
     # manifest before publication: an incomplete one must reject the candidate.
@@ -17,6 +16,12 @@ def main():
     # Candidate builds may collect audit evidence. Publishing is separate and
     # must not turn an explicitly unresolved source/license obligation green.
     require_release_ready()
+
+
+def main():
+    tag = os.environ["RELEASE_TAG"]
+    repository = os.environ["GH_REPO"]
+    preflight(tag)
     names = artifact_names(version()) + ["SHA256SUMS"]
     run("gh", "release", "create", tag, "--verify-tag", "--draft", "--title", f"CodeConvoy {tag}",
         "--notes-file", ROOT / "docs/release-notes.md", *[DIST / name for name in names])

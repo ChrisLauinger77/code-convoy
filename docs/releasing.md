@@ -30,7 +30,7 @@ remain in Git history; preserve separate historical validation records.
    [platform checklist](platform-validation.md), particularly Linux and Windows.
    Also review [third-party licensing](third-party-licenses.md). Candidate
    packages carry the license audit evidence even while obligations are open;
-   the publisher refuses to create a release while recorded blockers remain.
+   tagging and publication refuse to proceed while recorded blockers remain.
 4. When satisfied with the packages, open the waiting run's **Review
    deployments**, select `release` and approve. The run summary names the tag,
    commit and run ID that approval uses. `approve-and-tag` then creates the
@@ -46,13 +46,17 @@ credentials are used.
 
 Approval of the `release` environment is the only path to a tag or release;
 nothing is rebuilt after approval. `approve-and-tag` checks out the version and
-commit recorded by `validate` and fails if the tag already exists locally or on
-`origin`. As `github-actions[bot]`, it creates the annotated `vX.Y.Z` tag with
-the message `CodeConvoy X.Y.Z` and exactly one `Candidate-Run: <this run ID>`
-line, then pushes only that tag. Tags pushed with `GITHUB_TOKEN` start no
-workflow, and the workflow has no tag-push trigger: a manually pushed tag
-publishes nothing. `publish` downloads this run's complete `release-assets`
-artifact and requires exact Cargo version/tag equality. Missing, empty or
+commit recorded by `validate`, downloads this run's `release-assets`, and verifies
+the original checksums and release readiness before creating a tag. Missing,
+expired or invalid candidates fail before tagging. As `github-actions[bot]`,
+it creates the annotated `vX.Y.Z` tag with the message `CodeConvoy X.Y.Z` and
+exactly one `Candidate-Run: <this run ID>` line, then pushes only that tag.
+An existing tag is accepted only if it is an
+annotated tag directly on the validated commit with exactly this candidate's
+`Candidate-Run:` line; other existing tags fail without modification. Tags pushed
+with `GITHUB_TOKEN` start no workflow, and the workflow has no tag-push trigger:
+a manually pushed tag publishes nothing. `publish` downloads this run's complete
+`release-assets` artifact and requires exact Cargo version/tag equality. Missing, empty or
 expired artifacts fail publication; there is no rebuild fallback. The final
 artifact requests 30 days of retention, subject to repository limits.
 
@@ -60,7 +64,9 @@ Start a fresh manual run for each candidate instead of using **Re-run jobs**.
 Reruns can replace artifacts under the same run ID, so the candidate summary
 fails for `run_attempt` greater than one and that run never reaches approval.
 If tagging or publication fails after approval, use **Re-run failed jobs**,
-which keeps the approved packages; never **Re-run all jobs**. A waiting run
+which keeps the approved packages; never **Re-run all jobs**. A tagging retry
+revalidates the packages and can reuse its already-pushed tag after an interrupted
+job or lost push response, without recreating or moving it. A waiting run
 holds the workflow's concurrency group for its ref, so a newer run on the same
 ref queues behind it until the older deployment is approved or rejected.
 

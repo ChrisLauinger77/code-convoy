@@ -230,36 +230,21 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.sha }}
           fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15"
+      # Expired/missing candidates must fail before consuming a release tag.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: dist
       - name: Configure the release tagger
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-      - name: Require a new tag for the validated commit
-        run: |
-          if [ -z "$VERSION" ] || [ "$(git rev-parse HEAD)" != "$SOURCE_SHA" ]; then
-            echo "::error::Checkout does not match the validated version and commit."
-            exit 1
-          fi
-          if git rev-parse --quiet --verify "refs/tags/$RELEASE_TAG" > /dev/null; then
-            echo "::error::Tag $RELEASE_TAG already exists locally. Existing release tags are never moved; prepare a new version."
-            exit 1
-          fi
-          status=0
-          git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" > /dev/null || status=$?
-          if [ "$status" -eq 0 ]; then
-            echo "::error::Tag $RELEASE_TAG already exists on origin. Existing release tags are never moved; prepare a new version."
-            exit 1
-          elif [ "$status" -ne 2 ]; then
-            echo "::error::Cannot check origin for tag $RELEASE_TAG (git ls-remote exited with $status)."
-            exit 1
-          fi
-      - name: Create and push the annotated release tag
+      - name: Validate publication gates and create or recover the release tag
         id: tag
-        run: |
-          git tag -a "$RELEASE_TAG" "$SOURCE_SHA" -m "CodeConvoy $VERSION" -m "Candidate-Run: $CANDIDATE_RUN"
-          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          git push origin "refs/tags/$RELEASE_TAG"
-          echo "Created annotated tag \`$RELEASE_TAG\` on \`$SOURCE_SHA\` with \`Candidate-Run: $CANDIDATE_RUN\`." >> "$GITHUB_STEP_SUMMARY"
+        run: python packaging/candidate.py tag
 
   publish:
     needs: approve-and-tag
