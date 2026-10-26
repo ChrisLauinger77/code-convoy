@@ -244,6 +244,8 @@ struct ClaudeOutput {
     oversized: [bool; 2],
     protocol_error: bool,
     explicit_error: bool,
+    permission_denied: bool,
+    mcp_incomplete: bool,
     auto_requested: bool,
     manual_permissions_reported: bool,
     // Keep the parsed Claude result (including usage/denials/metadata) for outcome
@@ -273,6 +275,28 @@ impl ClaudeOutput {
             self.protocol_error = !self.continuation.observe(&event, self.result.as_ref());
         }
         let kind = event["type"].as_str().unwrap_or("");
+        // Claude can finish its conversation successfully after refusing a
+        // requested operation. Keep that separate from task completion, even
+        // when a later turn omits or clears its permission_denials list.
+        let denied = (kind == "result"
+            && event["permission_denials"]
+                .as_array()
+                .is_some_and(|d| !d.is_empty()))
+            || (kind == "user"
+                && event["tool_result_meta"].as_array().is_some_and(|entries| {
+                    entries
+                        .iter()
+                        .any(|entry| entry["permission_decision"]["decision"] == "reject")
+                }))
+            || (kind == "system" && event["subtype"] == "permission_denied");
+        if denied {
+            self.permission_denied = true;
+            self.activity.push_str("[CodeConvoy] Claude reported a permission denial; this run cannot be marked successful. See Raw output.\n");
+        }
+        if kind == "user" && headless_mcp_incomplete(&event) {
+            self.mcp_incomplete = true;
+            self.activity.push_str("[CodeConvoy] Claude reported an MCP timeout or unanswered confirmation; this run cannot be marked successful. See Raw output.\n");
+        }
         match kind {
             "assistant" => {
                 if let Some(content) = event["message"]["content"].as_array() {
@@ -344,7 +368,7 @@ impl ClaudeOutput {
                     && !denials.is_empty()
                 {
                     self.activity.push_str(&format!(
-                        "Warning: {} permission denial(s); see Raw output.\n",
+                        "[CodeConvoy] {} permission denial(s); see Raw output.\n",
                         denials.len()
                     ));
                 }
@@ -419,6 +443,8 @@ impl ClaudeOutput {
                 || result["queued_turn_count"].as_u64().is_some())
             && (result["errors"].is_null()
                 || result["errors"].as_array().is_some_and(Vec::is_empty))
+            && (result["permission_denials"].is_null()
+                || result["permission_denials"].as_array().is_some_and(Vec::is_empty))
     }
 }
 impl AgentOutput for ClaudeOutput {
@@ -459,8 +485,10 @@ impl AgentOutput for ClaudeOutput {
             && self.continuation.complete()
             && !self.protocol_error
             && !self.explicit_error
+            && !self.permission_denied
+            && !self.mcp_incomplete
         {
-            (JobStatus::Succeeded, "Claude Code completed. Review its response, permission denials and working-tree diff; CLI completion does not prove task fulfillment.".to_owned())
+            (JobStatus::Succeeded, "Claude Code completed. Review its response and working-tree diff; CLI completion does not prove task fulfillment.".to_owned())
         } else {
             (
                 JobStatus::Failed,
@@ -469,6 +497,12 @@ impl AgentOutput for ClaudeOutput {
                 ),
             )
         };
+        if self.permission_denied {
+            message.push_str(" Claude reported a permission denial. Review the denied operation and existing Claude policy in Raw output; CodeConvoy does not retry with broader permissions.");
+        }
+        if self.mcp_incomplete {
+            message.push_str(" An MCP call timed out or its confirmation was unanswered. Check the server and its confirmation requirements in Raw output; CodeConvoy does not retry the call or change permissions.");
+        }
         if self.auto_requested && outcome == JobStatus::Failed {
             message.push_str(" For unavailable Auto mode, check CLI support, account/model availability and organization policy; choose a different permission mode explicitly if needed.");
         }
@@ -484,6 +518,35 @@ impl AgentOutput for ClaudeOutput {
 }
 
 const MANUAL_PERMISSIONS_NOTICE: &str = "[CodeConvoy] Claude reported Manual permissions; Auto was not active. Check CLI support, account/model availability and organization policy. CodeConvoy does not retry with broader permissions.";
+
+fn headless_mcp_incomplete(event: &Value) -> bool {
+    // 2.1.310's timeout is a tool error, not a failed terminal result. Match
+    // the CLI diagnostic in both backend fields, never assistant prose or an
+    // arbitrary recoverable tool error. The elicitation hint is also present
+    // in that official binary; its emission depends on the pending question.
+    let Some(diagnostic) = event["tool_use_result"]
+        .as_str()
+        .and_then(|value| value.strip_prefix("Error: "))
+    else {
+        return false;
+    };
+    let timeout = diagnostic.starts_with("MCP server \"")
+        && diagnostic.contains("\" tool \"")
+        && diagnostic.contains("\" timed out after ");
+    let unanswered = diagnostic.contains(
+        "The server asked the user a question, and no answer came before the time limit.",
+    );
+    (timeout || unanswered)
+        && event["message"]["content"]
+            .as_array()
+            .is_some_and(|blocks| {
+                blocks.iter().any(|block| {
+                    block["type"] == "tool_result"
+                        && block["is_error"] == true
+                        && block["content"].as_str() == Some(diagnostic)
+                })
+            })
+}
 
 fn ui_render_notification(event: &Value) -> bool {
     event["type"] == "system"

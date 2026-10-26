@@ -5,12 +5,16 @@ use std::{
     time::Duration,
 };
 mod antigravity;
+mod claude_mcp;
 mod copilot_trust;
 mod cursor;
 mod standalone;
 mod workflow;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).is_some_and(|a| a == "claude-audit-mcp") {
+        return claude_mcp::run(&args);
+    }
     if copilot_trust::selected() {
         return copilot_trust::run(&args);
     }
@@ -426,6 +430,21 @@ fn gate(
     }
     if claude {
         match config["claude_outcome"].as_str() {
+            Some("denied") => {
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"result", "subtype":"success", "is_error":false,
+                    "result":"operation was denied", "duration_ms":1, "duration_api_ms":1, "num_turns":1,
+                    "session_id":"fixture", "permission_denials":[{"tool_name":"Bash"}]})
+                );
+                return Ok(());
+            }
+            Some("denied_tool") => {
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"user", "tool_result_meta":[{"id":"fixture-tool", "non_execution_kind":"permission-rule", "permission_decision":{"decision":"reject","source":"config"}}]})
+                );
+            }
             Some("result_error") => {
                 claude_result(true);
                 return Ok(());

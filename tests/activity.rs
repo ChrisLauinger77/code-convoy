@@ -48,7 +48,7 @@ fn representative_activity_fixtures_preserve_progress_results_and_backend_semant
                 "Tool: Bash · cargo fmt --check",
                 "Reviewed README. Grüße",
                 "Review complete",
-                "Warning: 1 permission denial",
+                "[CodeConvoy] 1 permission denial",
                 "Usage:",
             ][..],
         ),
@@ -110,7 +110,11 @@ fn representative_activity_fixtures_preserve_progress_results_and_backend_semant
         assert!(!activity.contains("raw-only"));
         assert_eq!(
             decoder.interpret(success()).0,
-            JobStatus::Succeeded,
+            if agent == AgentId::Claude {
+                JobStatus::Failed
+            } else {
+                JobStatus::Succeeded
+            },
             "{agent:?}"
         );
         if agent == AgentId::Copilot {
