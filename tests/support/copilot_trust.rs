@@ -13,46 +13,6 @@ pub fn selected() -> bool {
     })
 }
 
-/// Names the sender of a SIGCONT that ends the stopped-confirmation fixture.
-#[cfg(unix)]
-mod continued {
-    use std::sync::atomic::{AtomicI32, Ordering};
-
-    static SENDER: AtomicI32 = AtomicI32::new(-1);
-    static CODE: AtomicI32 = AtomicI32::new(0);
-
-    extern "C" fn handle(_: libc::c_int, info: *mut libc::siginfo_t, _: *mut libc::c_void) {
-        // SAFETY: SA_SIGINFO handlers receive a valid siginfo; atomic stores
-        // are async-signal-safe.
-        unsafe {
-            SENDER.store((*info).si_pid(), Ordering::SeqCst);
-            CODE.store((*info).si_code, Ordering::SeqCst);
-        }
-    }
-
-    pub fn record() {
-        // SAFETY: zeroed is a valid sigaction; the handler only stores atomics.
-        unsafe {
-            let mut action: libc::sigaction = std::mem::zeroed();
-            action.sa_sigaction = handle
-                as extern "C" fn(libc::c_int, *mut libc::siginfo_t, *mut libc::c_void)
-                as libc::sighandler_t;
-            action.sa_flags = libc::SA_SIGINFO;
-            libc::sigaction(libc::SIGCONT, &action, std::ptr::null_mut());
-        }
-    }
-
-    pub fn sender() -> String {
-        format!(
-            "SIGCONT sender pid {} code {}, own pid {}, parent {}",
-            SENDER.load(Ordering::SeqCst),
-            CODE.load(Ordering::SeqCst),
-            std::process::id(),
-            std::os::unix::process::parent_id()
-        )
-    }
-}
-
 fn locked(path: &Path) -> Result<fs::File, Box<dyn std::error::Error>> {
     let file = fs::OpenOptions::new()
         .create(true)
@@ -145,16 +105,11 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             // effect for the supervisor and needs no terminal.
             let _lock = locked(Path::new("stopped.lock"))?;
             fs::write("stopped.pid", std::process::id().to_string())?;
-            continued::record();
             eprint!("Do you trust the files in this folder?");
             std::io::stderr().flush()?;
             // SAFETY: raise has no memory-safety preconditions.
             unsafe { libc::raise(libc::SIGSTOP) };
-            return Err(format!(
-                "Stopped confirmation fixture was continued; {}",
-                continued::sender()
-            )
-            .into());
+            return Err("Stopped confirmation fixture was continued".into());
         }
         Some("copilot-trust-fixture:block") => {
             let _lock = locked(Path::new("blocked-parent.lock"))?;

@@ -327,8 +327,10 @@ has deterministic coverage independent of native API scheduling.
 
 On Unix, `process/unix` adds a narrow POSIX identity guard using `libc` (already a
 transitive dependency). `waitid(WEXITED | WNOHANG | WNOWAIT)` observes the direct
-child without reaping it. CodeConvoy exclusively owns that child: no competing
-waiter or automatic `SIGCHLD` reaper is permitted. Incompatible `SIGCHLD` settings
+child without reaping it. Darwin also reports a stopped child there, so a report
+whose `si_code` is `CLD_STOPPED` or `CLD_CONTINUED` is not an exit: a stopped CLI
+stays supervised until Stop or its time limit, as on Linux. CodeConvoy exclusively
+owns that child: no competing waiter or automatic `SIGCHLD` reaper is permitted. Incompatible `SIGCHLD` settings
 are rejected before spawn. While the unreaped leader reserves its PID, Stop and
 Drop may signal its process group. When the leader exits, remaining group members
 are terminated even if they redirected/closed every standard stream. The leader's
