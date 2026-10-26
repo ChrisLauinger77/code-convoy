@@ -300,6 +300,81 @@ fn permission_and_tool_errors_cannot_be_hidden_by_a_successful_terminal_result()
     assert!(detail.contains("permission denial or approval requirement"));
 }
 
+// Synthetic task payloads in the existing generic function envelope. These do
+// not claim to capture Cursor's subagent protocol or its v2026.10.22 wording.
+#[test]
+fn child_outcomes_use_generic_tool_errors_without_interpreting_nested_status_or_prose() {
+    for child_state in ["succeeded", "failed", "stopped", "cancelled"] {
+        let started = json!({"type":"tool_call", "subtype":"started",
+            "call_id":"task", "session_id":"fixture",
+            "tool_call":{"function":{"name":"task", "arguments":"raw-only task"}}});
+        for explicit_error in [false, true] {
+            let mut completed = started.clone();
+            completed["subtype"] = json!("completed");
+            completed["tool_call"]["function"]["result"] = if explicit_error {
+                json!({"error":{"message":format!("Subagent {child_state}")}})
+            } else {
+                json!({"success":{"agent_id":"raw-only child", "status":child_state}})
+            };
+            let events = [
+                init(),
+                started.clone(),
+                completed,
+                message(&format!(
+                    "Subagent {child_state}; parent handled the outcome. Grüße 🌍"
+                )),
+                success(),
+            ];
+            let stream = events
+                .iter()
+                .map(|event| format!("{event}\r\n"))
+                .collect::<String>();
+            for chunk_size in [1, 17, stream.len()] {
+                let mut decoder = Cursor.output();
+                let mut activity = String::new();
+                for bytes in stream.as_bytes().chunks(chunk_size) {
+                    activity.push_str(&decoder.push(Stream::Stdout, bytes));
+                }
+                activity.push_str(&decoder.finish());
+                let (outcome, detail) = decoder.interpret(status(0));
+                assert_eq!(
+                    outcome,
+                    if explicit_error {
+                        JobStatus::Failed
+                    } else {
+                        JobStatus::Succeeded
+                    },
+                    "{child_state}: {detail}"
+                );
+                if explicit_error {
+                    assert!(detail.contains("failed tool call"));
+                }
+                assert_eq!(decoder.interpret(status(7)).0, JobStatus::Failed);
+                assert!(activity.contains("tool completed: task"));
+                assert!(activity.contains("Grüße 🌍"));
+                assert!(!activity.contains("raw-only"));
+            }
+        }
+    }
+}
+
+#[test]
+fn parent_terminal_failure_or_stop_never_becomes_success_or_codeconvoy_cancellation() {
+    // Non-success subtypes are deliberately synthetic: only success is part of
+    // the documented terminal contract. No cancellation subtype is inferred.
+    for subtype in ["error", "stopped", "cancelled"] {
+        for is_error in [false, true] {
+            let mut result = success();
+            result["subtype"] = json!(subtype);
+            result["is_error"] = json!(is_error);
+            let (decoder, _) = decode(&[init(), result]);
+            for code in [0, 7, 130] {
+                assert_eq!(decoder.interpret(status(code)).0, JobStatus::Failed);
+            }
+        }
+    }
+}
+
 // Synthetic rejection payloads in the existing supported envelopes, not
 // recordings of the Auto-review classifier or its version-specific wording.
 #[test]

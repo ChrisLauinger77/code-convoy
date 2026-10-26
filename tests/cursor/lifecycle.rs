@@ -174,6 +174,10 @@ async fn terminal_failures_keep_results_and_release_slots_in_both_execution_mode
             ("malformed", JobStatus::Failed, "Invalid Cursor JSON"),
             ("incomplete", JobStatus::Failed, "incomplete"),
             ("interrupted", JobStatus::Failed, "process failed"),
+            ("subagent_failed", JobStatus::Failed, "failed tool call"),
+            ("subagent_stopped", JobStatus::Failed, "failed tool call"),
+            ("parent_failure_zero", JobStatus::Failed, "terminal result"),
+            ("success_nonzero", JobStatus::Failed, "process failed"),
             ("permission", JobStatus::Failed, "permission"),
             ("recursive_permission", JobStatus::Failed, "permission"),
             ("ambiguous_permission", JobStatus::Failed, "permission"),
@@ -204,6 +208,13 @@ async fn terminal_failures_keep_results_and_release_slots_in_both_execution_mode
             h.until(|events| Harness::finished(events, 1, expected))
                 .await;
             assert!(h.events.iter().any(|event| matches!(event, Event::Finished {run:1, detail, ..} if detail.contains(diagnostic))), "{outcome}: {:?}", h.events);
+            let expected_exit = match outcome {
+                "failure" | "success_nonzero" => 7,
+                "missing_auth" | "permission_exit" => 1,
+                "interrupted" => 130,
+                _ => 0,
+            };
+            assert!(h.events.iter().any(|event| matches!(event, Event::Finished {run:1, exit_code:Some(code), ..} if *code == expected_exit)), "{outcome}: {:?}", h.events);
             assert_eq!(
                 h.events
                     .iter()
@@ -246,6 +257,94 @@ async fn terminal_failures_keep_results_and_release_slots_in_both_execution_mode
                 .await;
             h.close().await;
         }
+    }
+}
+
+#[tokio::test]
+async fn terminal_success_cannot_release_a_live_process_and_cancellation_still_cleans_up() {
+    for mode in [ExecutionMode::Direct, ExecutionMode::IsolatedWorktree] {
+        let mut h = Harness::new(1, 512);
+        let source = h.repository("source").await;
+        h.start(
+            1,
+            h.task(
+                1,
+                mode,
+                json!({"spawn_child":true, "edit_before":true,
+                "cursor_terminal_before_gate":true}),
+            ),
+            &source,
+        )
+        .await;
+        h.until(|events| {
+            events.iter().any(|event| {
+                matches!(event,
+            Event::Output {run:1, text, ..} if text.contains("Cursor result: success"))
+            })
+        })
+        .await;
+        file_ready(&h.root.path().join("control/child.ready")).await;
+        let lock = child_lock(h.root.path());
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        assert!(
+            !h.events
+                .iter()
+                .any(|event| matches!(event, Event::Finished { run: 1, .. }))
+        );
+
+        h.start(2, h.task(2, ExecutionMode::Direct, json!({})), &source)
+            .await;
+        h.until(|events| {
+            events.iter().any(|event| {
+                matches!(
+                    event,
+                    Event::Queued {
+                        run: 2,
+                        reason: QueueReason::GlobalLimit | QueueReason::Repository(1),
+                        ..
+                    }
+                )
+            })
+        })
+        .await;
+        h.manager.cancel_run(1);
+        h.until(|events| {
+            Harness::finished(events, 1, JobStatus::Cancelled) && Harness::ready(events, 2)
+        })
+        .await;
+        lock_released(&lock).await;
+        let finished = h
+            .events
+            .iter()
+            .position(|event| matches!(event, Event::Finished { run: 1, .. }))
+            .unwrap();
+        let started = h
+            .events
+            .iter()
+            .position(|event| matches!(event, Event::Started { run: 2, .. }))
+            .unwrap();
+        assert!(finished < started);
+        if mode == ExecutionMode::IsolatedWorktree {
+            let retained = h.metadata(1);
+            assert!(retained.path.is_dir());
+            assert_eq!(
+                worktrees::inspect(&retained).await.unwrap().changed,
+                Some(true)
+            );
+            assert_eq!(
+                fs::read_to_string(source.path.join("tracked.txt")).unwrap(),
+                "base\n"
+            );
+        } else {
+            assert_eq!(
+                fs::read_to_string(source.path.join("tracked.txt")).unwrap(),
+                "1"
+            );
+        }
+        h.release(2, "source");
+        h.until(|events| Harness::finished(events, 2, JobStatus::Succeeded))
+            .await;
+        h.close().await;
     }
 }
 

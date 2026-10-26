@@ -126,6 +126,31 @@ pub fn complete() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Synthetic failure propagation through the existing parent protocol, never
+/// an assertion about the wire format emitted by a real Cursor subagent.
+pub fn failed_task(state: &str) {
+    for subtype in ["started", "completed"] {
+        let mut event = serde_json::json!({"type":"tool_call", "subtype":subtype,
+            "call_id":"task", "session_id":"cursor-fixture",
+            "tool_call":{"function":{"name":"task", "arguments":"synthetic task"}}});
+        if subtype == "completed" {
+            event["tool_call"]["function"]["result"] = serde_json::json!({
+                "error":{"message":format!("Subagent {state}")}
+            });
+        }
+        println!("{event}");
+    }
+}
+
+pub fn failed_result() {
+    println!(
+        "{}",
+        serde_json::json!({"type":"result", "subtype":"error",
+        "is_error":true, "result":"synthetic parent failure", "session_id":"cursor-fixture",
+        "duration_ms":1, "duration_api_ms":1})
+    );
+}
+
 /// Synthetic native function envelope. The command is output data only: this
 /// fixture never executes deletion commands or emulates Cursor's classifier.
 pub fn shell_call(state: &str, command: &str, rejection: Option<&str>) {

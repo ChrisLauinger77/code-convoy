@@ -378,6 +378,9 @@ fn gate(
             "{}",
             serde_json::json!({"type":"assistant", "session_id":"cursor-fixture", "message":{"role":"assistant", "content":[{"type":"text","text":format!("fixture gate ready {marker}")}]}})
         );
+        if config["cursor_terminal_before_gate"].as_bool() == Some(true) {
+            cursor::complete()?;
+        }
     } else if claude {
         if let Some(init) = config.get("claude_init") {
             println!("{init}");
@@ -478,7 +481,20 @@ fn gate(
         }
         antigravity::result("SUCCESS", "", None);
     } else if cursor {
+        if config["cursor_terminal_before_gate"].as_bool() == Some(true) {
+            return Ok(());
+        }
         match config["cursor_outcome"].as_str() {
+            Some("subagent_failed") => cursor::failed_task("failed"),
+            Some("subagent_stopped") => cursor::failed_task("stopped"),
+            Some("parent_failure_zero") => {
+                cursor::failed_result();
+                return Ok(());
+            }
+            Some("success_nonzero") => {
+                cursor::complete()?;
+                std::process::exit(7);
+            }
             Some("missing_auth") => {
                 eprint!(
                     "{}",
