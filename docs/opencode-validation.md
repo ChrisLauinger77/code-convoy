@@ -2,6 +2,11 @@
 
 Recorded 2026-10-05. OpenCode is implemented as CodeConvoy's third independent backend. Claude was still planned at the time of this OpenCode validation; see the subsequent [Claude validation](claude-validation.md). This record does not claim authenticated OpenCode E2E success. The [OpenCode 2 compatibility](#opencode-2-compatibility) section was added on 2026-10-20.
 
+The [OpenCode 2.1 event audit](opencode-2.1-audit.md), recorded 2026-10-26,
+compares official 2.1.0–2.1.4 contracts with the existing CLI adapter and adds
+captured-event regression coverage. It includes the runtime and cleanup limits
+observed during that audit; the historical evidence below remains unchanged.
+
 ## OpenCode 2 compatibility
 
 Recorded 2026-10-20 for CodeConvoy 1.3.0. A compatibility watch reported that OpenCode 2 may no longer accept `--dir`. That is confirmed: OpenCode 2 (tags `v2.0.0`, 2026-09-11, to `v2.0.32`, 2026-10-16) has no `--dir` for `run`, and its parser rejects unknown flags. Every OpenCode 2 job failed in that parser, and **Check CLI** already rejected OpenCode 2 for the missing flag. OpenCode 1 (`opencode-ai` on npm, latest `1.19.3`) still supports `--dir`. OpenCode 2 is supported on macOS, Linux and Windows; on macOS and Linux CodeConvoy confirms that its detached server has stopped (see the cancellation decision below). OpenCode was not installed on the development Mac, so no installed-CLI or authenticated check was possible.

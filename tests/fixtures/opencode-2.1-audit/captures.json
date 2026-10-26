@@ -1,0 +1,187 @@
+{
+  "captured": "2026-10-26",
+  "platform": "Linux x86_64",
+  "provider": "Deterministic local HTTP/SSE fixture; official CLI binaries, no hosted inference or credentials",
+  "packages": [
+    {
+      "name": "@opencode/cli-linux-x64",
+      "version": "2.1.0",
+      "integrity": "sha512-mNe1Br71C+9QZS9KYhs4soFuuKoG6A6bGI3xsdcBQRK8Nc494CDGnncUPNGLeEUp9zzpMwBMB27dmetXIkwZ6w==",
+      "tarball": "https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-2.1.0.tgz"
+    },
+    {
+      "name": "@opencode/cli-linux-x64",
+      "version": "2.1.2",
+      "integrity": "sha512-O8/8JT8SNmMReDmpYDsm04KmkrQQ2dzaKgaw06zCoUfh50ARGHs58E6zCh16GIUyEL8abrdSe268K5/ExE89Gw==",
+      "tarball": "https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-2.1.2.tgz"
+    },
+    {
+      "name": "@opencode/cli-linux-x64",
+      "version": "2.1.4",
+      "integrity": "sha512-o8EJ0ZsT4dzDKN+0mpG2EKbNGzJyp+F1++Av28UReRVfiEv+N34eZEnN/unkiMoerKHad6W6Ii7k4ukTnPNmNQ==",
+      "tarball": "https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-2.1.4.tgz"
+    },
+    {
+      "name": "opencode-linux-x64",
+      "version": "1.19.4",
+      "integrity": "sha512-rQ/l3jmJoxf8ZYnBargg9alURlz6buEilysGODtzkcmcYtcZ91LOgF034oUUHHQl8/y1hbRTDvg6ujqUjQsMXw==",
+      "tarball": "https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.19.4.tgz"
+    }
+  ],
+  "captures": [
+    {
+      "version": "2.1.0",
+      "scenario": "success",
+      "file": "2.1.0-success.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.0",
+      "scenario": "tool-error",
+      "file": "2.1.0-tool-error.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.0",
+      "scenario": "auth-error",
+      "file": "2.1.0-auth-error.jsonl",
+      "exit_code": 1,
+      "expected": "Failed"
+    },
+    {
+      "version": "2.1.0",
+      "scenario": "compaction",
+      "file": "2.1.0-compaction.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.0",
+      "scenario": "continuation",
+      "file": "2.1.0-continuation.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.4",
+      "scenario": "success",
+      "file": "2.1.4-success.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.4",
+      "scenario": "tool-error",
+      "file": "2.1.4-tool-error.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.4",
+      "scenario": "auth-error",
+      "file": "2.1.4-auth-error.jsonl",
+      "exit_code": 1,
+      "expected": "Failed"
+    },
+    {
+      "version": "2.1.4",
+      "scenario": "compaction",
+      "file": "2.1.4-compaction.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.4",
+      "scenario": "continuation",
+      "file": "2.1.4-continuation.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "1.19.4",
+      "scenario": "success",
+      "file": "1.19.4-success.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "1.19.4",
+      "scenario": "tool-error",
+      "file": "1.19.4-tool-error.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "1.19.4",
+      "scenario": "auth-error",
+      "file": "1.19.4-auth-error.jsonl",
+      "exit_code": 1,
+      "expected": "Failed"
+    },
+    {
+      "version": "1.19.4",
+      "scenario": "compaction",
+      "file": "1.19.4-compaction.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "1.19.4",
+      "scenario": "continuation",
+      "file": "1.19.4-continuation.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.0",
+      "scenario": "compaction-failure",
+      "file": "2.1.0-compaction-failure.jsonl",
+      "exit_code": 1,
+      "expected": "Failed"
+    },
+    {
+      "version": "2.1.2",
+      "scenario": "quota-error",
+      "file": "2.1.2-quota-error.jsonl",
+      "exit_code": 1,
+      "expected": "Failed"
+    },
+    {
+      "version": "2.1.4",
+      "scenario": "quota-error",
+      "file": "2.1.4-quota-error.jsonl",
+      "exit_code": 1,
+      "expected": "Failed"
+    },
+    {
+      "version": "2.1.0",
+      "scenario": "mcp-input",
+      "file": "2.1.0-mcp-input.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.4",
+      "scenario": "mcp-input",
+      "file": "2.1.4-mcp-input.jsonl",
+      "exit_code": 0,
+      "expected": "Succeeded"
+    },
+    {
+      "version": "2.1.0",
+      "scenario": "process-cancellation",
+      "file": "2.1.0-process-cancellation.jsonl",
+      "exit_code": 130,
+      "expected": "Failed"
+    },
+    {
+      "version": "2.1.4",
+      "scenario": "process-cancellation",
+      "file": "2.1.4-process-cancellation.jsonl",
+      "exit_code": 130,
+      "expected": "Failed"
+    }
+  ]
+}

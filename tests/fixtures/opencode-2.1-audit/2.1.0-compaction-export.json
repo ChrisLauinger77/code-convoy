@@ -1,0 +1,173 @@
+{
+  "info": {
+    "id": "ses_e8771d7d1ffeTQn1Vi357EOQQN",
+    "projectID": "global",
+    "model": {
+      "id": "audit-model",
+      "providerID": "audit",
+      "variant": "default"
+    },
+    "cost": 0,
+    "tokens": {
+      "input": 25060,
+      "output": 12,
+      "reasoning": 0,
+      "cache": {
+        "read": 0,
+        "write": 0
+      }
+    },
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793023945051,
+      "updated": 1793023945460,
+      "idle": 1793023945464
+    },
+    "title": "AUDIT_OK",
+    "location": {
+      "directory": "/workspace/code-convoy/work/opencode-audit/repo-2.1.0 Grüße 日本"
+    }
+  },
+  "messages": [
+    {
+      "id": "msg_1788e2979001cRIviDFBLpHq24",
+      "time": {
+        "created": 1793023945232
+      },
+      "text": "AUDIT:compaction\n",
+      "files": [],
+      "type": "user"
+    },
+    {
+      "id": "msg_1788e2a2b0015fOLWszQJgMwza",
+      "time": {
+        "created": 1793023945275,
+        "streamed": 1793023945330,
+        "completed": 1793023945350
+      },
+      "type": "assistant",
+      "agent": "build",
+      "model": {
+        "id": "audit-model",
+        "providerID": "audit",
+        "variant": "default"
+      },
+      "content": [
+        {
+          "type": "tool",
+          "id": "call_audit_read",
+          "name": "read",
+          "executed": false,
+          "state": {
+            "status": "completed",
+            "input": {
+              "path": "README.md"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Read file README.md, lines 1-1\n1: CLI compatibility audit fixture."
+              }
+            ],
+            "metadata": {
+              "truncated": false
+            }
+          },
+          "time": {
+            "created": 1793023945321,
+            "ran": 1793023945327,
+            "completed": 1793023945338
+          }
+        }
+      ],
+      "snapshot": {
+        "start": "ce9f93b4a41611c9bfa025c31ddb45a8a41ba6ad",
+        "end": "ce9f93b4a41611c9bfa025c31ddb45a8a41ba6ad",
+        "files": []
+      },
+      "finish": "tool-calls",
+      "rawFinish": "tool_calls",
+      "cost": 0,
+      "tokens": {
+        "input": 25000,
+        "output": 3,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "type": "compaction",
+      "id": "msg_1788e2aa2001liVVNfact5wqn6",
+      "time": {
+        "created": 1793023945378
+      },
+      "status": "completed",
+      "reason": "auto",
+      "model": {
+        "id": "audit-model",
+        "providerID": "audit",
+        "variant": "default"
+      },
+      "summary": "## Objective\n- Complete the CLI audit.\n\n## Next Move\n1. Continue the pending response.\n",
+      "cost": 0,
+      "tokens": {
+        "input": 20,
+        "output": 3,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1788e2ab2001JG3vc5bRU80NA3",
+      "time": {
+        "created": 1793023945414,
+        "streamed": 1793023945452,
+        "completed": 1793023945460
+      },
+      "type": "assistant",
+      "agent": "build",
+      "model": {
+        "id": "audit-model",
+        "providerID": "audit",
+        "variant": "default"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "AUDIT_OK"
+        }
+      ],
+      "snapshot": {
+        "start": "ce9f93b4a41611c9bfa025c31ddb45a8a41ba6ad",
+        "end": "ce9f93b4a41611c9bfa025c31ddb45a8a41ba6ad",
+        "files": []
+      },
+      "finish": "stop",
+      "rawFinish": "stop",
+      "cost": 0,
+      "tokens": {
+        "input": 20,
+        "output": 3,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1788e2af8001XULVtKAVZv6I7Z",
+      "time": {
+        "created": 1793023945464
+      },
+      "type": "idle",
+      "outcome": "succeeded"
+    }
+  ]
+}
