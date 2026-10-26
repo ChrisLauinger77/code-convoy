@@ -341,7 +341,7 @@ async fn confirmation_that_stops_the_cli_like_a_terminal_read_is_bounded_or_canc
             .await;
         let path = h.worktree(1).path.clone();
         let pid = fs::read_to_string(path.join("stopped.pid")).unwrap();
-        tokio::time::timeout(Duration::from_secs(10), async {
+        let reached = tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 let stat = Command::new("ps")
                     .args(["-o", "stat=", "-p", &pid])
@@ -356,8 +356,15 @@ async fn confirmation_that_stops_the_cli_like_a_terminal_read_is_bounded_or_canc
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         })
-        .await
-        .expect("fixture never reached the stopped state");
+        .await;
+        if reached.is_err() {
+            h.finished(1).await;
+            let (status, detail) = h.outcome(1);
+            panic!(
+                "fixture never stayed stopped; {status:?}: {detail}\nRaw: {}",
+                raw(&h.events)
+            );
+        }
         let stopped = std::time::Instant::now();
         let lock = fs::OpenOptions::new()
             .read(true)
