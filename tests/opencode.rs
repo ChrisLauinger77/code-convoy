@@ -368,6 +368,168 @@ fn captured_runs_complete_under_each_versions_own_rule() {
 }
 
 #[test]
+fn official_2_1_cli_captures_and_v1_regression_use_the_existing_completion_rules() {
+    // Official release binaries against a local deterministic provider, including
+    // actual read failures, automatic compaction, MCP timeouts and cancellation.
+    // These are captured CLI streams, not hand-written SDK or HTTP events.
+    let manifest: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/opencode-2.1-audit/captures.json")).unwrap();
+    let root =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/opencode-2.1-audit");
+    for capture in manifest["captures"].as_array().unwrap() {
+        let file = capture["file"].as_str().unwrap();
+        let data = std::fs::read(root.join(file)).unwrap();
+        let options = [(
+            "version".into(),
+            capture["version"]
+                .as_str()
+                .unwrap()
+                .split('.')
+                .next()
+                .unwrap()
+                .into(),
+        )]
+        .into();
+        let mut output = OpenCode.output_with_options(&options);
+        for chunk in data.chunks(37) {
+            output.push(Stream::Stdout, chunk);
+        }
+        output.finish();
+        let expected = match capture["expected"].as_str().unwrap() {
+            "Succeeded" => JobStatus::Succeeded,
+            "Failed" => JobStatus::Failed,
+            other => panic!("unexpected capture outcome: {other}"),
+        };
+        assert_eq!(
+            output
+                .interpret(status(capture["exit_code"].as_i64().unwrap() as i32))
+                .0,
+            expected,
+            "{file}"
+        );
+        if capture["scenario"] == "tool-error" {
+            assert!(
+                output
+                    .take_activity()
+                    .unwrap()
+                    .contains("Tool (error): read")
+            );
+        }
+        if capture["scenario"] == "process-cancellation" {
+            // The runner owns Cancelled; an interrupted CLI cannot pass the
+            // output decoder's success rule even without an error event.
+            assert_eq!(capture["exit_code"], 130);
+        }
+    }
+}
+
+#[test]
+fn structured_2_1_errors_keep_retry_timing_and_cannot_be_overridden_by_later_success() {
+    let options = opencode2(task()).options;
+    let success = include_str!("fixtures/opencode-2.1-audit/2.1.4-success.jsonl");
+    for data in [
+        include_str!("fixtures/opencode-2.1-audit/2.1.2-quota-error.jsonl"),
+        include_str!("fixtures/opencode-2.1-audit/2.1.4-quota-error.jsonl"),
+        include_str!("fixtures/opencode-2.1-audit/2.1.0-compaction-failure.jsonl"),
+    ] {
+        let error = data
+            .lines()
+            .find(|line| {
+                serde_json::from_str::<serde_json::Value>(line).unwrap()["type"] == "error"
+            })
+            .unwrap();
+        let mut output = OpenCode.output_with_options(&options);
+        assert_eq!(output.push(Stream::Stdout, error.as_bytes()), "");
+        assert_eq!(output.push(Stream::Stdout, b"\n"), format!("{error}\n"));
+        output.push(Stream::Stdout, success.as_bytes());
+        output.finish();
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+        let activity = output.take_activity().unwrap();
+        let event: serde_json::Value = serde_json::from_str(error).unwrap();
+        if event["error"]["type"] == "provider.quota" {
+            assert_eq!(event["error"]["retryAfterMs"], 2000);
+            assert!(activity.contains(r#""retryAfterMs":2000"#));
+            assert!(activity.contains(r#""status":429"#));
+        } else {
+            assert_eq!(event["error"]["type"], "compaction.failed");
+            assert!(activity.contains("Compaction summary"));
+        }
+    }
+}
+
+#[test]
+fn completed_2_1_compaction_and_continuation_do_not_need_sdk_lifecycle_events() {
+    let options = opencode2(task()).options;
+    for (export, events) in [
+        (
+            include_str!("fixtures/opencode-2.1-audit/2.1.0-compaction-export.json"),
+            include_str!("fixtures/opencode-2.1-audit/2.1.0-compaction.jsonl"),
+        ),
+        (
+            include_str!("fixtures/opencode-2.1-audit/2.1.4-compaction-export.json"),
+            include_str!("fixtures/opencode-2.1-audit/2.1.4-compaction.jsonl"),
+        ),
+    ] {
+        // Independent session exports establish that compaction really happened;
+        // its lifecycle is deliberately absent from the CLI's JSON projection.
+        let export: serde_json::Value = serde_json::from_str(export).unwrap();
+        assert!(
+            export["messages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|message| {
+                    message["type"] == "compaction" && message["status"] == "completed"
+                })
+        );
+        assert!(!events.contains("session.compact"));
+        assert_eq!(
+            decode(&options, events).interpret(status(0)).0,
+            JobStatus::Succeeded
+        );
+    }
+    let first = include_str!("fixtures/opencode-2.1-audit/2.1.4-success.jsonl");
+    let continued = include_str!("fixtures/opencode-2.1-audit/2.1.4-continuation.jsonl");
+    let session = |data: &str| {
+        serde_json::from_str::<serde_json::Value>(data.lines().next().unwrap()).unwrap()["sessionID"]
+            .clone()
+    };
+    assert_eq!(session(first), session(continued));
+    assert!(continued.contains("AUDIT_CONTINUED"));
+    // This is an upstream continuation probe; CodeConvoy does not pass either flag.
+    for argument in OpenCode.build(&opencode2(task()), &repo()).unwrap().args {
+        assert!(argument != "--session" && argument != "--continue");
+    }
+}
+
+#[test]
+fn captured_2_1_help_and_malformed_or_unexpected_cli_records_keep_the_existing_contract() {
+    let options = opencode2(task()).options;
+    for help in [
+        include_str!("fixtures/opencode-2.1-audit/2.1.0-run-help.txt"),
+        include_str!("fixtures/opencode-2.1-audit/2.1.4-run-help.txt"),
+    ] {
+        OpenCode.check_detection_for(&options, help).unwrap();
+    }
+    let success = include_str!("fixtures/opencode-2.1-audit/2.1.4-success.jsonl");
+    let unknown = "{\"type\":\"future_cli_event\",\"native\":{\"opaque\":true}}\n";
+    let mut output = OpenCode.output_with_options(&options);
+    assert_eq!(output.push(Stream::Stdout, unknown.as_bytes()), unknown);
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+    output.push(Stream::Stdout, success.as_bytes());
+    output.finish();
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+    for malformed in ["{broken\n", "{\"type\":\"text\",\"part\":"] {
+        assert_eq!(
+            decode(&options, &format!("{success}{malformed}"))
+                .interpret(status(0))
+                .0,
+            JobStatus::Failed
+        );
+    }
+}
+
+#[test]
 fn opencode_2_success_still_needs_an_answered_final_step_and_no_errors() {
     let v2 = include_str!("fixtures/opencode-2.0.32-run.jsonl");
     let two = opencode2(task()).options;
