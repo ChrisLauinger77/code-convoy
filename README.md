@@ -53,7 +53,7 @@ through the first convoy, Git review, manual validation and history.
 
 The guides describe the current source. Published packages can predate these
 changes; use their release notes and the dated verification records for exact
-version/platform evidence. Preparing 1.3.1 does not itself publish a new release.
+version/platform evidence. Preparing 1.3.2 does not itself publish a new release.
 
 ## Agent support
 
@@ -97,7 +97,7 @@ CodeConvoy neither bundles these runtimes nor downloads or installs them.
 The CodeConvoy installer stops with guidance if a required runtime is missing,
 old or unusable; silent/passive installation fails without a blocking dialog.
 Uninstallation requires the x86 runtime so it can safely check running processes.
-The 1.3.1 candidate installer uses native Windows APIs and requires only the x64
+The 1.3.2 candidate installer uses native Windows APIs and requires only the x64
 application runtime; its uninstaller needs no Visual C++ runtime. An upgrade
 that invokes the released 1.0.0 uninstaller still needs that uninstaller's x86
 runtime. The 1.0.0 downloads above are unchanged.
@@ -223,7 +223,7 @@ A working X11 or Wayland desktop and OpenGL/EGL driver are required. The folder
 picker needs `libdbus` and an XDG Desktop Portal with a FileChooser-capable
 backend appropriate to your desktop; `zenity` is its fallback. Manual path entry remains available.
 Git and agent CLIs run from the host. If AppImage mounting is unavailable, run
-`./CodeConvoy-1.3.1-x86_64.AppImage --appimage-extract-and-run`.
+`./CodeConvoy-1.3.2-x86_64.AppImage --appimage-extract-and-run`.
 
 X11 startup also needs the host's `libxkbcommon-x11.so.0`: install
 `libxkbcommon-x11-0` on Debian/Ubuntu or `libxkbcommon-x11` on Fedora/RHEL,
