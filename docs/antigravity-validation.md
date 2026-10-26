@@ -26,7 +26,7 @@ is not a substitute.
 | Permissions | Settings rules (`permissions.allow/deny/ask`), soft-deny in headless, `--dangerously-skip-permissions`, `--sandbox`, `--mode` | Headless mode, [permissions](https://antigravity.google/docs/permissions?tab=cli), [modes](https://antigravity.google/docs/cli/modes/) |
 | Session continuation | `--continue`, `--conversation <id>`; conversations scoped to cwd | Headless mode, conversations |
 | Authentication | Google sign-in (OS keyring), Gemini Enterprise, ADC (`AGY_ADC_AUTH=true`), Gemini API key with `modelProvider=gemini`; headless reuses cached credentials and fails with `authentication required` without a terminal | [Install and auth](https://antigravity.google/docs/install?tab=cli), headless mode |
-| Platforms | macOS, Linux and Windows releases (changelog fixes for each); Auto mode is Linux/macOS only | Changelog |
+| Platforms | macOS, Linux and Windows releases (changelog fixes for each); Auto mode is Linux/macOS only until 1.4.4 adds Windows 11 24H2 for personal accounts | Changelog |
 
 Third-party orchestration of `agy` with account sign-in is described as
 supported only by an unofficial forum answer; no official terms statement was
@@ -132,6 +132,10 @@ sandbox off and asks before commands on Windows 10 and Windows 11 before 24H2;
 earlier releases fail to start sandboxed commands there. An explicit **Enable for
 this job** is therefore rejected at review unless the registry's
 `CurrentBuildNumber` is 26100 or newer, or when it cannot be read.
+Google's sandbox guide adds that from 1.4.4 `--sandbox` has no effect on Linux
+hosts and containers that block unprivileged user namespaces. CodeConvoy does not
+gate that case; the setting help and review summary state it. See the
+[1.4.3–1.4.7 audit](antigravity-1.4-audit.md).
 
 Not used: `-p`, `--print-timeout`, `--continue`, `--conversation`, `--agent`,
 `--json-schema`, `--mode`, Antigravity's own worktrees, `/fork` and remote control. Tasks starting
@@ -285,9 +289,10 @@ error). Tests pin each case, the absence of invented advice and the summary.
   access, `denied_actions` shape, soft-deny stderr wording and permission
   enforcement, on every platform.
 - Whether `init.cwd` reports a linked worktree path or its main repository.
-- Linux and Windows behavior of the installed CLI, including whether the
-  Windows auto-updater leaves CodeConvoy's Job Object and whether stopping it
-  mid-update is safe.
+- Windows behavior of the installed CLI, including whether the Windows
+  auto-updater leaves CodeConvoy's Job Object and whether stopping it mid-update
+  is safe. On Linux, agy 1.4.7 repeated the signed-out checks above; see the
+  [1.4.3–1.4.7 audit](antigravity-1.4-audit.md#real-cli-evidence-agy-147-linux).
 - Whether Remote Control or the Antigravity Hub start inside a CodeConvoy job.
 - Concurrent headless `agy` processes sharing one sign-in, keyring and
   conversation store.

@@ -68,7 +68,7 @@ static OPTIONS: &[OptionSpec] = &[
         key: "sandbox",
         label: "Terminal sandbox",
         default: "configured",
-        help: "Antigravity configuration keeps your terminal sandbox setting. Enable restricts agent-launched commands with Antigravity's OS containment (--sandbox) for this job. On Windows it requires Windows 11 24H2 or newer; older Windows is rejected because Antigravity turns the sandbox off there. CodeConvoy does not provide a sandbox itself.",
+        help: "Antigravity configuration keeps your terminal sandbox setting. Enable restricts agent-launched commands with Antigravity's OS containment (--sandbox) for this job. On Windows it requires Windows 11 24H2 or newer; older Windows is rejected because Antigravity turns the sandbox off there. Antigravity also ignores it on Linux hosts or containers that block unprivileged user namespaces. Since agy 1.4.6, sandboxed commands cannot use ~/.docker, ~/.kube or ~/_netrc unless your Antigravity settings grant access; CodeConvoy adds no grants. CodeConvoy does not provide a sandbox itself.",
         kind: OptionKind::Choice(&[
             ("configured", "Antigravity configuration"),
             ("enabled", "Enable for this job"),
@@ -262,7 +262,7 @@ impl AgentBackend for Antigravity {
             "Antigravity's configured permission rules apply; tools that need approval are soft-denied in headless runs."
         };
         let sandbox = if value(options, &OPTIONS[4]) == "enabled" {
-            "Explicit --sandbox: agent-launched commands use Antigravity's terminal sandbox."
+            "Explicit --sandbox: agent-launched commands use Antigravity's terminal sandbox where the host supports it; Antigravity ignores it on Linux hosts that block unprivileged user namespaces."
         } else {
             "Antigravity's configured terminal sandbox setting applies."
         };
