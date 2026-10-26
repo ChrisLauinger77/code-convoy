@@ -44,7 +44,8 @@ to stderr) with placeholder descriptions instead of Google's text.
 `antigravity-1.4.2-authentication.stdout.jsonl` and
 `antigravity-1.4.2-authentication.stderr.txt` are the unmodified output of
 CodeConvoy's invocation of agy 1.4.2 without sign-in; no credentials, URLs or
-paths appear in them. `antigravity-success.jsonl`
+paths appear in them. agy 1.4.7 on Linux printed byte-identical output and the
+same help flag set. `antigravity-success.jsonl`
 reproduces the headless guide's recorded stream with sanitized values;
 `antigravity-activity.jsonl`, `antigravity-error.jsonl` and
 `antigravity-interrupted.jsonl` are synthetic variants of the documented shapes.

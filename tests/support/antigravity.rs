@@ -110,6 +110,26 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             result("SUCCESS", "", Some(json!(["command(cargo test)"])));
             return Ok(());
         }
+        "antigravity-fixture:stalled-after-refusal" => {
+            // agy 1.4.6+ can leave a sibling tool of a soft-denied call ACTIVE
+            // and never send a result (upstream issue 1328); only Stop or the
+            // CodeConvoy time limit ends such a run.
+            init()?;
+            eprintln!(
+                "Antigravity fixture refused run_command; allow command(cargo) to permit it."
+            );
+            println!(
+                "{}",
+                json!({"event":"step_update","step_update":{"conversation_id":CONVERSATION,"step_index":2,"state":"DONE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","error":{"type":"PERMISSION_DENIED","message":"fixture refusal"}}}})
+            );
+            println!(
+                "{}",
+                json!({"event":"step_update","step_update":{"conversation_id":CONVERSATION,"step_index":3,"state":"ACTIVE","step_type":"tool","tool_name":"run_command"}})
+            );
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(60));
+            }
+        }
         "antigravity-fixture:wrong-cwd" => {
             println!(
                 "{}",

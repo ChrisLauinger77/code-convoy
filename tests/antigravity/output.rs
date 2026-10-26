@@ -187,7 +187,8 @@ fn authentication_failures_are_classified_without_reading_credentials() {
 #[test]
 fn installed_1_4_2_unauthenticated_output_is_an_authentication_failure() {
     // Captured from agy 1.4.2 with CodeConvoy's exact invocation, no sign-in:
-    // a lone ERROR result without init, exit 1, and a stderr notice.
+    // a lone ERROR result without init, exit 1, and a stderr notice. agy 1.4.7
+    // on Linux printed byte-identical stdout and stderr.
     let stdout = include_str!("../fixtures/antigravity-1.4.2-authentication.stdout.jsonl");
     let stderr = include_str!("../fixtures/antigravity-1.4.2-authentication.stderr.txt");
     let (status, detail, text) = outcome(stdout, stderr, 1);
@@ -372,6 +373,63 @@ fn refused_actions_and_recoverable_tool_errors_stay_visible_on_success() {
     let (status, detail, _) = outcome(&join(&records), "", 0);
     assert_eq!(status, JobStatus::Succeeded);
     assert!(detail.contains("unrecognized form"), "{detail}");
+}
+
+#[test]
+fn sandbox_credential_denials_stay_tool_outcomes_rather_than_sign_in_failures() {
+    // agy 1.4.6 hides ~/.docker, ~/.kube and ~/_netrc from sandboxed commands
+    // unless granted. A registry's "authentication required" in tool output or
+    // in the model's answer is not an Antigravity sign-in failure.
+    let mut records = lines(SUCCESS);
+    let conversation = records[0]["conversation_id"].clone();
+    let tool = |index: u64, state: &str, info: Value| json!({"event":"step_update","step_update":{"conversation_id":conversation,"step_index":index,"state":state,"step_type":"tool","tool_name":"run_command","tool_info":info}});
+    records.splice(
+        2..2,
+        [
+            tool(5, "ACTIVE", json!({"name": "run_command"})),
+            tool(
+                5,
+                "DONE",
+                json!({"name":"run_command","parameters":{"CommandLine":"docker push registry.example/app"},"output":"unauthorized: authentication required\n"}),
+            ),
+            tool(
+                6,
+                "DONE",
+                json!({"name":"run_command","parameters":{"CommandLine":"kubectl get pods"},"error":{"type":"PERMISSION_DENIED","message":"open ~/.kube/config: permission denied"}}),
+            ),
+        ],
+    );
+    let result = &mut records.last_mut().unwrap()["result"];
+    result["response"] = json!("docker push failed: authentication required\n");
+    result["denied_actions"] = json!(["command(docker push registry.example/app)"]);
+    let (status, detail, text) = outcome(
+        &join(&records),
+        "Refused run_command outside the terminal sandbox.\n",
+        0,
+    );
+    assert_eq!(status, JobStatus::Succeeded, "{detail}");
+    assert!(!detail.contains("sign-in"), "{detail}");
+    assert!(detail.contains("refused 1 tool action(s)"), "{detail}");
+    assert!(text.contains("tool: run_command · docker push registry.example/app"));
+    assert!(text.contains("tool failed: run_command · open ~/.kube/config: permission denied"));
+}
+
+#[test]
+fn a_turn_stalled_after_a_refused_tool_never_succeeds() {
+    // Upstream issue 1328 (agy 1.4.6+): a sibling of a soft-denied tool call
+    // stays ACTIVE and no result follows until the process is stopped; issue
+    // 1296 ends a sandboxed Windows run the same way with exit code 2.
+    let mut records = lines(SUCCESS);
+    let conversation = records[0]["conversation_id"].clone();
+    records.truncate(2);
+    records.push(json!({"event":"step_update","step_update":{"conversation_id":conversation,"step_index":2,"state":"DONE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","error":{"type":"PERMISSION_DENIED","message":"refused"}}}}));
+    records.push(json!({"event":"step_update","step_update":{"conversation_id":conversation,"step_index":3,"state":"ACTIVE","step_type":"tool","tool_name":"run_command"}}));
+    for (code, expected) in [(0, "incomplete"), (2, "process failed")] {
+        let (status, detail, text) = outcome(&join(&records), "", code);
+        assert_eq!(status, JobStatus::Failed, "{code}: {detail}");
+        assert!(detail.contains(expected), "{code}: {detail}");
+        assert!(text.contains("without a final result"), "{text}");
+    }
 }
 
 #[test]

@@ -172,6 +172,64 @@ async fn failed_interrupted_malformed_and_incomplete_runs_fail_closed() {
 }
 
 #[tokio::test]
+async fn a_run_stalled_after_a_refused_tool_ends_only_by_time_limit_or_stop() {
+    // Upstream issue 1328 (agy 1.4.6+): a turn can hang without a result after
+    // a soft-denied tool call. That is indistinguishable from a long tool, so
+    // nothing ends it early; the time limit fails it after confirmed cleanup.
+    let prompt = "antigravity-fixture:stalled-after-refusal";
+    let (_temp, _repository, outcome) = run(prompt, &[("timeout_seconds", "2")]).await;
+    assert_eq!(outcome.status, JobStatus::Failed, "{}", outcome.detail);
+    assert!(
+        outcome.detail.contains("timed out after 2 seconds")
+            && outcome.detail.contains("cleanup was confirmed"),
+        "{}",
+        outcome.detail
+    );
+    assert!(
+        outcome
+            .activity
+            .contains("tool failed: run_command · fixture refusal")
+    );
+    assert!(outcome.activity.contains("tool started: run_command"));
+
+    // Without a time limit, Stop cancels the stalled process tree.
+    let temp = tempfile::tempdir().unwrap();
+    let repository = repository(temp.path(), "stalled").await;
+    let mut task = task();
+    task.prompt = prompt.into();
+    task.options = [(
+        "executable".to_owned(),
+        env!("CARGO_BIN_EXE_codeconvoy-test-agent").to_owned(),
+    )]
+    .into();
+    let prepared = runner::prepare(task, vec![repository]).await.unwrap();
+    let (tx, mut rx) = tokio::sync::mpsc::channel(256);
+    let mut manager = RunManager::new(1, tx);
+    manager
+        .start(1, prepared, agents::backend(AgentId::Antigravity).unwrap())
+        .unwrap();
+    let status = tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            match rx.recv().await.unwrap() {
+                Event::Output { text, .. } if text.contains("tool started") => {
+                    manager.cancel_run(1);
+                }
+                Event::Finished { status, .. } => break status,
+                _ => {}
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(status, JobStatus::Cancelled);
+    manager.shutdown();
+    tokio::time::timeout(Duration::from_secs(10), &mut manager.join)
+        .await
+        .unwrap()
+        .unwrap();
+}
+
+#[tokio::test]
 async fn refused_actions_are_reported_and_edits_are_retained() {
     let (_temp, _repository, outcome) = run("antigravity-fixture:denied", &[]).await;
     assert_eq!(outcome.status, JobStatus::Succeeded, "{}", outcome.detail);

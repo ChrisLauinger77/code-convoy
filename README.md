@@ -46,7 +46,7 @@ through the first convoy, Git review, manual validation and history.
 | Storage measurement and safe cleanup | [Storage Overview](docs/storage.md) · [Managed worktrees](docs/worktree-cleanup.md) |
 | Keyboard and alerts | [Shortcuts](#keyboard-shortcuts) · [Notifications](docs/notifications.md) |
 | Cursor setup, permissions and limitations | [Cursor CLI guide](docs/cursor.md) · [Validation evidence](docs/cursor-validation.md) |
-| Antigravity setup, permissions and limitations | [Antigravity CLI guide](docs/antigravity.md) · [Validation evidence](docs/antigravity-validation.md) · [Release readiness](docs/antigravity-readiness.md) |
+| Antigravity setup, permissions and limitations | [Antigravity CLI guide](docs/antigravity.md) · [Validation evidence](docs/antigravity-validation.md) · [Release readiness](docs/antigravity-readiness.md) · [1.4.3–1.4.7 audit](docs/antigravity-1.4-audit.md) |
 | Upgrade and external CLI boundaries | [1.x compatibility](docs/compatibility.md) |
 | Platform evidence and remaining checks | [Verification matrix](docs/platform-validation.md) |
 | Build, contribute and report issues | [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Releasing](docs/releasing.md) |
@@ -64,7 +64,7 @@ version/platform evidence. Preparing 1.3.1 does not itself publish a new release
 | OpenCode           | Supported | Real-CLI smoke test without sign-in (1.19.3 and 2.0.32, macOS); signed-in provider E2E unverified |
 | Claude Code        | Supported | User-verified on Linux (five-repository README summarization convoy) and macOS                  |
 | Cursor CLI         | Experimental | Linux CLI `2026.10.16-e3cb207` syntax verified without sign-in; authenticated tasks and full protocol compatibility unverified |
-| Antigravity CLI    | Experimental | macOS CLI `1.4.2` Check CLI, argument syntax and unauthenticated jobs verified; authenticated tasks unverified |
+| Antigravity CLI    | Experimental | macOS CLI `1.4.2` and Linux CLI `1.4.7` Check CLI, argument syntax and unauthenticated jobs verified; authenticated tasks unverified |
 
 ## Downloads and platform support
 
@@ -929,7 +929,7 @@ instructions. **Check CLI** runs `agy --help` (read from stderr) and
 | Model | Blank keeps Antigravity's default; a slug from `agy models` is passed as `--model` |
 | Effort | Blank keeps Antigravity's configuration; Low/Medium/High map to `--effort` |
 | Permissions | **Antigravity configuration** passes no flag; **Approve all tool requests** explicitly passes `--dangerously-skip-permissions` |
-| Terminal sandbox | **Antigravity configuration** keeps your setting; **Enable for this job** passes `--sandbox` (Windows 11 24H2 or newer on Windows) |
+| Terminal sandbox | **Antigravity configuration** keeps your setting; **Enable for this job** passes `--sandbox` (Windows 11 24H2 or newer on Windows; ignored by Antigravity on Linux hosts that block unprivileged user namespaces) |
 | Time limit (seconds) | Blank is unlimited; 1–86400 limits execution after spawn |
 
 The invocation is `agy --input-format stream-json --output-format stream-json
@@ -942,10 +942,11 @@ Success requires an `init` for the assigned checkout, one conversation, only
 `SUCCESS` results with no unfinished step, and exit zero; it does not establish
 file changes. Refused tool actions keep success but are stated. Failures lead with
 recovery advice, the exit code or signal and the conversation ID. agy 1.4.2 on
-macOS passed Check CLI and failed real jobs at the sign-in gate as expected;
-authenticated tasks remain unverified. See the [guide](docs/antigravity.md),
-[evidence](docs/antigravity-validation.md) and
-[release readiness](docs/antigravity-readiness.md).
+macOS and agy 1.4.7 on Linux passed Check CLI and failed real jobs at the
+sign-in gate as expected; authenticated tasks remain unverified. See the [guide](docs/antigravity.md),
+[evidence](docs/antigravity-validation.md),
+[release readiness](docs/antigravity-readiness.md) and the
+[1.4.3–1.4.7 audit](docs/antigravity-1.4-audit.md).
 
 ## Repository safety and data
 

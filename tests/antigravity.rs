@@ -323,6 +323,8 @@ fn execution_summary_describes_explicit_choices_and_completion_limits() {
     );
     assert!(explicit.contains("--dangerously-skip-permissions"));
     assert!(explicit.contains("--sandbox"));
+    // Antigravity 1.4.4+ ignores --sandbox where Linux blocks user namespaces.
+    assert!(explicit.contains("unprivileged user namespaces"));
     assert!(explicit.contains("90 seconds"));
     assert!(
         Antigravity
