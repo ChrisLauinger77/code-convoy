@@ -82,6 +82,19 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("Interactive workspace trust confirmation is unavailable: stdin is closed.");
             std::process::exit(1);
         }
+        #[cfg(unix)]
+        Some("copilot-trust-fixture:terminal") => {
+            // A background process group reading its controlling terminal is
+            // stopped by SIGTTIN instead of seeing EOF. SIGSTOP has the same
+            // effect for the supervisor and needs no terminal.
+            let _lock = locked(Path::new("stopped.lock"))?;
+            fs::write("stopped.pid", std::process::id().to_string())?;
+            eprint!("Do you trust the files in this folder?");
+            std::io::stderr().flush()?;
+            // SAFETY: raise has no memory-safety preconditions.
+            unsafe { libc::raise(libc::SIGSTOP) };
+            return Err("Stopped confirmation fixture was continued".into());
+        }
         Some("copilot-trust-fixture:block") => {
             let _lock = locked(Path::new("blocked-parent.lock"))?;
             let _child = std::process::Command::new(std::env::current_exe()?)

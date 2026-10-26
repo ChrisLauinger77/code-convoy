@@ -26,6 +26,16 @@ fn git_command(path: &Path, args: &[&str]) -> String {
     String::from_utf8(result.stdout).unwrap().trim().into()
 }
 
+fn raw(events: &[Event]) -> String {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            Event::Output { raw, .. } => Some(raw.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
 struct Harness {
     _root: tempfile::TempDir,
     _fixture_root: tempfile::TempDir,
@@ -242,14 +252,7 @@ async fn trust_rejection_and_confirmation_eof_fail_with_raw_diagnostics_and_acti
             assert_eq!(status, JobStatus::Failed);
             assert!(detail.contains("workspace trust") && detail.contains("outside CodeConvoy"));
             assert!(!detail.contains("timed out"));
-            let raw: String = h
-                .events
-                .iter()
-                .filter_map(|event| match event {
-                    Event::Output { raw, .. } => Some(raw.as_str()),
-                    _ => None,
-                })
-                .collect();
+            let raw = raw(&h.events);
             if mode == "reject" {
                 assert!(raw.contains("Error: Workspace trust required"));
             } else {
@@ -271,17 +274,8 @@ async fn blocked_confirmation_is_bounded_or_cancelled_and_tree_cleanup_releases_
         for cancel in [false, true] {
             let mut h = Harness::new(newer).await;
             h.start(1, "block", if cancel { "60" } else { "2" }).await;
-            h.until(|events| {
-                let raw: String = events
-                    .iter()
-                    .filter_map(|event| match event {
-                        Event::Output { raw, .. } => Some(raw.as_str()),
-                        _ => None,
-                    })
-                    .collect();
-                raw.contains("Do you trust the files in this folder?")
-            })
-            .await;
+            h.until(|events| raw(events).contains("Do you trust the files in this folder?"))
+                .await;
             let path = h.worktree(1).path.clone();
             let locks = ["blocked-parent.lock", "blocked-child.lock"].map(|name| {
                 let lock = fs::OpenOptions::new()
@@ -317,6 +311,65 @@ async fn blocked_confirmation_is_bounded_or_cancelled_and_tree_cleanup_releases_
             h.assert_source_preserved();
             h.close().await;
         }
+    }
+}
+
+/// Launched from a terminal, the CLI shares its controlling terminal from a
+/// background process group: a confirmation read there stops it, so neither
+/// output nor stdin EOF ends the job. The deadline and Stop must still do so.
+#[cfg(unix)]
+#[tokio::test]
+async fn confirmation_that_stops_the_cli_like_a_terminal_read_is_bounded_or_cancelled() {
+    for cancel in [false, true] {
+        let mut h = Harness::new(true).await;
+        h.start(1, "terminal", if cancel { "60" } else { "3" })
+            .await;
+        h.until(|events| raw(events).contains("Do you trust the files in this folder?"))
+            .await;
+        let path = h.worktree(1).path.clone();
+        let pid = fs::read_to_string(path.join("stopped.pid")).unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let stat = Command::new("ps")
+                    .args(["-o", "stat=", "-p", &pid])
+                    .output()
+                    .unwrap();
+                if String::from_utf8_lossy(&stat.stdout)
+                    .trim_start()
+                    .starts_with('T')
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("fixture never reached the stopped state");
+        let lock = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path.join("stopped.lock"))
+            .unwrap();
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        if cancel {
+            h.manager.cancel_run(1);
+        }
+        h.finished(1).await;
+        let (status, detail) = h.outcome(1);
+        if cancel {
+            assert_eq!(status, JobStatus::Cancelled);
+        } else {
+            assert_eq!(status, JobStatus::Failed);
+            assert!(detail.contains("execution timed out after 3 seconds"));
+            assert!(detail.contains("cleanup was confirmed"));
+        }
+        fs2::FileExt::try_lock_exclusive(&lock).unwrap();
+        h.start(2, "complete", "60").await;
+        h.finished(2).await;
+        assert_eq!(h.outcome(2).0, JobStatus::Succeeded);
+        assert_ne!(h.worktree(2).path, path);
+        h.assert_source_preserved();
+        h.close().await;
     }
 }
 

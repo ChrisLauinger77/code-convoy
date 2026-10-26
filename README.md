@@ -647,9 +647,19 @@ CodeConvoy therefore does **not** add `--trust-folder`, even in all-tools mode.
 Ordinary stdin prompt mode does not require this flag. Untrusted repository
 integrations remain subject to Copilot's headless trust gates; saved trust and
 explicit user-configured environment opt-ins remain the CLI's responsibility.
+In the shipped 1.0.103 code, prompt mode loads repository hooks and workspace
+MCP servers only with saved folder trust, `--trust-folder`, `COPILOT_ALLOW_ALL=true`
+or the `GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS` / `GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP`
+opt-ins; otherwise it skips them without asking. Its trust dialog belongs to the
+interactive UI only. Because CodeConvoy removes an inherited `COPILOT_ALLOW_ALL`,
+that variable cannot act as trust either. Copilot's changelog states that saved
+folder trust persists across Git worktrees (1.0.60), so an isolated worktree of a
+repository already trusted in Copilot may load its integrations; that follows the
+user's saved decision and was not exercised without authentication.
 No new CLI minimum is imposed: the saved 1.0.65 help without this flag and the
-captured 1.0.99-1 help both pass the existing capability checks. Detection and
-execution continue to use the same executable with auto-update disabled.
+captured 1.0.99-1 help both pass the existing capability checks. The flag's first
+stable release is 1.0.100. Detection and execution continue to use the same
+executable with auto-update disabled.
 
 `--no-ask-user` disables the agent's question tool; it is not a guarantee against
 every CLI startup or permission prompt. stdin is a pipe containing only the task
@@ -659,6 +669,13 @@ exit. For workspace-trust errors, inspect Raw and review the **exact job working
 directory** and repository configuration with Copilot outside CodeConvoy. An
 isolated retry creates a fresh directory; trust of an earlier attempt does not
 imply trust of its replacement. CodeConvoy never edits the CLI's trust settings.
+
+When CodeConvoy is started from a terminal, a Unix child keeps that controlling
+terminal from its own background process group. A CLI reading a confirmation
+there is stopped by the kernel (SIGTTIN) and cannot consume keystrokes; its
+question appears in that terminal rather than in Raw. The deadline and **Stop**
+still end the stopped process tree. Copilot prompt mode was not observed reading
+the terminal.
 
 Copilot execution previously had no deadline. To bound a CLI that still waits
 after EOF or otherwise stops responding, Copilot now uses CodeConvoy's existing
@@ -683,22 +700,53 @@ no login, credentials, global settings or real user repository were changed.
 This establishes syntax/startup through the authentication gate, **not authenticated
 worktree execution or native trust/permission enforcement**.
 
+Linux re-audit (2026-10-26, x86-64): no Copilot was installed. The official
+`@github/copilot-linux-x64` npm packages below matched their registry SHA-512
+integrity and ran from temporary directories, with authentication variables
+removed and empty configuration/cache/home directories. The 1.0.65 and 1.0.99-1
+help output is byte-identical to the saved fixtures. Fresh detached worktrees
+received the exact adapter arguments and stdin; a 1.0.99-1 run with
+`--trust-folder` also had repository hooks and `.mcp.json` committed. No trust
+prompt, timeout, worktree change or saved trusted folder resulted.
+
+| CLI       | Tarball SHA-256                                                    | Result                                                                                                     |
+| --------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| 1.0.65    | `5d9014651ad51db6f3febe584954a0a195b3d997d0ed8f59ae67498d630a75df` | Authentication gate; adding `--trust-folder` fails with `error: unknown option '--trust-folder'`           |
+| 1.0.99-1  | `635275040c2504736ceb6a4366daf6d172311e80748e580feb241ad77d120190` | Authentication gate, with and without `--trust-folder`; both optional real-CLI tests pass                 |
+| 1.0.103   | `f3b064d98211b472a3e4cd0e63a9b643177a910a2189d6d3c946fd0df94323fd` | Rejected before startup: `error: --no-remote was removed. Use /remote off in a session; ...`              |
+| 1.0.104-3 | `68bfc9cbe92043c3f90b1f6cea851c362491f6d02d5887c9d7f77df8cf77bb4f` | Same `--no-remote` rejection                                                                               |
+
+Known incompatibility: 1.0.103, the stable release on 2026-10-26, retired
+`--no-remote` and renamed `--no-remote-export` to `--sync-session off`; 1.0.104-3
+accepts `--no-remote-export` again but still rejects `--no-remote`. **Check CLI**
+reports `Copilot CLI is missing --no-remote` before any job starts, so nothing
+hangs. Supporting these versions needs a separate decision on remote-session
+flags and is not a workspace-trust change. With the retired flags replaced
+experimentally by `--sync-session=off`, both versions reached the same
+authentication gate with and without `--trust-folder`; that is not a supported
+command.
+
 `tests/copilot.rs` and `tests/copilot/execution.rs` cover both help contracts,
 exact stdin/EOF and worktree selection, retained source state, synthetic trust
 rejection/confirmation, completion status, deadlines and cancellation of a blocked
-parent/child tree with subsequent scheduler admission. The trust-failure fixtures
+parent/child tree with subsequent scheduler admission. On Unix, a CLI stopped while
+asking for confirmation, as a terminal read would stop it, is ended by the deadline
+or **Stop** too. The trust-failure fixtures
 are deliberately synthetic; their messages are not claimed as native CLI output.
 Optional real CLI tests can select an absolute executable using
 `CODECONVOY_COPILOT_EXECUTABLE`; the fresh-worktree smoke test uses empty temporary
 Copilot/GitHub CLI configuration and removes authentication environment variables.
-Authenticated E2E for 1.0.99-1 and Linux/Windows trust behavior remain unverified.
+Authenticated E2E for every version and Windows trust behavior remain unverified.
 
 Validation on the audit host passed `cargo fmt --check`,
 `cargo clippy --all-targets --all-features -- -D warnings`,
 `cargo test --all-features` and `cargo build --release`. The full suite required
 native local permissions for an existing Unix-socket fixture. The Copilot test
 target passed 13 regular tests; both optional real-CLI tests were also run
-explicitly and passed against the temporary 1.0.99-1 binary.
+explicitly and passed against the temporary 1.0.99-1 binary. The Linux re-audit
+passed the same four checks, with 14 regular Copilot tests; the optional
+real-CLI tests passed against 1.0.65 and 1.0.99-1 and failed against 1.0.103 and
+1.0.104-3 with the `--no-remote` rejection above.
 
 ### Safe manual Copilot E2E test
 
