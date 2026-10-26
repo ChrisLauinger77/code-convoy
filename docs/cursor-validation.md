@@ -9,6 +9,11 @@ The [2026-10-20 permission audit](cursor-permission-audit.md) supplements this
 historical evidence. Cursor execution now has a finite 3600-second default;
 blank/missing saved values no longer mean unlimited execution.
 
+The [2026-10-26 subagent completion audit](cursor-subagent-completion-audit.md)
+checks v2026.10.22 release notes against the parent-stream completion boundary,
+cancellation and Windows UTF-8 paths. It adds synthetic regressions without
+changing the adapter or claiming authenticated subagent validation.
+
 ## Evidence and limits
 
 The maintainer accepted an isolated **Linux x86_64 syntax smoke test with Cursor
