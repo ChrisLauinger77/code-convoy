@@ -15,6 +15,8 @@ on:
         description: Inspect Windows release linker inputs and test installer/ZIP (no publication)
         type: boolean
         default: false
+  schedule:
+    - cron: '0 0 1 * *'
 permissions:
   contents: read
 jobs:
