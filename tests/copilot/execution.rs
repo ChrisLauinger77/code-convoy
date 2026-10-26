@@ -358,6 +358,7 @@ async fn confirmation_that_stops_the_cli_like_a_terminal_read_is_bounded_or_canc
         })
         .await
         .expect("fixture never reached the stopped state");
+        let stopped = std::time::Instant::now();
         let lock = fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -369,12 +370,21 @@ async fn confirmation_that_stops_the_cli_like_a_terminal_read_is_bounded_or_canc
         }
         h.finished(1).await;
         let (status, detail) = h.outcome(1);
+        // Report how the stopped CLI ended, not only that it ended differently.
+        let outcome = format!(
+            "{status:?} {:?} after the stop: {detail}\nRaw: {}",
+            stopped.elapsed(),
+            raw(&h.events)
+        );
         if cancel {
-            assert_eq!(status, JobStatus::Cancelled);
+            assert_eq!(status, JobStatus::Cancelled, "{outcome}");
         } else {
-            assert_eq!(status, JobStatus::Failed);
-            assert!(detail.contains("execution timed out after 3 seconds"));
-            assert!(detail.contains("cleanup was confirmed"));
+            assert_eq!(status, JobStatus::Failed, "{outcome}");
+            assert!(
+                detail.contains("execution timed out after 3 seconds"),
+                "{outcome}"
+            );
+            assert!(detail.contains("cleanup was confirmed"), "{outcome}");
         }
         fs2::FileExt::try_lock_exclusive(&lock).unwrap();
         h.start(2, "complete", "60").await;
