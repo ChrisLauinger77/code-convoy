@@ -595,6 +595,8 @@ The application sends the prompt through stdin and sets the working directory to
 
 See the official [Codex noninteractive documentation](https://learn.chatgpt.com/docs/non-interactive-mode). The user has successfully verified authenticated execution on Linux against two real repositories concurrently, including independent changes, output capture, and Git diff inspection. Successful macOS execution is also user-verified. This behavior and the Codex invocation are preserved when adding Copilot.
 
+The [Codex 0.164 audit](docs/codex-0.164-audit.md) (2026-10-26) ran this invocation through official 0.163.0 and 0.164.0 binaries against a local provider on Linux. The 0.164.0 resume, `-c`/`--config` and permission-queue fixes need no CodeConvoy change: the single `exec --config` override, JSONL events, exit codes, completion rule and cancellation behaved the same in both.
+
 ## Copilot contract
 
 Copilot has been user-verified end-to-end on Linux and macOS. Linux testing used two real repositories running concurrently. Its installed help/version output and generated CLI flags have also been checked locally.

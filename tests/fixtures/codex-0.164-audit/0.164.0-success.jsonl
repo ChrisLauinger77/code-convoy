@@ -1,0 +1,9 @@
+{"type":"thread.started","thread_id":"01a1795b-a66a-7a41-a3f1-5e036324310d"}
+{"type":"turn.started"}
+{"type":"error","message":"Reconnecting... 2/5 (unexpected status 404 Not Found: not found, url: ws://127.0.0.1:37547/v1/responses)"}
+{"type":"error","message":"Reconnecting... 3/5 (unexpected status 404 Not Found: Unknown error, url: ws://127.0.0.1:37547/v1/responses)"}
+{"type":"error","message":"Reconnecting... 4/5 (unexpected status 404 Not Found: Unknown error, url: ws://127.0.0.1:37547/v1/responses)"}
+{"type":"error","message":"Reconnecting... 5/5 (unexpected status 404 Not Found: Unknown error, url: ws://127.0.0.1:37547/v1/responses)"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Falling back from WebSockets to HTTPS transport. unexpected status 404 Not Found: not found, url: ws://127.0.0.1:37547/v1/responses"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"AUDIT_OK"}}
+{"type":"turn.completed","usage":{"input_tokens":11,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":7,"reasoning_output_tokens":0}}
