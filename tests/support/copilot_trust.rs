@@ -31,28 +31,44 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             std::thread::sleep(Duration::from_millis(10));
         }
     }
-    let newer = std::env::current_exe()?
+    let name = std::env::current_exe()?
         .file_stem()
-        .is_some_and(|name| name.to_string_lossy().ends_with("new"));
-    if !newer && args.iter().any(|arg| arg == "--trust-folder") {
-        return Err("Unknown option: --trust-folder".into());
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let (version, help) = if name.ends_with("sync") {
+        (
+            "1.0.103",
+            include_str!("../fixtures/copilot-1.0.103-help.txt"),
+        )
+    } else if name.ends_with("new") {
+        (
+            "1.0.99-1",
+            include_str!("../fixtures/copilot-1.0.99-1-help.txt"),
+        )
+    } else {
+        (
+            "1.0.65",
+            include_str!("../fixtures/copilot-1.0.65-help.txt"),
+        )
+    };
+    // Like the real CLIs, reject options this version's help does not offer
+    // (--trust-folder before 1.0.99-1, the remote-session flags across 1.0.103).
+    for arg in args.iter().skip(1).filter(|arg| arg.starts_with("--")) {
+        let flag = arg.split('=').next().unwrap_or(arg);
+        let offered = help.split_whitespace().any(|word| {
+            word.strip_prefix(flag)
+                .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['[', '=', ',']))
+        });
+        if !offered {
+            return Err(format!("unexpected argument '{flag}' for Copilot {version}").into());
+        }
     }
     if args.iter().any(|arg| arg == "--help") {
-        print!(
-            "{}",
-            if newer {
-                include_str!("../fixtures/copilot-1.0.99-1-help.txt")
-            } else {
-                include_str!("../fixtures/copilot-1.0.65-help.txt")
-            }
-        );
+        print!("{help}");
         return Ok(());
     }
     if args.iter().any(|arg| arg == "--version") {
-        println!(
-            "GitHub Copilot CLI fixture {}",
-            if newer { "1.0.99-1" } else { "1.0.65" }
-        );
+        println!("GitHub Copilot CLI fixture {version}");
         return Ok(());
     }
     let mut input = String::new();

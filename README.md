@@ -601,13 +601,25 @@ Copilot has been user-verified end-to-end on Linux and macOS. Linux testing used
 
 A previously verified installation had two versions: the normal launcher reported **1.0.91**, while `copilot --no-auto-update --version` reported the bundled **1.0.65**. CodeConvoy passes `--no-auto-update` to both detection and execution, so they consistently use the bundled executable and do not initiate CLI updates. **Check CLI** reports that effective version. If your bundled CLI is too old, it reports the missing capability; updating Copilot is a separate user action.
 
-The default command shape is:
+The default command shape for Copilot 1.0.102 and earlier is:
 
 ```sh
 copilot --no-auto-update --no-ask-user --no-color --plain-diff \
   --output-format text --stream on --no-remote --no-remote-export \
   --allow-tool=write --deny-tool=shell
 ```
+
+Copilot 1.0.103 retired `--no-remote` and renamed `--no-remote-export` to
+`--sync-session`. When the CLI's help offers `--sync-session` instead of both
+legacy flags, CodeConvoy passes `--sync-session=off` in their place. Every launch
+preflight checks the selected executable's help before its jobs are built, so the
+flags follow the installed CLI; an executable that was never checked keeps the
+legacy flags. Each generation rejects the other's flags at startup, so a CLI
+replaced after the check fails its job immediately instead of syncing the session.
+`--sync-session=off` turns off read-only session sync for the run, including sync
+enabled in Copilot settings. No 1.0.103 flag disables incoming remote control; in
+the shipped 1.0.103 code a non-TTY prompt-mode run never accepts it, and hosting
+starts only with `--host-*` flags that CodeConvoy never passes.
 
 CodeConvoy sets the selected repository as the process working directory and writes task/context to **stdin**, then closes it. Without attachments, prompt bytes remain exact; images add native file arguments as described in [task context](docs/task-context.md). Copilot documents piped input as noninteractive prompt mode. There is no shell pipeline in the implementation, no `exec` subcommand, and no `-p -` argument: that would be a literal prompt in Copilot. Each job starts a fresh local invocation; there is no resume, remote connection, fleet mode or session sharing. CodeConvoy supplies the selected direct or isolated working directory.
 
@@ -713,21 +725,22 @@ prompt, timeout, worktree change or saved trusted folder resulted.
 | --------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | 1.0.65    | `5d9014651ad51db6f3febe584954a0a195b3d997d0ed8f59ae67498d630a75df` | Authentication gate; adding `--trust-folder` fails with `error: unknown option '--trust-folder'`           |
 | 1.0.99-1  | `635275040c2504736ceb6a4366daf6d172311e80748e580feb241ad77d120190` | Authentication gate, with and without `--trust-folder`; both optional real-CLI tests pass                 |
-| 1.0.103   | `f3b064d98211b472a3e4cd0e63a9b643177a910a2189d6d3c946fd0df94323fd` | Rejected before startup: `error: --no-remote was removed. Use /remote off in a session; ...`              |
-| 1.0.104-3 | `68bfc9cbe92043c3f90b1f6cea851c362491f6d02d5887c9d7f77df8cf77bb4f` | Same `--no-remote` rejection                                                                               |
+| 1.0.102   | `450d256c69526c1c30286d21df0f6e1a05412beb37fe4a5b5054905f5f8fbd3d` | Last legacy-flag release; same as 1.0.99-1                                                                 |
+| 1.0.103   | `f3b064d98211b472a3e4cd0e63a9b643177a910a2189d6d3c946fd0df94323fd` | With `--sync-session=off`: same as 1.0.99-1. Legacy flags fail: `error: --no-remote was removed. ...`     |
+| 1.0.104-3 | `68bfc9cbe92043c3f90b1f6cea851c362491f6d02d5887c9d7f77df8cf77bb4f` | Same as 1.0.103                                                                                            |
 
-Known incompatibility: 1.0.103, the stable release on 2026-10-26, retired
+Remote-session flags: 1.0.103, the stable release on 2026-10-26, retired
 `--no-remote` and renamed `--no-remote-export` to `--sync-session off`; 1.0.104-3
-accepts `--no-remote-export` again but still rejects `--no-remote`. **Check CLI**
-reports `Copilot CLI is missing --no-remote` before any job starts, so nothing
-hangs. Supporting these versions needs a separate decision on remote-session
-flags and is not a workspace-trust change. With the retired flags replaced
-experimentally by `--sync-session=off`, both versions reached the same
-authentication gate with and without `--trust-folder`; that is not a supported
-command.
+accepts `--no-remote-export` again but still rejects `--no-remote`. Before this
+was handled, **Check CLI** rejected both with `Copilot CLI is missing --no-remote`
+before any job started. The [command shape](#copilot-contract) above describes the
+help-based selection. 1.0.103 also rejects `--sync-session=bogus`, so `=off` is
+parsed as the value, while 1.0.65 to 1.0.102 reject `--sync-session` itself.
+The 1.0.103 help is saved unmodified in `tests/fixtures/copilot-1.0.103-help.txt`.
 
-`tests/copilot.rs` and `tests/copilot/execution.rs` cover both help contracts,
-exact stdin/EOF and worktree selection, retained source state, synthetic trust
+`tests/copilot.rs` and `tests/copilot/execution.rs` cover all three help contracts,
+the remote flags each one selects at launch, exact stdin/EOF and worktree
+selection, retained source state, synthetic trust
 rejection/confirmation, completion status, deadlines and cancellation of a blocked
 parent/child tree with subsequent scheduler admission. On Unix, a CLI stopped while
 asking for confirmation, as a terminal read would stop it, is ended by the deadline
@@ -744,9 +757,8 @@ Validation on the audit host passed `cargo fmt --check`,
 native local permissions for an existing Unix-socket fixture. The Copilot test
 target passed 13 regular tests; both optional real-CLI tests were also run
 explicitly and passed against the temporary 1.0.99-1 binary. The Linux re-audit
-passed the same four checks, with 14 regular Copilot tests; the optional
-real-CLI tests passed against 1.0.65 and 1.0.99-1 and failed against 1.0.103 and
-1.0.104-3 with the `--no-remote` rejection above.
+passed the same four checks, with 15 regular Copilot tests; the optional
+real-CLI tests passed against 1.0.65, 1.0.99-1, 1.0.102, 1.0.103 and 1.0.104-3.
 
 ### Safe manual Copilot E2E test
 
