@@ -122,8 +122,8 @@ build, **120 packaging tests**, and the separate Linux private-D-Bus test pass.
 The OpenCode integration target has **22 passed, 1 intentionally ignored**; that
 ignored installed-CLI probe also passed separately for the three binaries above.
 The final full suite has **810 passed, 1 failed, 14 ignored**. Its sole failure
-matches the unmodified baseline failure below; the audit logs retain both
-runs.
+matches the unmodified baseline failure below. The logs of both runs are not part
+of this repository.
 
 Two cleanup findings prevent an unconditional all-green compatibility claim:
 

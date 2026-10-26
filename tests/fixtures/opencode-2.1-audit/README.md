@@ -38,5 +38,7 @@ Successful tool-error/MCP-input streams mean the model continued after the tool
 failure; they do not assert that the requested tool operation succeeded.
 
 See [the audit](../../../docs/opencode-2.1-audit.md) for results, source links and
-the separate cleanup findings. Capture scripts, process observations and command
-logs are retained in the audit workspace at `/workspace/work/opencode-audit`.
+the separate cleanup findings. The capture scripts, local provider and MCP server,
+process observations and command logs are not part of this repository, so these
+files cannot be regenerated from it; the invocation and environment above record
+how they were produced.
