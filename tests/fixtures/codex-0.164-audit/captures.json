@@ -1,0 +1,37 @@
+{
+  "captured": "2026-10-26",
+  "platform": "Linux x86_64",
+  "provider": "Deterministic local Responses API HTTP/SSE fixture via openai_base_url; official CLI binaries, isolated CODEX_HOME, no hosted inference or account credentials",
+  "binaries": [
+    {
+      "version": "0.163.0",
+      "source": "Installed standalone release (codex-package.json reports 0.163.0); release asset codex-package-x86_64-unknown-linux-musl.tar.zst, published 2026-10-15",
+      "bin/codex sha256": "399ff69c431c066e40de318fba45c2b07f45a76b19939d247ee4828fc70c4215"
+    },
+    {
+      "version": "0.164.0",
+      "source": "https://github.com/openai/codex/releases/download/rust-v0.164.0/codex-package-x86_64-unknown-linux-musl.tar.zst",
+      "package sha256": "7801ae47316395e3a638fb61964a9f28f84a6647c1b1ed90332e4d6b6da046d8",
+      "bin/codex sha256": "b93f6811d3f653f0fb83be4050d857fb9abbb111dfa2ce160563327daff7f306"
+    }
+  ],
+  "invocation": "codex --no-daemon --ask-for-approval never exec --json --color never --ephemeral --sandbox <read-only|workspace-write> -",
+  "captures": [
+    { "version": "0.163.0", "scenario": "success", "file": "0.163.0-success.jsonl", "exit_code": 0, "expected": "Succeeded" },
+    { "version": "0.164.0", "scenario": "success", "file": "0.164.0-success.jsonl", "exit_code": 0, "expected": "Succeeded" },
+    { "version": "0.163.0", "scenario": "failed-request", "file": "0.163.0-failed-request.jsonl", "exit_code": 1, "expected": "Failed" },
+    { "version": "0.164.0", "scenario": "failed-request", "file": "0.164.0-failed-request.jsonl", "exit_code": 1, "expected": "Failed" },
+    { "version": "0.163.0", "scenario": "escalation-rejected", "sandbox": "workspace-write", "file": "0.163.0-escalation-rejected.jsonl", "exit_code": 0, "expected": "Succeeded" },
+    { "version": "0.164.0", "scenario": "escalation-rejected", "sandbox": "workspace-write", "file": "0.164.0-escalation-rejected.jsonl", "exit_code": 0, "expected": "Succeeded" },
+    { "version": "0.163.0", "scenario": "sandbox-denied", "file": "0.163.0-sandbox-denied.jsonl", "exit_code": 0, "expected": "Succeeded" },
+    { "version": "0.164.0", "scenario": "sandbox-denied", "file": "0.164.0-sandbox-denied.jsonl", "exit_code": 0, "expected": "Succeeded" },
+    { "version": "0.163.0", "scenario": "cancelled-command", "file": "0.163.0-cancelled-command.jsonl", "exit_code": null, "expected": "Failed", "runner": "Cancelled" },
+    { "version": "0.164.0", "scenario": "cancelled-command", "file": "0.164.0-cancelled-command.jsonl", "exit_code": null, "expected": "Failed", "runner": "Cancelled" },
+    { "version": "0.163.0", "scenario": "cancelled-stream", "file": "0.163.0-cancelled-stream.jsonl", "exit_code": null, "expected": "Failed", "runner": "Cancelled" },
+    { "version": "0.164.0", "scenario": "cancelled-stream", "file": "0.164.0-cancelled-stream.jsonl", "exit_code": null, "expected": "Failed", "runner": "Cancelled" }
+  ],
+  "help": [
+    { "version": "0.163.0", "file": "0.163.0-help.txt" },
+    { "version": "0.164.0", "file": "0.164.0-help.txt" }
+  ]
+}

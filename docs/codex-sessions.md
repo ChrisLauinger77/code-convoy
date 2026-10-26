@@ -3,6 +3,11 @@
 Investigated on **2026-10-06**, with installed **Codex CLI 0.160.1**. No
 user-facing Resume/Open action is implemented for CodeConvoy jobs.
 
+The [Codex 0.164 audit](codex-0.164-audit.md), recorded 2026-10-26, adds real
+0.163.0 and 0.164.0 runs against a local provider: `exec resume` with a
+CodeConvoy `--ephemeral` thread ID fails with `no rollout found`, exit 1. The
+findings below remain unchanged.
+
 CodeConvoy launches independent `codex exec --json --ephemeral` processes with
 each selected repository as cwd. A `thread.started` identifier is an event from
 that invocation; it does not establish a saved, resumable session. The public
