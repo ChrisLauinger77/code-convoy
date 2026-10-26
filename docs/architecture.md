@@ -161,11 +161,11 @@ provider/model/permission semantics or additional backend is introduced.
 
 Codex uses stdin for the prompt to avoid shell injection and command-line length limits. It sets `--no-daemon`, explicit sandbox permissions, and `--ask-for-approval never`; no interactive approval UI exists. Authentication remains entirely with the CLI. Session resume is intentionally absent while ephemeral execution is enabled. A successful exit must also have a `turn.completed` event and no `turn.failed` event. Unknown JSONL events remain visible for diagnostics.
 
-Copilot uses its documented stdin pipe mode for a noninteractive prompt and keeps stdout as text. It uses `--no-ask-user`, explicit streaming/no-color/plain-diff, and disables remote control/export. No Codex flags or result events are applied to it. Its success criterion is process exit zero; reviewing the agent response is still necessary when tools were denied or a task was not fulfilled.
+Copilot uses its documented stdin pipe mode for a noninteractive prompt and keeps stdout as text. It uses `--no-ask-user`, explicit streaming/no-color/plain-diff, and disables remote control/export: `--no-remote --no-remote-export` up to 1.0.102, `--sync-session=off` from 1.0.103. Copilot's `check_detection_for` records which pair each executable's help offers; launch preflight runs it before `build` reads the record, and an unchecked executable keeps the legacy flags. Each generation rejects the other's flags, so a stale record fails at startup. No Codex flags or result events are applied to it. Its success criterion is process exit zero; reviewing the agent response is still necessary when tools were denied or a task was not fulfilled.
 
 Detection and execution both use `--no-auto-update`. On the development machine that selects bundled 1.0.65, whereas launching without that flag reports cached 1.0.91. Compatibility is checked against the flags required by the backend, with useful version reporting and missing-executable errors. Automatic startup checks and explicit refreshes use the same backend contract; executable generations prevent late responses from replacing a newer selection's availability.
 
-Copilot's default grants `write` permission and denies `shell`; choices also support existing CLI approvals or explicit all-tool approval. Temp-directory verification can be restricted. These are Copilot permission rules, not an OS sandbox. Saved CLI permissions/hooks/MCP configuration still apply. Authentication and `COPILOT_HOME` are inherited, never read or edited by CodeConvoy. `COPILOT_ALLOW_ALL` is removed in the child so the UI's chosen approval mode is not silently broadened by that environment variable. As with Codex, inherited `GIT_*` repository overrides are removed; authentication variables such as `GITHUB_TOKEN` do not match that prefix.
+Copilot's default grants `write` permission and denies `shell`; choices also support existing CLI approvals or explicit all-tool approval. Temp-directory verification can be restricted. These are Copilot permission rules, not an OS sandbox. Saved CLI permissions/hooks/MCP configuration still apply. Authentication and `COPILOT_HOME` are inherited, never read or edited by CodeConvoy. `COPILOT_ALLOW_ALL` is removed in the child so the UI's chosen approval mode is not silently broadened by that environment variable. Prompt mode also treats it as folder trust for repository hooks and workspace MCP servers (checked in the shipped 1.0.103 code), so the removal equally prevents an inherited trust grant; CodeConvoy never passes `--trust-folder`. As with Codex, inherited `GIT_*` repository overrides are removed; authentication variables such as `GITHUB_TOKEN` do not match that prefix.
 
 ### Third-backend review: OpenCode
 
@@ -327,8 +327,10 @@ has deterministic coverage independent of native API scheduling.
 
 On Unix, `process/unix` adds a narrow POSIX identity guard using `libc` (already a
 transitive dependency). `waitid(WEXITED | WNOHANG | WNOWAIT)` observes the direct
-child without reaping it. CodeConvoy exclusively owns that child: no competing
-waiter or automatic `SIGCHLD` reaper is permitted. Incompatible `SIGCHLD` settings
+child without reaping it. Darwin also reports a stopped child there, so a report
+whose `si_code` is `CLD_STOPPED` or `CLD_CONTINUED` is not an exit: a stopped CLI
+stays supervised until Stop or its time limit, as on Linux. CodeConvoy exclusively
+owns that child: no competing waiter or automatic `SIGCHLD` reaper is permitted. Incompatible `SIGCHLD` settings
 are rejected before spawn. While the unreaped leader reserves its PID, Stop and
 Drop may signal its process group. When the leader exits, remaining group members
 are terminated even if they redirected/closed every standard stream. The leader's

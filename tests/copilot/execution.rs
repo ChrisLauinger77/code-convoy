@@ -26,6 +26,16 @@ fn git_command(path: &Path, args: &[&str]) -> String {
     String::from_utf8(result.stdout).unwrap().trim().into()
 }
 
+fn raw(events: &[Event]) -> String {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            Event::Output { raw, .. } => Some(raw.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
 struct Harness {
     _root: tempfile::TempDir,
     _fixture_root: tempfile::TempDir,
@@ -36,8 +46,12 @@ struct Harness {
     rx: tokio::sync::mpsc::Receiver<Event>,
     events: Vec<Event>,
 }
+/// Fixture CLI generations: 1.0.65, 1.0.99-1 (--trust-folder) and 1.0.103
+/// (--sync-session instead of --no-remote/--no-remote-export).
+const CLIS: [&str; 3] = ["old", "new", "sync"];
+
 impl Harness {
-    async fn new(newer: bool) -> Self {
+    async fn new(cli: &str) -> Self {
         let root = tempfile::tempdir().unwrap();
         let fixture_root = executable::directory();
         let path = root.path().join("source ü with spaces");
@@ -62,14 +76,10 @@ impl Harness {
         fs::write(path.join("tracked.txt"), "source dirty sentinel\n").unwrap();
         fs::write(path.join("untracked.txt"), "source only\n").unwrap();
         let source = git::register(&path).await.unwrap();
-        let name = if newer {
-            "copilot-trust-new"
-        } else {
-            "copilot-trust-old"
-        };
-        let executable = fixture_root
-            .path()
-            .join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        let executable = fixture_root.path().join(format!(
+            "copilot-trust-{cli}{}",
+            std::env::consts::EXE_SUFFIX
+        ));
         executable::install(&executable);
         let (tx, rx) = tokio::sync::mpsc::channel(256);
         let manager =
@@ -182,8 +192,8 @@ impl Harness {
 
 #[tokio::test]
 async fn fresh_owned_worktrees_receive_stdin_without_granting_trust_on_old_and_new_clis() {
-    for newer in [false, true] {
-        let mut h = Harness::new(newer).await;
+    for cli in CLIS {
+        let mut h = Harness::new(cli).await;
         let task = h.start(1, "complete", "").await;
         h.finished(1).await;
         h.close().await;
@@ -220,6 +230,19 @@ async fn fresh_owned_worktrees_receive_stdin_without_granting_trust_on_old_and_n
         ] {
             assert!(!args.iter().any(|arg| arg == forbidden));
         }
+        // Launch preflight's help check selects the remote flags this CLI offers.
+        let legacy = cli != "sync";
+        for (flag, expected) in [
+            ("--no-remote", legacy),
+            ("--no-remote-export", legacy),
+            ("--sync-session=off", !legacy),
+        ] {
+            assert_eq!(
+                args.iter().any(|arg| arg == flag),
+                expected,
+                "{cli}: {flag}"
+            );
+        }
         assert_eq!(
             fs::read_to_string(metadata.path.join("tracked.txt")).unwrap(),
             "Copilot fixture edit\n"
@@ -232,9 +255,9 @@ async fn fresh_owned_worktrees_receive_stdin_without_granting_trust_on_old_and_n
 
 #[tokio::test]
 async fn trust_rejection_and_confirmation_eof_fail_with_raw_diagnostics_and_actionable_details() {
-    for newer in [false, true] {
+    for cli in CLIS {
         for mode in ["reject", "confirmation"] {
-            let mut h = Harness::new(newer).await;
+            let mut h = Harness::new(cli).await;
             h.start(1, mode, "60").await;
             h.finished(1).await;
             h.close().await;
@@ -242,14 +265,7 @@ async fn trust_rejection_and_confirmation_eof_fail_with_raw_diagnostics_and_acti
             assert_eq!(status, JobStatus::Failed);
             assert!(detail.contains("workspace trust") && detail.contains("outside CodeConvoy"));
             assert!(!detail.contains("timed out"));
-            let raw: String = h
-                .events
-                .iter()
-                .filter_map(|event| match event {
-                    Event::Output { raw, .. } => Some(raw.as_str()),
-                    _ => None,
-                })
-                .collect();
+            let raw = raw(&h.events);
             if mode == "reject" {
                 assert!(raw.contains("Error: Workspace trust required"));
             } else {
@@ -267,21 +283,12 @@ async fn trust_rejection_and_confirmation_eof_fail_with_raw_diagnostics_and_acti
 
 #[tokio::test]
 async fn blocked_confirmation_is_bounded_or_cancelled_and_tree_cleanup_releases_capacity() {
-    for newer in [false, true] {
+    for cli in CLIS {
         for cancel in [false, true] {
-            let mut h = Harness::new(newer).await;
+            let mut h = Harness::new(cli).await;
             h.start(1, "block", if cancel { "60" } else { "2" }).await;
-            h.until(|events| {
-                let raw: String = events
-                    .iter()
-                    .filter_map(|event| match event {
-                        Event::Output { raw, .. } => Some(raw.as_str()),
-                        _ => None,
-                    })
-                    .collect();
-                raw.contains("Do you trust the files in this folder?")
-            })
-            .await;
+            h.until(|events| raw(events).contains("Do you trust the files in this folder?"))
+                .await;
             let path = h.worktree(1).path.clone();
             let locks = ["blocked-parent.lock", "blocked-child.lock"].map(|name| {
                 let lock = fs::OpenOptions::new()
@@ -320,10 +327,86 @@ async fn blocked_confirmation_is_bounded_or_cancelled_and_tree_cleanup_releases_
     }
 }
 
+/// Launched from a terminal, the CLI shares its controlling terminal from a
+/// background process group: a confirmation read there stops it, so neither
+/// output nor stdin EOF ends the job. The deadline and Stop must still do so.
+#[cfg(unix)]
+#[tokio::test]
+async fn confirmation_that_stops_the_cli_like_a_terminal_read_is_bounded_or_cancelled() {
+    for cancel in [false, true] {
+        let mut h = Harness::new("sync").await;
+        h.start(1, "terminal", if cancel { "60" } else { "3" })
+            .await;
+        h.until(|events| raw(events).contains("Do you trust the files in this folder?"))
+            .await;
+        let path = h.worktree(1).path.clone();
+        let pid = fs::read_to_string(path.join("stopped.pid")).unwrap();
+        let reached = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let stat = Command::new("ps")
+                    .args(["-o", "stat=", "-p", &pid])
+                    .output()
+                    .unwrap();
+                if String::from_utf8_lossy(&stat.stdout)
+                    .trim_start()
+                    .starts_with('T')
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        if reached.is_err() {
+            h.finished(1).await;
+            let (status, detail) = h.outcome(1);
+            panic!(
+                "fixture never stayed stopped; {status:?}: {detail}\nRaw: {}",
+                raw(&h.events)
+            );
+        }
+        let stopped = std::time::Instant::now();
+        let lock = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path.join("stopped.lock"))
+            .unwrap();
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        if cancel {
+            h.manager.cancel_run(1);
+        }
+        h.finished(1).await;
+        let (status, detail) = h.outcome(1);
+        // Report how the stopped CLI ended, not only that it ended differently.
+        let outcome = format!(
+            "{status:?} {:?} after the stop: {detail}\nRaw: {}",
+            stopped.elapsed(),
+            raw(&h.events)
+        );
+        if cancel {
+            assert_eq!(status, JobStatus::Cancelled, "{outcome}");
+        } else {
+            assert_eq!(status, JobStatus::Failed, "{outcome}");
+            assert!(
+                detail.contains("execution timed out after 3 seconds"),
+                "{outcome}"
+            );
+            assert!(detail.contains("cleanup was confirmed"), "{outcome}");
+        }
+        fs2::FileExt::try_lock_exclusive(&lock).unwrap();
+        h.start(2, "complete", "60").await;
+        h.finished(2).await;
+        assert_eq!(h.outcome(2).0, JobStatus::Succeeded);
+        assert_ne!(h.worktree(2).path, path);
+        h.assert_source_preserved();
+        h.close().await;
+    }
+}
+
 #[tokio::test]
 #[ignore = "Requires a real Copilot executable; tests only startup through the authentication gate in disposable directories"]
 async fn real_copilot_stdin_in_fresh_worktree_reaches_authentication_without_a_trust_prompt() {
-    let mut h = Harness::new(true).await;
+    let mut h = Harness::new("new").await;
     let path = h._root.path().join("real CLI worktree ü");
     git_command(
         &h.source.path,
@@ -343,6 +426,27 @@ async fn real_copilot_stdin_in_fresh_worktree_reaches_authentication_without_a_t
         options: [("executable".into(), executable)].into(),
         ..Default::default()
     };
+    let config = h._root.path().join("empty copilot config");
+    let gh_config = h._root.path().join("empty gh config");
+    fs::create_dir_all(&config).unwrap();
+    fs::create_dir_all(&gh_config).unwrap();
+    let env: Vec<(String, String)> = vec![
+        ("COPILOT_HOME".into(), config.to_str().unwrap().into()),
+        ("GH_CONFIG_DIR".into(), gh_config.to_str().unwrap().into()),
+        (
+            "COPILOT_CACHE_HOME".into(),
+            h._root.path().join("cli cache").to_str().unwrap().into(),
+        ),
+    ];
+    let removed = ["GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN"].map(str::to_owned);
+    // As at launch preflight: the help check selects the remote-session flags.
+    let mut help_command = Copilot.detection(&task.options, &path).unwrap();
+    help_command.env = env.clone();
+    help_command.remove_env.extend(removed.clone());
+    let help = process::capture(help_command, 128 * 1024).await.unwrap();
+    assert!(help.status.success());
+    let help = Copilot.help_text(&help.stdout, &help.stderr);
+    Copilot.check_detection_for(&task.options, &help).unwrap();
     for trust in [false, true] {
         let mut spec = Copilot
             .build(
@@ -353,30 +457,9 @@ async fn real_copilot_stdin_in_fresh_worktree_reaches_authentication_without_a_t
                 },
             )
             .unwrap();
-        let config = h._root.path().join("empty copilot config");
-        let gh_config = h._root.path().join("empty gh config");
-        fs::create_dir_all(&config).unwrap();
-        fs::create_dir_all(&gh_config).unwrap();
-        spec.env = vec![
-            ("COPILOT_HOME".into(), config.to_str().unwrap().into()),
-            ("GH_CONFIG_DIR".into(), gh_config.to_str().unwrap().into()),
-            (
-                "COPILOT_CACHE_HOME".into(),
-                h._root.path().join("cli cache").to_str().unwrap().into(),
-            ),
-        ];
-        spec.remove_env
-            .extend(["GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN"].map(str::to_owned));
-        let mut help_command = Copilot.detection(&task.options, &path).unwrap();
-        help_command.env = spec.env.clone();
-        help_command.remove_env = spec.remove_env.clone();
-        let help = process::capture(help_command, 128 * 1024).await.unwrap();
-        assert!(help.status.success());
-        if trust
-            && !Copilot
-                .help_text(&help.stdout, &help.stderr)
-                .contains("--trust-folder")
-        {
+        spec.env = env.clone();
+        spec.remove_env.extend(removed.clone());
+        if trust && !help.contains("--trust-folder") {
             continue; // Older CLIs must not receive the optional trust flag.
         }
         if trust {

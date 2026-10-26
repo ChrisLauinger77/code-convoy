@@ -271,7 +271,10 @@ Linux's [waitid documentation](https://man7.org/linux/man-pages/man2/waitid.2.ht
 describes non-reaping observation. Apple's
 [waitid implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_exit.c)
 also supports `WNOWAIT`, but can leave the information buffer unchanged for
-`WNOHANG`, so the buffer is zero-initialized. Apple's
+`WNOHANG`, so the buffer is zero-initialized. macOS CI also showed it reporting a
+stopped child with `WEXITED` alone, as [golang/go#19314](https://github.com/golang/go/issues/19314)
+notes; the guard then killed a live, stopped CLI and reported `SIGKILL`. Stop and
+continue reports (`CLD_STOPPED`, `CLD_CONTINUED`) are therefore not exits. Apple's
 [group signalling implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sig.c)
 can report `EPERM` for a zombie-only group. On macOS, that response after observed
 leader exit allows reaping, but still requires a subsequent absence proof. It is

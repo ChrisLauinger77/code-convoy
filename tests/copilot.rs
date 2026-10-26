@@ -189,6 +189,21 @@ fn detection_uses_same_executable_and_version_policy_and_rejects_incompatible_he
     assert!(!actual_help.contains("--trust-folder"));
     assert!(newer_help.contains("--trust-folder"));
     assert!(Copilot.check_detection(newer_help).is_ok());
+    // 1.0.103 replaced both remote flags with --sync-session.
+    let current_help = include_str!("fixtures/copilot-1.0.103-help.txt");
+    for retired in ["--no-remote", "--no-remote-export"] {
+        assert!(!current_help.split_whitespace().any(|word| word == retired));
+    }
+    assert!(current_help.contains("--sync-session[=<on|off>]"));
+    assert!(Copilot.check_detection(current_help).is_ok());
+    let no_remote_interface = current_help.replace("--sync-session", "--unsupported");
+    assert!(
+        Copilot
+            .check_detection(&no_remote_interface)
+            .unwrap_err()
+            .to_string()
+            .contains("cannot disable remote session sharing")
+    );
     // A longer flag must not satisfy a missing shorter one.
     let missing_remote = actual_help.replace("--no-remote ", "--unsupported ");
     assert!(missing_remote.contains("--no-remote-export"));
@@ -203,6 +218,57 @@ fn detection_uses_same_executable_and_version_policy_and_rejects_incompatible_he
             .check_detection("gh copilot suggest --help")
             .is_err()
     );
+}
+
+#[test]
+fn help_check_selects_the_remote_session_flags_of_that_executable() {
+    let old_help = include_str!("fixtures/copilot-1.0.65-help.txt");
+    let current_help = include_str!("fixtures/copilot-1.0.103-help.txt");
+    let legacy = ["--no-remote", "--no-remote-export"];
+    let task_for = |name: &str| {
+        let mut task = task();
+        let executable = std::env::temp_dir()
+            .join("codeconvoy remote flags")
+            .join(name);
+        task.options
+            .insert("executable".into(), executable.to_str().unwrap().into());
+        task
+    };
+    let remote = |task: &TaskConfig| -> Vec<String> {
+        let args = Copilot.build(task, &repository()).unwrap().args;
+        let args: Vec<_> = args
+            .iter()
+            .map(|a| a.to_str().unwrap().to_owned())
+            .collect();
+        // Remote flags keep their position between output and tool settings.
+        let start = args.iter().position(|a| a == "--stream").unwrap() + 2;
+        let end = args.iter().position(|a| a == "--allow-tool=write").unwrap();
+        args[start..end].to_vec()
+    };
+    let current = task_for("current");
+    // Unchecked keeps the legacy flags, which 1.0.103 rejects rather than syncing.
+    assert_eq!(remote(&current), legacy);
+    Copilot
+        .check_detection_for(&current.options, current_help)
+        .unwrap();
+    assert_eq!(remote(&current), ["--sync-session=off"]);
+    // The record belongs to that executable; a later check replaces it.
+    let other = task_for("other");
+    assert_eq!(remote(&other), legacy);
+    Copilot
+        .check_detection_for(&current.options, old_help)
+        .unwrap();
+    assert_eq!(remote(&current), legacy);
+    // A failed check changes nothing; legacy flags win if both are offered.
+    assert!(
+        Copilot
+            .check_detection_for(&other.options, "GitHub Copilot CLI --sync-session")
+            .is_err()
+    );
+    assert_eq!(remote(&other), legacy);
+    let both = format!("{old_help}\n      --sync-session[=<on|off>]\n");
+    Copilot.check_detection_for(&other.options, &both).unwrap();
+    assert_eq!(remote(&other), legacy);
 }
 
 #[test]

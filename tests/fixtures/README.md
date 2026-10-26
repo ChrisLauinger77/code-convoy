@@ -5,8 +5,14 @@
 binary, checked on 2026-10-20 in temporary configuration/cache directories.
 It includes the optional session-only `--trust-folder` contract. The older
 `copilot-1.0.65-help.txt` has no such flag and remains a supported help fixture.
+`copilot-1.0.103-help.txt` is the same unmodified stdout from the official
+`@github/copilot-linux-x64` 1.0.103 npm package, checked on 2026-10-26; it offers
+`--sync-session` instead of `--no-remote` and `--no-remote-export`. The test agent
+serves it when hard-linked with a `sync` suffix, and each fixture generation
+rejects flags its help does not offer.
 `tests/support/copilot_trust.rs` models trust failures, interactive confirmation
-after stdin EOF and a deliberately blocked process tree. Those scenarios are
+after stdin EOF, a deliberately blocked process tree and, on Unix, a CLI stopped
+while asking (as SIGTTIN stops a background terminal read). Those scenarios are
 synthetic, not authenticated provider evidence. See the
 [workspace trust audit](../../README.md#workspace-trust-and-unattended-execution)
 for binary provenance, real startup evidence and limitations.

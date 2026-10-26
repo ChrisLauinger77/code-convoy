@@ -5,7 +5,7 @@ use crate::{
     process::{CommandSpec, Stream},
 };
 use anyhow::Result;
-use std::{path::Path, process::ExitStatus, time::Duration};
+use std::{collections::BTreeMap, path::Path, process::ExitStatus, sync::Mutex, time::Duration};
 
 pub struct Copilot;
 static OPTIONS: &[OptionSpec] = &[
@@ -69,7 +69,8 @@ static OPTIONS: &[OptionSpec] = &[
         kind: OptionKind::Text { hint: "3600" },
     },
 ];
-// All of these were checked against the installed bundled CLI 1.0.65.
+// All of these were checked against the bundled CLI 1.0.65 and release 1.0.103.
+// Remote-session flags differ between them; see RemoteFlags.
 const REQUIRED_FLAGS: &[&str] = &[
     "--prompt",
     "--model",
@@ -84,9 +85,47 @@ const REQUIRED_FLAGS: &[&str] = &[
     "--no-auto-update",
     "--no-color",
     "--plain-diff",
-    "--no-remote",
-    "--no-remote-export",
 ];
+
+/// Copilot 1.0.103 retired --no-remote and renamed --no-remote-export to
+/// --sync-session. Each generation rejects the other's flags, so a stale
+/// choice fails at startup instead of running with session sync enabled.
+#[derive(Clone, Copy)]
+enum RemoteFlags {
+    /// 1.0.102 and earlier: no remote control, no session export.
+    Legacy,
+    /// 1.0.103 and later: no session sync for this run. No flag disables
+    /// incoming control; the 1.0.103 code never accepts it in non-TTY prompt mode.
+    SyncSession,
+}
+impl RemoteFlags {
+    fn offered(help: &str) -> Option<Self> {
+        if offers(help, "--no-remote") && offers(help, "--no-remote-export") {
+            Some(Self::Legacy)
+        } else if offers(help, "--sync-session") {
+            Some(Self::SyncSession)
+        } else {
+            None
+        }
+    }
+    fn args(self) -> &'static [&'static str] {
+        match self {
+            Self::Legacy => &["--no-remote", "--no-remote-export"],
+            Self::SyncSession => &["--sync-session=off"],
+        }
+    }
+}
+/// Remote flags from each executable's latest successful help check. Launch
+/// preflight checks before its jobs are built; an unchecked executable keeps
+/// the legacy flags, which a newer CLI rejects.
+static INSPECTED: Mutex<BTreeMap<String, RemoteFlags>> = Mutex::new(BTreeMap::new());
+
+fn offers(help: &str, flag: &str) -> bool {
+    help.split_whitespace().any(|word| {
+        word.strip_prefix(flag)
+            .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['[', '=', ',']))
+    })
+}
 impl AgentBackend for Copilot {
     fn id(&self) -> AgentId {
         AgentId::Copilot
@@ -124,14 +163,21 @@ impl AgentBackend for Copilot {
             "This executable is not the standalone GitHub Copilot CLI. Choose copilot, not gh copilot."
         );
         for flag in REQUIRED_FLAGS {
-            let supported = help.split_whitespace().any(|word| {
-                word.strip_prefix(flag)
-                    .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['[', '=', ',']))
-            });
             anyhow::ensure!(
-                supported,
-                "Copilot CLI is missing {flag}. Install a compatible standalone CLI (checked with bundled 1.0.65); --no-auto-update uses the bundled executable, not a cached update."
+                offers(help, flag),
+                "Copilot CLI is missing {flag}. Install a compatible standalone CLI (checked with 1.0.65 and 1.0.103); --no-auto-update uses the bundled executable, not a cached update."
             );
+        }
+        anyhow::ensure!(
+            RemoteFlags::offered(help).is_some(),
+            "Copilot CLI offers neither --no-remote with --no-remote-export nor --sync-session, so CodeConvoy cannot disable remote session sharing. Install a compatible standalone CLI (checked with 1.0.65 and 1.0.103)."
+        );
+        Ok(())
+    }
+    fn check_detection_for(&self, options: &AgentOptions, help: &str) -> Result<()> {
+        self.check_detection(help)?;
+        if let (Some(flags), Ok(mut inspected)) = (RemoteFlags::offered(help), INSPECTED.lock()) {
+            inspected.insert(value(options, &OPTIONS[0]).to_owned(), flags);
         }
         Ok(())
     }
@@ -152,9 +198,13 @@ impl AgentBackend for Copilot {
             "text",
             "--stream",
             "on",
-            "--no-remote",
-            "--no-remote-export",
         ]);
+        let remote = INSPECTED
+            .lock()
+            .ok()
+            .and_then(|inspected| inspected.get(value(&task.options, &OPTIONS[0])).copied())
+            .unwrap_or(RemoteFlags::Legacy);
+        spec = spec.args(remote.args());
         match value(&task.options, &OPTIONS[3]) {
             "file-edits" => spec = spec.args(&["--allow-tool=write", "--deny-tool=shell"]),
             "all-tools" => spec = spec.args(&["--allow-all-tools"]),

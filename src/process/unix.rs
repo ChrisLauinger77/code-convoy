@@ -84,7 +84,11 @@ impl Group {
             };
             if result == 0 {
                 // SAFETY: waitid initialized the SIGCHLD fields (or left zeros).
-                return Ok(unsafe { info.si_pid() } == self.pid);
+                // Darwin also reports a stopped child despite WEXITED alone
+                // (golang/go#19314; seen in macOS CI). A stop is not an exit:
+                // treating it as one would kill a live, unexited CLI's group.
+                return Ok(unsafe { info.si_pid() } == self.pid
+                    && !matches!(info.si_code, libc::CLD_STOPPED | libc::CLD_CONTINUED));
             }
             let error = io::Error::last_os_error();
             if error.kind() != io::ErrorKind::Interrupted {
