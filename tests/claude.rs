@@ -11,6 +11,10 @@ use std::{path::Path, process::ExitStatus};
 #[path = "claude/background_membership.rs"]
 mod background_membership;
 
+#[cfg(feature = "test-support")]
+#[path = "claude/headless.rs"]
+mod headless;
+
 fn task() -> TaskConfig {
     TaskConfig {
         agent: AgentId::Claude,
@@ -41,10 +45,148 @@ fn success() -> Value {
         "result":"Grüße 🌍\nFinished.", "session_id":"fixture", "num_turns":1,
         "duration_ms":20, "duration_api_ms":10, "total_cost_usd":0.02,
         "usage":{"input_tokens":10,"output_tokens":20},
-        "permission_denials":[{"tool_name":"Bash","tool_input":{"command":"denied"}}]})
+        "permission_denials":[]})
 }
 fn line(event: &Value) -> Vec<u8> {
     (event.to_string() + "\n").into_bytes()
+}
+
+#[test]
+fn permission_failures_cannot_be_hidden_by_cli_success() {
+    for denials in [
+        json!([{"tool_name":"Bash"}]),
+        json!([{"tool_name":"mcp__audit__confirm"}]),
+        json!({}),
+        json!(false),
+    ] {
+        let mut event = success();
+        event["permission_denials"] = denials;
+        let mut output = Claude.output();
+        output.push(Stream::Stdout, &line(&event));
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+    }
+}
+
+#[test]
+fn permission_denials_are_sticky_across_tool_metadata_and_background_turns() {
+    let denied = json!({"type":"user","message":{"content":[{"type":"tool_result", "is_error":true, "tool_use_id":"denied-tool", "content":"denied"}]},
+        "tool_result_meta":[{"id":"denied-tool","non_execution_kind":"permission-rule", "permission_decision":{"decision":"reject","source":"config","reason_type":"subcommandResults"}}]});
+    let mut output = Claude.output();
+    output.push(Stream::Stdout, &line(&denied));
+    output.push(Stream::Stdout, &line(&success()));
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+    assert!(output.interpret(status(0)).1.contains("permission denial"));
+    assert!(
+        output
+            .take_activity()
+            .unwrap()
+            .contains("[CodeConvoy] Claude reported a permission denial")
+    );
+    let mut output = Claude.output();
+    output.push(Stream::Stdout, &line(&json!({"type":"system", "subtype":"permission_denied", "tool_name":"Bash", "tool_use_id":"denied-tool"})));
+    output.push(Stream::Stdout, &line(&success()));
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+
+    for first in [true, false] {
+        let mut events = background_events();
+        let results: Vec<usize> = events
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| (e["type"] == "result").then_some(i))
+            .collect();
+        events[if first { results[0] } else { results[1] }]["permission_denials"] =
+            json!([{"tool_name":"mcp__audit__confirm"}]);
+        assert_eq!(background_outcome(&events), JobStatus::Failed);
+    }
+    // Older CLIs may omit optional denial metadata. Ordinary recoverable tool
+    // failures and prose mentioning permissions are not permission decisions.
+    for denials in [None, Some(Value::Null), Some(json!([]))] {
+        let mut event = success();
+        event.as_object_mut().unwrap().remove("permission_denials");
+        if let Some(denials) = denials {
+            event["permission_denials"] = denials;
+        }
+        let mut output = Claude.output();
+        output.push(Stream::Stdout,&line(&json!({"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"permission denied in a test assertion; recovered"}]}})));
+        output.push(Stream::Stdout, &line(&event));
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+    }
+}
+
+#[test]
+fn explicit_mcp_timeouts_and_unanswered_confirmations_cannot_be_hidden_by_success() {
+    for text in [
+        "MCP server \"audit\" tool \"elicit\" timed out after 1s",
+        "The server asked the user a question, and no answer came before the time limit. Do not call this tool again in this turn. Tell the user that the server's question got no answer, and wait for their reply.",
+    ] {
+        let error = json!({"type":"user", "message":{"content":[{"type":"tool_result","is_error":true,"tool_use_id":"mcp-tool","content":text}]},"tool_use_result":format!("Error: {text}")});
+        let mut output = Claude.output();
+        output.push(Stream::Stdout, &line(&error));
+        output.push(Stream::Stdout, &line(&success()));
+        assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
+        assert!(output.interpret(status(0)).1.contains("MCP call timed out"));
+        assert!(
+            output
+                .take_activity()
+                .unwrap()
+                .contains("[CodeConvoy] Claude reported an MCP timeout")
+        );
+
+        for key in ["tool_use_result", "message"] {
+            let mut unconfirmed = error.clone();
+            unconfirmed.as_object_mut().unwrap().remove(key);
+            let mut output = Claude.output();
+            output.push(Stream::Stdout, &line(&unconfirmed));
+            output.push(Stream::Stdout, &line(&success()));
+            assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+        }
+    }
+}
+
+#[test]
+fn captured_headless_2_1_310_results_classify_independently_of_exit_zero() {
+    for (fixture, code, expected) in [
+        (
+            include_str!("fixtures/claude-headless-2.1.310/normal.jsonl"),
+            0,
+            JobStatus::Succeeded,
+        ),
+        (
+            include_str!("fixtures/claude-headless-2.1.310/denied.jsonl"),
+            0,
+            JobStatus::Failed,
+        ),
+        (
+            include_str!("fixtures/claude-headless-2.1.310/mcp-confirm.jsonl"),
+            0,
+            JobStatus::Failed,
+        ),
+        (
+            include_str!("fixtures/claude-headless-2.1.310/mcp-elicit.jsonl"),
+            0,
+            JobStatus::Failed,
+        ),
+        (
+            include_str!("fixtures/claude-headless-2.1.310/auth.jsonl"),
+            1,
+            JobStatus::Failed,
+        ),
+        (
+            include_str!("fixtures/claude-headless-2.1.310/cancel.jsonl"),
+            0,
+            JobStatus::Failed,
+        ),
+    ] {
+        for chunk in [1, 37, fixture.len()] {
+            let mut output = Claude.output();
+            for bytes in fixture.as_bytes().chunks(chunk) {
+                output.push(Stream::Stdout, bytes);
+            }
+            output.finish();
+            assert_eq!(output.interpret(status(code)).0, expected);
+            assert_eq!(output.interpret(status(1)).0, JobStatus::Failed);
+        }
+    }
 }
 fn auto_output() -> Box<dyn AgentOutput> {
     Claude.output_with_options(&[("permission_mode".into(), "auto".into())].into())
@@ -389,7 +531,9 @@ fn result_extracts_final_text_and_preserves_usage_denials_tools_unknown_events_a
         );
     }
     let mut decoded = String::new();
-    for byte in line(&success()) {
+    let mut denied = success();
+    denied["permission_denials"] = json!([{"tool_name":"Bash","tool_input":{"command":"denied"}}]);
+    for byte in line(&denied) {
         decoded.push_str(&output.push(Stream::Stdout, &[byte]));
     }
     assert!(decoded.contains("Grüße 🌍\nFinished."));
@@ -404,7 +548,7 @@ fn result_extracts_final_text_and_preserves_usage_denials_tools_unknown_events_a
     output.push(Stream::Stderr, b"provider diagnostic");
     assert_eq!(output.finish(), "[stderr] provider diagnostic");
     assert!(output.finish().is_empty());
-    assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+    assert_eq!(output.interpret(status(0)).0, JobStatus::Failed);
     for code in [1, 7, 130] {
         assert_eq!(output.interpret(status(code)).0, JobStatus::Failed);
     }

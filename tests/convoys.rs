@@ -1077,7 +1077,15 @@ async fn simultaneous_claude_modes_use_their_own_snapshot_for_auto_warnings() {
 
 #[tokio::test]
 async fn claude_build_spawn_and_zero_exit_protocol_failures_release_slots_and_repository_leases() {
-    for failure in ["build", "spawn", "result_error", "malformed", "incomplete"] {
+    for failure in [
+        "build",
+        "spawn",
+        "result_error",
+        "malformed",
+        "incomplete",
+        "denied",
+        "denied_tool",
+    ] {
         let mut h = Harness::new(1);
         let repo = h.repo("shared").await;
         let mut task = h.task(1, AgentId::Claude, 1, false);

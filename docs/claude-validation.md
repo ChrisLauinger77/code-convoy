@@ -1,5 +1,11 @@
 # Claude Code validation
 
+The [2026-10-26 headless permission audit](claude-headless-audit.md) reviews
+official releases 2.1.304–2.1.310 and records real Linux 2.1.310 denial, MCP
+confirmation/timeout, authentication and blocked-cancellation probes. It updates
+completion rules for permission denials and explicit MCP timeouts. The dated
+evidence below remains historical.
+
 Recorded 2026-10-05 on macOS. Claude is CodeConvoy's fourth and final backend for the v0.1.0 cycle. At that time, authenticated Claude E2E was unverified. `claude` was not found on PATH; no CLI was installed, no login was attempted, and no credential/configuration file was inspected or edited.
 
 ## User confirmation — 2026-10-12
