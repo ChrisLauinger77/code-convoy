@@ -5,12 +5,16 @@
 CodeConvoy is a native Rust/egui desktop application for running one task
 across multiple local Git repositories using a selected coding-agent CLI.
 
-Supported backends:
+Agent backends:
 
 - OpenAI Codex CLI
 - GitHub Copilot CLI
 - OpenCode
 - Claude Code
+- Cursor CLI (experimental)
+- Antigravity CLI (experimental)
+
+See `README.md` for current support status and exact validation evidence.
 
 CodeConvoy orchestrates existing local CLI installations. It does not manage
 provider accounts, API keys, or authentication.
@@ -37,7 +41,7 @@ engine, or general multi-agent framework.
 - Git CLI for repository operations
 - serde for persisted state
 
-Do not introduce:
+Keep the desktop application native Rust/egui. Do not introduce into it:
 
 - Tauri
 - Electron
@@ -47,7 +51,14 @@ Do not introduce:
 
 without an explicit architectural decision.
 
+The separate project homepage in `website/` uses HTML/CSS. Keep it static and
+independent of the desktop application; follow `website/README.md` for its build
+and preview workflow.
+
 Prefer conservative dependencies and justify new ones.
+See `CONTRIBUTING.md` for toolchain requirements, platform prerequisites and
+dependency/license checks. Preserve `Cargo.lock`; do not run `cargo update` just
+to build.
 
 ## Architecture
 
@@ -67,8 +78,8 @@ Read `docs/architecture.md` before making significant architectural changes.
 
 ## Agent backends
 
-The backend abstraction is feature-frozen for the v0.1.x cycle except for
-bug fixes or changes required by real backend behavior.
+Evolve backend interfaces only for concrete CLI behavior or explicitly requested
+features. Follow `docs/compatibility.md` for the current 1.x compatibility policy.
 
 Each backend owns its own:
 
@@ -234,6 +245,13 @@ the UI thread and persist only references/metadata, never contents. Activity
 summaries must describe actual backend events and keep bounded Raw output
 available for diagnostics.
 
+## Manual validation
+
+Validation is an explicit user action, separate from agent execution and result
+resolution. Preserve shell-free commands, repository leases and process-tree
+cancellation. Preset assignment only configures commands; it must never run them.
+Follow `docs/validation.md` for configuration, execution and persistence rules.
+
 ## Process management
 
 Agent processes must never block the egui UI thread.
@@ -265,6 +283,11 @@ than appearing to still be running.
 
 Run IDs must remain stable and must not be reused after history cleanup.
 
+Follow `docs/compatibility.md` for settings/history compatibility and
+`docs/history-export.md` for the public export contract. Application versions,
+internal state versions and export schema versions are independent. Exports are
+reports, not backups or an import format.
+
 ## UI
 
 Keep the existing compact two-pane native desktop design.
@@ -290,6 +313,10 @@ Backend-specific settings should only appear for the selected backend.
 
 Do not perform expensive subprocess or Git work every egui frame.
 
+Keep update checks explicit and inform-only: no automatic requests, downloads or
+installation. Follow `docs/desktop-workflow.md#update-check` for the existing
+network and privacy boundaries.
+
 ## Scope
 
 Before adding a new feature, check whether it belongs in CodeConvoy's core
@@ -298,19 +325,16 @@ purpose:
 > Run one task across multiple repositories using the coding agent of your
 > choice.
 
-For the v0.1.x cycle, do not add new coding-agent backends unless explicitly
-requested.
+Do not add new coding-agent backends unless explicitly requested. Maintain the
+existing backends listed under **Project** with their backend-specific contracts.
 
-The initial backend set is intentionally limited to:
+Direct execution and CodeConvoy-owned isolated worktrees are within the current
+scope, including explicit result review, Apply, Discard and verified cleanup.
+Follow the safety requirements above and `docs/worktree-cleanup.md`.
 
-- Codex
-- GitHub Copilot
-- OpenCode
-- Claude Code
-
-Features such as pipelines, worktrees, automatic commits, automatic pull
-requests, embedded terminals, cloud execution, and agent-to-agent workflows
-are outside the current scope unless explicitly requested.
+Features such as pipelines, automatic commits, automatic pull requests, embedded
+terminals, cloud execution, and agent-to-agent workflows are outside the current
+scope unless explicitly requested.
 
 ## Code quality
 
@@ -357,7 +381,6 @@ Follow this workflow:
 4. Run all checks under **Required validation**, plus:
 
    ```sh
-   python3 -m unittest discover -s packaging -p 'test_*.py'
    python3 packaging/release.py check-tag vX.Y.Z
    ```
 
@@ -378,8 +401,14 @@ requests those actions. Never move or overwrite an existing release tag.
 Before considering a change complete, run:
 
 ```sh
+python3 -m unittest discover -s packaging -p 'test_*.py'
 cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-features
-cargo build --release
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
+cargo build --locked --release --bin codeconvoy
 ```
+
+See `CONTRIBUTING.md` and `.github/workflows/ci.yml` for platform-specific checks
+and dependency/license validation. Deterministic tests need no provider
+credentials. Run ignored or authenticated tests only for their documented purpose,
+and report native platform or authenticated checks that were not performed.
