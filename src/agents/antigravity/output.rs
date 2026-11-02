@@ -329,6 +329,17 @@ impl AntigravityOutput {
                 )
             });
         }
+        // Since agy 1.4.11 this optional field identifies a cut-off turn,
+        // independently of status/exit code. Retain it like any failed result
+        // so a later SUCCESS cannot erase premature termination.
+        if let Some(reason) = result["finished_reason"]
+            .as_str()
+            .filter(|reason| !reason.is_empty())
+        {
+            self.failed.get_or_insert_with(|| {
+                (format!("finished_reason {}", short(reason)), short(error))
+            });
+        }
         let mut text = format!(
             "[CodeConvoy] Antigravity result: {}{}\n",
             short(if status.is_empty() {

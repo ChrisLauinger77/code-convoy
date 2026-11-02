@@ -66,6 +66,34 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write("agent-input", &prompt)?;
     std::fs::write("antigravity-args", serde_json::to_vec(&args[1..])?)?;
     match prompt.as_str() {
+        "antigravity-fixture:hook-nonzero" => {
+            // Simulate the documented process outcome, not a captured hook
+            // transcript. No claim about the hook's structured event shape.
+            eprintln!("Fixture PreInvocation hook stopped the turn");
+            std::process::exit(1);
+        }
+        "antigravity-fixture:success-nonzero" => {
+            init()?;
+            result("SUCCESS", "", None);
+            std::process::exit(1);
+        }
+        prompt if prompt.starts_with("antigravity-fixture:finished-reason:") => {
+            let reason = prompt
+                .strip_prefix("antigravity-fixture:finished-reason:")
+                .ok_or("missing fixture finished reason")?;
+            init()?;
+            text("Partial answer");
+            println!(
+                "{}",
+                json!({"event":"result","result":{
+                    "conversation_id":CONVERSATION,"status":"SUCCESS",
+                    "response":"Partial answer","num_turns":1,"finished_reason":reason
+                }})
+            );
+            // Contradictory later success cannot erase the earlier failure.
+            result("SUCCESS", "", None);
+            return Ok(());
+        }
         "antigravity-fixture:missing-auth" => {
             eprintln!("Error: authentication required. Run agy in a terminal to sign in.");
             std::process::exit(1);

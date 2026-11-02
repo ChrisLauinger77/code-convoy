@@ -518,3 +518,39 @@ fn reported_working_directory_must_match_the_assigned_checkout() {
         assert_eq!(status, expected, "{reported:?}: {detail}");
     }
 }
+
+#[test]
+fn early_finished_reasons_cannot_be_mistaken_for_success() {
+    // Synthetic variants of the documented result shape using the optional
+    // field documented by Google's 1.4.11 release. No authenticated CLI call.
+    for reason in ["print_timeout", "interrupted", "error"] {
+        let mut records = lines(SUCCESS);
+        records.last_mut().unwrap()["result"]["finished_reason"] = json!(reason);
+        for code in [0, 1, 130] {
+            let (status, detail, _) = outcome(&join(&records), "", code);
+            assert_eq!(status, JobStatus::Failed, "{reason}, exit {code}: {detail}");
+        }
+        // A later normal result must not erase the premature termination.
+        records.push(lines(SUCCESS).pop().unwrap());
+        assert_eq!(outcome(&join(&records), "", 0).0, JobStatus::Failed);
+        // Nor may a premature result after a normal result become success.
+        records.swap(4, 5);
+        assert_eq!(outcome(&join(&records), "", 0).0, JobStatus::Failed);
+    }
+}
+
+#[test]
+fn optional_unknown_fields_preserve_normal_completion() {
+    let mut records = lines(SUCCESS);
+    for record in &mut records {
+        record["future_metadata"] = json!({"version": 2});
+        let kind = record["event"].as_str().unwrap().to_owned();
+        record[&kind]["future_payload"] = json!([1, 2]);
+    }
+    assert!(
+        records.last().unwrap()["result"]
+            .get("finished_reason")
+            .is_none()
+    );
+    assert_eq!(outcome(&join(&records), "", 0).0, JobStatus::Succeeded);
+}

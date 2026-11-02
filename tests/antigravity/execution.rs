@@ -90,6 +90,12 @@ async fn run(prompt: &str, options: &[(&str, &str)]) -> (tempfile::TempDir, Repo
         .await
         .unwrap()
         .unwrap();
+    while let Ok(event) = rx.try_recv() {
+        assert!(
+            !matches!(event, Event::Finished { .. }),
+            "duplicate terminal event: {event:?}"
+        );
+    }
     (temp, repository, outcome)
 }
 
@@ -257,4 +263,30 @@ async fn refused_actions_are_reported_and_edits_are_retained() {
     assert!(args.contains("--dangerously-skip-permissions"));
     assert_eq!(args.contains("--sandbox"), sandbox);
     assert!(!args.contains("--print-timeout"));
+}
+
+#[tokio::test]
+async fn early_results_and_nonzero_exits_reach_one_failed_terminal_state() {
+    for reason in ["print_timeout", "interrupted", "error"] {
+        let (_temp, _repository, outcome) = run(
+            &format!("antigravity-fixture:finished-reason:{reason}"),
+            &[],
+        )
+        .await;
+        assert_eq!(outcome.status, JobStatus::Failed, "{}", outcome.detail);
+        assert_eq!(outcome.exit_code, Some(0));
+        assert!(
+            outcome
+                .detail
+                .contains(&format!("finished_reason {reason}"))
+        );
+        assert!(outcome.raw.contains("Partial answer"));
+    }
+    for scenario in ["hook-nonzero", "success-nonzero"] {
+        let (_temp, _repository, outcome) =
+            run(&format!("antigravity-fixture:{scenario}"), &[]).await;
+        assert_eq!(outcome.status, JobStatus::Failed, "{}", outcome.detail);
+        assert_eq!(outcome.exit_code, Some(1));
+        assert!(outcome.detail.contains("process failed"));
+    }
 }
