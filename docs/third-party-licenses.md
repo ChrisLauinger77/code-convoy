@@ -13,11 +13,13 @@ not a lockstep dependency database for ordinary pull requests. The audit below
 records **491 third-party packages**, with exact versions, registry checksums, declared
 license expressions, authors, source revisions and notice provenance. A
 conservative non-dev dependency traversal for Linux x86-64, Windows x86-64,
-macOS arm64 and macOS x86-64 reaches **416** crates, including build scripts and
+macOS arm64 and macOS x86-64 reaches **417** crates, including build scripts and
 procedural macros. `targets` records that closure; `application_targets`
-separately records normal dependency edges. The other 75 entries are explicit
+separately records normal dependency edges. The other 74 entries are explicit
 exclusions for these release targets. This does not imply every object survives
 linking, or that every listed crate is in every package. The
+[1.3.3 release refresh](release-1.3.3-license-validation.md) records the 33
+updated crate versions since 1.3.2. The
 [1.3.1 release refresh](release-1.3.1-license-validation.md) records the 10
 added and 8 removed crate versions since 1.3.0. The
 [1.3.0 release refresh](release-1.3.0-license-validation.md) records the 56
@@ -334,6 +336,12 @@ lock-file and dependency updates: tokio 1.54.1, ureq 3.5.0, ksni 0.3.7 and
 related crates. ksni now brings `arc-swap` and `crossbeam-queue` to Linux, and
 `rustversion` becomes a Linux build-only input. See the
 [1.3.1 release refresh](release-1.3.1-license-validation.md).
+
+On 2026-11-02, the 1.3.3 release preparation refreshed the snapshot for routine
+lock-file and zbus 6.2.0 updates: 33 crate versions, including AccessKit, ICU4X
+and zbus. No crate was added or removed and no notice text changed. The zbus
+updates re-resolve `dirs-sys` to `windows-sys` 0.59.0, which becomes a Windows
+input. See the [1.3.3 release refresh](release-1.3.3-license-validation.md).
 
 ## Earlier candidate verification record
 
