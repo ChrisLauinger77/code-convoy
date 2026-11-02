@@ -625,6 +625,57 @@ fn only_a_complete_success_result_can_succeed_even_at_exit_zero() {
 }
 
 #[test]
+fn startup_failure_is_failed_with_no_stdout_even_at_exit_zero() {
+    // v2.1.314 documents changing silent startup failures from exit 0 to
+    // an error and exit 1. Neither outcome may confirm a CodeConvoy task.
+    for mode in ["dontAsk", "acceptEdits", "auto"] {
+        let options = [("permission_mode".into(), mode.into())].into();
+        for code in [0, 1] {
+            for diagnostic in ["", "Fixture startup failure: unavailable configuration ü"] {
+                let mut output = Claude.output_with_options(&options);
+                for byte in diagnostic.as_bytes() {
+                    output.push(Stream::Stderr, std::slice::from_ref(byte));
+                }
+                let tail = output.finish();
+                let activity = output.take_activity().unwrap();
+                if !diagnostic.is_empty() {
+                    assert!(tail.contains(diagnostic));
+                    assert!(activity.contains(diagnostic));
+                }
+                let (outcome, detail) = output.interpret(status(code));
+                assert_eq!(outcome, JobStatus::Failed, "{mode}, exit {code}: {detail}");
+            }
+        }
+    }
+}
+
+#[test]
+fn nonzero_exit_fails_after_partial_or_complete_headless_output() {
+    // Replay a prior real capture, not an invented v2.1.314 transcript.
+    let events: Vec<_> = include_str!("fixtures/claude-headless-2.1.310/normal.jsonl")
+        .lines()
+        .collect();
+    for count in 0..=events.len() {
+        let mut output = Claude.output();
+        for event in &events[..count] {
+            output.push(Stream::Stdout, event.as_bytes());
+            output.push(Stream::Stdout, b"\n");
+        }
+        output.finish();
+        for code in [1, 7, 130] {
+            assert_eq!(
+                output.interpret(status(code)).0,
+                JobStatus::Failed,
+                "{count} records, exit {code}"
+            );
+        }
+        if count == events.len() {
+            assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
+        }
+    }
+}
+
+#[test]
 fn errors_malformed_incomplete_duplicate_and_post_result_records_fail_closed() {
     for failure in [
         b"{invalid JSON\n".as_slice(),
