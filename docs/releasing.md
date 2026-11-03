@@ -19,9 +19,14 @@ the immediately previous version. Replace the previous release's content during
 release preparation and remove older version sections. Historical release notes
 remain in Git history; preserve separate historical validation records.
 
-1. Review [release-notes.md](release-notes.md) and commit the release changes.
+1. Review [release-notes.md](release-notes.md), commit the release changes on
+   `main` and push the commit to remote `main` without force-pushing.
    Confirm applicable normal CI checks are green; Markdown-only changes skip CI.
-2. Run **Release → Run workflow** on the reviewed branch. This
+2. Verify remote `main` points to the release commit, then dispatch
+   `.github/workflows/release.yml` on `main` using **Release → Run workflow**
+   or `gh workflow run release.yml --ref main`. Confirm the resulting
+   run targets that commit and report its URL/status. A `create release X.Y.Z`
+   request authorizes the release commit, push and dispatch together. This
    builds and verifies packages and uploads the complete `release-assets`
    workflow artifact, including checksums. It then waits for approval and
    creates no tag or release before it.

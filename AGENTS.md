@@ -356,9 +356,11 @@ Do not add abstractions for hypothetical future requirements.
 ## Maintainer release requests
 
 When the user asks `create release X.Y.Z`, prepare that CodeConvoy release and
-create a local release commit. This request explicitly authorizes the version
-updates, release documentation changes, validation, and commit; do not ask for
-another confirmation to create that commit.
+create the release commit on `main`, push it to remote `main`, then dispatch
+`release.yml` on `main`. This request
+explicitly authorizes the version updates, release documentation changes,
+validation, commit, push and workflow dispatch; do not ask for another
+confirmation for those actions.
 
 Follow this workflow:
 
@@ -386,15 +388,23 @@ Follow this workflow:
 
    Substitute the requested version in the tag check. Resolve failures before
    committing and report platform checks that were not performed truthfully.
-5. Review the final diff and create a commit containing only the release
+5. Review the final diff and create a commit on `main` containing only the release
    preparation changes. Preserve unrelated work, including already-staged
    changes. Use the Conventional Commit message:
    `chore(release): prepare vX.Y.Z`.
-6. Report the version, commit ID, and validation results.
+6. Push the release commit to remote `main` without force-pushing.
+   Verify remote `main` points to that commit before dispatching
+   `.github/workflows/release.yml` with `--ref main`. If the push fails or
+   remote `main` has advanced, resolve the discrepancy before dispatching; never
+   silently build a different commit.
+7. Confirm the dispatched run targets the release commit and report the version,
+   commit ID, validation results and workflow run URL/status.
 
-This workflow ends with the local release commit. Create or push a tag, push
-commits, dispatch a workflow, or publish a release only when the user explicitly
-requests those actions. Never move or overwrite an existing release tag.
+This workflow ends after pushing the release commit and dispatching the candidate
+build. Preserve the `release` environment approval gate described in
+`docs/releasing.md`; do not approve publication or manually create or push a tag
+unless the user explicitly requests those actions. Never move or overwrite an
+existing release tag.
 
 ## Required validation
 
