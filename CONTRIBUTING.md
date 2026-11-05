@@ -183,7 +183,8 @@ architecture changes. Backend-specific work belongs in that backend; verify flag
 against the installed CLI or authoritative documentation.
 
 The [release procedure](docs/releasing.md) preserves two stages: a manual candidate
-run builds/verifies artifacts without publishing; a maintainer's annotated tag
-selects those exact bytes for verification and publication without rebuilding.
+run builds/verifies artifacts without publishing; maintainer approval of the
+`release` environment then tags that run's exact commit and publishes those
+exact bytes without rebuilding.
 Ordinary PR validation needs no tag, package publication or release workflow
 dispatch. Do not run publishing scripts as tests.

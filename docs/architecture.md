@@ -267,8 +267,8 @@ a blank CodeConvoy time limit stays unlimited, and rejects an explicit sandbox o
 Windows builds below 26100. `output_for()` checks `init.cwd` against the checkout.
 The decoder requires one init, a consistent conversation ID and a final
 `SUCCESS` result (every result must succeed) plus exit zero; reported failure
-statuses, `AGY_ERROR`, authentication text and malformed or incomplete streams
-fail the job. Refused actions keep a successful status but are stated in the
+statuses, a non-empty `finished_reason`, `AGY_ERROR`, authentication text and
+malformed or incomplete streams fail the job. Refused actions keep a successful status but are stated in the
 result detail. Scheduler, Git, process and other backend behavior are unchanged.
 Lifecycle needs no Antigravity-specific handling: the shared process
 group/Job Object, leases and worktree ownership cover cancellation, quit,

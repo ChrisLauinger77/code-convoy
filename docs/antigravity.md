@@ -118,6 +118,8 @@ A job **succeeds** only when all of these hold:
 - every event uses the same conversation ID;
 - the stream ends with a `result` whose status is `SUCCESS`, and every earlier
   result is also `SUCCESS`;
+- no result reports a non-empty `finished_reason` (agy 1.4.11 and newer use it
+  for a cut-off turn, such as `print_timeout`, `interrupted` or `error`);
 - no step of any type (tool, streamed response or other) reported as `ACTIVE`
   is left without its `DONE` update when a `SUCCESS` result arrives;
 - every record is valid JSON within 1 MiB;

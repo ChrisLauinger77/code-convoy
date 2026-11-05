@@ -136,7 +136,7 @@ manifest and exact candidate provenance passed verification; aggregate bytes
 matched the independently inspected platform outputs. Each Linux package's
 maximum required GLIBC version is **2.39**. Exact hashes, artifact identity and
 notice-delivery evidence are in the
-[license audit](third-party-licenses.md#verification-record).
+[license audit](third-party-licenses.md#earlier-candidate-verification-record).
 
 | Platform / final candidate | Passed checks | Limits |
 | --- | --- | --- |

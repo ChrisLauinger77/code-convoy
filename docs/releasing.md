@@ -186,7 +186,8 @@ package-manager submission or automatic publication.
 
 [Normal CI](../.github/workflows/ci.yml) runs on pull requests targeting `main`
 and manual dispatch, excluding changes consisting entirely of `**/*.md`
-files. Mixed Markdown/code/configuration changes still run CI. Its matrix uses
+files. Mixed Markdown/code/configuration changes still run CI. It also runs
+monthly on a schedule. Its matrix uses
 `ubuntu-latest`, `macos-latest`, and `windows-latest`, stable Rust, and Python
 3.15. Packaging unit tests, formatting, strict Clippy, all non-ignored Rust tests
 and a locked release build run on each platform; Windows also runs the explicit

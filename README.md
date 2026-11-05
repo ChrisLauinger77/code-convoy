@@ -412,7 +412,7 @@ automation, commits or pushes.
 
 Requirements:
 
-- Rust and Cargo (manifest minimum 1.95; development CI uses stable and release builds pin 1.99.0). See [toolchain and build instructions](CONTRIBUTING.md#build-prerequisites).
+- Rust and Cargo (manifest minimum 1.95; development CI uses stable and release builds pin 1.99.1). See [toolchain and build instructions](CONTRIBUTING.md#build-prerequisites).
 - Git on `PATH`.
 - A working desktop graphics environment.
 - The CLI for the agent you want to use, already installed and authenticated using its own login flow. Its executable must be in the desktop application's `PATH` or a common installation folder, or supply its absolute path in the UI. No agent CLI is required for CodeConvoy to start; availability is checked automatically, and **Check CLI** refreshes the selected agent.
@@ -827,7 +827,7 @@ cargo test --all-features --test opencode installed_opencode_accepts_generated_a
 
 ## Claude Code contract
 
-Claude is the fourth independent backend. It uses the documented [print interface](https://code.claude.com/docs/en/headless) and [CLI flags](https://code.claude.com/docs/en/cli-reference). Authenticated execution is user-verified on macOS as of 2026-10-12 (a five-repository README summarization convoy). See [validation evidence and limitations](docs/claude-validation.md).
+Claude is the fourth independent backend. It uses the documented [print interface](https://code.claude.com/docs/en/headless) and [CLI flags](https://code.claude.com/docs/en/cli-reference). Authenticated execution is user-verified on macOS as of 2026-10-12 (a five-repository README summarization convoy) and was later user-verified on Linux. See [validation evidence and limitations](docs/claude-validation.md).
 
 Default invocation:
 
@@ -941,7 +941,7 @@ and the task plus text context as one `stream-json` user message on stdin.
 Images are unsupported; session continuation is not used.
 
 Success requires an `init` for the assigned checkout, one conversation, only
-`SUCCESS` results with no unfinished step, and exit zero; it does not establish
+`SUCCESS` results with no `finished_reason` or unfinished step, and exit zero; it does not establish
 file changes. Refused tool actions keep success but are stated. Failures lead with
 recovery advice, the exit code or signal and the conversation ID. agy 1.4.2 on
 macOS and agy 1.4.7 on Linux passed Check CLI and failed real jobs at the
@@ -975,7 +975,7 @@ UI testing, issue reporting and dependency-license review. See
 
 The [CI workflow](.github/workflows/ci.yml) runs on pull requests targeting `main`
 and manual dispatch. Changes consisting entirely of `**/*.md` files skip
-CI; changes that also include other files still run it. CI uses stable Rust and
+CI; changes that also include other files still run it. It also runs monthly on a schedule. CI uses stable Rust and
 Python 3.15 on `ubuntu-latest`, `macos-latest`, and `windows-latest`, runs the
 packaging tests and checks below, and additionally checks software graphics
 initialization on Windows. No authenticated agent tasks are run.

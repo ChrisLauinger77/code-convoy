@@ -78,7 +78,7 @@ The distributed `codeconvoy-nsis-helpers-1.zip` contains original/reduced source
 Cargo.lock, dependency inventory, patches, notices, template and build scripts.
 The three original registry source archives accompany it. The existing Rust
 **1.99.0** standard-library notices and separate library lockfile apply to the
-rebuilt helper too. [The kit README](../third-party/nsis/README.txt) gives the
+rebuilt helper too. [The kit README](https://github.com/ChrisLauinger77/code-convoy/blob/v1.0.0/third-party/nsis/README.txt) gives the
 build commands, API references and maintenance constraints.
 
 The native builds select **MSVC 14.51.36231**, linker **14.51.36260.0**, and
@@ -107,8 +107,8 @@ independent runner's output. `/Brepro` suppresses timestamp-based PE differences
 source paths are remapped. This demonstrates clean-build repeatability with
 these selected inputs, not identical output across arbitrary SDK/compiler
 updates. Raw evidence is retained in
-[nsis-build-evidence.zip](../third-party/nsis-build-evidence.zip) and indexed by
-[nsis-build-audit.json](../third-party/nsis-build-audit.json).
+[nsis-build-evidence.zip](https://github.com/ChrisLauinger77/code-convoy/blob/v1.0.0/third-party/nsis-build-evidence.zip) and indexed by
+[nsis-build-audit.json](https://github.com/ChrisLauinger77/code-convoy/blob/v1.0.0/third-party/nsis-build-audit.json).
 
 ## Validation and remaining checks
 

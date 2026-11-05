@@ -1,5 +1,10 @@
 # AppImage runtime provenance and relinking — 2026-10-16
 
+> Historical record. Packaging now uses the upstream AppImage runtime; see
+> [upstream runtime validation](appimage-upstream-runtime-validation.md). Paths to
+> retired runtime files refer to the
+> [v1.0.0 source tree](https://github.com/ChrisLauinger77/code-convoy/tree/v1.0.0).
+
 This is a focused follow-up to the two AppImage publication blockers. It does
 not repeat the Rust/Windows license audit or change CodeConvoy's MIT license.
 The changes are based on `17bebd91dc1230dfb9637fe81d6b89e3092f0196`.
@@ -41,7 +46,7 @@ engineering evidence; neither independently establishes legal compliance.
 The replacement keeps AppImage Type 2 and upstream runtime revision
 `dd6cebedcbddde9c82f89b011e8e1d40b6e43868`. Its launcher C source is unchanged;
 the build-time version label is `dd6cebed-codeconvoy1`. All runtime input pins
-are in [runtime-inputs.json](../third-party/runtime/runtime-inputs.json).
+are in [runtime-inputs.json](https://github.com/ChrisLauinger77/code-convoy/blob/v1.0.0/third-party/runtime/runtime-inputs.json).
 
 | Component | Input and changes |
 | --- | --- |
@@ -91,7 +96,7 @@ The resulting ELF has neither an interpreter nor a `DT_NEEDED` shared library.
 
 ## Reproducibility and recipient demonstration
 
-The [standalone recipe](../third-party/runtime/build-runtime.py) uses a fresh
+The [standalone recipe](https://github.com/ChrisLauinger77/code-convoy/blob/v1.0.0/third-party/runtime/build-runtime.py) uses a fresh
 root filesystem for every build. Only `fetch` accesses the network. Building
 installs already verified APK files with `--no-network`, clears the environment
 and runs in a network-disabled bubblewrap namespace. Mutable tags and package
