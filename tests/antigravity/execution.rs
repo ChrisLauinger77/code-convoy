@@ -237,15 +237,27 @@ async fn a_run_stalled_after_a_refused_tool_ends_only_by_time_limit_or_stop() {
 
 #[tokio::test]
 async fn refused_actions_are_reported_and_edits_are_retained() {
-    let (_temp, _repository, outcome) = run("antigravity-fixture:denied", &[]).await;
-    assert_eq!(outcome.status, JobStatus::Succeeded, "{}", outcome.detail);
-    assert!(outcome.detail.contains("refused 1 tool action(s)"));
-    assert!(outcome.activity.contains("Warning: Antigravity refused 1"));
-    assert!(
-        outcome
-            .activity
-            .contains("[stderr] Antigravity fixture refused")
-    );
+    // 1.5.2 can refuse policy-restricted tools even with the skip flag. This
+    // fixture checks CodeConvoy's handling, not agy's actual policy enforcement.
+    for options in [vec![], vec![("permissions", "skip")]] {
+        let (_temp, repository, outcome) = run("antigravity-fixture:denied", &options).await;
+        assert_eq!(outcome.status, JobStatus::Succeeded, "{}", outcome.detail);
+        assert!(outcome.detail.contains("refused 1 tool action(s)"));
+        assert!(outcome.detail.contains("may be incomplete"));
+        assert!(!outcome.detail.contains("sign-in"), "{}", outcome.detail);
+        assert!(outcome.activity.contains("Warning: Antigravity refused 1"));
+        assert!(outcome.raw.contains("denied_actions"));
+        assert!(
+            outcome
+                .activity
+                .contains("[stderr] Antigravity fixture refused")
+        );
+        let args = fs::read_to_string(repository.path.join("antigravity-args")).unwrap();
+        assert_eq!(
+            args.contains("--dangerously-skip-permissions"),
+            !options.is_empty()
+        );
+    }
 
     // Windows sandbox support depends on the host build; see the unit test.
     let sandbox = !cfg!(windows);

@@ -58,7 +58,7 @@ static OPTIONS: &[OptionSpec] = &[
         key: "permissions",
         label: "Permissions",
         default: "configured",
-        help: "Antigravity configuration applies your settings.json permission rules. Headless runs have no approval prompt, so tools that need approval (shell commands by default) are soft-denied while the run continues. Approve all tool requests explicitly passes --dangerously-skip-permissions, including file writes and commands; this is not an OS sandbox. CodeConvoy never enables it automatically.",
+        help: "Antigravity configuration applies your settings.json permission rules. Headless runs have no approval prompt, so tools that need approval (shell commands by default) are soft-denied while the run continues. Approve all tool requests explicitly passes --dangerously-skip-permissions to skip ordinary tool approvals, including file writes and commands. System command denylists and enterprise permission policies can still deny actions. This is not an OS sandbox. CodeConvoy never enables it automatically.",
         kind: OptionKind::Choice(&[
             ("configured", "Antigravity configuration"),
             ("skip", "Approve all tool requests"),
@@ -257,7 +257,7 @@ impl AgentBackend for Antigravity {
     }
     fn execution_summary(&self, options: &AgentOptions) -> String {
         let permissions = if value(options, &OPTIONS[3]) == "skip" {
-            "Explicit --dangerously-skip-permissions: Antigravity approves every tool request, including file writes and commands."
+            "Explicit --dangerously-skip-permissions: Antigravity skips ordinary tool approval prompts for file writes and commands. System command denylists and enterprise permission policies can still deny actions."
         } else {
             "Antigravity's configured permission rules apply; tools that need approval are soft-denied in headless runs."
         };

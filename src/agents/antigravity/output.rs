@@ -368,7 +368,7 @@ impl AntigravityOutput {
                 self.denied += denied.len();
                 if !denied.is_empty() {
                     text.push_str(&format!(
-                        "Warning: Antigravity refused {} tool action(s) that needed approval; see Raw output.\n",
+                        "Warning: Antigravity refused {} tool action(s); see Raw output.\n",
                         denied.len()
                     ));
                 }
@@ -523,7 +523,7 @@ impl AgentOutput for AntigravityOutput {
         );
         if self.denied > 0 {
             detail.push_str(&format!(
-                " It refused {} tool action(s) that needed approval, so the task may be incomplete; review Activity, Raw output and the diff.",
+                " It refused {} tool action(s), so the task may be incomplete; review Activity, Raw output and the diff.",
                 self.denied
             ));
         } else if self.denied_unrecognized {
