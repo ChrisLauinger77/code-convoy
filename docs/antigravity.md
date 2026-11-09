@@ -70,8 +70,12 @@ CodeConvoy from a session without those variables.
 Headless `agy` runs have no approval prompt. With **Antigravity configuration**,
 rules in your Antigravity settings apply; tools that would ask (shell commands by
 default) are soft-denied while the run continues. **Approve all tool requests**
-approves file writes and command execution without review; it is never enabled
-automatically. Neither choice is an OS sandbox provided by CodeConvoy.
+skips ordinary approval prompts for file writes and commands; it is never enabled
+automatically. Since [agy 1.5.2](https://github.com/google-antigravity/antigravity-cli/releases/tag/1.5.2),
+system command denylists still block commands with this flag. Headless runs also
+deny terminal commands or file access outside the workspace that an enterprise
+administrator requires to be reviewed. These denials cannot be approved through
+CodeConvoy. Neither choice is an OS sandbox provided by CodeConvoy.
 
 If your Antigravity settings select Auto mode (Linux and macOS since agy 1.3.5,
 Windows 11 24H2 or newer for personal Google Accounts since 1.4.4), Antigravity's
