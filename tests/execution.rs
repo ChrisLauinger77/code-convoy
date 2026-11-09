@@ -487,6 +487,99 @@ async fn opencode_2_cancellation_kills_descendants_and_leaves_other_jobs_running
     assert!(!dir.path().join("tree/orphan-survived").exists());
 }
 
+#[tokio::test]
+async fn opencode_2_background_wait_keeps_the_job_running_until_exit_or_explicit_cancellation() {
+    use codeconvoy::agents::opencode::OpenCode;
+    for cancel in [false, true] {
+        let (_fixture, executable) = opencode2_fixture();
+        let dir = tempfile::tempdir().unwrap();
+        let mut prepared = prepare_opencode2(dir.path(), &["waiting"], 1, &executable).await;
+        let repository = prepared.repositories[0].repository.clone();
+        let control = dir.path().join("control");
+        std::fs::create_dir(&control).unwrap();
+        prepared.task.prompt = format!(
+            "codeconvoy-fixture-gate\n{}",
+            serde_json::json!({
+                "control": control,
+                "ticket": "background",
+                "opencode_background_wait": true,
+            })
+        );
+        let peer = runner::prepare(prepared.task.clone(), vec![repository.clone()])
+            .await
+            .unwrap();
+        let (tx, mut rx) = mpsc::channel(256);
+        let mut manager = runner::RunManager::new(2, tx);
+        manager.start(300, prepared, Arc::new(OpenCode)).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let event = rx.recv().await.unwrap();
+                assert!(!matches!(event, Event::Finished { .. }), "{event:?}");
+                if matches!(event, Event::Output { ref raw, .. } if raw.contains("background_wait"))
+                {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        // A stop and a response were already decoded, but the live CLI still
+        // owns this repository. A second job cannot enter it yet.
+        manager.start(301, peer, Arc::new(OpenCode)).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let event = rx.recv().await.unwrap();
+                assert!(!matches!(event, Event::Finished { .. }), "{event:?}");
+                if matches!(event, Event::Queued { run: 301, .. }) {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        let lock = std::fs::OpenOptions::new()
+            .write(true)
+            .open(repository.path.join(".git/codeconvoy-fixture.lock"))
+            .unwrap();
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+        // Cancel the queued peer too, so only the original job can run.
+        manager.cancel(301, 0);
+        if cancel {
+            manager.cancel(300, 0);
+        } else {
+            std::fs::write(control.join("background-waiting.release"), "finish").unwrap();
+        }
+        let events = finish(&mut rx, 2).await;
+        let expected = if cancel {
+            JobStatus::Cancelled
+        } else {
+            JobStatus::Succeeded
+        };
+        assert!(
+            events.iter().any(|event| matches!(event,
+                Event::Finished { run: 300, status, .. } if *status == expected
+            )),
+            "{events:?}"
+        );
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Finished {
+                run: 301,
+                status: JobStatus::Cancelled,
+                ..
+            }
+        )));
+        assert!(fs2::FileExt::try_lock_exclusive(&lock).is_ok());
+        #[cfg(unix)]
+        assert!(!alive(standalone_server(&repository.path)));
+        manager.shutdown();
+        tokio::time::timeout(Duration::from_secs(5), &mut manager.join)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+}
+
 #[cfg(unix)]
 fn standalone_server(repository: &Path) -> libc::pid_t {
     std::fs::read_to_string(repository.join("opencode2-server.pid"))

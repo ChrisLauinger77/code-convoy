@@ -429,6 +429,7 @@ mod detached_groups {
         cancellation.cancel();
         let result = task.await.unwrap().unwrap();
         assert!(result.cancelled);
+        assert_eq!(result.status.unwrap().code(), Some(143));
         // The CLI exited through SIGTERM, which stops the server first.
         assert!(!alive(server));
     }

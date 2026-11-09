@@ -396,6 +396,17 @@ fn gate(
             "{}",
             serde_json::json!({"type":"text", "part":{"text":format!("fixture gate ready {marker}")}})
         );
+        if config["opencode_background_wait"].as_bool() == Some(true) {
+            // 2.2.6 can finish a turn while its run still waits for jobs.
+            println!(
+                "{}",
+                serde_json::json!({"type":"step_finish", "part":{"type":"step-finish", "reason":"stop"}})
+            );
+            println!(
+                "{}",
+                serde_json::json!({"type":"background_wait", "jobs":[{"id":"job_fixture", "kind":"shell", "title":"gated job"}]})
+            );
+        }
     } else if copilot {
         println!("fixture gate ready {marker}");
     } else {
