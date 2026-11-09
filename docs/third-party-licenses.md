@@ -10,14 +10,16 @@ and the two-stage release architecture are unchanged.
 
 [catalog.json](../third-party/catalog.json) is the reviewed release snapshot,
 not a lockstep dependency database for ordinary pull requests. The audit below
-records **491 third-party packages**, with exact versions, registry checksums, declared
+records **492 third-party packages**, with exact versions, registry checksums, declared
 license expressions, authors, source revisions and notice provenance. A
 conservative non-dev dependency traversal for Linux x86-64, Windows x86-64,
 macOS arm64 and macOS x86-64 reaches **417** crates, including build scripts and
 procedural macros. `targets` records that closure; `application_targets`
-separately records normal dependency edges. The other 74 entries are explicit
+separately records normal dependency edges. The other 75 entries are explicit
 exclusions for these release targets. This does not imply every object survives
 linking, or that every listed crate is in every package. The
+[1.3.4 release refresh](release-1.3.4-license-validation.md) records the 32
+version upgrades, two additions and one removal since 1.3.3. The
 [1.3.3 release refresh](release-1.3.3-license-validation.md) records the 33
 updated crate versions since 1.3.2. The
 [1.3.1 release refresh](release-1.3.1-license-validation.md) records the 10
@@ -27,7 +29,7 @@ added and 24 removed crate versions and refreshed target coverage; the earlier
 [lock-file maintenance review](lockfile-maintenance-license-validation.md)
 records the 1.2.0 refresh.
 
-The collection contains **402 distinct notice texts**, deduplicated by
+The collection contains **404 distinct notice texts**, deduplicated by
 their content hashes in [texts.json](../third-party/texts.json). It retains
 upstream copyright statements, notices, font licenses and protocol XML copyright
 blocks. When a crate omits a license file, the evidence refers to its exact
@@ -60,7 +62,7 @@ or exhaustive inventory. The library lockfile is included in the source ZIP.
 | --- | --- |
 | Rust crates, mostly MIT/Apache/BSD/ISC/Zlib/BSL/Unlicense | Preserve actual license/copyright/NOTICE texts. Retain OR alternatives; `self_cell` uses Apache rather than its GPL alternative. AND clauses are cumulative. |
 | `epaint_default_fonts` 0.37.0 | Unmodified Hack, Noto Emoji, Ubuntu Light and emoji-icon-font bytes, plus the new egui icon subset; font notices and the subset attribution are included. Hack includes Bitstream-derived terms; OFL and Ubuntu font naming/reserved-name conditions remain applicable. |
-| Unicode | Unicode-3.0 texts for 18 Unicode-licensed crates, the combined `unicode-ident` expression, and Rust standard-library Unicode exceptions. |
+| Unicode | Unicode-3.0 texts for 18 Unicode-licensed crates, the combined `unicode-ident` and `unicode-properties` expressions, and Rust standard-library Unicode exceptions. |
 | `option-ext` 0.2.0 | MPL-2.0 notice and exact unmodified `.crate` source archive; checksum must equal Cargo.lock. |
 | Official AppImage runtime 20251108 | Checksum-pinned upstream MIT launcher at `dd6cebedcbddde9c82f89b011e8e1d40b6e43868`; sources, applicable patches/notices and upstream recipient build/relink instructions are distributed. See the [verification record](appimage-upstream-runtime-validation.md). |
 | Compiler startup code | musl 1.2.5 and observed GNU CRT code; GCC 14.2.0 reference source, copyright, GPLv3 and Runtime Library Exception 3.1 remain supplied. Upstream C/clang build evidence supports the eligible-compilation interpretation; exact original APK/object hashes are not claimed. |

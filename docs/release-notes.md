@@ -1,38 +1,35 @@
-# CodeConvoy 1.3.3 — Stricter Antigravity completion
+# CodeConvoy 1.3.4 — CLI compatibility guidance and dependency updates
 
-## Changes since 1.3.2
+## Changes since 1.3.3
 
 ### Antigravity CLI
 
-- A run now fails when an Antigravity result reports a non-empty
-  `finished_reason`, such as `print_timeout`, `interrupted` or `error`. agy
-  1.4.11 and later add this optional field to identify a turn that was cut off,
-  independently of the result status and exit code. Previously such a result
-  could still complete as successful, including with exit code 0. The premature
-  termination stays sticky, so a later successful result cannot erase it. Results
-  without the field complete as before. See the
-  [Antigravity contract](../README.md#antigravity-cli-contract).
+- Permission help and review text now clarify that system command denylists and
+  enterprise policies can still deny actions when `--dangerously-skip-permissions`
+  is selected. Execution arguments, permission modes and authentication are
+  unchanged. See the [Antigravity contract](../README.md#antigravity-cli-contract).
 
-### Claude Code
+### OpenCode
 
-- No production change. New regression tests confirm that a Claude startup
-  failure without output fails the run whether the CLI exits with 0 or, as
-  Claude Code 2.1.314 and later do, with 1, and that a nonzero exit fails the
-  run even after complete headless output.
+- Added regression coverage for OpenCode 2.2.6 background-wait events and process
+  termination: a stop event followed by background work does not finish a run
+  before process exit, requested cancellation with exit code 143 stays cancelled,
+  and an unsolicited exit code 143 fails. No adapter logic changed; both
+  OpenCode 1 and OpenCode 2 remain supported.
 
 ### Dependencies and licensing
 
-- Routine dependency updates, including zbus 6.2.0, AccessKit 0.25.2 and ICU4X
-  2.4.0. No dependency was added or removed and every license expression is
-  unchanged. The release notice inventory was refreshed for the 33 updated
-  crate versions; see the
-  [1.3.3 release refresh](release-1.3.3-license-validation.md).
+- Updated dependencies, including rfd 0.18.0 and zbus 6.2.1. The release inventory
+  covers 32 version upgrades, two added packages and one removed package.
+  It retains the new Unicode notice required by unicode-properties 0.1.5 and
+  the notices for the added packages. See the
+  [1.3.4 release refresh](release-1.3.4-license-validation.md).
 - The recorded Microsoft/NSIS inputs, terms, runtime policy and Windows
   packaging configuration are unchanged, so the existing Windows licensing-risk
   decision applies without renewed acceptance.
 
 **Windows Microsoft-component terms:** before using or redistributing Windows
-downloads, review the [component terms](https://github.com/ChrisLauinger77/code-convoy/blob/v1.3.3/third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt),
+downloads, review the [component terms](https://github.com/ChrisLauinger77/code-convoy/blob/v1.3.4/third-party/MICROSOFT-DISTRIBUTABLE-CODE.txt),
 also included in `THIRD-PARTY-NOTICES.txt`. Permission for the Microsoft portions
 is conditional on agreement to those terms; if you do not agree, do not use or
 redistribute those portions. CodeConvoy's independent MIT license is unchanged.
