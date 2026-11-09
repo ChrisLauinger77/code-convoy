@@ -359,8 +359,9 @@ fn captured_runs_complete_under_each_versions_own_rule() {
     );
     assert!(activity.contains("OpenCode step finished: tool-calls"));
     assert_eq!(output.interpret(status(0)).0, JobStatus::Succeeded);
-    // OpenCode 2 exits 1 after reported errors and 130 after an interrupt.
-    for code in [1, 130] {
+    // Without the runner's explicit cancellation token, even SIGTERM's 143
+    // must remain a failure rather than silently becoming Cancelled.
+    for code in [1, 130, 143] {
         assert_eq!(output.interpret(status(code)).0, JobStatus::Failed);
     }
     // The OpenCode 1 rule still needs the final stop that OpenCode 2 omits.
