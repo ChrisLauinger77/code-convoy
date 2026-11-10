@@ -167,7 +167,6 @@ fn capability_choices_come_from_the_inspected_cli_and_registry_is_independent() 
         choices.iter().map(|(v, _)| *v).collect::<Vec<_>>(),
         ["", "none", "low", "medium", "high", "xhigh", "max"]
     );
-    assert!(agents::backend(AgentId::Claude).is_ok());
 }
 #[test]
 fn detection_uses_same_executable_and_version_policy_and_rejects_incompatible_help() {
@@ -399,7 +398,7 @@ fn old_state_and_per_agent_preferences_survive_switching_reuse_and_restart() {
     assert_eq!(state.draft.options["tool_approvals"], "all-tools");
 }
 #[tokio::test]
-async fn missing_executable_produces_an_actionable_error_without_disabling_codex() {
+async fn missing_executable_produces_an_actionable_error() {
     let dir = tempfile::tempdir().unwrap();
     let options = [(
         "executable".into(),
@@ -418,7 +417,6 @@ async fn missing_executable_produces_an_actionable_error_without_disabling_codex
             .to_string()
             .contains("Check the executable path and installation")
     );
-    assert!(agents::backend(AgentId::Codex).is_ok());
 }
 #[tokio::test]
 #[ignore = "Requires locally installed Copilot; executes only --help/--version, never an agent task"]

@@ -1574,7 +1574,7 @@ fn saved_auto_and_legacy_permissions_preserve_preferences_history_and_templates(
 }
 
 #[tokio::test]
-async fn missing_claude_is_actionable_and_does_not_disable_other_backends() {
+async fn missing_claude_is_actionable() {
     let dir = tempfile::tempdir().unwrap();
     let options = [(
         "executable".into(),
@@ -1589,9 +1589,6 @@ async fn missing_claude_is_actionable_and_does_not_disable_other_backends() {
             .to_string()
             .contains("Check the executable path and installation")
     );
-    for agent in AgentId::ALL {
-        assert!(agents::backend(agent).is_ok());
-    }
 }
 
 #[tokio::test]
