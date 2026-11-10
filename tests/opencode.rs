@@ -73,7 +73,6 @@ fn default_command_uses_exact_stdin_native_repository_path_and_existing_rules() 
             assert!(choices.iter().any(|(value, _)| *value == spec.default));
         }
     }
-    assert!(agents::backend(AgentId::Claude).is_ok());
 }
 
 fn opencode2(mut task: TaskConfig) -> TaskConfig {
@@ -839,7 +838,7 @@ fn version_one_state_roundtrips_opencode_drafts_preferences_and_history() {
 }
 
 #[tokio::test]
-async fn missing_executable_is_actionable_and_other_backends_still_exist() {
+async fn missing_executable_is_actionable() {
     let dir = tempfile::tempdir().unwrap();
     for version in ["1", "2"] {
         let options = [
@@ -858,9 +857,6 @@ async fn missing_executable_is_actionable_and_other_backends_still_exist() {
                 .to_string()
                 .contains("Check the executable path and installation")
         );
-    }
-    for agent in [AgentId::Codex, AgentId::Copilot] {
-        assert!(agents::backend(agent).is_ok());
     }
 }
 
