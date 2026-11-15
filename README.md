@@ -1,3 +1,7 @@
+> [!IMPORTANT]
+> **This repository is archived** in favour of
+> [paseo-multi-project](https://github.com/ChrisLauinger77/paseo-multi-project).
+
 # CodeConvoy
 
 [![CI](https://github.com/ChrisLauinger77/code-convoy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ChrisLauinger77/code-convoy/actions/workflows/ci.yml)
